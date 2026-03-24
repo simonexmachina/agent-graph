@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Test / type checker caches
+.pytest_cache/
+.pyright/
+
+# Credentials (never commit)
+.agentgraph/
+
+# Local Claude settings (personal permissions, not shared)
+.claude/settings.local.json
+
+# macOS
+.DS_Store
+
+# Node (extension)
+extension/horizon-observer/node_modules/
+extension/horizon-observer/dist/
