@@ -1,11 +1,11 @@
 ---
 # agent-graph-fidf
 title: 'CLI auth onboarding: Google Docs OAuth + Slack cookies'
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-03-24T10:30:07Z
-updated_at: 2026-03-24T11:02:06Z
+updated_at: 2026-03-24T11:06:20Z
 parent: agent-graph-szbj
 ---
 
@@ -14,3 +14,9 @@ agentgraph auth google-docs — runs OAuth 2.0 user token flow in the CLI. Opens
 ## Slack Auth
 
 agentgraph auth slack — guided prompt flow. No redirect needed. Prints step-by-step instructions to open DevTools → Application → Cookies → app.slack.com, then prompts for the xoxc- token value and d cookie value. Stores both in ~/.agentgraph/credentials.json alongside Google credentials.
+
+## Summary of Changes
+
+- credentials.py: GoogleCredentials + SlackCredentials Pydantic models, load/save with chmod 600
+- auth/google.py: OAuth2 browser flow, localhost:8766 callback server, stores token + refresh_token
+- auth/slack.py: guided step-by-step DevTools prompt, stores xoxc- token + d cookie

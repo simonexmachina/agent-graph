@@ -1,10 +1,11 @@
 ---
 # agent-graph-edge
 title: 'GC job: 90-day last_accessed retention'
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-03-24T10:20:17Z
-updated_at: 2026-03-24T10:20:17Z
+updated_at: 2026-03-24T11:06:29Z
 parent: agent-graph-af03
 blocked_by:
     - agent-graph-hpnd

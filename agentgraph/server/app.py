@@ -9,29 +9,39 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Annotated, AsyncGenerator
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 from fastapi import FastAPI, Header, Response, status
 
 from agentgraph.db.connection import apply_schema, close_pool, get_pool
+from agentgraph.graph.gc import run_gc
 from agentgraph.server.dwell import run_dwell_loop
 from agentgraph.server.models import BlurEvent, FocusEvent
 
 logger = logging.getLogger(__name__)
 
 _dwell_task: asyncio.Task[None] | None = None
+_scheduler: AsyncIOScheduler | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global _dwell_task
+    global _dwell_task, _scheduler
     from agentgraph.connectors.registry import bootstrap
 
     await apply_schema()
     bootstrap()
     _dwell_task = asyncio.create_task(run_dwell_loop())
+
+    _scheduler = AsyncIOScheduler()
+    _scheduler.add_job(run_gc, "cron", hour=3, minute=0, id="gc")
+    _scheduler.start()
+
     logger.info("AgentGraph server started")
     yield
     if _dwell_task:
         _dwell_task.cancel()
+    if _scheduler:
+        _scheduler.shutdown(wait=False)
     await close_pool()
     logger.info("AgentGraph server stopped")
 

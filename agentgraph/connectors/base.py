@@ -1,9 +1,13 @@
 """Base connector interface and shared batch types."""
 
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
+# pyright: reportUnknownArgumentType=false
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -43,11 +47,53 @@ class EntityBatch(BaseModel):
     persons: list[PersonRecord] = []
 
 
+class FetchPolicy:
+    """Encapsulates refresh policy decisions for a resource."""
+
+    FIRST_VISIT = "first_visit"
+    INCREMENTAL = "incremental"
+    FRESH = "fresh"
+
+    def __init__(self, stale_after_seconds: int) -> None:
+        self.stale_after = timedelta(seconds=stale_after_seconds)
+
+    def decide(self, last_synced_at: datetime | None) -> str:
+        """
+        Return FIRST_VISIT, INCREMENTAL, or FRESH based on last sync time.
+        - FIRST_VISIT: never synced
+        - INCREMENTAL: synced but data is stale
+        - FRESH: synced recently, only update last_accessed
+        """
+        if last_synced_at is None:
+            return self.FIRST_VISIT
+        age = datetime.now(timezone.utc) - last_synced_at
+        if age > self.stale_after:
+            return self.INCREMENTAL
+        return self.FRESH
+
+
 class BaseConnector(ABC):
     source: str
+    fetch_policy: FetchPolicy
 
     @abstractmethod
     def can_handle(self, url: str) -> bool: ...
 
     @abstractmethod
     async def fetch(self, resource_type: str, resource_id: str) -> EntityBatch: ...
+
+    async def last_synced_at(self, resource_id: str) -> datetime | None:
+        """Return the most recent synced_at for a platform entity, or None."""
+        from agentgraph.db.connection import get_pool
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            result: Any = await conn.fetchval(
+                """
+                SELECT max(synced_at) FROM entities
+                WHERE platform = $1 AND platform_entity_id = $2
+                """,
+                self.source,
+                resource_id,
+            )
+        return result  # type: ignore[no-any-return]
