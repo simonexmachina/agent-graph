@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "AgentGraph Horizon Observer",
+  "version": "0.1.0",
+  "description": "Observes browser activity and sends focus/blur events to AgentGraph.",
+  "permissions": ["tabs", "storage"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AgentGraph"
+  },
+  "host_permissions": [
+    "http://localhost:8765/*"
+  ]
+}

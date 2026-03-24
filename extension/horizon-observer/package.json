@@ -1,0 +1,15 @@
+{
+  "name": "horizon-observer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && node scripts/bundle.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.300",
+    "typescript": "^5.4.5",
+    "esbuild": "^0.21.4"
+  }
+}
