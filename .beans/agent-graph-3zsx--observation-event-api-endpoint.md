@@ -1,10 +1,11 @@
 ---
 # agent-graph-3zsx
 title: Observation event API endpoint
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-03-24T10:19:43Z
-updated_at: 2026-03-24T10:19:43Z
+updated_at: 2026-03-24T11:02:06Z
 parent: agent-graph-dy5s
 blocked_by:
     - agent-graph-k0ya

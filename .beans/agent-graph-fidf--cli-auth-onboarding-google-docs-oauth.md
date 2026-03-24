@@ -1,11 +1,11 @@
 ---
 # agent-graph-fidf
 title: 'CLI auth onboarding: Google Docs OAuth + Slack cookies'
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-24T10:30:07Z
-updated_at: 2026-03-24T10:34:21Z
+updated_at: 2026-03-24T11:02:06Z
 parent: agent-graph-szbj
 ---
 
