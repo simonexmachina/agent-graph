@@ -98,6 +98,14 @@ def traverse(
 
 
 @app.command()
+def mcp_serve() -> None:
+    """Start the AgentGraph MCP server (stdio transport)."""
+    from agentgraph.mcp.server import mcp
+
+    mcp.run(transport="stdio")
+
+
+@app.command()
 def query(
     entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
     filter: list[str] = typer.Option([], "--filter", "-f", help="key=value filters"),
