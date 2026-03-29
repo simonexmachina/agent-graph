@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-ResourceType = Literal["document", "spreadsheet", "channel", "message", "thread", "dm", "form"]
+ResourceType = Literal["document", "spreadsheet", "channel", "message", "thread", "dm"]
 
 
 class PersonRecord(BaseModel):

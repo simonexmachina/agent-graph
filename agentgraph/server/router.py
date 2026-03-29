@@ -25,11 +25,6 @@ _GSHEETS_RE = re.compile(
     r"https://docs\.google\.com/spreadsheets/d/(?P<spreadsheet_id>[a-zA-Z0-9_-]+)"
 )
 
-# Pattern: https://docs.google.com/forms/d/{formId}/...
-_GFORMS_RE = re.compile(
-    r"https://docs\.google\.com/forms/d/(?P<form_id>[a-zA-Z0-9_-]+)"
-)
-
 # Pattern: https://app.slack.com/client/{workspaceId}/{channelId}
 _SLACK_CHANNEL_RE = re.compile(
     r"https://app\.slack\.com/client/(?P<workspace_id>[A-Z0-9]+)/(?P<channel_id>[A-Z0-9]+)"
@@ -56,15 +51,7 @@ _GMAIL_THREAD_RE = re.compile(
 
 def classify_url(url: str) -> SourceReference | None:
     """Return a SourceReference for a known URL, or None if unrecognised."""
-    # Forms, Sheets, Docs all live under docs.google.com — check most specific first
-    m = _GFORMS_RE.match(url)
-    if m:
-        return SourceReference(
-            source="gforms",
-            resource_type="form",
-            resource_id=m.group("form_id"),
-        )
-
+    # Sheets must be checked before Docs — both live under docs.google.com
     m = _GSHEETS_RE.match(url)
     if m:
         return SourceReference(

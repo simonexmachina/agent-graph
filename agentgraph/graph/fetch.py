@@ -35,7 +35,6 @@ async def fetch_entity(platform: str, resource_id: str) -> dict[str, Any]:
     resource_type_map: dict[str, ResourceType] = {
         "Document": "document",
         "Spreadsheet": "spreadsheet",
-        "Form": "form",
         "Channel": "channel",
         "Message": "message",
         "Thread": "thread",

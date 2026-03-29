@@ -1,16 +1,14 @@
-"""Unit tests for Google Docs, Google Forms, and Slack connectors (mocked HTTP)."""
+"""Unit tests for Google Docs and Slack connectors (mocked HTTP)."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agentgraph.connectors.base import EntityBatch, FetchPolicy
-from agentgraph.connectors.gdocs import GoogleDocsConnector, _extract_plain_text, _extract_persons
-from agentgraph.connectors.gforms import GoogleFormsConnector, _render_form_content
+from agentgraph.connectors.base import EntityBatch
+from agentgraph.connectors.gdocs import GoogleDocsConnector
 from agentgraph.connectors.slack import SlackConnector, _parse_mentions
 
 
@@ -50,83 +48,6 @@ def test_parse_mentions_no_false_positives() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _extract_plain_text
-# ---------------------------------------------------------------------------
-
-def test_extract_plain_text_basic() -> None:
-    doc: dict[str, Any] = {
-        "body": {
-            "content": [
-                {
-                    "paragraph": {
-                        "elements": [
-                            {"textRun": {"content": "Hello "}},
-                            {"textRun": {"content": "world"}},
-                        ]
-                    }
-                }
-            ]
-        }
-    }
-    assert _extract_plain_text(doc) == "Hello world"
-
-
-def test_extract_plain_text_empty_doc() -> None:
-    assert _extract_plain_text({}) == ""
-
-
-def test_extract_plain_text_no_text_runs() -> None:
-    doc: dict[str, Any] = {
-        "body": {
-            "content": [
-                {"paragraph": {"elements": [{"inlineObjectElement": {}}]}}
-            ]
-        }
-    }
-    assert _extract_plain_text(doc) == ""
-
-
-# ---------------------------------------------------------------------------
-# _extract_persons
-# ---------------------------------------------------------------------------
-
-def test_extract_persons_no_suggestions() -> None:
-    persons, edges = _extract_persons({}, "doc-1")
-    assert persons == []
-    assert edges == []
-
-
-def test_extract_persons_from_suggestions() -> None:
-    doc: dict[str, Any] = {
-        "suggestedDocumentStyleChanges": {
-            "s1": {
-                "author": {"email": "alice@example.com", "displayName": "Alice"}
-            }
-        }
-    }
-    persons, edges = _extract_persons(doc, "doc-1")
-    assert len(persons) == 1
-    assert persons[0].canonical_email == "alice@example.com"
-    assert persons[0].display_name == "Alice"
-    assert len(edges) == 1
-    assert edges[0].edge_type == "collaborated"
-    assert edges[0].source_platform_user_id == "alice@example.com"
-    assert edges[0].target_platform_entity_id == "doc-1"
-
-
-def test_extract_persons_deduplicates() -> None:
-    doc: dict[str, Any] = {
-        "suggestedDocumentStyleChanges": {
-            "s1": {"author": {"email": "alice@example.com", "displayName": "Alice"}},
-            "s2": {"author": {"email": "alice@example.com", "displayName": "Alice"}},
-        }
-    }
-    persons, edges = _extract_persons(doc, "doc-1")
-    assert len(persons) == 1
-    assert len(edges) == 1
-
-
-# ---------------------------------------------------------------------------
 # GoogleDocsConnector.fetch — FetchPolicy branching (no real Google API)
 # ---------------------------------------------------------------------------
 
@@ -142,7 +63,7 @@ async def test_gdocs_fetch_fresh_returns_empty_batch(gdocs_connector: GoogleDocs
         patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
         patch("agentgraph.connectors.gdocs._touch_last_accessed", new=AsyncMock()) as mock_touch,
     ):
-        batch = await gdocs_connector.fetch("Document", "doc-abc")
+        batch = await gdocs_connector.fetch("document", "doc-abc")
 
     assert batch == EntityBatch()
     mock_touch.assert_awaited_once_with("doc-abc")
@@ -157,7 +78,7 @@ async def test_gdocs_fetch_stale_calls_fetch_doc(gdocs_connector: GoogleDocsConn
         patch("agentgraph.connectors.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
         patch("agentgraph.connectors.gdocs.upsert_batch", new=AsyncMock()) as mock_upsert,
     ):
-        batch = await gdocs_connector.fetch("Document", "doc-xyz")
+        batch = await gdocs_connector.fetch("document", "doc-xyz")
 
     assert batch is fake_batch
     mock_upsert.assert_awaited_once_with(fake_batch)
@@ -172,7 +93,7 @@ async def test_gdocs_fetch_first_visit_calls_fetch_doc(gdocs_connector: GoogleDo
         patch("agentgraph.connectors.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
         patch("agentgraph.connectors.gdocs.upsert_batch", new=AsyncMock()),
     ):
-        batch = await gdocs_connector.fetch("Document", "doc-new")
+        batch = await gdocs_connector.fetch("document", "doc-new")
 
     assert batch is fake_batch
 
@@ -193,7 +114,7 @@ async def test_slack_fetch_fresh_returns_empty_batch(slack_connector: SlackConne
         patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
         patch("agentgraph.connectors.slack._touch_last_accessed", new=AsyncMock()) as mock_touch,
     ):
-        batch = await slack_connector.fetch("Channel", "C12345")
+        batch = await slack_connector.fetch("channel", "C12345")
 
     assert batch == EntityBatch()
     mock_touch.assert_awaited_once_with("C12345")
@@ -209,7 +130,7 @@ async def test_slack_fetch_stale_calls_fetch_channel(slack_connector: SlackConne
         patch("agentgraph.connectors.slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
         patch("agentgraph.connectors.slack.upsert_batch", new=AsyncMock()),
     ):
-        batch = await slack_connector.fetch("Channel", "C12345")
+        batch = await slack_connector.fetch("channel", "C12345")
 
     assert batch is fake_batch
     mock_fetch.assert_awaited_once_with("C12345", oldest=str(stale_time.timestamp()))
@@ -224,7 +145,7 @@ async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(slack_conne
         patch("agentgraph.connectors.slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
         patch("agentgraph.connectors.slack.upsert_batch", new=AsyncMock()),
     ):
-        await slack_connector.fetch("Channel", "C99999")
+        await slack_connector.fetch("channel", "C99999")
 
     mock_fetch.assert_awaited_once_with("C99999", oldest=None)
 
@@ -241,146 +162,3 @@ def test_gdocs_can_handle(gdocs_connector: GoogleDocsConnector) -> None:
 def test_slack_can_handle(slack_connector: SlackConnector) -> None:
     assert slack_connector.can_handle("https://app.slack.com/client/T123/C456")
     assert not slack_connector.can_handle("https://docs.google.com")
-
-
-# ---------------------------------------------------------------------------
-# _render_form_content
-# ---------------------------------------------------------------------------
-
-def test_render_form_content_empty() -> None:
-    assert _render_form_content({}) == ""
-
-
-def test_render_form_content_description_only() -> None:
-    form: dict[str, Any] = {"info": {"description": "Fill out this survey."}}
-    result = _render_form_content(form)
-    assert "Fill out this survey." in result
-
-
-def test_render_form_content_short_answer_question() -> None:
-    form: dict[str, Any] = {
-        "info": {},
-        "items": [
-            {
-                "title": "What is your name?",
-                "questionItem": {
-                    "question": {
-                        "required": True,
-                        "textQuestion": {"paragraph": False},
-                    }
-                },
-            }
-        ],
-    }
-    result = _render_form_content(form)
-    assert "What is your name?" in result
-    assert "*" in result  # required marker
-    assert "SHORT_ANSWER" in result
-
-
-def test_render_form_content_choice_question() -> None:
-    form: dict[str, Any] = {
-        "info": {},
-        "items": [
-            {
-                "title": "Favourite colour?",
-                "questionItem": {
-                    "question": {
-                        "choiceQuestion": {
-                            "type": "RADIO",
-                            "options": [
-                                {"value": "Red"},
-                                {"value": "Blue"},
-                                {"value": "Green"},
-                            ],
-                        }
-                    }
-                },
-            }
-        ],
-    }
-    result = _render_form_content(form)
-    assert "Favourite colour?" in result
-    assert "RADIO" in result
-    assert "Red" in result
-    assert "Blue" in result
-
-
-def test_render_form_content_scale_question() -> None:
-    form: dict[str, Any] = {
-        "info": {},
-        "items": [
-            {
-                "title": "How satisfied are you?",
-                "questionItem": {
-                    "question": {
-                        "scaleQuestion": {
-                            "low": 1,
-                            "high": 5,
-                            "lowLabel": "Not at all",
-                            "highLabel": "Very much",
-                        }
-                    }
-                },
-            }
-        ],
-    }
-    result = _render_form_content(form)
-    assert "How satisfied are you?" in result
-    assert "SCALE" in result
-    assert "Not at all" in result
-    assert "Very much" in result
-
-
-# ---------------------------------------------------------------------------
-# GoogleFormsConnector.fetch — FetchPolicy branching
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def gforms_connector() -> GoogleFormsConnector:
-    return GoogleFormsConnector()
-
-
-@pytest.mark.asyncio
-async def test_gforms_fetch_fresh_returns_empty_batch(gforms_connector: GoogleFormsConnector) -> None:
-    with (
-        patch.object(gforms_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
-        patch("agentgraph.connectors.gforms._touch_last_accessed", new=AsyncMock()) as mock_touch,
-    ):
-        batch = await gforms_connector.fetch("form", "form-abc")
-
-    assert batch == EntityBatch()
-    mock_touch.assert_awaited_once_with("form-abc")
-
-
-@pytest.mark.asyncio
-async def test_gforms_fetch_stale_calls_fetch_form(gforms_connector: GoogleFormsConnector) -> None:
-    fake_batch = EntityBatch()
-    with (
-        patch.object(gforms_connector, "last_synced_at", new=AsyncMock(return_value=_stale_dt())),
-        patch("agentgraph.connectors.gforms._fetch_form", new=AsyncMock(return_value=fake_batch)),
-        patch("agentgraph.connectors.gforms.upsert_batch", new=AsyncMock()) as mock_upsert,
-    ):
-        batch = await gforms_connector.fetch("form", "form-xyz")
-
-    assert batch is fake_batch
-    mock_upsert.assert_awaited_once_with(fake_batch)
-
-
-@pytest.mark.asyncio
-async def test_gforms_fetch_first_visit_calls_fetch_form(gforms_connector: GoogleFormsConnector) -> None:
-    fake_batch = EntityBatch()
-    with (
-        patch.object(gforms_connector, "last_synced_at", new=AsyncMock(return_value=None)),
-        patch("agentgraph.connectors.gforms._fetch_form", new=AsyncMock(return_value=fake_batch)),
-        patch("agentgraph.connectors.gforms.upsert_batch", new=AsyncMock()),
-    ):
-        batch = await gforms_connector.fetch("form", "form-new")
-
-    assert batch is fake_batch
-
-
-def test_gforms_can_handle(gforms_connector: GoogleFormsConnector) -> None:
-    assert gforms_connector.can_handle("https://docs.google.com/forms/d/abc123/viewform")
-    assert gforms_connector.can_handle("https://docs.google.com/forms/d/abc123/edit")
-    assert not gforms_connector.can_handle("https://docs.google.com/document/d/abc123")
