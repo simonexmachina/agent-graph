@@ -237,13 +237,13 @@ def _make_db_row(d: dict[str, Any], extra: dict[str, Any] | None = None) -> Any:
     merged = {**d, **(extra or {})}
     row = MagicMock()
     row.__getitem__ = lambda self, key: merged[key]
+    row.__contains__ = lambda self, key: key in merged
 
     def keys_fn() -> list[str]:
         return list(merged.keys())
 
     row.keys = keys_fn
     row.get = lambda key, default=None: merged.get(key, default)
-    # Support "key in row.keys()" checks
     return row
 
 
