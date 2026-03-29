@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -158,7 +159,7 @@ async def cli_poll(
     for connector in connectors:
         if connector.poll_interval is None:
             continue
-        await _poll_connector(connector)
+        asyncio.create_task(_poll_connector(connector))
         polled.append(connector.source)
 
     return {"polled": polled}
