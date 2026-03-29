@@ -1,10 +1,11 @@
 ---
 # agent-graph-5634
 title: Event queue + offline resilience
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-03-24T10:19:19Z
-updated_at: 2026-03-24T10:19:19Z
+updated_at: 2026-03-24T11:18:02Z
 parent: agent-graph-4q2a
 blocked_by:
     - agent-graph-hpnd

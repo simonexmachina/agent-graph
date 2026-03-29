@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-import asyncpg
 
 from agentgraph.db.connection import apply_schema, get_pool, close_pool
 
@@ -28,7 +27,9 @@ async def test_tables_exist() -> None:
             """
         )
         names = {r["tablename"] for r in tables}
-    assert {"persons", "platform_identities", "entities", "edges", "observations"} <= names
+    assert {"entities", "edges", "observations"} <= names
+    assert "persons" not in names
+    assert "platform_identities" not in names
 
 
 @pytest.mark.integration
@@ -42,18 +43,17 @@ async def test_vector_extension() -> None:
 
 
 @pytest.mark.integration
-async def test_insert_person_and_entity() -> None:
+async def test_insert_person_and_entity_and_edge() -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:
+        # Person is now an entity
         person_id = await conn.fetchval(
             """
-            INSERT INTO persons (canonical_email, display_name)
-            VALUES ($1, $2)
-            ON CONFLICT (canonical_email) DO UPDATE SET display_name = EXCLUDED.display_name
+            INSERT INTO entities (entity_type, platform, platform_entity_id, title, content)
+            VALUES ('Person', 'canonical', 'test@example.com', 'Test User', 'test@example.com')
+            ON CONFLICT (platform, platform_entity_id) DO UPDATE SET title = EXCLUDED.title
             RETURNING id
             """,
-            "test@example.com",
-            "Test User",
         )
         assert person_id is not None
 
@@ -74,7 +74,7 @@ async def test_insert_person_and_entity() -> None:
 
         edge_id = await conn.fetchval(
             """
-            INSERT INTO edges (edge_type, source_person_id, target_entity_id)
+            INSERT INTO edges (edge_type, source_entity_id, target_entity_id)
             VALUES ($1, $2, $3)
             RETURNING id
             """,
@@ -88,3 +88,6 @@ async def test_insert_person_and_entity() -> None:
         await conn.execute("DELETE FROM entities WHERE id = $1", entity_id)
         count = await conn.fetchval("SELECT count(*) FROM edges WHERE id = $1", edge_id)
         assert count == 0
+
+        # Clean up person
+        await conn.execute("DELETE FROM entities WHERE id = $1", person_id)

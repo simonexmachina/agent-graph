@@ -16,8 +16,10 @@ interface TabState {
   focusedAt: string; // ISO-8601
 }
 
-// In-memory state (survives within a single service-worker lifetime).
-// Restored from storage on startup if needed.
+// Hex Gmail message IDs extracted by the content script, keyed by tab ID.
+// Cleared when the tab navigates away from a thread URL.
+const gmailMessageIdByTab = new Map<number, string>();
+
 const STATE_KEY = "agentgraph_active_tab";
 
 async function readState(): Promise<TabState | null> {
@@ -51,12 +53,17 @@ async function emitBlur(state: TabState): Promise<void> {
 /** Emit a focus for the given tab. */
 async function emitFocus(tabId: number, url: string, title: string): Promise<void> {
   const ts = now();
+  const meta: Record<string, string> = {};
+  const gmailMessageId = gmailMessageIdByTab.get(tabId);
+  if (gmailMessageId) meta.gmail_message_id = gmailMessageId;
+
   const event: ObserveEvent = {
     type: "focus",
     url,
     title,
     tab_id: tabId,
     timestamp: ts,
+    ...(Object.keys(meta).length > 0 && { meta }),
   };
   const state: TabState = { tabId, url, title, focusedAt: ts };
   await writeState(state);
@@ -88,6 +95,11 @@ async function handleTabChange(tabId: number): Promise<void> {
   }
 
   if (!prev || prev.tabId !== tabId || prev.url !== url) {
+    // Clear stale Gmail message ID so the initial focus event carries no meta
+    // and the content script re-sends the correct ID for the new page.
+    if (prev?.url !== url) {
+      gmailMessageIdByTab.delete(tabId);
+    }
     await emitFocus(tabId, url, title);
   }
 }
@@ -101,8 +113,9 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, _tab) => {
-  // Only act when the URL is finalised (status=complete) or title changes
-  if (changeInfo.status === "complete" || changeInfo.title) {
+  // Act on URL changes (covers SPA hash navigation like Gmail), status=complete
+  // (covers full page loads), or title changes (covers late title updates).
+  if (changeInfo.url || changeInfo.status === "complete" || changeInfo.title) {
     const activeTab = await chrome.tabs.query({ active: true, currentWindow: true });
     if (activeTab[0]?.id === tabId) {
       await handleTabChange(tabId);
@@ -124,6 +137,35 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (activeTab?.id != null) {
     await handleTabChange(activeTab.id);
   }
+});
+
+// Receive Gmail message IDs from the content script.
+// Cache the ID and re-emit a focus event so the server can patch the meta on
+// the existing observation (the content script fires ~300ms after the initial
+// focus event, after which the original observation has no meta yet).
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type === "gmail_message_id" && sender.tab?.id != null) {
+    const tabId = sender.tab.id;
+    gmailMessageIdByTab.set(tabId, message.messageId as string);
+
+    // Re-emit focus with meta so the server patches the existing observation
+    chrome.tabs.get(tabId, async (tab) => {
+      if (tab?.url?.includes("mail.google.com")) {
+        await emitFocus(tabId, tab.url, tab.title ?? "");
+      }
+    });
+  }
+});
+
+// Clear cached message ID when a tab navigates away from a Gmail thread
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url && !changeInfo.url.includes("mail.google.com")) {
+    gmailMessageIdByTab.delete(tabId);
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  gmailMessageIdByTab.delete(tabId);
 });
 
 // On service worker startup: flush any queued events from a previous session

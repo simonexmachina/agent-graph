@@ -1,4 +1,4 @@
-"""Idempotent upsert layer for entities, persons, and edges."""
+"""Idempotent upsert layer for entities and edges."""
 
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false
@@ -20,75 +20,62 @@ logger = logging.getLogger(__name__)
 async def upsert_batch(batch: EntityBatch) -> None:
     """Persist an EntityBatch to the graph, generating embeddings as needed."""
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            person_id_map = await _upsert_persons(conn, batch.persons)
-            entity_id_map = await _upsert_entities(conn, batch.entities)
-            await _upsert_edges(conn, batch.edges, person_id_map, entity_id_map)
+    async with pool.acquire() as conn, conn.transaction():
+        person_id_map = await _upsert_persons(conn, batch.persons)
+        entity_id_map = await _upsert_entities(conn, batch.entities)
+        await _upsert_edges(conn, batch.edges, person_id_map, entity_id_map)
+
+    await _link_references(batch)
 
 
 async def _upsert_persons(
     conn: Any, persons: list[PersonRecord]
 ) -> dict[str, UUID]:
     """
-    Upsert persons and platform_identities.
-    Returns mapping of platform_user_id → person UUID.
+    Upsert persons as Person entities (platform='canonical').
+    Returns mapping of platform_user_id (and email if known) → entity UUID.
     """
     id_map: dict[str, UUID] = {}
 
     for p in persons:
-        if p.canonical_email:
-            # Known email: upsert by email
-            person_id: UUID = await conn.fetchval(
-                """
-                INSERT INTO persons (canonical_email, display_name)
-                VALUES ($1, $2)
-                ON CONFLICT (canonical_email) DO UPDATE
-                    SET display_name = COALESCE(EXCLUDED.display_name, persons.display_name),
-                        last_accessed = now()
-                RETURNING id
-                """,
-                p.canonical_email,
-                p.display_name,
-            )
-        else:
-            # Email-less identity: look up via existing platform identity first
-            existing = await conn.fetchval(
-                """
-                SELECT person_id FROM platform_identities
-                WHERE platform = $1 AND platform_user_id = $2
-                """,
-                p.platform,
-                p.platform_user_id,
-            )
-            if existing:
-                person_id = existing
-                await conn.execute(
-                    "UPDATE persons SET last_accessed = now() WHERE id = $1",
-                    person_id,
-                )
-            else:
-                person_id = await conn.fetchval(
-                    "INSERT INTO persons (display_name) VALUES ($1) RETURNING id",
-                    p.display_name,
-                )
+        # Canonical key: email if known, else "<platform>:<user_id>"
+        platform_entity_id = p.canonical_email or f"{p.platform}:{p.platform_user_id}"
 
-        # Upsert platform identity
-        await conn.execute(
+        meta: dict[str, str] = {}
+        if p.canonical_email:
+            meta["canonical_email"] = p.canonical_email
+        meta[f"{p.platform}_user_id"] = p.platform_user_id
+        if p.platform_username:
+            meta[f"{p.platform}_username"] = p.platform_username
+
+        # Compute embedding from name + email so person entities rank well in search
+        embedding_text = " ".join(filter(None, [p.display_name, p.canonical_email]))
+        embedding: list[float] | None = encode(embedding_text) if embedding_text else None
+
+        entity_id: UUID = await conn.fetchval(
             """
-            INSERT INTO platform_identities
-                (person_id, platform, platform_user_id, platform_username)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (platform, platform_user_id) DO UPDATE
-                SET platform_username = COALESCE(EXCLUDED.platform_username, platform_identities.platform_username)
+            INSERT INTO entities
+                (entity_type, platform, platform_entity_id, title, content,
+                 content_embedding, metadata)
+            VALUES ('Person', 'canonical', $1, $2, $3, $4::vector, $5)
+            ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
+                title             = COALESCE(EXCLUDED.title, entities.title),
+                content           = COALESCE(EXCLUDED.content, entities.content),
+                content_embedding = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
+                metadata          = entities.metadata || EXCLUDED.metadata,
+                last_accessed     = now()
+            RETURNING id
             """,
-            person_id,
-            p.platform,
-            p.platform_user_id,
-            p.platform_username,
+            platform_entity_id,
+            p.display_name,
+            p.canonical_email,  # email as content for full-text search
+            str(embedding) if embedding else None,
+            json.dumps(meta),
         )
 
-        id_map[p.platform_user_id] = person_id
+        id_map[p.platform_user_id] = entity_id
+        if p.canonical_email:
+            id_map[p.canonical_email] = entity_id
 
     return id_map
 
@@ -147,46 +134,50 @@ async def _upsert_edges(
     entity_id_map: dict[str, UUID],
 ) -> None:
     for edge in edges:
-        source_entity_id = (
+        # Resolve source: entity takes priority, fall back to person
+        source_entity_id: UUID | None = (
             entity_id_map.get(edge.source_platform_entity_id)
             if edge.source_platform_entity_id
-            else None
-        )
-        source_person_id = (
-            person_id_map.get(edge.source_platform_user_id)
+            else person_id_map.get(edge.source_platform_user_id)
             if edge.source_platform_user_id
             else None
         )
-        target_entity_id = (
+        # Resolve target: entity takes priority, fall back to person
+        target_entity_id: UUID | None = (
             entity_id_map.get(edge.target_platform_entity_id)
             if edge.target_platform_entity_id
-            else None
-        )
-        target_person_id = (
-            person_id_map.get(edge.target_platform_user_id)
+            else person_id_map.get(edge.target_platform_user_id)
             if edge.target_platform_user_id
             else None
         )
 
-        if not (source_entity_id or source_person_id):
+        if not source_entity_id:
             logger.warning("Skipping edge %s — source not resolved", edge.edge_type)
             continue
-        if not (target_entity_id or target_person_id):
+        if not target_entity_id:
             logger.warning("Skipping edge %s — target not resolved", edge.edge_type)
             continue
 
         await conn.execute(
             """
             INSERT INTO edges
-                (edge_type, source_entity_id, source_person_id,
-                 target_entity_id, target_person_id, platform, properties)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (edge_type, source_entity_id, target_entity_id, platform, properties)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (edge_type, source_entity_id, target_entity_id) DO NOTHING
             """,
             edge.edge_type,
             source_entity_id,
-            source_person_id,
             target_entity_id,
-            target_person_id,
             edge.platform,
             json.dumps(dict(edge.properties)),
         )
+
+
+async def _link_references(batch: EntityBatch) -> None:
+    """After a batch is persisted, create cross-platform 'references' edges."""
+    from agentgraph.graph.link import link_entity_from_content, link_entity_to_urls
+
+    for entity in batch.entities:
+        if entity.content:
+            await link_entity_to_urls(entity.platform_entity_id, entity.platform, entity.content)
+        await link_entity_from_content(entity.platform_entity_id, entity.platform)

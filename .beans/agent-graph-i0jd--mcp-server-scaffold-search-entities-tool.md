@@ -1,10 +1,11 @@
 ---
 # agent-graph-i0jd
 title: MCP server scaffold + search_entities tool
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-03-24T10:20:28Z
-updated_at: 2026-03-24T10:20:28Z
+updated_at: 2026-03-24T11:23:06Z
 parent: agent-graph-414r
 blocked_by:
     - agent-graph-k1ub

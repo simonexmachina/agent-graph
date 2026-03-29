@@ -1,0 +1,358 @@
+"""Discord connector (bot token auth)."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+
+from agentgraph.auth.credentials import load as load_creds
+from agentgraph.connectors.base import (
+    BaseConnector,
+    EdgeRecord,
+    EntityBatch,
+    EntityRecord,
+    FetchPolicy,
+    PersonRecord,
+)
+from agentgraph.graph.upsert import upsert_batch
+
+logger = logging.getLogger(__name__)
+
+DISCORD_API = "https://discord.com/api/v10"
+_STALE_AFTER = 5 * 60  # 5 minutes
+_MAX_RETRIES = 3
+
+# Module-level user cache so repeated syncs don't re-fetch the same users
+_user_cache: dict[str, PersonRecord] = {}
+
+
+def _get_headers() -> dict[str, str]:
+    stored = load_creds()
+    if stored.discord is None:
+        raise RuntimeError("Discord credentials not configured. Run: agentgraph auth discord")
+    return {"Authorization": f"Bot {stored.discord.bot_token}"}
+
+
+async def _api_get(client: httpx.AsyncClient, path: str, **params: Any) -> Any:
+    for attempt in range(_MAX_RETRIES):
+        resp = await client.get(
+            f"{DISCORD_API}{path}",
+            headers=_get_headers(),
+            params=params,
+            timeout=30,
+        )
+        if resp.status_code == 429:
+            retry_after = float(resp.headers.get("Retry-After", "1"))
+            is_global = resp.headers.get("X-RateLimit-Global") == "true"
+            logger.warning(
+                "Discord rate limited%s on %s — sleeping %.1fs",
+                " (global)" if is_global else "",
+                path,
+                retry_after,
+            )
+            await asyncio.sleep(retry_after)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise RuntimeError(f"Discord API {path} still rate-limited after {_MAX_RETRIES} retries")
+
+
+def _snowflake_to_dt(snowflake: str) -> datetime:
+    """Convert a Discord snowflake ID to a UTC datetime."""
+    ts_ms = (int(snowflake) >> 22) + 1420070400000
+    return datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
+
+
+def _snowflake_after(dt: datetime) -> str:
+    """Return the smallest snowflake ID that is strictly after dt."""
+    ts_ms = int(dt.timestamp() * 1000) - 1420070400000
+    return str(max(ts_ms, 0) << 22)
+
+
+def _parse_mentions(content: str) -> list[str]:
+    """Extract <@USER_ID> and <@!USER_ID> user IDs from message content."""
+    import re
+    return re.findall(r"<@!?(\d+)>", content)
+
+
+class DiscordConnector(BaseConnector):
+    source = "discord"
+    fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
+
+    def can_handle(self, url: str) -> bool:
+        return "discord.com/channels/" in url
+
+    async def fetch(self, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+        last_sync = await self.last_synced_at(resource_id)
+        decision = self.fetch_policy.decide(last_sync)
+
+        if decision == FetchPolicy.FRESH:
+            logger.debug("discord/%s is fresh — updating last_accessed only", resource_id)
+            await _touch_last_accessed(resource_id)
+            return EntityBatch()
+
+        after_snowflake: str | None = None
+        if decision == FetchPolicy.INCREMENTAL and last_sync:
+            after_snowflake = _snowflake_after(last_sync)
+
+        is_dm = resource_type == "dm"
+        logger.info("Fetching Discord %s %s (policy=%s)", resource_type, resource_id, decision)
+        batch = await _fetch_channel(resource_id, after_snowflake=after_snowflake, is_dm=is_dm)
+        await upsert_batch(batch)
+        return batch
+
+
+async def _touch_last_accessed(channel_id: str) -> None:
+    from agentgraph.db.connection import get_pool
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE entities SET last_accessed = now() WHERE platform = 'discord' AND platform_entity_id = $1",
+            channel_id,
+        )
+
+
+async def _fetch_user(
+    client: httpx.AsyncClient,
+    user_id: str,
+    seen_users: dict[str, PersonRecord],
+) -> PersonRecord | None:
+    if user_id in seen_users:
+        return seen_users[user_id]
+    if user_id in _user_cache:
+        seen_users[user_id] = _user_cache[user_id]
+        return _user_cache[user_id]
+    try:
+        data = await _api_get(client, f"/users/{user_id}")
+        username = data.get("username", "")
+        global_name = data.get("global_name") or username
+        person = PersonRecord(
+            platform="discord",
+            platform_user_id=user_id,
+            platform_username=username,
+            display_name=global_name or None,
+            # Discord bots cannot access user emails
+        )
+        seen_users[user_id] = person
+        _user_cache[user_id] = person
+        return person
+    except Exception as exc:
+        logger.debug("Could not fetch Discord user %s: %s", user_id, exc)
+        return None
+
+
+async def _fetch_thread_messages(
+    client: httpx.AsyncClient,
+    thread_id: str,
+    parent_channel_id: str,
+    parent_message_id: str,
+    entities: list[EntityRecord],
+    edges: list[EdgeRecord],
+    seen_users: dict[str, PersonRecord],
+    persons: list[PersonRecord],
+    after_snowflake: str | None,
+) -> None:
+    """Fetch messages in a Discord thread (threads are channels in Discord API)."""
+    try:
+        params: dict[str, Any] = {"limit": 100}
+        if after_snowflake:
+            params["after"] = after_snowflake
+
+        messages = await _api_get(client, f"/channels/{thread_id}/messages", **params)
+    except Exception as exc:
+        logger.warning("Could not fetch thread %s: %s", thread_id, exc)
+        return
+
+    for msg in messages:
+        msg_id: str = msg.get("id", "")
+        content: str = msg.get("content", "")
+        author: dict[str, Any] = msg.get("author", {})
+        user_id: str = author.get("id", "")
+
+        if not msg_id:
+            continue
+
+        entities.append(EntityRecord(
+            entity_type="Message",
+            platform="discord",
+            platform_entity_id=f"{thread_id}:{msg_id}",
+            content=content,
+            created_at=_snowflake_to_dt(msg_id),
+            updated_at=_snowflake_to_dt(msg_id),
+            metadata={"channel_id": parent_channel_id, "thread_id": thread_id, "message_id": msg_id},
+        ))
+
+        edges.append(EdgeRecord(
+            edge_type="replied_to",
+            source_platform_entity_id=f"{thread_id}:{msg_id}",
+            target_platform_entity_id=f"{parent_channel_id}:{parent_message_id}",
+            platform="discord",
+        ))
+        edges.append(EdgeRecord(
+            edge_type="posted_in",
+            source_platform_entity_id=f"{thread_id}:{msg_id}",
+            target_platform_entity_id=parent_channel_id,
+            platform="discord",
+        ))
+
+        if user_id:
+            person = await _fetch_user(client, user_id, seen_users)
+            if person and person not in persons:
+                persons.append(person)
+            edges.append(EdgeRecord(
+                edge_type="authored",
+                source_platform_user_id=user_id,
+                target_platform_entity_id=f"{thread_id}:{msg_id}",
+                platform="discord",
+            ))
+
+        for mentioned_id in _parse_mentions(content):
+            person = await _fetch_user(client, mentioned_id, seen_users)
+            if person and person not in persons:
+                persons.append(person)
+            edges.append(EdgeRecord(
+                edge_type="mentions",
+                source_platform_entity_id=f"{thread_id}:{msg_id}",
+                target_platform_user_id=mentioned_id,
+                platform="discord",
+            ))
+
+
+async def _fetch_channel(
+    channel_id: str,
+    after_snowflake: str | None = None,
+    is_dm: bool = False,
+) -> EntityBatch:
+    entities: list[EntityRecord] = []
+    persons: list[PersonRecord] = []
+    edges: list[EdgeRecord] = []
+    seen_users: dict[str, PersonRecord] = {}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        # Channel entity
+        try:
+            channel_info = await _api_get(client, f"/channels/{channel_id}")
+        except Exception as exc:
+            logger.error("Could not fetch Discord channel %s: %s", channel_id, exc)
+            return EntityBatch()
+
+        guild_id = channel_info.get("guild_id", "")
+        channel_type: int = channel_info.get("type", 0)
+
+        if channel_type in (1, 3):  # 1 = DM, 3 = Group DM
+            recipients: list[dict[str, Any]] = channel_info.get("recipients", [])
+            if channel_type == 3 and channel_info.get("name"):
+                channel_name = channel_info["name"]
+            elif recipients:
+                channel_name = ", ".join(r.get("username", r.get("id", "")) for r in recipients)
+            else:
+                channel_name = channel_id
+            # Emit Person records for DM participants from channel metadata
+            for recipient in recipients:
+                user_id: str = recipient.get("id", "")
+                if not user_id or user_id in seen_users:
+                    continue
+                username = recipient.get("username", "")
+                global_name = recipient.get("global_name") or username
+                person = PersonRecord(
+                    platform="discord",
+                    platform_user_id=user_id,
+                    platform_username=username,
+                    display_name=global_name or None,
+                )
+                seen_users[user_id] = person
+                _user_cache[user_id] = person
+                persons.append(person)
+                edges.append(EdgeRecord(
+                    edge_type="participated_in",
+                    source_platform_user_id=user_id,
+                    target_platform_entity_id=channel_id,
+                    platform="discord",
+                ))
+        else:
+            channel_name = channel_info.get("name", channel_id)
+
+        entities.append(EntityRecord(
+            entity_type="Channel",
+            platform="discord",
+            platform_entity_id=channel_id,
+            title=f"#{channel_name}",
+            updated_at=datetime.now(UTC),
+            metadata={"guild_id": guild_id} if guild_id else {},
+        ))
+
+        # Fetch messages (Discord returns newest-first; reverse for chronological)
+        params: dict[str, Any] = {"limit": 100}
+        if after_snowflake:
+            params["after"] = after_snowflake
+
+        try:
+            messages = await _api_get(client, f"/channels/{channel_id}/messages", **params)
+        except Exception as exc:
+            logger.error("Could not fetch messages for Discord channel %s: %s", channel_id, exc)
+            return EntityBatch(entities=entities)
+
+        for msg in messages:
+            msg_id: str = msg.get("id", "")
+            content: str = msg.get("content", "")
+            author: dict[str, Any] = msg.get("author", {})
+            user_id: str = author.get("id", "")
+            thread: dict[str, Any] | None = msg.get("thread")
+
+            if not msg_id:
+                continue
+
+            entities.append(EntityRecord(
+                entity_type="Message",
+                platform="discord",
+                platform_entity_id=f"{channel_id}:{msg_id}",
+                content=content,
+                created_at=_snowflake_to_dt(msg_id),
+                updated_at=_snowflake_to_dt(msg_id),
+                metadata={"channel_id": channel_id, "message_id": msg_id, "guild_id": guild_id},
+            ))
+
+            edges.append(EdgeRecord(
+                edge_type="posted_in",
+                source_platform_entity_id=f"{channel_id}:{msg_id}",
+                target_platform_entity_id=channel_id,
+                platform="discord",
+            ))
+
+            if user_id:
+                person = await _fetch_user(client, user_id, seen_users)
+                if person and person not in persons:
+                    persons.append(person)
+                edges.append(EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id=user_id,
+                    target_platform_entity_id=f"{channel_id}:{msg_id}",
+                    platform="discord",
+                ))
+
+            for mentioned_id in _parse_mentions(content):
+                person = await _fetch_user(client, mentioned_id, seen_users)
+                if person and person not in persons:
+                    persons.append(person)
+                edges.append(EdgeRecord(
+                    edge_type="mentions",
+                    source_platform_entity_id=f"{channel_id}:{msg_id}",
+                    target_platform_user_id=mentioned_id,
+                    platform="discord",
+                ))
+
+            # Fetch thread replies if this message spawned a thread
+            if thread:
+                thread_id: str = thread.get("id", "")
+                if thread_id:
+                    await _fetch_thread_messages(
+                        client, thread_id, channel_id, msg_id,
+                        entities, edges, seen_users, persons, after_snowflake,
+                    )
+
+    return EntityBatch(entities=entities, persons=persons, edges=edges)

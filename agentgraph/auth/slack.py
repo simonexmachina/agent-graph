@@ -14,14 +14,15 @@ def run_cookie_flow() -> None:
         "To get your Slack credentials:\n"
         "\n"
         "  1. Open Slack in your browser (app.slack.com)\n"
-        "  2. Open DevTools  →  Application  →  Cookies  →  https://app.slack.com\n"
-        "  3. Find the cookie named  d  — copy its value\n"
-        "  4. Find the token in Local Storage  →  localConfig_v2\n"
-        "     (look for a key starting with xoxc-)\n"
+        "  2. Open DevTools  →  Network tab\n"
+        "  3. Filter requests by 'api/' and click on any request to slack.com/api/\n"
+        "  4. In the request:\n"
+        "       • Payload tab  →  Form Data  →  token: xoxc-...\n"
+        "         (this is your xoxc- token)\n"
+        "       • Headers tab  →  Request Headers  →  Cookie: d=...\n"
+        "         (copy just the value after 'd=')\n"
         "\n"
-        "  Alternatively: in DevTools  →  Network, make any Slack request,\n"
-        "  inspect the Authorization header for the xoxc- token and the\n"
-        "  Cookie header for the d= value.\n"
+        "  Tip: send a message or switch channel to trigger a fresh API request.\n"
     )
 
     xoxc_token = typer.prompt("xoxc- token").strip()
@@ -30,6 +31,27 @@ def run_cookie_flow() -> None:
 
     d_cookie = typer.prompt("d cookie value").strip()
 
-    creds = SlackCredentials(xoxc_token=xoxc_token, d_cookie=d_cookie)
+    # Fetch the authenticated user's Slack identity
+    user_id: str | None = None
+    try:
+        import httpx
+        resp = httpx.get(
+            "https://slack.com/api/auth.test",
+            headers={
+                "Authorization": f"Bearer {xoxc_token}",
+                "Cookie": f"d={d_cookie}",
+            },
+            timeout=10,
+        )
+        data = resp.json()
+        if data.get("ok"):
+            user_id = data.get("user_id")
+    except Exception:
+        pass
+
+    creds = SlackCredentials(xoxc_token=xoxc_token, d_cookie=d_cookie, user_id=user_id)
     update("slack", creds)
-    typer.echo("\nSlack credentials saved to ~/.agentgraph/credentials.json")
+    msg = "\nSlack credentials saved to ~/.agentgraph/credentials.json"
+    if user_id:
+        msg += f" (authenticated as {user_id})"
+    typer.echo(msg)

@@ -14,6 +14,7 @@ class FocusEvent(BaseModel):
     title: str | None = None
     tab_id: int | None = None
     timestamp: datetime
+    meta: dict[str, str] | None = None
 
 
 class BlurEvent(BaseModel):

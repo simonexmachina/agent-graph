@@ -1,4 +1,4 @@
-"""CLI query commands — thin wrappers over the graph query layer."""
+"""CLI query commands — call the running server when available, fall back to local."""
 
 from __future__ import annotations
 
@@ -6,24 +6,79 @@ import asyncio
 import json
 from typing import Any
 
+import httpx
 from rich.console import Console
 from rich.table import Table
 
+from agentgraph.config import get_settings
+
 console = Console()
+
+
+def _server_base() -> str:
+    s = get_settings()
+    return f"http://{s.server_host}:{s.server_port}/api/cli"
+
+
+def _get(path: str, params: dict[str, Any] | None = None) -> Any | None:
+    """
+    GET from the server's CLI API.  Returns parsed JSON on success, None if the
+    server is unreachable (connection refused / timeout).
+    """
+    try:
+        resp = httpx.get(
+            f"{_server_base()}{path}",
+            params=params,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.ConnectError:
+        return None
+    except httpx.TimeoutException:
+        return None
+
+
+def _post(path: str, params: dict[str, Any] | None = None) -> Any | None:
+    """POST to the server's CLI API. Returns parsed JSON on success, None if unreachable."""
+    try:
+        resp = httpx.post(
+            f"{_server_base()}{path}",
+            params=params,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.ConnectError:
+        return None
+    except httpx.TimeoutException:
+        return None
 
 
 def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
+def _warn_local() -> None:
+    console.print(
+        "[dim]Server not running — using local DB (embedding model will load)[/dim]"
+    )
+
+
 # ---------------------------------------------------------------------------
 # search
 # ---------------------------------------------------------------------------
 
-def cmd_search(query: str, entity_types: list[str], limit: int, as_json: bool) -> None:
-    from agentgraph.graph.query import search_entities
+def cmd_search(query: str, entity_types: list[str], limit: int, min_score: float, as_json: bool) -> None:
+    params: dict[str, Any] = {"q": query, "limit": limit, "min_score": min_score}
+    if entity_types:
+        params["entity_type"] = entity_types
 
-    results = _run(search_entities(query, entity_types=entity_types or None, limit=limit))
+    results = _get("/search", params)
+    if results is None:
+        _warn_local()
+        from agentgraph.graph.query import search_entities
+        results = _run(search_entities(query, entity_types=entity_types or None, limit=limit, min_score=min_score))
 
     if as_json:
         console.print_json(json.dumps(results, default=str))
@@ -53,9 +108,11 @@ def cmd_search(query: str, entity_types: list[str], limit: int, as_json: bool) -
 # ---------------------------------------------------------------------------
 
 def cmd_get(entity_id: str, as_json: bool) -> None:
-    from agentgraph.graph.query import get_entity
-
-    entity = _run(get_entity(entity_id))
+    entity = _get(f"/entity/{entity_id}")
+    if entity is None:
+        _warn_local()
+        from agentgraph.graph.query import get_entity
+        entity = _run(get_entity(entity_id))
 
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
@@ -82,9 +139,19 @@ def cmd_get(entity_id: str, as_json: bool) -> None:
 def cmd_edges(
     entity_id: str, edge_type: str | None, direction: str, as_json: bool
 ) -> None:
-    from agentgraph.graph.query import get_edges
+    params: dict[str, Any] = {"direction": direction}
+    if edge_type:
+        params["edge_type"] = edge_type
 
-    edges = _run(get_edges(entity_id, edge_type=edge_type, direction=direction))
+    edges = _get(f"/edges/{entity_id}", params)
+    if edges is None:
+        _warn_local()
+        from agentgraph.graph.query import get_edges, get_entity
+        entity = _run(get_entity(entity_id))
+        if entity is None:
+            console.print(f"[red]Entity {entity_id!r} not found.[/red]")
+            return
+        edges = _run(get_edges(entity["id"], edge_type=edge_type, direction=direction))
 
     if as_json:
         console.print_json(json.dumps(edges, default=str))
@@ -101,12 +168,12 @@ def cmd_edges(
     table.add_column("Platform")
 
     for e in edges:
-        if e.get("source_entity_id") == entity_id or e.get("source_person_id") == entity_id:
+        if e.get("source_entity_id") == entity_id:
             direction_label = "→ out"
-            other = e.get("target_ref") or e.get("target_entity_id") or e.get("target_person_id") or "?"
+            other = e.get("target_ref") or e.get("target_entity_id") or "?"
         else:
             direction_label = "← in"
-            other = e.get("source_ref") or e.get("source_entity_id") or e.get("source_person_id") or "?"
+            other = e.get("source_ref") or e.get("source_entity_id") or "?"
         table.add_row(e["edge_type"], direction_label, str(other), e.get("platform") or "")
 
     console.print(table)
@@ -117,9 +184,15 @@ def cmd_edges(
 # ---------------------------------------------------------------------------
 
 def cmd_traverse(entity_id: str, max_depth: int, as_json: bool) -> None:
-    from agentgraph.graph.query import traverse_graph
-
-    result = _run(traverse_graph(entity_id, max_depth=max_depth))
+    result = _get(f"/traverse/{entity_id}", {"depth": max_depth})
+    if result is None:
+        _warn_local()
+        from agentgraph.graph.query import get_entity, traverse_graph
+        entity = _run(get_entity(entity_id))
+        if entity is None:
+            console.print(f"[red]Entity {entity_id!r} not found.[/red]")
+            return
+        result = _run(traverse_graph(entity["id"], max_depth=max_depth))
 
     if as_json:
         console.print_json(json.dumps(result, default=str))
@@ -145,12 +218,61 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool) -> None:
 # query
 # ---------------------------------------------------------------------------
 
-def cmd_query(
-    entity_type: str, filters: dict[str, str], limit: int, as_json: bool
-) -> None:
-    from agentgraph.graph.query import query_by_filter
+def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
+    result = _post(f"/fetch", params={"platform": platform, "resource_id": resource_id})
+    if result is None:
+        _warn_local()
+        from agentgraph.graph.fetch import fetch_entity
+        try:
+            result = _run(fetch_entity(platform, resource_id))
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            return
 
-    results = _run(query_by_filter(entity_type, filters=filters, limit=limit))
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+
+    console.print(
+        f"[green]Fetched:[/green] {result['entities']} entities, "
+        f"{result['persons']} persons, {result['edges']} edges"
+    )
+
+
+def cmd_query(
+    entity_type: str,
+    filters: dict[str, str],
+    limit: int,
+    order_by: str,
+    since: str | None,
+    authored_by_me: bool,
+    as_json: bool,
+) -> None:
+    params: dict[str, Any] = {
+        "entity_type": entity_type,
+        "limit": limit,
+        "order_by": order_by,
+        "mine": authored_by_me,
+    }
+    if since:
+        params["since"] = since
+    if filters:
+        params["filter"] = [f"{k}={v}" for k, v in filters.items()]
+
+    results = _get("/query", params)
+    if results is None:
+        _warn_local()
+        from agentgraph.graph.query import query_by_filter
+        results = _run(
+            query_by_filter(
+                entity_type,
+                filters=filters,
+                limit=limit,
+                order_by=order_by,
+                since=since,
+                authored_by_me=authored_by_me,
+            )
+        )
 
     if as_json:
         console.print_json(json.dumps(results, default=str))

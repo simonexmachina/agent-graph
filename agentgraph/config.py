@@ -7,7 +7,6 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 CONFIG_DIR = Path.home() / ".agentgraph"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
@@ -33,7 +32,7 @@ class Settings(BaseSettings):
 
     # Dwell detection
     dwell_threshold_seconds: int = Field(
-        default=5,
+        default=3,
         description="Seconds a focus event must persist without a blur before triggering a fetch",
     )
     dwell_poll_interval_seconds: float = Field(
@@ -51,6 +50,16 @@ class Settings(BaseSettings):
         description="sentence-transformers model name for content embeddings",
     )
     embedding_dimensions: int = Field(default=384)
+
+    # Connectors
+    slack_workspace_id: str | None = Field(
+        default=None,
+        description="Slack workspace ID (e.g. T01ABC123) to observe; others are ignored",
+    )
+    google_auth_provider: str = Field(
+        default="oauth",
+        description="Google auth provider: 'oauth' (custom OAuth2 flow) or 'gcloud' (Application Default Credentials)",
+    )
 
     # Logging
     log_level: str = Field(default="INFO")

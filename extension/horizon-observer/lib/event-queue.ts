@@ -13,6 +13,7 @@ export interface ObserveEvent {
   title?: string;
   tab_id: number;
   timestamp: string; // ISO-8601
+  meta?: Record<string, string>;
 }
 
 const QUEUE_KEY = "agentgraph_event_queue";

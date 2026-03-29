@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel
@@ -66,7 +66,7 @@ class FetchPolicy:
         """
         if last_synced_at is None:
             return self.FIRST_VISIT
-        age = datetime.now(timezone.utc) - last_synced_at
+        age = datetime.now(UTC) - last_synced_at
         if age > self.stale_after:
             return self.INCREMENTAL
         return self.FRESH
@@ -80,7 +80,7 @@ class BaseConnector(ABC):
     def can_handle(self, url: str) -> bool: ...
 
     @abstractmethod
-    async def fetch(self, resource_type: str, resource_id: str) -> EntityBatch: ...
+    async def fetch(self, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch: ...
 
     async def last_synced_at(self, resource_id: str) -> datetime | None:
         """Return the most recent synced_at for a platform entity, or None."""

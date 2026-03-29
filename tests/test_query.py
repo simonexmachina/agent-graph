@@ -50,9 +50,7 @@ def _edge(
         "platform": "gdocs",
         "properties": {},
         "source_entity_id": source_entity_id,
-        "source_person_id": None,
         "target_entity_id": target_entity_id,
-        "target_person_id": None,
         "source_ref": None,
         "target_ref": None,
     }
@@ -145,8 +143,7 @@ async def test_get_edges_returns_edges() -> None:
 
     eid = str(uuid4())
     edge = _edge(source_entity_id=eid)
-    row = _make_db_row(edge, extra={"source_entity_ref": "pe-123", "target_entity_ref": None,
-                                     "source_person_ref": None, "target_person_ref": None})
+    row = _make_db_row(edge, extra={"source_ref": "pe-123", "target_ref": None})
 
     with patch("agentgraph.graph.query.get_pool") as mock_pool:
         mock_conn = AsyncMock()

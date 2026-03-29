@@ -6,14 +6,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from google.auth.transport.requests import Request  # type: ignore[import-untyped]
-from google.oauth2.credentials import Credentials  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
-from agentgraph.auth.credentials import load as load_creds
+from agentgraph.auth.google_provider import get_provider
 from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
@@ -31,45 +29,113 @@ _STALE_AFTER = 15 * 60
 
 
 def _build_service() -> Any:
-    stored = load_creds()
-    if stored.google is None:
-        raise RuntimeError("Google credentials not configured. Run: agentgraph auth google-docs")
-
-    g = stored.google
-    creds = Credentials(
-        token=g.access_token,
-        refresh_token=g.refresh_token,
-        token_uri=g.token_uri,
-        client_id=g.client_id,
-        client_secret=g.client_secret,
-    )
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        # Persist refreshed token
-        from agentgraph.auth.credentials import GoogleCredentials, update
-        update("google", GoogleCredentials(
-            client_id=g.client_id,
-            client_secret=g.client_secret,
-            access_token=creds.token or "",
-            refresh_token=creds.refresh_token or "",
-        ))
-
-    return build("docs", "v1", credentials=creds)
+    return build("docs", "v1", credentials=get_provider().get_credentials())
 
 
-def _extract_plain_text(doc: dict[str, Any]) -> str:
-    """Walk the document body and extract plain text."""
-    parts: list[str] = []
+def _build_drive_service() -> Any:
+    return build("drive", "v3", credentials=get_provider().get_credentials())
+
+
+_HEADING_PREFIX: dict[str, str] = {
+    "HEADING_1": "# ",
+    "HEADING_2": "## ",
+    "HEADING_3": "### ",
+    "HEADING_4": "#### ",
+    "HEADING_5": "##### ",
+    "HEADING_6": "###### ",
+    "TITLE":     "# ",
+    "SUBTITLE":  "## ",
+}
+
+# glyphTypes that indicate an ordered list
+_ORDERED_GLYPH_TYPES = {"DECIMAL", "ALPHA", "UPPER_ALPHA", "ROMAN", "UPPER_ROMAN"}
+
+
+def _extract_markdown(doc: dict[str, Any]) -> str:
+    """Walk the document body and render content as Markdown."""
+    lists: dict[str, Any] = doc.get("lists", {})
+    # ordered-list counters: (list_id, nesting_level) → next index
+    ordered_counters: dict[tuple[str, int], int] = {}
+
+    lines: list[str] = []
     body = doc.get("body", {})
+
     for element in body.get("content", []):
         paragraph = element.get("paragraph")
         if not paragraph:
             continue
+
+        style = paragraph.get("paragraphStyle", {})
+        named_style = style.get("namedStyleType", "NORMAL_TEXT")
+        bullet = paragraph.get("bullet")
+
+        # ── Collect inline text from all text runs ────────────────────────
+        inline_parts: list[str] = []
         for pe in paragraph.get("elements", []):
             text_run = pe.get("textRun")
-            if text_run:
-                parts.append(text_run.get("content", ""))
-    return "".join(parts).strip()
+            if not text_run:
+                continue
+            raw = text_run.get("content", "")
+            # Strip the trailing newline that Docs embeds in each paragraph element
+            raw = raw.rstrip("\n")
+            if not raw:
+                continue
+            ts = text_run.get("textStyle", {})
+            link_url: str = (ts.get("link") or {}).get("url", "")
+            bold: bool = ts.get("bold", False)
+            italic: bool = ts.get("italic", False)
+
+            text = raw
+            if link_url:
+                text = f"[{text}]({link_url})"
+            if bold:
+                text = f"**{text}**"
+            if italic:
+                text = f"*{text}*"
+            inline_parts.append(text)
+
+        inline = "".join(inline_parts).strip()
+        if not inline:
+            continue
+
+        # ── List items ────────────────────────────────────────────────────
+        if bullet:
+            list_id: str = bullet.get("listId", "")
+            nesting: int = bullet.get("nestingLevel", 0)
+            indent = "  " * nesting
+
+            # Determine ordered vs unordered from list properties
+            nesting_levels = (
+                lists.get(list_id, {})
+                    .get("listProperties", {})
+                    .get("nestingLevels", [])
+            )
+            glyph_type = ""
+            if nesting < len(nesting_levels):
+                glyph_type = nesting_levels[nesting].get("glyphType", "")
+
+            if glyph_type in _ORDERED_GLYPH_TYPES:
+                key = (list_id, nesting)
+                n = ordered_counters.get(key, 0) + 1
+                ordered_counters[key] = n
+                lines.append(f"{indent}{n}. {inline}")
+            else:
+                lines.append(f"{indent}- {inline}")
+
+        # ── Headings ──────────────────────────────────────────────────────
+        elif named_style in _HEADING_PREFIX:
+            prefix = _HEADING_PREFIX[named_style]
+            if lines:
+                lines.append("")       # blank line before heading
+            lines.append(f"{prefix}{inline}")
+            lines.append("")           # blank line after heading
+
+        # ── Normal paragraphs ─────────────────────────────────────────────
+        else:
+            lines.append(inline)
+            lines.append("")           # blank line between paragraphs
+
+    return "\n".join(lines).strip()
 
 
 def _extract_persons(doc: dict[str, Any], doc_id: str) -> tuple[list[PersonRecord], list[EdgeRecord]]:
@@ -109,7 +175,7 @@ class GoogleDocsConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return "docs.google.com/document" in url
 
-    async def fetch(self, resource_type: str, resource_id: str) -> EntityBatch:
+    async def fetch(self, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)
 
@@ -138,15 +204,45 @@ async def _touch_last_accessed(doc_id: str) -> None:
 async def _fetch_doc(doc_id: str) -> EntityBatch:
     import asyncio
 
-    service = await asyncio.get_event_loop().run_in_executor(None, _build_service)
-    doc: dict[str, Any] = await asyncio.get_event_loop().run_in_executor(
+    loop = asyncio.get_event_loop()
+    service = await loop.run_in_executor(None, _build_service)
+    doc: dict[str, Any] = await loop.run_in_executor(
         None,
         lambda: service.documents().get(documentId=doc_id).execute(),
     )
 
     title = doc.get("title", "")
-    content = _extract_plain_text(doc)
+    content = _extract_markdown(doc)
     persons, person_edges = _extract_persons(doc, doc_id)
+
+    # Fetch document owners via Drive API and emit authored edges
+    try:
+        drive_service = await loop.run_in_executor(None, _build_drive_service)
+        file_meta: dict[str, Any] = await loop.run_in_executor(
+            None,
+            lambda: drive_service.files().get(
+                fileId=doc_id,
+                fields="owners",
+            ).execute(),
+        )
+        for owner in file_meta.get("owners", []):
+            email: str = owner.get("emailAddress", "")
+            name: str = owner.get("displayName", "")
+            if email:
+                persons.append(PersonRecord(
+                    platform="gdocs",
+                    platform_user_id=email,
+                    canonical_email=email,
+                    display_name=name or None,
+                ))
+                person_edges.append(EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id=email,
+                    target_platform_entity_id=doc_id,
+                    platform="gdocs",
+                ))
+    except Exception:
+        logger.debug("Could not fetch Drive ownership for %s", doc_id)
 
     entity = EntityRecord(
         entity_type="Document",
@@ -154,7 +250,7 @@ async def _fetch_doc(doc_id: str) -> EntityBatch:
         platform_entity_id=doc_id,
         title=title,
         content=content,
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
     )
 
     return EntityBatch(

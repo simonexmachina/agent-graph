@@ -1,11 +1,11 @@
 ---
 # agent-graph-og3t
 title: Slack connector
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-03-24T10:30:07Z
-updated_at: 2026-03-24T10:33:45Z
+updated_at: 2026-03-24T11:15:42Z
 parent: agent-graph-sb7y
 blocked_by:
     - agent-graph-hpnd

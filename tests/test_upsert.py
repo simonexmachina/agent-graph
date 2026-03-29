@@ -50,7 +50,6 @@ async def db():
     async with pool.acquire() as conn:
         await conn.execute("DELETE FROM edges")
         await conn.execute("DELETE FROM entities")
-        await conn.execute("DELETE FROM persons")
     await close_pool()
 
 
@@ -71,10 +70,14 @@ async def test_upsert_person_with_email() -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM persons WHERE canonical_email = 'alice@example.com'"
+            """
+            SELECT * FROM entities
+            WHERE entity_type = 'Person' AND platform_entity_id = 'alice@example.com'
+            """
         )
     assert row is not None
-    assert row["display_name"] == "Alice"
+    assert row["title"] == "Alice"
+    assert row["platform"] == "canonical"
 
 
 @pytest.mark.integration
@@ -91,7 +94,10 @@ async def test_upsert_person_idempotent() -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         count = await conn.fetchval(
-            "SELECT count(*) FROM persons WHERE canonical_email = 'bob@example.com'"
+            """
+            SELECT count(*) FROM entities
+            WHERE entity_type = 'Person' AND platform_entity_id = 'bob@example.com'
+            """
         )
     assert count == 1
 

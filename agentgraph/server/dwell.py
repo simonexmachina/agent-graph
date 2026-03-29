@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from agentgraph.config import get_settings
 from agentgraph.db.connection import get_pool
@@ -23,14 +23,14 @@ async def evaluate_once() -> None:
     """
     settings = get_settings()
     threshold = timedelta(seconds=settings.dwell_threshold_seconds)
-    cutoff = datetime.now(timezone.utc) - threshold
+    cutoff = datetime.now(UTC) - threshold
 
     pool = await get_pool()
     async with pool.acquire() as conn:
         # Find mature, unevaluated focus events
         rows = await conn.fetch(
             """
-            SELECT o.id, o.url, o.tab_id, o.timestamp
+            SELECT o.id, o.url, o.tab_id, o.timestamp, o.meta
             FROM observations o
             WHERE o.event_type = 'focus'
               AND o.evaluated = false
@@ -50,6 +50,13 @@ async def evaluate_once() -> None:
         for row in rows:
             ref = classify_url(row["url"])
             if ref is not None:
+                import json as _json
+                meta: dict[str, str] | None = None
+                if row["meta"]:
+                    try:
+                        meta = _json.loads(row["meta"])
+                    except Exception:
+                        pass
                 logger.info(
                     "Dwell detected: %s %s/%s (tab %s)",
                     ref.source,
@@ -58,7 +65,7 @@ async def evaluate_once() -> None:
                     row["tab_id"],
                 )
                 # Dispatch to connector (imported here to avoid circular deps)
-                asyncio.create_task(_dispatch(ref.source, ref.resource_type, ref.resource_id))
+                asyncio.create_task(_dispatch(ref.source, ref.resource_type, ref.resource_id, meta))
 
             # Mark evaluated regardless of whether we recognised the URL
             await conn.execute(
@@ -67,7 +74,7 @@ async def evaluate_once() -> None:
             )
 
 
-async def _dispatch(source: str, resource_type: str, resource_id: str) -> None:
+async def _dispatch(source: str, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> None:
     """Fire-and-forget connector fetch."""
     from agentgraph.connectors.registry import get_connector
 
@@ -76,7 +83,13 @@ async def _dispatch(source: str, resource_type: str, resource_id: str) -> None:
         logger.debug("No connector registered for source '%s'", source)
         return
     try:
-        await connector.fetch(resource_type=resource_type, resource_id=resource_id)
+        logger.info("Fetching %s/%s/%s", source, resource_type, resource_id)
+        batch = await connector.fetch(resource_type=resource_type, resource_id=resource_id, meta=meta)
+        logger.info(
+            "Fetch complete %s/%s/%s — %d entities, %d persons, %d edges",
+            source, resource_type, resource_id,
+            len(batch.entities), len(batch.persons), len(batch.edges),
+        )
     except Exception:
         logger.exception("Connector fetch failed: %s/%s/%s", source, resource_type, resource_id)
 

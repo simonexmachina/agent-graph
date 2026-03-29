@@ -16,16 +16,25 @@ class GoogleCredentials(BaseModel):
     access_token: str
     refresh_token: str
     token_uri: str = "https://oauth2.googleapis.com/token"
+    user_email: str | None = None
+    display_name: str | None = None
 
 
 class SlackCredentials(BaseModel):
     xoxc_token: str
     d_cookie: str
+    user_id: str | None = None
+
+
+class DiscordCredentials(BaseModel):
+    bot_token: str
+    bot_user_id: str | None = None
 
 
 class Credentials(BaseModel):
     google: GoogleCredentials | None = None
     slack: SlackCredentials | None = None
+    discord: DiscordCredentials | None = None
 
 
 def load() -> Credentials:

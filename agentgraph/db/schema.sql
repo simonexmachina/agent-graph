@@ -5,41 +5,16 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;  -- for future trigram-based fuzzy search
 
 -- ---------------------------------------------------------------------------
--- Persons: canonical identity keyed by email
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS persons (
-    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    canonical_email TEXT UNIQUE,          -- NULL for email-less identities
-    display_name TEXT,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_accessed TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_persons_email ON persons (canonical_email)
-    WHERE canonical_email IS NOT NULL;
-
--- ---------------------------------------------------------------------------
--- Platform identities: links a Person to a platform-specific ID
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS platform_identities (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    person_id        UUID NOT NULL REFERENCES persons (id) ON DELETE CASCADE,
-    platform         TEXT NOT NULL,        -- 'slack' | 'gdocs' | etc.
-    platform_user_id TEXT NOT NULL,
-    platform_username TEXT,
-    raw_profile      JSONB NOT NULL DEFAULT '{}',
-    UNIQUE (platform, platform_user_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_platform_identities_person ON platform_identities (person_id);
-
--- ---------------------------------------------------------------------------
--- Entities: messages, documents, tasks, channels, etc.
+-- Entities: messages, documents, channels, persons, etc.
+-- entity_type: 'Message' | 'Document' | 'Channel' | 'Task' | 'Person'
+-- platform:    'slack' | 'gdocs' | 'canonical' (Person nodes use 'canonical')
+-- For Person nodes: platform='canonical', platform_entity_id=canonical_email
+--   (or 'platform:user_id' if email unknown), metadata includes platform user IDs
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS entities (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    entity_type      TEXT NOT NULL,        -- 'Message' | 'Document' | 'Channel' | 'Task' | 'Project'
-    platform         TEXT NOT NULL,        -- 'slack' | 'gdocs'
+    entity_type      TEXT NOT NULL,
+    platform         TEXT NOT NULL,
     platform_entity_id TEXT NOT NULL,
     title            TEXT,
     content          TEXT,
@@ -47,7 +22,7 @@ CREATE TABLE IF NOT EXISTS entities (
     metadata         JSONB NOT NULL DEFAULT '{}',
     created_at       TIMESTAMPTZ,
     updated_at       TIMESTAMPTZ,
-    synced_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    synced_at        TIMESTAMPTZ,
     last_accessed    TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (platform, platform_entity_id)
 );
@@ -65,36 +40,32 @@ CREATE INDEX IF NOT EXISTS idx_entities_fulltext ON entities
             coalesce(title, '') || ' ' || coalesce(content, ''))
     );
 
-CREATE INDEX IF NOT EXISTS idx_entities_type     ON entities (entity_type);
-CREATE INDEX IF NOT EXISTS idx_entities_platform ON entities (platform);
+CREATE INDEX IF NOT EXISTS idx_entities_type         ON entities (entity_type);
+CREATE INDEX IF NOT EXISTS idx_entities_platform     ON entities (platform);
 CREATE INDEX IF NOT EXISTS idx_entities_last_accessed ON entities (last_accessed);
 
 -- ---------------------------------------------------------------------------
--- Edges: typed relationships between entities and/or persons
+-- Edges: typed relationships between entities (including Person entities)
+-- edge_type: 'authored' | 'posted_in' | 'replied_to' | 'mentions' |
+--            'collaborated' | 'references'
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS edges (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    edge_type        TEXT NOT NULL,        -- 'authored' | 'posted_in' | 'replied_to' | 'mentions' | 'references'
-    source_entity_id UUID REFERENCES entities (id) ON DELETE CASCADE,
-    source_person_id UUID REFERENCES persons (id)  ON DELETE CASCADE,
-    target_entity_id UUID REFERENCES entities (id) ON DELETE CASCADE,
-    target_person_id UUID REFERENCES persons (id)  ON DELETE CASCADE,
+    edge_type        TEXT NOT NULL,
+    source_entity_id UUID NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
+    target_entity_id UUID NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     platform         TEXT,
     properties       JSONB NOT NULL DEFAULT '{}',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT edges_has_source CHECK (
-        source_entity_id IS NOT NULL OR source_person_id IS NOT NULL
-    ),
-    CONSTRAINT edges_has_target CHECK (
-        target_entity_id IS NOT NULL OR target_person_id IS NOT NULL
-    )
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_edges_source_entity ON edges (source_entity_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target_entity ON edges (target_entity_id);
-CREATE INDEX IF NOT EXISTS idx_edges_source_person ON edges (source_person_id);
-CREATE INDEX IF NOT EXISTS idx_edges_target_person ON edges (target_person_id);
-CREATE INDEX IF NOT EXISTS idx_edges_type           ON edges (edge_type);
+CREATE INDEX IF NOT EXISTS idx_edges_type          ON edges (edge_type);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_edges_unique ON edges (
+    edge_type, source_entity_id, target_entity_id
+);
 
 -- ---------------------------------------------------------------------------
 -- Observations: raw focus/blur events from the browser extension
@@ -107,8 +78,11 @@ CREATE TABLE IF NOT EXISTS observations (
     tab_id     INTEGER,
     timestamp  TIMESTAMPTZ NOT NULL,
     evaluated  BOOLEAN NOT NULL DEFAULT false,  -- has dwell evaluator processed this?
+    meta       JSONB,                           -- optional platform metadata (e.g. gmail_message_id)
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE observations ADD COLUMN IF NOT EXISTS meta JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_observations_timestamp  ON observations (timestamp);
 CREATE INDEX IF NOT EXISTS idx_observations_evaluated  ON observations (evaluated) WHERE NOT evaluated;

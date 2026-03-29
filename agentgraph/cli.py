@@ -30,8 +30,18 @@ def auth_slack() -> None:
     run_cookie_flow()
 
 
+@auth_app.command("discord")
+def auth_discord() -> None:
+    """Store Discord bot token credentials."""
+    from agentgraph.auth.discord import run_token_flow
+
+    run_token_flow()
+
+
 @app.command()
-def serve() -> None:
+def serve(
+    reload: bool = typer.Option(False, "--reload", "-r", help="Auto-reload on code changes"),
+) -> None:
     """Start the AgentGraph backend server."""
     import uvicorn
 
@@ -44,7 +54,7 @@ def serve() -> None:
         "agentgraph.server.app:app",
         host=settings.server_host,
         port=settings.server_port,
-        reload=False,
+        reload=reload,
     )
 
 
@@ -53,12 +63,13 @@ def search(
     query: str = typer.Argument(..., help="Search query"),
     type: list[str] = typer.Option([], "--type", "-t", help="Filter by entity type"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results"),
+    min_score: float = typer.Option(0.03, "--min-score", help="Minimum relevance score (0–1)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Search the knowledge graph."""
     from agentgraph.cli_query import cmd_search
 
-    cmd_search(query=query, entity_types=type, limit=limit, as_json=json)
+    cmd_search(query=query, entity_types=type, limit=limit, min_score=min_score, as_json=json)
 
 
 @app.command()
@@ -98,6 +109,41 @@ def traverse(
 
 
 @app.command()
+def fetch(
+    platform: str = typer.Argument(..., help="Platform name (e.g. gdocs, slack, discord)"),
+    resource_id: str = typer.Argument(..., help="Platform-specific entity ID"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Trigger a connector fetch for a platform entity."""
+    from agentgraph.cli_query import cmd_fetch
+
+    cmd_fetch(platform=platform, resource_id=resource_id, as_json=json)
+
+
+@app.command()
+def onboard() -> None:
+    """Interactive setup: authenticate with Google Docs, Slack, and Discord."""
+    import typer
+
+    from agentgraph.auth.discord import run_token_flow as discord_flow
+    from agentgraph.auth.google import run_oauth_flow
+    from agentgraph.auth.slack import run_cookie_flow
+
+    typer.echo("=== AgentGraph Setup ===\n")
+
+    typer.echo("Step 1/3: Google Docs")
+    run_oauth_flow()
+
+    typer.echo("\nStep 2/3: Slack")
+    run_cookie_flow()
+
+    typer.echo("\nStep 3/3: Discord")
+    discord_flow()
+
+    typer.echo("\nSetup complete. Run `agentgraph serve` to start the server.")
+
+
+@app.command()
 def mcp_serve() -> None:
     """Start the AgentGraph MCP server (stdio transport)."""
     from agentgraph.mcp.server import mcp
@@ -108,12 +154,15 @@ def mcp_serve() -> None:
 @app.command()
 def query(
     entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
-    filter: list[str] = typer.Option([], "--filter", "-f", help="key=value filters"),
+    filter: list[str] = typer.Option([], "--filter", "-f", help="key=value filters (column or metadata)"),
+    since: str | None = typer.Option(None, "--since", "-s", help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)"),
+    mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results"),
+    order_by: str = typer.Option("created_at", "--order-by", "-o", help="Column to sort by (created_at, updated_at, last_accessed)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Query entities by type and filters."""
     from agentgraph.cli_query import cmd_query
 
     parsed_filters = dict(f.split("=", 1) for f in filter if "=" in f)
-    cmd_query(entity_type=entity_type, filters=parsed_filters, limit=limit, as_json=json)
+    cmd_query(entity_type=entity_type, filters=parsed_filters, limit=limit, order_by=order_by, since=since, authored_by_me=mine, as_json=json)

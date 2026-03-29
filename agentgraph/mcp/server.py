@@ -36,6 +36,7 @@ async def search_entities_tool(
     query: str,
     entity_types: list[str] | None = None,
     limit: int = 10,
+    min_score: float = 0.03,
 ) -> str:
     """
     Search the knowledge graph using a natural-language query.
@@ -48,12 +49,14 @@ async def search_entities_tool(
         entity_types: Optional list of entity types to restrict results
             (e.g. ["Message", "Document", "Channel"]).
         limit: Maximum number of results to return (default 10).
+        min_score: Minimum relevance score threshold (0–1, default 0.02).
+            Results below this score are suppressed as noise.
 
     Returns:
         JSON array of matching entities with id, title, content snippet,
         platform, and relevance score.
     """
-    results = await search_entities(query, entity_types=entity_types, limit=limit)
+    results = await search_entities(query, entity_types=entity_types, limit=limit, min_score=min_score)
     # Trim content to a readable snippet for the LLM
     for r in results:
         if r.get("content") and len(str(r["content"])) > 500:
@@ -140,6 +143,34 @@ async def traverse_graph_tool(
 
 
 # ---------------------------------------------------------------------------
+# fetch_entity — trigger connector re-ingestion
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def fetch_entity_tool(platform: str, resource_id: str) -> str:
+    """
+    Trigger a connector fetch for a platform entity.
+
+    Forces re-ingestion of a specific resource from its source platform,
+    updating content and edges in the graph.
+
+    Args:
+        platform: Platform name (e.g. "gdocs", "slack", "discord", "gmail").
+        resource_id: Platform-specific entity ID.
+
+    Returns:
+        JSON object with counts of ingested entities, persons, and edges.
+    """
+    from agentgraph.graph.fetch import fetch_entity
+
+    try:
+        result = await fetch_entity(platform, resource_id)
+        return json.dumps(result)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
 # query_by_filter — type + metadata filters
 # ---------------------------------------------------------------------------
 
@@ -147,23 +178,38 @@ async def traverse_graph_tool(
 async def query_by_filter_tool(
     entity_type: str,
     filters: dict[str, Any] | None = None,
+    since: str | None = None,
+    authored_by_me: bool = False,
     limit: int = 50,
+    order_by: str = "created_at",
 ) -> str:
     """
-    Query entities by type with optional metadata key=value filters.
+    Query entities by type with optional filters.
 
-    Useful for listing all documents, all messages in a specific channel,
-    or all tasks with a given status.
+    Useful for listing all messages in a specific channel, all documents
+    on a platform, activity within a time window, or content authored by
+    the current user.
 
     Args:
         entity_type: Entity type to query ("Message", "Document",
             "Channel", "Task", "Project").
-        filters: Optional dict of metadata key=value pairs to filter by.
+        filters: Optional dict of key=value filters. Known columns
+            (platform, platform_entity_id) are applied as column filters;
+            all other keys are matched against the metadata JSONB field.
+        since: Optional time cutoff — ISO timestamp or relative duration
+            like "12h", "30m", "2d". Only returns entities created after
+            this time.
+        authored_by_me: If true, only return entities with an authored
+            edge from the current user (resolved from stored credentials).
         limit: Maximum number of results (default 50).
+        order_by: Column to sort by descending (default "created_at").
 
     Returns:
         JSON array of matching entities.
     """
     str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
-    results = await query_by_filter(entity_type, filters=str_filters, limit=limit)
+    results = await query_by_filter(
+        entity_type, filters=str_filters, limit=limit, order_by=order_by,
+        since=since, authored_by_me=authored_by_me,
+    )
     return json.dumps(results, default=str)

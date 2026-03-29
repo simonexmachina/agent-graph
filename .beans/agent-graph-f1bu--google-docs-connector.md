@@ -1,11 +1,11 @@
 ---
 # agent-graph-f1bu
 title: Google Docs connector
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-03-24T10:20:05Z
-updated_at: 2026-03-24T10:29:45Z
+updated_at: 2026-03-24T11:15:41Z
 parent: agent-graph-sb7y
 blocked_by:
     - agent-graph-hpnd

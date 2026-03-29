@@ -23,11 +23,10 @@ async def run_gc() -> int:
     settings = get_settings()
     pool = await get_pool()
 
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            # Delete stale entities (edges cascade automatically)
-            entity_count: int = await conn.fetchval(
-                """
+    async with pool.acquire() as conn, conn.transaction():
+        # Delete stale entities (edges cascade automatically)
+        entity_count: int = await conn.fetchval(
+            """
                 WITH deleted AS (
                     DELETE FROM entities
                     WHERE last_accessed < now() - ($1 || ' days')::interval
@@ -35,32 +34,12 @@ async def run_gc() -> int:
                 )
                 SELECT count(*) FROM deleted
                 """,
-                str(settings.retention_days),
-            )
+            str(settings.retention_days),
+        )
 
-            # Delete persons with no remaining edges
-            person_count: int = await conn.fetchval(
-                """
-                WITH deleted AS (
-                    DELETE FROM persons p
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM edges e
-                        WHERE e.source_person_id = p.id
-                           OR e.target_person_id = p.id
-                    )
-                    AND last_accessed < now() - ($1 || ' days')::interval
-                    RETURNING id
-                )
-                SELECT count(*) FROM deleted
-                """,
-                str(settings.retention_days),
-            )
-
-    total = entity_count + person_count
+    total = entity_count
     logger.info(
-        "GC complete: removed %d entities, %d persons (%d total, retention=%d days)",
-        entity_count,
-        person_count,
+        "GC complete: removed %d entities (retention=%d days)",
         total,
         settings.retention_days,
     )

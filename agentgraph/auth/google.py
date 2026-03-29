@@ -1,4 +1,4 @@
-"""Google OAuth2 flow for Google Docs / Drive API access."""
+"""Google OAuth2 flow for Google Docs API access."""
 
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false
@@ -15,8 +15,13 @@ from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 from agentgraph.auth.credentials import GoogleCredentials, update
 
 SCOPES = [
-    "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/documents.readonly",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/drive.metadata.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "openid",
 ]
 
 REDIRECT_URI = "http://localhost:8766"
@@ -25,8 +30,35 @@ CALLBACK_PORT = 8766
 
 def run_oauth_flow() -> None:
     """Interactive OAuth2 browser flow. Stores credentials on completion."""
-    client_id = typer.prompt("Google OAuth client ID")
-    client_secret = typer.prompt("Google OAuth client secret", hide_input=True)
+    from agentgraph.auth.credentials import load as load_creds
+
+    stored = load_creds()
+    existing = stored.google
+
+    if existing:
+        typer.echo(f"Re-authenticating as {existing.user_email or 'existing account'} with updated scopes.")
+        client_id = existing.client_id
+        client_secret = existing.client_secret
+    else:
+        typer.echo(
+            "\n"
+            "To get your Google OAuth credentials:\n"
+            "\n"
+            "  1. Go to https://console.cloud.google.com/\n"
+            "  2. Create a project (or select an existing one)\n"
+            "  3. Enable the APIs:\n"
+            "       APIs & Services → Enable APIs → search for and enable:\n"
+            "         • Google Docs API\n"
+            "         • Google Sheets API\n"
+            "  4. Create OAuth credentials:\n"
+            "       APIs & Services → Credentials → Create Credentials\n"
+            "       → OAuth client ID → Application type: Desktop app\n"
+            "  5. Copy the Client ID and Client Secret from the dialog\n"
+            "  6. Under OAuth consent screen → Audience, add your email\n"
+            "     as a Test user (required while the app is in testing mode)\n"
+        )
+        client_id = typer.prompt("Google OAuth client ID")
+        client_secret = typer.prompt("Google OAuth client secret", hide_input=True)
 
     client_config = {
         "installed": {
@@ -58,14 +90,36 @@ def run_oauth_flow() -> None:
     flow.fetch_token(code=auth_code)
     token = flow.credentials
 
+    # Fetch the authenticated user's identity
+    user_email: str | None = None
+    display_name: str | None = None
+    try:
+        import requests
+        resp = requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {token.token}"},
+            timeout=10,
+        )
+        if resp.ok:
+            info = resp.json()
+            user_email = info.get("email")
+            display_name = info.get("name")
+    except Exception:
+        pass
+
     creds = GoogleCredentials(
         client_id=client_id,
         client_secret=client_secret,
         access_token=token.token or "",
         refresh_token=token.refresh_token or "",
+        user_email=user_email,
+        display_name=display_name,
     )
     update("google", creds)
-    typer.echo("Google credentials saved to ~/.agentgraph/credentials.json")
+    msg = "Google credentials saved to ~/.agentgraph/credentials.json"
+    if user_email:
+        msg += f" (authenticated as {user_email})"
+    typer.echo(msg)
 
 
 def _wait_for_callback() -> str:
