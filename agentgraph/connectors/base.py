@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
+
+ResourceType = Literal["document", "spreadsheet", "channel", "message", "thread", "dm", "form"]
 
 
 class PersonRecord(BaseModel):
@@ -80,7 +82,7 @@ class BaseConnector(ABC):
     def can_handle(self, url: str) -> bool: ...
 
     @abstractmethod
-    async def fetch(self, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch: ...
+    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch: ...
 
     async def last_synced_at(self, resource_id: str) -> datetime | None:
         """Return the most recent synced_at for a platform entity, or None."""

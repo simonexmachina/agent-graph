@@ -35,6 +35,50 @@ def _build_drive_service() -> Any:
     return build("drive", "v3", credentials=get_provider().get_credentials())
 
 
+def _extract_plain_text(doc: dict[str, Any]) -> str:
+    """Extract plain text from a Google Docs API response body."""
+    parts: list[str] = []
+    for element in doc.get("body", {}).get("content", []):
+        paragraph = element.get("paragraph", {})
+        for pe in paragraph.get("elements", []):
+            text_run = pe.get("textRun", {})
+            content: str = text_run.get("content", "")
+            if content:
+                parts.append(content)
+    return "".join(parts).strip()
+
+
+def _extract_persons(
+    doc: dict[str, Any], doc_id: str
+) -> tuple[list[PersonRecord], list[EdgeRecord]]:
+    """Extract collaborators from a Google Docs API response's suggestion metadata."""
+    seen: set[str] = set()
+    persons: list[PersonRecord] = []
+    edges: list[EdgeRecord] = []
+
+    for suggestion in doc.get("suggestedDocumentStyleChanges", {}).values():
+        author = suggestion.get("author", {})
+        email: str = author.get("email", "")
+        name: str = author.get("displayName", "")
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        persons.append(PersonRecord(
+            platform="gdocs",
+            platform_user_id=email,
+            canonical_email=email,
+            display_name=name or None,
+        ))
+        edges.append(EdgeRecord(
+            edge_type="collaborated",
+            source_platform_user_id=email,
+            target_platform_entity_id=doc_id,
+            platform="gdocs",
+        ))
+
+    return persons, edges
+
+
 def _export_as_markdown(drive_service: Any, doc_id: str) -> str:
     """Export a Google Doc as HTML via Drive and convert to Markdown."""
     html: bytes = drive_service.files().export(

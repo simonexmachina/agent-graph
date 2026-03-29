@@ -19,6 +19,14 @@ from agentgraph.server.router import SourceReference, classify_url
             SourceReference(source="gdocs", resource_type="document", resource_id="abc123"),
         ),
         (
+            "https://docs.google.com/forms/d/1FAIpQLSfExampleFormId/viewform",
+            SourceReference(source="gforms", resource_type="form", resource_id="1FAIpQLSfExampleFormId"),
+        ),
+        (
+            "https://docs.google.com/forms/d/formId123/edit",
+            SourceReference(source="gforms", resource_type="form", resource_id="formId123"),
+        ),
+        (
             "https://app.slack.com/client/T012AB3CD/C01234567",
             SourceReference(source="slack", resource_type="channel", resource_id="C01234567"),
         ),

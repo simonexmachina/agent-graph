@@ -1,4 +1,4 @@
-"""Unit tests for Google Docs and Slack connectors (mocked HTTP)."""
+"""Unit tests for Google Docs, Google Forms, and Slack connectors (mocked HTTP)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import pytest
 
 from agentgraph.connectors.base import EntityBatch, FetchPolicy
 from agentgraph.connectors.gdocs import GoogleDocsConnector, _extract_plain_text, _extract_persons
+from agentgraph.connectors.gforms import GoogleFormsConnector, _render_form_content
 from agentgraph.connectors.slack import SlackConnector, _parse_mentions
 
 
@@ -240,3 +241,146 @@ def test_gdocs_can_handle(gdocs_connector: GoogleDocsConnector) -> None:
 def test_slack_can_handle(slack_connector: SlackConnector) -> None:
     assert slack_connector.can_handle("https://app.slack.com/client/T123/C456")
     assert not slack_connector.can_handle("https://docs.google.com")
+
+
+# ---------------------------------------------------------------------------
+# _render_form_content
+# ---------------------------------------------------------------------------
+
+def test_render_form_content_empty() -> None:
+    assert _render_form_content({}) == ""
+
+
+def test_render_form_content_description_only() -> None:
+    form: dict[str, Any] = {"info": {"description": "Fill out this survey."}}
+    result = _render_form_content(form)
+    assert "Fill out this survey." in result
+
+
+def test_render_form_content_short_answer_question() -> None:
+    form: dict[str, Any] = {
+        "info": {},
+        "items": [
+            {
+                "title": "What is your name?",
+                "questionItem": {
+                    "question": {
+                        "required": True,
+                        "textQuestion": {"paragraph": False},
+                    }
+                },
+            }
+        ],
+    }
+    result = _render_form_content(form)
+    assert "What is your name?" in result
+    assert "*" in result  # required marker
+    assert "SHORT_ANSWER" in result
+
+
+def test_render_form_content_choice_question() -> None:
+    form: dict[str, Any] = {
+        "info": {},
+        "items": [
+            {
+                "title": "Favourite colour?",
+                "questionItem": {
+                    "question": {
+                        "choiceQuestion": {
+                            "type": "RADIO",
+                            "options": [
+                                {"value": "Red"},
+                                {"value": "Blue"},
+                                {"value": "Green"},
+                            ],
+                        }
+                    }
+                },
+            }
+        ],
+    }
+    result = _render_form_content(form)
+    assert "Favourite colour?" in result
+    assert "RADIO" in result
+    assert "Red" in result
+    assert "Blue" in result
+
+
+def test_render_form_content_scale_question() -> None:
+    form: dict[str, Any] = {
+        "info": {},
+        "items": [
+            {
+                "title": "How satisfied are you?",
+                "questionItem": {
+                    "question": {
+                        "scaleQuestion": {
+                            "low": 1,
+                            "high": 5,
+                            "lowLabel": "Not at all",
+                            "highLabel": "Very much",
+                        }
+                    }
+                },
+            }
+        ],
+    }
+    result = _render_form_content(form)
+    assert "How satisfied are you?" in result
+    assert "SCALE" in result
+    assert "Not at all" in result
+    assert "Very much" in result
+
+
+# ---------------------------------------------------------------------------
+# GoogleFormsConnector.fetch — FetchPolicy branching
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def gforms_connector() -> GoogleFormsConnector:
+    return GoogleFormsConnector()
+
+
+@pytest.mark.asyncio
+async def test_gforms_fetch_fresh_returns_empty_batch(gforms_connector: GoogleFormsConnector) -> None:
+    with (
+        patch.object(gforms_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
+        patch("agentgraph.connectors.gforms._touch_last_accessed", new=AsyncMock()) as mock_touch,
+    ):
+        batch = await gforms_connector.fetch("form", "form-abc")
+
+    assert batch == EntityBatch()
+    mock_touch.assert_awaited_once_with("form-abc")
+
+
+@pytest.mark.asyncio
+async def test_gforms_fetch_stale_calls_fetch_form(gforms_connector: GoogleFormsConnector) -> None:
+    fake_batch = EntityBatch()
+    with (
+        patch.object(gforms_connector, "last_synced_at", new=AsyncMock(return_value=_stale_dt())),
+        patch("agentgraph.connectors.gforms._fetch_form", new=AsyncMock(return_value=fake_batch)),
+        patch("agentgraph.connectors.gforms.upsert_batch", new=AsyncMock()) as mock_upsert,
+    ):
+        batch = await gforms_connector.fetch("form", "form-xyz")
+
+    assert batch is fake_batch
+    mock_upsert.assert_awaited_once_with(fake_batch)
+
+
+@pytest.mark.asyncio
+async def test_gforms_fetch_first_visit_calls_fetch_form(gforms_connector: GoogleFormsConnector) -> None:
+    fake_batch = EntityBatch()
+    with (
+        patch.object(gforms_connector, "last_synced_at", new=AsyncMock(return_value=None)),
+        patch("agentgraph.connectors.gforms._fetch_form", new=AsyncMock(return_value=fake_batch)),
+        patch("agentgraph.connectors.gforms.upsert_batch", new=AsyncMock()),
+    ):
+        batch = await gforms_connector.fetch("form", "form-new")
+
+    assert batch is fake_batch
+
+
+def test_gforms_can_handle(gforms_connector: GoogleFormsConnector) -> None:
+    assert gforms_connector.can_handle("https://docs.google.com/forms/d/abc123/viewform")
+    assert gforms_connector.can_handle("https://docs.google.com/forms/d/abc123/edit")
+    assert not gforms_connector.can_handle("https://docs.google.com/document/d/abc123")
