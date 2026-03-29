@@ -138,3 +138,16 @@ async def cli_fetch(
         return await fetch_entity(platform, resource_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/fetch-entity")
+async def cli_fetch_entity(
+    entity_id: str = Query(...),
+) -> dict[str, Any]:
+    """Trigger a connector fetch for an entity by its internal UUID."""
+    from agentgraph.graph.fetch import fetch_entity_by_id
+
+    try:
+        return await fetch_entity_by_id(entity_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

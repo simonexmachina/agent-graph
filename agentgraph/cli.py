@@ -120,6 +120,17 @@ def fetch(
     cmd_fetch(platform=platform, resource_id=resource_id, as_json=json)
 
 
+@app.command("fetch-entity")
+def fetch_entity_cmd(
+    entity_id: str = typer.Argument(..., help="Internal entity UUID"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Trigger a connector re-fetch for an entity by its internal ID."""
+    from agentgraph.cli_query import cmd_fetch_entity
+
+    cmd_fetch_entity(entity_id=entity_id, as_json=json)
+
+
 @app.command()
 def onboard() -> None:
     """Interactive setup: authenticate with Google Docs, Slack, and Discord."""

@@ -171,6 +171,34 @@ async def fetch_entity_tool(platform: str, resource_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# fetch_entity_by_id — re-ingest by internal UUID
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def fetch_entity_by_id_tool(entity_id: str) -> str:
+    """
+    Trigger a connector fetch for an entity by its internal UUID.
+
+    Looks up the entity's platform and platform-specific ID, then forces
+    re-ingestion from the source platform.
+
+    Args:
+        entity_id: Internal entity UUID (the id field from graph nodes).
+
+    Returns:
+        JSON object with counts of ingested entities, persons, and edges,
+        or an error message if the entity is not found.
+    """
+    from agentgraph.graph.fetch import fetch_entity_by_id
+
+    try:
+        result = await fetch_entity_by_id(entity_id)
+        return json.dumps(result)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
 # query_by_filter — type + metadata filters
 # ---------------------------------------------------------------------------
 

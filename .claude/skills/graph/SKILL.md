@@ -20,8 +20,11 @@ agentgraph traverse <entity-id|platform/ref> [--depth N] [--json]
 # Filter entities by type and metadata
 agentgraph query --type <entity-type> [--filter key=value] [--since 12h|30m|2d] [--mine] [--limit N] [--order-by created_at|updated_at|last_accessed] [--json]
 
-# Trigger a connector fetch for a platform entity
+# Trigger a connector fetch for a platform entity (by platform + platform-specific ID)
 agentgraph fetch <platform> <resource-id> [--json]
+
+# Trigger a connector re-fetch for an entity by its internal UUID
+agentgraph fetch-entity <entity-id> [--json]
 
 # Server
 agentgraph serve [--reload]

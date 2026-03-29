@@ -219,12 +219,49 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool) -> None:
 # ---------------------------------------------------------------------------
 
 def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
-    result = _post(f"/fetch", params={"platform": platform, "resource_id": resource_id})
+    try:
+        result = _post(f"/fetch", params={"platform": platform, "resource_id": resource_id})
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        console.print(f"[red]{detail}[/red]")
+        return
     if result is None:
         _warn_local()
         from agentgraph.graph.fetch import fetch_entity
         try:
             result = _run(fetch_entity(platform, resource_id))
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            return
+
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+
+    console.print(
+        f"[green]Fetched:[/green] {result['entities']} entities, "
+        f"{result['persons']} persons, {result['edges']} edges"
+    )
+
+
+def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
+    try:
+        result = _post("/fetch-entity", params={"entity_id": entity_id})
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        console.print(f"[red]{detail}[/red]")
+        return
+    if result is None:
+        _warn_local()
+        from agentgraph.graph.fetch import fetch_entity_by_id
+        try:
+            result = _run(fetch_entity_by_id(entity_id))
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             return
