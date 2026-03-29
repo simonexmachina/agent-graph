@@ -6,12 +6,13 @@ import re
 from dataclasses import dataclass
 
 from agentgraph.config import get_settings
+from agentgraph.connectors.base import ResourceType
 
 
 @dataclass(frozen=True)
 class SourceReference:
-    source: str           # 'gdocs' | 'slack' | 'discord'
-    resource_type: str    # 'document' | 'channel'
+    source: str
+    resource_type: ResourceType
     resource_id: str
 
 
