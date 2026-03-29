@@ -18,6 +18,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents.readonly",
     "https://www.googleapis.com/auth/spreadsheets.readonly",
     "https://www.googleapis.com/auth/drive.metadata.readonly",
+    "https://www.googleapis.com/auth/forms.body.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -50,6 +51,7 @@ def run_oauth_flow() -> None:
             "       APIs & Services → Enable APIs → search for and enable:\n"
             "         • Google Docs API\n"
             "         • Google Sheets API\n"
+            "         • Google Forms API\n"
             "  4. Create OAuth credentials:\n"
             "       APIs & Services → Credentials → Create Credentials\n"
             "       → OAuth client ID → Application type: Desktop app\n"

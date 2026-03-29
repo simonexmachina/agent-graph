@@ -26,6 +26,9 @@ agentgraph fetch <platform> <resource-id> [--json]
 # Trigger a connector re-fetch for an entity by its internal UUID
 agentgraph fetch-entity <entity-id> [--json]
 
+# Trigger a background poll for one or all connectors
+agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive — omit for all
+
 # Server
 agentgraph serve [--reload]
 agentgraph mcp-serve

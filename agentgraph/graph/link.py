@@ -14,6 +14,8 @@ import json
 import logging
 import re
 
+from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE
+
 logger = logging.getLogger(__name__)
 
 # Broad URL extractor — classify_url does the fine-grained matching
@@ -25,15 +27,6 @@ _INSERT_EDGE = """
     VALUES ('references', $1, $2, 'cross', $3)
     ON CONFLICT (edge_type, source_entity_id, target_entity_id) DO NOTHING
 """
-
-
-_RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
-    "document":    "Document",
-    "spreadsheet": "Spreadsheet",
-    "channel":     "Channel",
-    "dm":          "Channel",
-    "message":     "Message",
-}
 
 
 async def link_entity_to_urls(platform_entity_id: str, platform: str, content: str) -> int:
@@ -80,8 +73,8 @@ async def link_entity_to_urls(platform_entity_id: str, platform: str, content: s
             )
             if not tgt_row:
                 # Create a stub so the reference is visible before the content is fetched.
-                # synced_at is set to epoch so the connector always treats it as stale.
-                entity_type = _RESOURCE_TYPE_TO_ENTITY_TYPE.get(ref.resource_type, "Document")
+                # synced_at is NULL so the connector always treats it as stale.
+                entity_type = RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type]  # type: ignore[index]
                 tgt_id = await conn.fetchval(  # type: ignore[attr-defined]
                     """
                     INSERT INTO entities (entity_type, platform, platform_entity_id, synced_at)

@@ -23,6 +23,7 @@ from agentgraph.server.cli_api import router as cli_router
 from agentgraph.server.dwell import run_dwell_loop
 from agentgraph.server.graph_api import router as graph_router
 from agentgraph.server.models import BlurEvent, FocusEvent
+from agentgraph.server.sync import setup_sync
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     _scheduler = AsyncIOScheduler()
     _scheduler.add_job(run_gc, "cron", hour=3, minute=0, id="gc")
+    setup_sync(_scheduler)
     _scheduler.start()
 
     logger.info("AgentGraph server started")

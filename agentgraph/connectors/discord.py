@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -17,6 +17,7 @@ from agentgraph.connectors.base import (
     EntityRecord,
     FetchPolicy,
     PersonRecord,
+    ResourceType,
 )
 from agentgraph.graph.upsert import upsert_batch
 
@@ -38,7 +39,7 @@ def _get_headers() -> dict[str, str]:
 
 
 async def _api_get(client: httpx.AsyncClient, path: str, **params: Any) -> Any:
-    for attempt in range(_MAX_RETRIES):
+    for _attempt in range(_MAX_RETRIES):
         resp = await client.get(
             f"{DISCORD_API}{path}",
             headers=_get_headers(),
@@ -82,11 +83,12 @@ def _parse_mentions(content: str) -> list[str]:
 class DiscordConnector(BaseConnector):
     source = "discord"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
+    poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
 
     def can_handle(self, url: str) -> bool:
         return "discord.com/channels/" in url
 
-    async def fetch(self, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)
 
@@ -104,6 +106,22 @@ class DiscordConnector(BaseConnector):
         batch = await _fetch_channel(resource_id, after_snowflake=after_snowflake, is_dm=is_dm)
         await upsert_batch(batch)
         return batch
+
+    async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
+        from agentgraph.connectors.slack import _get_known_channels
+
+        channel_rows = await _get_known_channels("discord")
+        combined = EntityBatch()
+        for channel_id, synced_at in channel_rows:
+            after_snowflake = _snowflake_after(synced_at) if synced_at else None
+            try:
+                batch = await _fetch_channel(channel_id, after_snowflake=after_snowflake)
+                combined.entities.extend(batch.entities)
+                combined.persons.extend(batch.persons)
+                combined.edges.extend(batch.edges)
+            except Exception:
+                logger.exception("discord poll: failed to fetch channel %s", channel_id)
+        return combined, cursor
 
 
 async def _touch_last_accessed(channel_id: str) -> None:
@@ -355,4 +373,7 @@ async def _fetch_channel(
                         entities, edges, seen_users, persons, after_snowflake,
                     )
 
-    return EntityBatch(entities=entities, persons=persons, edges=edges)
+    batch = EntityBatch(entities=entities, persons=persons, edges=edges)
+    for entity in batch.entities[:]:
+        batch.add_stubs_from(entity)
+    return batch

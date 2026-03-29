@@ -19,6 +19,7 @@ from agentgraph.connectors.base import (
     EntityRecord,
     FetchPolicy,
     PersonRecord,
+    ResourceType,
 )
 from agentgraph.graph.upsert import upsert_batch
 
@@ -61,7 +62,7 @@ class GoogleSheetsConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return "docs.google.com/spreadsheets" in url
 
-    async def fetch(self, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)
 
@@ -162,8 +163,6 @@ async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
         updated_at=datetime.now(UTC),
     )
 
-    return EntityBatch(
-        entities=[entity],
-        persons=persons,
-        edges=edges,
-    )
+    batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
+    batch.add_stubs_from(entity)
+    return batch

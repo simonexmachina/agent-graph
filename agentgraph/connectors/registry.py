@@ -19,10 +19,15 @@ def registered_sources() -> list[str]:
     return list(_registry.keys())
 
 
+def get_all_connectors() -> list[BaseConnector]:
+    return list(_registry.values())
+
+
 def bootstrap() -> None:
     """Register all built-in connectors. Called at server startup."""
     from agentgraph.connectors.discord import DiscordConnector
     from agentgraph.connectors.gdocs import GoogleDocsConnector
+    from agentgraph.connectors.gdrive import DriveChangesConnector
     from agentgraph.connectors.gmail import GmailConnector
     from agentgraph.connectors.gsheets import GoogleSheetsConnector
     from agentgraph.connectors.slack import SlackConnector
@@ -32,3 +37,4 @@ def bootstrap() -> None:
     register(GmailConnector())
     register(SlackConnector())
     register(DiscordConnector())
+    register(DriveChangesConnector())

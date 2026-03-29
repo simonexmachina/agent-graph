@@ -163,6 +163,17 @@ def mcp_serve() -> None:
 
 
 @app.command()
+def poll(
+    source: str | None = typer.Argument(None, help="Connector source to poll (e.g. slack, gmail). Omit to poll all."),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Trigger a background poll for one or all connectors."""
+    from agentgraph.cli_query import cmd_poll
+
+    cmd_poll(source=source, as_json=json)
+
+
+@app.command()
 def query(
     entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
     filter: list[str] = typer.Option([], "--filter", "-f", help="key=value filters (column or metadata)"),

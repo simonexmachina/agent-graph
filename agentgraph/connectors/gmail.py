@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr, parsedate_to_datetime
 from typing import Any
 
@@ -22,6 +22,7 @@ from agentgraph.connectors.base import (
     EntityRecord,
     FetchPolicy,
     PersonRecord,
+    ResourceType,
 )
 from agentgraph.graph.upsert import upsert_batch
 
@@ -31,6 +32,9 @@ _STALE_AFTER = 15 * 60
 
 # Strip Re:/Fwd: prefixes for embedding but keep original as title
 _SUBJECT_PREFIX_RE = re.compile(r"^(Re|Fwd|FW|RE|FWD):\s*", re.IGNORECASE)
+# Gmail API thread/message IDs are lowercase hex strings (16 chars).
+# URL hash fragments (legacy Gmail links) are base64-like and are NOT valid API IDs.
+_GMAIL_THREAD_ID_RE = re.compile(r"[0-9a-f]{16,}")
 
 # Simple HTML tag stripper for fallback body extraction
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -102,25 +106,15 @@ def _format_date(date_str: str) -> str:
         return date_str
 
 
-_FETCH_LIMIT = 5   # threads to fetch per observation
-
-
 class GmailConnector(BaseConnector):
     source = "gmail"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
+    poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
 
     def can_handle(self, url: str) -> bool:
         return "mail.google.com" in url
 
-    async def last_synced_at(self, resource_id: str) -> datetime | None:  # type: ignore[override]
-        from agentgraph.db.connection import get_pool
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            return await conn.fetchval(
-                "SELECT max(synced_at) FROM entities WHERE platform = 'gmail'"
-            )
-
-    async def fetch(self, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         if resource_type != "thread":
             logger.debug("gmail connector: unsupported resource_type %r — skipping", resource_type)
             return EntityBatch()
@@ -134,16 +128,104 @@ class GmailConnector(BaseConnector):
             await upsert_batch(batch)
             return batch
 
-        # No message ID available (content script not yet loaded, or non-thread URL).
-        # Fall back to fetching the N most recent threads, gated by stale policy.
-        last_sync = await self.last_synced_at(resource_id)
-        if self.fetch_policy.decide(last_sync) == FetchPolicy.FRESH:
-            logger.debug("gmail: recently synced — skipping")
-            return EntityBatch()
+        if resource_id and _GMAIL_THREAD_ID_RE.fullmatch(resource_id):
+            # Caller supplied a Gmail API thread ID (hex) — fetch directly.
+            logger.info("gmail: fetching specific thread by thread ID %s", resource_id)
+            batch = await _fetch_thread_by_thread_id(resource_id)
+            await upsert_batch(batch)
+            return batch
 
-        batch = await _fetch_recent_threads(limit=_FETCH_LIMIT)
-        await upsert_batch(batch)
-        return batch
+        logger.debug("gmail: no usable thread ID in resource_id=%r meta=%r — skipping", resource_id, meta)
+        return EntityBatch()
+
+    async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
+        import asyncio
+
+        loop = asyncio.get_event_loop()
+        service = await loop.run_in_executor(None, _build_service)
+
+        if not cursor:
+            # First run: record the current historyId as the starting point.
+            # Nothing is fetched now; subsequent polls pick up new threads from here.
+            profile: dict[str, Any] = await loop.run_in_executor(
+                None,
+                lambda: service.users().getProfile(userId="me").execute(),
+            )
+            logger.info("gmail poll: initialised cursor at historyId %s", profile["historyId"])
+            return EntityBatch(), {"history_id": profile["historyId"]}
+
+        # Incremental poll via history list.
+        start_history_id: str = cursor["history_id"]
+        thread_ids: set[str] = set()
+        page_token: str | None = None
+        latest_history_id = start_history_id
+
+        while True:
+            kwargs: dict[str, Any] = {
+                "userId": "me",
+                "startHistoryId": start_history_id,
+                "historyTypes": ["messageAdded"],
+                "labelId": "INBOX",
+            }
+            if page_token:
+                kwargs["pageToken"] = page_token
+
+            try:
+                response: dict[str, Any] = await loop.run_in_executor(
+                    None,
+                    lambda kw=kwargs: service.users().history().list(**kw).execute(),
+                )
+            except Exception as exc:
+                from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
+
+                if isinstance(exc, HttpError) and exc.resp.status == 404:
+                    # historyId expired — reset cursor for full re-sync next run.
+                    logger.warning("gmail historyId %s expired, resetting cursor", start_history_id)
+                    return EntityBatch(), {}
+                raise
+
+            latest_history_id = response.get("historyId", latest_history_id)
+            for record in response.get("history", []):
+                for msg_added in record.get("messagesAdded", []):
+                    thread_ids.add(msg_added["message"]["threadId"])
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+        logger.info("gmail poll: fetching %d thread(s)", len(thread_ids))
+        combined = EntityBatch()
+        for tid in thread_ids:
+            try:
+                batch = await _fetch_thread_by_thread_id(tid)
+                combined.entities.extend(batch.entities)
+                combined.persons.extend(batch.persons)
+                combined.edges.extend(batch.edges)
+            except Exception:
+                logger.exception("gmail poll: failed to fetch thread %s", tid)
+
+        return combined, {"history_id": latest_history_id}
+
+
+async def _fetch_thread_by_thread_id(thread_id: str) -> EntityBatch:
+    """Fetch a thread directly by its Gmail thread ID."""
+    import asyncio
+
+    loop = asyncio.get_event_loop()
+    service = await loop.run_in_executor(None, _build_service)
+
+    thread: dict[str, Any] = await loop.run_in_executor(
+        None,
+        lambda: service.users().threads().get(
+            userId="me", id=thread_id, format="full"
+        ).execute(),
+    )
+    entity, persons, edges = _thread_to_items(thread)
+    if not entity:
+        return EntityBatch()
+    batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
+    batch.add_stubs_from(entity)
+    return batch
 
 
 async def _fetch_thread_by_message_id(message_id: str) -> EntityBatch:
@@ -161,55 +243,7 @@ async def _fetch_thread_by_message_id(message_id: str) -> EntityBatch:
         ).execute(),
     )
     thread_id: str = msg["threadId"]
-
-    thread: dict[str, Any] = await loop.run_in_executor(
-        None,
-        lambda: service.users().threads().get(  # noqa: B023
-            userId="me", id=thread_id, format="full"
-        ).execute(),
-    )
-    entity, persons, edges = _thread_to_items(thread)
-    if not entity:
-        return EntityBatch()
-    return EntityBatch(entities=[entity], persons=persons, edges=edges)
-
-
-async def _fetch_recent_threads(limit: int) -> EntityBatch:
-    """Fetch the N most recently active inbox threads."""
-    import asyncio
-
-    loop = asyncio.get_event_loop()
-    service = await loop.run_in_executor(None, _build_service)
-
-    result: dict[str, Any] = await loop.run_in_executor(
-        None,
-        lambda: service.users().threads().list(
-            userId="me", q="in:anywhere", maxResults=limit
-        ).execute(),
-    )
-    thread_stubs: list[dict[str, Any]] = result.get("threads", [])
-    if not thread_stubs:
-        return EntityBatch()
-
-    all_entities: list[EntityRecord] = []
-    all_persons: list[PersonRecord] = []
-    all_edges: list[EdgeRecord] = []
-
-    for stub in thread_stubs:
-        tid = stub["id"]
-        thread: dict[str, Any] = await loop.run_in_executor(
-            None,
-            lambda: service.users().threads().get(  # noqa: B023
-                userId="me", id=tid, format="full"
-            ).execute(),
-        )
-        entity, persons, edges = _thread_to_items(thread)
-        if entity:
-            all_entities.append(entity)
-            all_persons.extend(persons)
-            all_edges.extend(edges)
-
-    return EntityBatch(entities=all_entities, persons=all_persons, edges=all_edges)
+    return await _fetch_thread_by_thread_id(thread_id)
 
 
 def _thread_to_items(
@@ -291,3 +325,50 @@ def _thread_to_items(
         },
     )
     return entity, persons, edges
+
+
+async def _list_all_threads(service: Any, loop: Any) -> EntityBatch:
+    """Page through all inbox threads and return a combined EntityBatch."""
+    combined = EntityBatch()
+    page_token: str | None = None
+
+    while True:
+        kwargs: dict[str, Any] = {"userId": "me", "maxResults": 500}
+        if page_token:
+            kwargs["pageToken"] = page_token
+
+        response: dict[str, Any] = await loop.run_in_executor(
+            None,
+            lambda kw=kwargs: service.users().threads().list(**kw).execute(),
+        )
+
+        for thread_stub in response.get("threads", []):
+            try:
+                batch = await _fetch_thread_by_thread_id(thread_stub["id"])
+                combined.entities.extend(batch.entities)
+                combined.persons.extend(batch.persons)
+                combined.edges.extend(batch.edges)
+            except Exception:
+                logger.exception("gmail _list_all_threads: failed to fetch thread %s", thread_stub["id"])
+
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    return combined
+
+
+async def _filter_known_threads(thread_ids: set[str]) -> set[str]:
+    """Return only the thread IDs that already exist in the entities table."""
+    from agentgraph.db.connection import get_pool
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT platform_entity_id FROM entities
+            WHERE platform = 'gmail' AND platform_entity_id = ANY($1)
+            """,
+            list(thread_ids),
+        )
+    return {row["platform_entity_id"] for row in rows}

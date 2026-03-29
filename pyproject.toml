@@ -19,6 +19,7 @@ dependencies = [
     "typer>=0.24.1",
     "uvicorn>=0.42.0",
     "mcp>=1.26.0",
+    "markdownify>=1.2.2",
 ]
 
 [dependency-groups]

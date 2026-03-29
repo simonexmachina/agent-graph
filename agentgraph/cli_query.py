@@ -220,7 +220,7 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool) -> None:
 
 def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
     try:
-        result = _post(f"/fetch", params={"platform": platform, "resource_id": resource_id})
+        result = _post("/fetch", params={"platform": platform, "resource_id": resource_id})
     except httpx.HTTPStatusError as exc:
         try:
             detail = exc.response.json().get("detail", str(exc))
@@ -329,3 +329,31 @@ def cmd_query(
         table.add_row(str(r["id"])[:8], r["platform"], snippet)
 
     console.print(table)
+
+
+def cmd_poll(source: str | None, as_json: bool) -> None:
+    params: dict[str, Any] = {}
+    if source:
+        params["source"] = source
+    try:
+        result = _post("/poll", params=params)
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        console.print(f"[red]{detail}[/red]")
+        return
+    if result is None:
+        console.print("[red]Server not available. Start with: agentgraph serve[/red]")
+        return
+
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+
+    polled: list[str] = result.get("polled", [])
+    if polled:
+        console.print(f"[green]Polled:[/green] {', '.join(polled)}")
+    else:
+        console.print("[dim]No connectors polled (none matched or none have poll_interval set).[/dim]")

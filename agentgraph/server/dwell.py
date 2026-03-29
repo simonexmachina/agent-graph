@@ -10,6 +10,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from agentgraph.config import get_settings
+from agentgraph.connectors.base import ResourceType
 from agentgraph.db.connection import get_pool
 from agentgraph.server.router import classify_url
 
@@ -74,7 +75,7 @@ async def evaluate_once() -> None:
             )
 
 
-async def _dispatch(source: str, resource_type: str, resource_id: str, meta: dict[str, str] | None = None) -> None:
+async def _dispatch(source: str, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> None:
     """Fire-and-forget connector fetch."""
     from agentgraph.connectors.registry import get_connector
 

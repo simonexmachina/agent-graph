@@ -86,3 +86,13 @@ ALTER TABLE observations ADD COLUMN IF NOT EXISTS meta JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_observations_timestamp  ON observations (timestamp);
 CREATE INDEX IF NOT EXISTS idx_observations_evaluated  ON observations (evaluated) WHERE NOT evaluated;
+
+-- ---------------------------------------------------------------------------
+-- Sync state: per-connector background polling cursors
+-- source matches connector.source (or a shared key like "drive")
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sync_state (
+    source     TEXT PRIMARY KEY,
+    cursor     JSONB NOT NULL DEFAULT '{}',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

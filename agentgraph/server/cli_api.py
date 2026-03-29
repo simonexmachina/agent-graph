@@ -140,6 +140,30 @@ async def cli_fetch(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/poll")
+async def cli_poll(
+    source: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Trigger a background poll for one connector (by source) or all connectors."""
+    from agentgraph.connectors.registry import get_all_connectors
+    from agentgraph.server.sync import _poll_connector
+
+    connectors = get_all_connectors()
+    if source is not None:
+        connectors = [c for c in connectors if c.source == source]
+        if not connectors:
+            raise HTTPException(status_code=404, detail=f"No connector registered for source '{source}'")
+
+    polled: list[str] = []
+    for connector in connectors:
+        if connector.poll_interval is None:
+            continue
+        await _poll_connector(connector)
+        polled.append(connector.source)
+
+    return {"polled": polled}
+
+
 @router.post("/fetch-entity")
 async def cli_fetch_entity(
     entity_id: str = Query(...),

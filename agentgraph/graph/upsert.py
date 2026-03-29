@@ -90,37 +90,55 @@ async def _upsert_entities(
     id_map: dict[str, UUID] = {}
 
     for e in entities:
-        embedding: list[float] | None = None
-        if e.content:
-            text = f"{e.title or ''} {e.content}".strip()
-            embedding = encode(text)
+        if e.is_stub:
+            # Stubs are placeholders pending a full fetch.  Insert with synced_at=NULL
+            # so the connector treats the entity as never-synced when the resource is
+            # next visited.  On conflict, only touch last_accessed — never overwrite
+            # real content or advance synced_at.
+            entity_id = await conn.fetchval(
+                """
+                INSERT INTO entities (entity_type, platform, platform_entity_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
+                    last_accessed = now()
+                RETURNING id
+                """,
+                e.entity_type,
+                e.platform,
+                e.platform_entity_id,
+            )
+        else:
+            embedding: list[float] | None = None
+            if e.content:
+                text = f"{e.title or ''} {e.content}".strip()
+                embedding = encode(text)
 
-        entity_id: UUID = await conn.fetchval(
-            """
-            INSERT INTO entities
-                (entity_type, platform, platform_entity_id, title, content,
-                 content_embedding, metadata, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9)
-            ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
-                title              = COALESCE(EXCLUDED.title, entities.title),
-                content            = COALESCE(EXCLUDED.content, entities.content),
-                content_embedding  = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
-                metadata           = entities.metadata || EXCLUDED.metadata,
-                updated_at         = COALESCE(EXCLUDED.updated_at, entities.updated_at),
-                synced_at          = now(),
-                last_accessed      = now()
-            RETURNING id
-            """,
-            e.entity_type,
-            e.platform,
-            e.platform_entity_id,
-            e.title,
-            e.content,
-            str(embedding) if embedding else None,
-            json.dumps(dict(e.metadata)),
-            e.created_at,
-            e.updated_at,
-        )
+            entity_id = await conn.fetchval(
+                """
+                INSERT INTO entities
+                    (entity_type, platform, platform_entity_id, title, content,
+                     content_embedding, metadata, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9)
+                ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
+                    title              = COALESCE(EXCLUDED.title, entities.title),
+                    content            = COALESCE(EXCLUDED.content, entities.content),
+                    content_embedding  = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
+                    metadata           = entities.metadata || EXCLUDED.metadata,
+                    updated_at         = COALESCE(EXCLUDED.updated_at, entities.updated_at),
+                    synced_at          = now(),
+                    last_accessed      = now()
+                RETURNING id
+                """,
+                e.entity_type,
+                e.platform,
+                e.platform_entity_id,
+                e.title,
+                e.content,
+                str(embedding) if embedding else None,
+                json.dumps(dict(e.metadata)),
+                e.created_at,
+                e.updated_at,
+            )
 
         id_map[e.platform_entity_id] = entity_id
 
