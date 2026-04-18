@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import socket
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -17,16 +18,18 @@ from agentgraph.auth.credentials import GoogleCredentials, update
 SCOPES = [
     "https://www.googleapis.com/auth/documents.readonly",
     "https://www.googleapis.com/auth/spreadsheets.readonly",
-    "https://www.googleapis.com/auth/drive.metadata.readonly",
-    "https://www.googleapis.com/auth/forms.body.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid",
 ]
 
-REDIRECT_URI = "http://localhost:8766"
-CALLBACK_PORT = 8766
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 def run_oauth_flow() -> None:
@@ -51,7 +54,7 @@ def run_oauth_flow() -> None:
             "       APIs & Services → Enable APIs → search for and enable:\n"
             "         • Google Docs API\n"
             "         • Google Sheets API\n"
-            "         • Google Forms API\n"
+            "         • Google Drive API\n"
             "  4. Create OAuth credentials:\n"
             "       APIs & Services → Credentials → Create Credentials\n"
             "       → OAuth client ID → Application type: Desktop app\n"
@@ -62,11 +65,14 @@ def run_oauth_flow() -> None:
         client_id = typer.prompt("Google OAuth client ID")
         client_secret = typer.prompt("Google OAuth client secret", hide_input=True)
 
+    port = _find_free_port()
+    redirect_uri = f"http://localhost:{port}"
+
     client_config = {
         "installed": {
             "client_id": client_id,
             "client_secret": client_secret,
-            "redirect_uris": [REDIRECT_URI],
+            "redirect_uris": [redirect_uri],
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
         }
@@ -75,7 +81,7 @@ def run_oauth_flow() -> None:
     flow: Flow = Flow.from_client_config(
         client_config,
         scopes=SCOPES,
-        redirect_uri=REDIRECT_URI,
+        redirect_uri=redirect_uri,
     )
 
     auth_url, _ = flow.authorization_url(
@@ -87,7 +93,7 @@ def run_oauth_flow() -> None:
     typer.echo(f"If the browser doesn't open, visit:\n  {auth_url}\n")
     webbrowser.open(auth_url)
 
-    auth_code = _wait_for_callback()
+    auth_code = _wait_for_callback(port)
 
     flow.fetch_token(code=auth_code)
     token = flow.credentials
@@ -114,6 +120,7 @@ def run_oauth_flow() -> None:
         client_secret=client_secret,
         access_token=token.token or "",
         refresh_token=token.refresh_token or "",
+        token_expiry=token.expiry,
         user_email=user_email,
         display_name=display_name,
     )
@@ -124,7 +131,7 @@ def run_oauth_flow() -> None:
     typer.echo(msg)
 
 
-def _wait_for_callback() -> str:
+def _wait_for_callback(port: int) -> str:
     """Spin up a one-shot HTTP server to capture the OAuth redirect code."""
     auth_code: list[str] = []
 
@@ -142,7 +149,7 @@ def _wait_for_callback() -> str:
         def log_message(self, format: str, *args: object) -> None:
             pass  # suppress request logs
 
-    server = HTTPServer(("localhost", CALLBACK_PORT), _Handler)
+    server = HTTPServer(("localhost", port), _Handler)
     server.handle_request()
     server.server_close()
 
