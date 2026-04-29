@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from agentgraph.connectors.base import EntityBatch
-from agentgraph.connectors.gdocs import GoogleDocsConnector
-from agentgraph.connectors.slack import SlackConnector, _parse_mentions
+from agentgraph_connector_google.gdocs import GoogleDocsConnector
+from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ async def test_gdocs_fetch_fresh_returns_empty_batch(gdocs_connector: GoogleDocs
     """When data is fresh, connector returns empty batch and touches last_accessed."""
     with (
         patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
-        patch("agentgraph.connectors.gdocs._touch_last_accessed", new=AsyncMock()) as mock_touch,
+        patch("agentgraph_connector_google.gdocs._touch_last_accessed", new=AsyncMock()) as mock_touch,
     ):
         batch = await gdocs_connector.fetch("document", "doc-abc")
 
@@ -75,8 +75,8 @@ async def test_gdocs_fetch_stale_calls_fetch_doc(gdocs_connector: GoogleDocsConn
     fake_batch = EntityBatch()
     with (
         patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=_stale_dt())),
-        patch("agentgraph.connectors.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
-        patch("agentgraph.connectors.gdocs.upsert_batch", new=AsyncMock()) as mock_upsert,
+        patch("agentgraph_connector_google.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
+        patch("agentgraph_connector_google.gdocs.upsert_batch", new=AsyncMock()) as mock_upsert,
     ):
         batch = await gdocs_connector.fetch("document", "doc-xyz")
 
@@ -90,8 +90,8 @@ async def test_gdocs_fetch_first_visit_calls_fetch_doc(gdocs_connector: GoogleDo
     fake_batch = EntityBatch()
     with (
         patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=None)),
-        patch("agentgraph.connectors.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
-        patch("agentgraph.connectors.gdocs.upsert_batch", new=AsyncMock()),
+        patch("agentgraph_connector_google.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
+        patch("agentgraph_connector_google.gdocs.upsert_batch", new=AsyncMock()),
     ):
         batch = await gdocs_connector.fetch("document", "doc-new")
 
@@ -112,7 +112,7 @@ async def test_slack_fetch_fresh_returns_empty_batch(slack_connector: SlackConne
     """When channel data is fresh, connector returns empty batch."""
     with (
         patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
-        patch("agentgraph.connectors.slack._touch_last_accessed", new=AsyncMock()) as mock_touch,
+        patch("agentgraph_connector_slack._touch_last_accessed", new=AsyncMock()) as mock_touch,
     ):
         batch = await slack_connector.fetch("channel", "C12345")
 
@@ -127,8 +127,8 @@ async def test_slack_fetch_stale_calls_fetch_channel(slack_connector: SlackConne
     fake_batch = EntityBatch()
     with (
         patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=stale_time)),
-        patch("agentgraph.connectors.slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
-        patch("agentgraph.connectors.slack.upsert_batch", new=AsyncMock()),
+        patch("agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
+        patch("agentgraph_connector_slack.upsert_batch", new=AsyncMock()),
     ):
         batch = await slack_connector.fetch("channel", "C12345")
 
@@ -142,8 +142,8 @@ async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(slack_conne
     fake_batch = EntityBatch()
     with (
         patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=None)),
-        patch("agentgraph.connectors.slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
-        patch("agentgraph.connectors.slack.upsert_batch", new=AsyncMock()),
+        patch("agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
+        patch("agentgraph_connector_slack.upsert_batch", new=AsyncMock()),
     ):
         await slack_connector.fetch("channel", "C99999")
 

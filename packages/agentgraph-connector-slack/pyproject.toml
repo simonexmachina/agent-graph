@@ -1,0 +1,18 @@
+[project]
+name = "agentgraph-connector-slack"
+version = "0.1.0"
+description = "Slack connector for AgentGraph"
+requires-python = ">=3.12"
+dependencies = [
+    "agentgraph",
+    "httpx>=0.28.1",
+]
+
+[project.entry-points."agentgraph.connectors"]
+slack = "agentgraph_connector_slack:SlackConnector"
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+agentgraph = { workspace = true }

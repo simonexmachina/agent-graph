@@ -4,20 +4,25 @@ from __future__ import annotations
 
 import pytest
 
-from agentgraph.db.connection import apply_schema, get_pool, close_pool
+from agentgraph.backends.postgres.backend import PostgresBackend
+from agentgraph.config import get_settings
+from agentgraph.core.context import set_backend
 
 
 @pytest.fixture(autouse=True)
-async def db_pool():
-    """Set up and tear down the connection pool for each test."""
-    await apply_schema()
-    yield
-    await close_pool()
+async def pg_backend():
+    """Set up and tear down the PostgresBackend for each test."""
+    settings = get_settings()
+    backend = PostgresBackend(settings.database_url)
+    await backend.initialize()
+    set_backend(backend)
+    yield backend
+    await backend.close()
 
 
 @pytest.mark.integration
-async def test_tables_exist() -> None:
-    pool = await get_pool()
+async def test_tables_exist(pg_backend: PostgresBackend) -> None:
+    pool = pg_backend._pool_or_raise()
     async with pool.acquire() as conn:
         tables = await conn.fetch(
             """
@@ -33,8 +38,8 @@ async def test_tables_exist() -> None:
 
 
 @pytest.mark.integration
-async def test_vector_extension() -> None:
-    pool = await get_pool()
+async def test_vector_extension(pg_backend: PostgresBackend) -> None:
+    pool = pg_backend._pool_or_raise()
     async with pool.acquire() as conn:
         result = await conn.fetchval(
             "SELECT extname FROM pg_extension WHERE extname = 'vector'"
@@ -43,10 +48,9 @@ async def test_vector_extension() -> None:
 
 
 @pytest.mark.integration
-async def test_insert_person_and_entity_and_edge() -> None:
-    pool = await get_pool()
+async def test_insert_person_and_entity_and_edge(pg_backend: PostgresBackend) -> None:
+    pool = pg_backend._pool_or_raise()
     async with pool.acquire() as conn:
-        # Person is now an entity
         person_id = await conn.fetchval(
             """
             INSERT INTO entities (entity_type, platform, platform_entity_id, title, content)
@@ -84,10 +88,8 @@ async def test_insert_person_and_entity_and_edge() -> None:
         )
         assert edge_id is not None
 
-        # Verify cascade: deleting entity removes edge
         await conn.execute("DELETE FROM entities WHERE id = $1", entity_id)
         count = await conn.fetchval("SELECT count(*) FROM edges WHERE id = $1", edge_id)
         assert count == 0
 
-        # Clean up person
         await conn.execute("DELETE FROM entities WHERE id = $1", person_id)

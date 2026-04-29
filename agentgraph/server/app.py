@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from agentgraph.config import get_settings
-from agentgraph.db.connection import apply_schema, close_pool, get_pool
+from agentgraph.core.context import set_backend
 from agentgraph.graph.gc import run_gc
 from agentgraph.server.cli_api import router as cli_router
 from agentgraph.server.dwell import run_dwell_loop
@@ -36,11 +36,24 @@ _scheduler: AsyncIOScheduler | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global _dwell_task, _scheduler
+    from agentgraph.backends import get_backend_class
     from agentgraph.connectors.registry import bootstrap
     from agentgraph.logging import configure_logging
 
-    configure_logging(get_settings().log_level)
-    await apply_schema()
+    settings = get_settings()
+    configure_logging(settings.log_level)
+
+    backend_class = get_backend_class(settings.backend)
+    if settings.backend == "postgres":
+        backend = backend_class(settings.database_url)
+    elif settings.backend == "sqlite":
+        backend = backend_class(settings.backend_sqlite_path, settings.backend_sqlite_vector_mode)
+    else:
+        backend = backend_class(settings)
+
+    await backend.initialize()
+    set_backend(backend)
+
     bootstrap()
     _dwell_task = asyncio.create_task(run_dwell_loop())
 
@@ -49,13 +62,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_sync(_scheduler)
     _scheduler.start()
 
-    logger.info("AgentGraph server started")
+    logger.info("AgentGraph server started (backend=%s)", settings.backend)
     yield
+
     if _dwell_task:
         _dwell_task.cancel()
     if _scheduler:
         _scheduler.shutdown(wait=False)
-    await close_pool()
+    await backend.close()
     logger.info("AgentGraph server stopped")
 
 
@@ -81,52 +95,30 @@ async def observe(
     Receive a focus or blur observation from the browser extension.
     Persists immediately and returns 204 — no body.
     """
+    import json as _json
+
+    from agentgraph.core.context import get_backend
+
     logger.debug("observe: %s %s (tab %s)", event.type, event.url, event.tab_id)
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        import json as _json
-        meta = event.meta if isinstance(event, FocusEvent) else None
-        meta_json = _json.dumps(meta) if meta else None
 
-        # If this is a duplicate focus within the dedup window but carries meta
-        # (content script fires ~300ms after the initial focus event), patch the
-        # existing row rather than discarding the richer event.
-        if meta_json:
-            await conn.execute(
-                """
-                UPDATE observations SET meta = $1
-                WHERE id = (
-                    SELECT id FROM observations
-                    WHERE event_type = $2
-                      AND tab_id     = $3
-                      AND url        = $4
-                      AND timestamp  > now() - INTERVAL '5 seconds'
-                    ORDER BY timestamp DESC
-                    LIMIT 1
-                ) AND meta IS NULL
-                """,
-                meta_json, event.type, event.tab_id, event.url,
-            )
+    meta = event.meta if isinstance(event, FocusEvent) else None
+    meta_json = _json.dumps(meta) if meta else None
 
-        await conn.execute(
-            """
-            INSERT INTO observations (event_type, url, title, tab_id, timestamp, meta)
-            SELECT $1, $2, $3, $4, $5, $6
-            WHERE NOT EXISTS (
-                SELECT 1 FROM observations
-                WHERE event_type = $1
-                  AND tab_id     = $4
-                  AND url        = $2
-                  AND timestamp  > now() - INTERVAL '2 seconds'
-            )
-            """,
-            event.type,
-            event.url,
-            event.title if isinstance(event, FocusEvent) else None,
-            event.tab_id,
-            event.timestamp,
-            meta_json,
+    backend = get_backend()
+
+    if meta_json:
+        await backend.patch_observation_meta(
+            event.type, event.tab_id, event.url, meta_json
         )
+
+    await backend.insert_observation(
+        event_type=event.type,
+        url=event.url,
+        title=event.title if isinstance(event, FocusEvent) else None,
+        tab_id=event.tab_id,
+        timestamp=event.timestamp,
+        meta=meta_json,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

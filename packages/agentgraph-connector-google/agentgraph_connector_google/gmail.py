@@ -36,10 +36,6 @@ _SUBJECT_PREFIX_RE = re.compile(r"^(Re|Fwd|FW|RE|FWD):\s*", re.IGNORECASE)
 # URL hash fragments (legacy Gmail links) are base64-like and are NOT valid API IDs.
 _GMAIL_THREAD_ID_RE = re.compile(r"[0-9a-f]{16,}")
 
-# Simple HTML tag stripper for fallback body extraction
-_HTML_TAG_RE = re.compile(r"<[^>]+>")
-_HTML_WS_RE = re.compile(r"\n{3,}")
-
 
 def _build_service() -> Any:
     return build("gmail", "v1", credentials=get_provider().get_credentials())
@@ -55,32 +51,32 @@ def _get_header(headers: list[dict[str, str]], name: str) -> str:
 
 
 def _extract_body(payload: dict[str, Any]) -> str:
-    """Recursively extract plain-text body from a MIME payload.
+    """Recursively extract body from a MIME payload, preferring HTML (via html2text)."""
+    import html2text  # type: ignore[import-untyped]
 
-    Prefers text/plain; falls back to text/html with tags stripped.
-    """
-    mime_type: str = payload.get("mimeType", "")
+    def _decode(data: str) -> str:
+        return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
 
-    if mime_type == "text/plain":
-        data = (payload.get("body") or {}).get("data", "")
-        if data:
-            return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
+    def _collect(part: dict[str, Any], html_parts: list[str], text_parts: list[str]) -> None:
+        mime_type: str = part.get("mimeType", "")
+        data: str = (part.get("body") or {}).get("data", "")
+        if mime_type == "text/html" and data:
+            html_parts.append(_decode(data))
+        elif mime_type == "text/plain" and data:
+            text_parts.append(_decode(data))
+        for child in part.get("parts", []):
+            _collect(child, html_parts, text_parts)
 
-    if mime_type == "text/html":
-        data = (payload.get("body") or {}).get("data", "")
-        if data:
-            html = base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
-            text = _HTML_TAG_RE.sub(" ", html)
-            text = _HTML_WS_RE.sub("\n\n", text)
-            return text.strip()
+    html_parts: list[str] = []
+    text_parts: list[str] = []
+    _collect(payload, html_parts, text_parts)
 
-    # Recurse into multipart
-    for part in payload.get("parts", []):
-        result = _extract_body(part)
-        if result:
-            return result
-
-    return ""
+    if html_parts:
+        h = html2text.HTML2Text()
+        h.ignore_images = True
+        h.body_width = 0
+        return h.handle("\n".join(html_parts)).strip()
+    return "\n".join(text_parts).strip()
 
 
 def _parse_email_addresses(header_value: str) -> list[tuple[str, str]]:
@@ -110,6 +106,7 @@ class GmailConnector(BaseConnector):
     source = "gmail"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
+    sync_horizon_days: int = 90  # How far back to look on the initial bulk ingest
 
     def can_handle(self, url: str) -> bool:
         return "mail.google.com" in url
@@ -145,14 +142,19 @@ class GmailConnector(BaseConnector):
         service = await loop.run_in_executor(None, _build_service)
 
         if not cursor:
-            # First run: record the current historyId as the starting point.
-            # Nothing is fetched now; subsequent polls pick up new threads from here.
+            # First run: capture current historyId *before* bulk fetch so we don't miss
+            # any messages that arrive during the bulk ingest.
             profile: dict[str, Any] = await loop.run_in_executor(
                 None,
                 lambda: service.users().getProfile(userId="me").execute(),
             )
-            logger.info("gmail poll: initialised cursor at historyId %s", profile["historyId"])
-            return EntityBatch(), {"history_id": profile["historyId"]}
+            history_id: str = profile["historyId"]
+            logger.info("gmail poll: initialised cursor at historyId %s; starting bulk ingest", history_id)
+
+            after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime("%Y/%m/%d")
+            bulk_batch = await _list_inbox_threads_since(service, loop, after_date)
+            logger.info("gmail poll: bulk ingest fetched %d thread(s)", len(bulk_batch.entities))
+            return bulk_batch, {"history_id": history_id}
 
         # Incremental poll via history list.
         start_history_id: str = cursor["history_id"]
@@ -259,6 +261,12 @@ def _thread_to_items(
     first_headers = messages[0].get("payload", {}).get("headers", [])
     subject = _get_header(first_headers, "Subject") or "(no subject)"
 
+    thread_created_at: datetime | None = None
+    try:
+        thread_created_at = parsedate_to_datetime(_get_header(first_headers, "Date"))
+    except Exception:
+        pass
+
     content_blocks: list[str] = []
     persons: list[PersonRecord] = []
     edges: list[EdgeRecord] = []
@@ -317,6 +325,7 @@ def _thread_to_items(
         platform_entity_id=thread_id,
         title=subject,
         content=content,
+        created_at=thread_created_at,
         updated_at=datetime.now(UTC),
         metadata={
             "message_count": len(messages),
@@ -327,13 +336,14 @@ def _thread_to_items(
     return entity, persons, edges
 
 
-async def _list_all_threads(service: Any, loop: Any) -> EntityBatch:
-    """Page through all inbox threads and return a combined EntityBatch."""
+async def _list_inbox_threads_since(service: Any, loop: Any, after_date: str) -> EntityBatch:
+    """Page through inbox threads newer than after_date (YYYY/MM/DD) and return a combined EntityBatch."""
     combined = EntityBatch()
     page_token: str | None = None
+    q = f"in:inbox after:{after_date}"
 
     while True:
-        kwargs: dict[str, Any] = {"userId": "me", "maxResults": 500}
+        kwargs: dict[str, Any] = {"userId": "me", "maxResults": 500, "q": q}
         if page_token:
             kwargs["pageToken"] = page_token
 
@@ -349,26 +359,10 @@ async def _list_all_threads(service: Any, loop: Any) -> EntityBatch:
                 combined.persons.extend(batch.persons)
                 combined.edges.extend(batch.edges)
             except Exception:
-                logger.exception("gmail _list_all_threads: failed to fetch thread %s", thread_stub["id"])
+                logger.exception("gmail bulk ingest: failed to fetch thread %s", thread_stub["id"])
 
         page_token = response.get("nextPageToken")
         if not page_token:
             break
 
     return combined
-
-
-async def _filter_known_threads(thread_ids: set[str]) -> set[str]:
-    """Return only the thread IDs that already exist in the entities table."""
-    from agentgraph.db.connection import get_pool
-
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT platform_entity_id FROM entities
-            WHERE platform = 'gmail' AND platform_entity_id = ANY($1)
-            """,
-            list(thread_ids),
-        )
-    return {row["platform_entity_id"] for row in rows}

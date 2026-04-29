@@ -1,8 +1,7 @@
 """Credential storage and retrieval from ~/.agentgraph/credentials.json."""
 
-from __future__ import annotations
-
 import json
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -16,6 +15,7 @@ class GoogleCredentials(BaseModel):
     access_token: str
     refresh_token: str
     token_uri: str = "https://oauth2.googleapis.com/token"
+    token_expiry: datetime | None = None
     user_email: str | None = None
     display_name: str | None = None
 

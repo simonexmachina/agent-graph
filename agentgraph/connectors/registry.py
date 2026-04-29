@@ -1,8 +1,18 @@
-"""Connector registry: maps source names to connector instances."""
+"""Connector registry: maps source names to connector instances.
+
+Built-in connectors are discovered via Python entry points
+(``agentgraph.connectors`` group). Third-party connectors can be installed
+as separate packages that declare the same entry point group.
+"""
 
 from __future__ import annotations
 
+import importlib.metadata
+import logging
+
 from agentgraph.connectors.base import BaseConnector
+
+logger = logging.getLogger(__name__)
 
 _registry: dict[str, BaseConnector] = {}
 
@@ -24,17 +34,17 @@ def get_all_connectors() -> list[BaseConnector]:
 
 
 def bootstrap() -> None:
-    """Register all built-in connectors. Called at server startup."""
-    from agentgraph.connectors.discord import DiscordConnector
-    from agentgraph.connectors.gdocs import GoogleDocsConnector
-    from agentgraph.connectors.gdrive import DriveChangesConnector
-    from agentgraph.connectors.gmail import GmailConnector
-    from agentgraph.connectors.gsheets import GoogleSheetsConnector
-    from agentgraph.connectors.slack import SlackConnector
+    """Discover and register connectors via Python entry points."""
+    for ep in importlib.metadata.entry_points(group="agentgraph.connectors"):
+        try:
+            connector_class: type[BaseConnector] = ep.load()
+            register(connector_class())
+            logger.debug("Loaded connector %r from %s", ep.name, ep.value)
+        except Exception as exc:
+            logger.warning("Failed to load connector %r: %s", ep.name, exc)
 
-    register(GoogleDocsConnector())
-    register(GoogleSheetsConnector())
-    register(GmailConnector())
-    register(SlackConnector())
-    register(DiscordConnector())
-    register(DriveChangesConnector())
+    if not _registry:
+        logger.warning(
+            "No connectors discovered. Install connector packages (e.g. pip install agentgraph[all]) "
+            "or declare entry points in the 'agentgraph.connectors' group."
+        )

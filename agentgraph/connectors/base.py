@@ -154,16 +154,6 @@ class BaseConnector(ABC):
 
     async def last_synced_at(self, resource_id: str) -> datetime | None:
         """Return the most recent synced_at for a platform entity, or None."""
-        from agentgraph.db.connection import get_pool
+        from agentgraph.core.context import get_backend
 
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            result: Any = await conn.fetchval(
-                """
-                SELECT max(synced_at) FROM entities
-                WHERE platform = $1 AND platform_entity_id = $2
-                """,
-                self.source,
-                resource_id,
-            )
-        return result  # type: ignore[no-any-return]
+        return await get_backend().get_last_synced_at(self.source, resource_id)

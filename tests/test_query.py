@@ -1,4 +1,4 @@
-"""Unit tests for the graph query layer and MCP tools (mocked DB)."""
+"""Unit tests for the graph query layer and MCP tools (mocked backend)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+
+from agentgraph.core.context import set_backend
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +58,25 @@ def _edge(
     }
 
 
+def _mock_backend(**method_overrides: Any) -> Any:
+    """Build a mock StorageBackend with sensible async defaults."""
+    backend = MagicMock()
+    defaults = {
+        "search_entities": AsyncMock(return_value=[]),
+        "get_entity_by_id": AsyncMock(return_value=None),
+        "get_entities_by_id_prefix": AsyncMock(return_value=[]),
+        "get_entity_by_platform": AsyncMock(return_value=None),
+        "get_edges": AsyncMock(return_value=[]),
+        "get_edges_for_entities": AsyncMock(return_value=[]),
+        "traverse_graph": AsyncMock(return_value={"nodes": [], "edges": []}),
+        "query_by_filter": AsyncMock(return_value=[]),
+        "list_entities": AsyncMock(return_value=[]),
+    }
+    for name, value in {**defaults, **method_overrides}.items():
+        setattr(backend, name, value)
+    return backend
+
+
 # ---------------------------------------------------------------------------
 # search_entities
 # ---------------------------------------------------------------------------
@@ -65,15 +86,10 @@ async def test_search_entities_returns_results() -> None:
     from agentgraph.graph.query import search_entities
 
     expected = [_entity(score=0.9), _entity(score=0.7)]
+    backend = _mock_backend(search_entities=AsyncMock(return_value=expected))
+    set_backend(backend)
 
-    with (
-        patch("agentgraph.graph.query.encode", return_value=[0.1] * 384),
-        patch("agentgraph.graph.query.get_pool") as mock_pool,
-    ):
-        mock_conn = AsyncMock()
-        mock_conn.fetch = AsyncMock(return_value=_make_db_rows(expected))
-        mock_pool.return_value = _pool_ctx(mock_conn)
-
+    with patch("agentgraph.graph.query.encode", return_value=[0.1] * 384):
         results = await search_entities("test query", limit=5)
 
     assert len(results) == 2
@@ -84,14 +100,10 @@ async def test_search_entities_returns_results() -> None:
 async def test_search_entities_empty_results() -> None:
     from agentgraph.graph.query import search_entities
 
-    with (
-        patch("agentgraph.graph.query.encode", return_value=[0.0] * 384),
-        patch("agentgraph.graph.query.get_pool") as mock_pool,
-    ):
-        mock_conn = AsyncMock()
-        mock_conn.fetch = AsyncMock(return_value=[])
-        mock_pool.return_value = _pool_ctx(mock_conn)
+    backend = _mock_backend(search_entities=AsyncMock(return_value=[]))
+    set_backend(backend)
 
+    with patch("agentgraph.graph.query.encode", return_value=[0.0] * 384):
         results = await search_entities("empty query")
 
     assert results == []
@@ -106,15 +118,12 @@ async def test_get_entity_found() -> None:
     from agentgraph.graph.query import get_entity
 
     eid = str(uuid4())
-    row = _make_db_row(_entity(title="Found Doc"))
+    entity = _entity(title="Found Doc")
+    entity["id"] = eid
+    backend = _mock_backend(get_entity_by_id=AsyncMock(return_value=entity))
+    set_backend(backend)
 
-    with patch("agentgraph.graph.query.get_pool") as mock_pool:
-        mock_conn = AsyncMock()
-        mock_conn.fetchrow = AsyncMock(return_value=row)
-        mock_pool.return_value = _pool_ctx(mock_conn)
-
-        result = await get_entity(eid)
-
+    result = await get_entity(eid)
     assert result is not None
     assert result["title"] == "Found Doc"
 
@@ -123,13 +132,10 @@ async def test_get_entity_found() -> None:
 async def test_get_entity_not_found() -> None:
     from agentgraph.graph.query import get_entity
 
-    with patch("agentgraph.graph.query.get_pool") as mock_pool:
-        mock_conn = AsyncMock()
-        mock_conn.fetchrow = AsyncMock(return_value=None)
-        mock_pool.return_value = _pool_ctx(mock_conn)
+    backend = _mock_backend(get_entity_by_id=AsyncMock(return_value=None))
+    set_backend(backend)
 
-        result = await get_entity(str(uuid4()))
-
+    result = await get_entity(str(uuid4()))
     assert result is None
 
 
@@ -143,15 +149,10 @@ async def test_get_edges_returns_edges() -> None:
 
     eid = str(uuid4())
     edge = _edge(source_entity_id=eid)
-    row = _make_db_row(edge, extra={"source_ref": "pe-123", "target_ref": None})
+    backend = _mock_backend(get_edges=AsyncMock(return_value=[edge]))
+    set_backend(backend)
 
-    with patch("agentgraph.graph.query.get_pool") as mock_pool:
-        mock_conn = AsyncMock()
-        mock_conn.fetch = AsyncMock(return_value=[row])
-        mock_pool.return_value = _pool_ctx(mock_conn)
-
-        edges = await get_edges(eid, direction="out")
-
+    edges = await get_edges(eid, direction="out")
     assert len(edges) == 1
     assert edges[0]["edge_type"] == "authored"
 
@@ -222,36 +223,3 @@ async def test_mcp_query_by_filter_tool() -> None:
 
     parsed = json.loads(result)
     assert isinstance(parsed, list)
-
-
-# ---------------------------------------------------------------------------
-# DB mock helpers
-# ---------------------------------------------------------------------------
-
-def _make_db_rows(entities: list[dict[str, Any]]) -> list[Any]:
-    return [_make_db_row(e) for e in entities]
-
-
-def _make_db_row(d: dict[str, Any], extra: dict[str, Any] | None = None) -> Any:
-    """Build a MagicMock that behaves like an asyncpg Record."""
-    merged = {**d, **(extra or {})}
-    row = MagicMock()
-    row.__getitem__ = lambda self, key: merged[key]
-    row.__contains__ = lambda self, key: key in merged
-
-    def keys_fn() -> list[str]:
-        return list(merged.keys())
-
-    row.keys = keys_fn
-    row.get = lambda key, default=None: merged.get(key, default)
-    return row
-
-
-def _pool_ctx(mock_conn: Any) -> Any:
-    """Return a mock pool whose acquire() is an async context manager."""
-    pool = MagicMock()
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=mock_conn)
-    cm.__aexit__ = AsyncMock(return_value=False)
-    pool.acquire = MagicMock(return_value=cm)
-    return pool

@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from agentgraph.backends.postgres.backend import PostgresBackend
+from agentgraph.config import get_settings
 from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
@@ -13,7 +15,7 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
 )
-from agentgraph.db.connection import apply_schema, close_pool, get_pool
+from agentgraph.core.context import set_backend
 from agentgraph.graph.upsert import upsert_batch
 
 
@@ -43,18 +45,21 @@ def test_fetch_policy_stale() -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-async def db():
-    await apply_schema()
-    yield
-    pool = await get_pool()
+async def pg_backend():
+    settings = get_settings()
+    backend = PostgresBackend(settings.database_url)
+    await backend.initialize()
+    set_backend(backend)
+    yield backend
+    pool = backend._pool_or_raise()
     async with pool.acquire() as conn:
         await conn.execute("DELETE FROM edges")
         await conn.execute("DELETE FROM entities")
-    await close_pool()
+    await backend.close()
 
 
 @pytest.mark.integration
-async def test_upsert_person_with_email() -> None:
+async def test_upsert_person_with_email(pg_backend: PostgresBackend) -> None:
     batch = EntityBatch(
         persons=[
             PersonRecord(
@@ -67,7 +72,7 @@ async def test_upsert_person_with_email() -> None:
     )
     await upsert_batch(batch)
 
-    pool = await get_pool()
+    pool = pg_backend._pool_or_raise()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -81,7 +86,7 @@ async def test_upsert_person_with_email() -> None:
 
 
 @pytest.mark.integration
-async def test_upsert_person_idempotent() -> None:
+async def test_upsert_person_idempotent(pg_backend: PostgresBackend) -> None:
     person = PersonRecord(
         platform="slack",
         platform_user_id="U999",
@@ -91,7 +96,7 @@ async def test_upsert_person_idempotent() -> None:
     await upsert_batch(EntityBatch(persons=[person]))
     await upsert_batch(EntityBatch(persons=[person]))
 
-    pool = await get_pool()
+    pool = pg_backend._pool_or_raise()
     async with pool.acquire() as conn:
         count = await conn.fetchval(
             """
@@ -103,7 +108,7 @@ async def test_upsert_person_idempotent() -> None:
 
 
 @pytest.mark.integration
-async def test_upsert_entity_and_edge() -> None:
+async def test_upsert_entity_and_edge(pg_backend: PostgresBackend) -> None:
     batch = EntityBatch(
         persons=[
             PersonRecord(
@@ -133,7 +138,7 @@ async def test_upsert_entity_and_edge() -> None:
     )
     await upsert_batch(batch)
 
-    pool = await get_pool()
+    pool = pg_backend._pool_or_raise()
     async with pool.acquire() as conn:
         entity = await conn.fetchrow(
             "SELECT * FROM entities WHERE platform_entity_id = 'doc-abc'"
@@ -147,10 +152,10 @@ async def test_upsert_entity_and_edge() -> None:
 
 
 @pytest.mark.integration
-async def test_gc_removes_stale_entities() -> None:
+async def test_gc_removes_stale_entities(pg_backend: PostgresBackend) -> None:
     from agentgraph.graph.gc import run_gc
 
-    pool = await get_pool()
+    pool = pg_backend._pool_or_raise()
     async with pool.acquire() as conn:
         await conn.execute(
             """

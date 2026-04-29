@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,11 +13,20 @@ from agentgraph.server.models import BlurEvent, FocusEvent
 
 @pytest.fixture
 def client() -> TestClient:
-    # Import after patching to avoid real DB/dwell startup
-    with patch("agentgraph.server.app.apply_schema", new_callable=AsyncMock), \
-         patch("agentgraph.server.app.close_pool", new_callable=AsyncMock), \
-         patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.server.app.run_dwell_loop", new_callable=AsyncMock):
+    """Create a test client with all backend I/O mocked out."""
+    mock_backend = MagicMock()
+    mock_backend.initialize = AsyncMock()
+    mock_backend.close = AsyncMock()
+    mock_backend.insert_observation = AsyncMock()
+    mock_backend.patch_observation_meta = AsyncMock()
+
+    with (
+        patch("agentgraph.backends.get_backend_class", return_value=lambda *a: mock_backend),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.server.app.run_dwell_loop", new_callable=AsyncMock),
+        patch("agentgraph.server.app.setup_sync"),
+        patch("agentgraph.server.app.AsyncIOScheduler"),
+    ):
         from agentgraph.server.app import app
         return TestClient(app, raise_server_exceptions=True)
 
@@ -52,21 +61,27 @@ def test_blur_event_model() -> None:
 
 @pytest.mark.integration
 async def test_observe_focus_persists() -> None:
-    from agentgraph.db.connection import apply_schema, get_pool, close_pool
+    from agentgraph.backends.postgres.backend import PostgresBackend
+    from agentgraph.config import get_settings
+    from agentgraph.core.context import set_backend
 
-    await apply_schema()
-    pool = await get_pool()
+    settings = get_settings()
+    backend = PostgresBackend(settings.database_url)
+    await backend.initialize()
+    set_backend(backend)
 
     ts = datetime.now(timezone.utc)
+    await backend.insert_observation(
+        event_type="focus",
+        url="https://docs.google.com/document/d/abc/edit",
+        title="My Doc",
+        tab_id=42,
+        timestamp=ts,
+        meta=None,
+    )
+
+    pool = backend._pool_or_raise()
     async with pool.acquire() as conn:
-        await conn.execute(
-            "INSERT INTO observations (event_type, url, title, tab_id, timestamp) VALUES ($1,$2,$3,$4,$5)",
-            "focus",
-            "https://docs.google.com/document/d/abc/edit",
-            "My Doc",
-            42,
-            ts,
-        )
         row = await conn.fetchrow(
             "SELECT * FROM observations WHERE tab_id = 42 AND event_type = 'focus'"
         )
@@ -75,4 +90,6 @@ async def test_observe_focus_persists() -> None:
     assert row["url"] == "https://docs.google.com/document/d/abc/edit"
     assert row["evaluated"] is False
 
-    await close_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM observations WHERE tab_id = 42")
+    await backend.close()

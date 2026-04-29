@@ -1,3 +1,5 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
+# pyright: reportUnknownArgumentType=false
 """Google authentication providers.
 
 Two implementations are available:
@@ -50,8 +52,9 @@ class OAuthProvider(GoogleAuthProvider):
             token_uri=g.token_uri,
             client_id=g.client_id,
             client_secret=g.client_secret,
+            expiry=g.token_expiry,
         )
-        if creds.expired and creds.refresh_token:
+        if not creds.valid and creds.refresh_token:
             creds.refresh(Request())
             update(
                 "google",
@@ -60,6 +63,7 @@ class OAuthProvider(GoogleAuthProvider):
                     client_secret=g.client_secret,
                     access_token=creds.token or "",
                     refresh_token=creds.refresh_token or "",
+                    token_expiry=creds.expiry,
                     user_email=g.user_email,
                     display_name=g.display_name,
                 ),
@@ -79,7 +83,7 @@ class GCloudProvider(GoogleAuthProvider):
     _SCOPES = [
         "https://www.googleapis.com/auth/documents.readonly",
         "https://www.googleapis.com/auth/spreadsheets.readonly",
-        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/gmail.readonly",
         "https://www.googleapis.com/auth/userinfo.email",
     ]

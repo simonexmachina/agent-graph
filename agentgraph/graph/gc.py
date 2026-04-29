@@ -1,14 +1,11 @@
 """Garbage collection: remove entities not accessed within retention window."""
 
-# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
-# pyright: reportUnknownArgumentType=false
-
 from __future__ import annotations
 
 import logging
 
 from agentgraph.config import get_settings
-from agentgraph.db.connection import get_pool
+from agentgraph.core.context import get_backend
 
 logger = logging.getLogger(__name__)
 
@@ -17,27 +14,10 @@ async def run_gc() -> int:
     """
     Delete entities where last_accessed < now() - retention_days.
     Edges are removed via ON DELETE CASCADE.
-    Person entities with no remaining edges are pruned separately.
     Returns the total number of rows deleted.
     """
     settings = get_settings()
-    pool = await get_pool()
-
-    async with pool.acquire() as conn, conn.transaction():
-        # Delete stale entities (edges cascade automatically)
-        entity_count: int = await conn.fetchval(
-            """
-                WITH deleted AS (
-                    DELETE FROM entities
-                    WHERE last_accessed < now() - ($1 || ' days')::interval
-                    RETURNING id
-                )
-                SELECT count(*) FROM deleted
-                """,
-            str(settings.retention_days),
-        )
-
-    total = entity_count
+    total = await get_backend().gc_entities(settings.retention_days)
     logger.info(
         "GC complete: removed %d entities (retention=%d days)",
         total,

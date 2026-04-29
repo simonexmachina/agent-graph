@@ -10,23 +10,15 @@ Two directions, both called from upsert_batch:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 
 from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE
+from agentgraph.core.context import get_backend
 
 logger = logging.getLogger(__name__)
 
-# Broad URL extractor — classify_url does the fine-grained matching
 _URL_RE = re.compile(r"https?://\S+")
-
-_INSERT_EDGE = """
-    INSERT INTO edges
-        (edge_type, source_entity_id, target_entity_id, platform, properties)
-    VALUES ('references', $1, $2, 'cross', $3)
-    ON CONFLICT (edge_type, source_entity_id, target_entity_id) DO NOTHING
-"""
 
 
 async def link_entity_to_urls(platform_entity_id: str, platform: str, content: str) -> int:
@@ -47,55 +39,30 @@ async def link_entity_to_urls(platform_entity_id: str, platform: str, content: s
     if not refs:
         return 0
 
-    from agentgraph.db.connection import get_pool
+    backend = get_backend()
+    src_id = await backend.find_entity_id(platform, platform_entity_id)
+    if not src_id:
+        return 0
 
-    pool = await get_pool()
     count = 0
-    async with pool.acquire() as conn:  # type: ignore[attr-defined]
-        src_row = await conn.fetchrow(  # type: ignore[attr-defined]
-            "SELECT id FROM entities WHERE platform = $1 AND platform_entity_id = $2",
-            platform,
-            platform_entity_id,
+    seen: set[str] = set()
+    for ref in refs:
+        if ref.resource_id in seen:
+            continue
+        seen.add(ref.resource_id)
+
+        tgt_id = await backend.find_entity_id(ref.source, ref.resource_id)
+        if not tgt_id:
+            entity_type = RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type]  # type: ignore[index]
+            tgt_id = await backend.upsert_stub_entity(entity_type, ref.source, ref.resource_id)
+            logger.debug("Created stub entity %s/%s", ref.source, ref.resource_id)
+
+        await backend.insert_references_edge(src_id, tgt_id)
+        logger.debug(
+            "Linked %s/%s → %s/%s",
+            platform, platform_entity_id, ref.source, ref.resource_id,
         )
-        if not src_row:
-            return 0
-
-        seen: set[str] = set()
-        for ref in refs:
-            if ref.resource_id in seen:
-                continue
-            seen.add(ref.resource_id)
-
-            tgt_row = await conn.fetchrow(  # type: ignore[attr-defined]
-                "SELECT id FROM entities WHERE platform = $1 AND platform_entity_id = $2",
-                ref.source,
-                ref.resource_id,
-            )
-            if not tgt_row:
-                # Create a stub so the reference is visible before the content is fetched.
-                # synced_at is NULL so the connector always treats it as stale.
-                entity_type = RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type]  # type: ignore[index]
-                tgt_id = await conn.fetchval(  # type: ignore[attr-defined]
-                    """
-                    INSERT INTO entities (entity_type, platform, platform_entity_id, synced_at)
-                    VALUES ($1, $2, $3, NULL)
-                    ON CONFLICT (platform, platform_entity_id) DO UPDATE
-                        SET last_accessed = now()
-                    RETURNING id
-                    """,
-                    entity_type,
-                    ref.source,
-                    ref.resource_id,
-                )
-                tgt_row = {"id": tgt_id}
-                logger.debug("Created stub entity %s/%s", ref.source, ref.resource_id)
-
-            await conn.execute(_INSERT_EDGE, src_row["id"], tgt_row["id"], json.dumps({}))  # type: ignore[attr-defined]
-            logger.debug(
-                "Linked %s/%s → %s/%s",
-                platform, platform_entity_id, ref.source, ref.resource_id,
-            )
-            count += 1
+        count += 1
 
     return count
 
@@ -107,35 +74,20 @@ async def link_entity_from_content(platform_entity_id: str, platform: str) -> in
     platform_entity_id (which appears in any URL pointing at this entity).
     Returns the number of edges created.
     """
-    from agentgraph.db.connection import get_pool
+    backend = get_backend()
+    tgt_id = await backend.find_entity_id(platform, platform_entity_id)
+    if not tgt_id:
+        return 0
 
-    pool = await get_pool()
-    count = 0
-    async with pool.acquire() as conn:  # type: ignore[attr-defined]
-        tgt_row = await conn.fetchrow(  # type: ignore[attr-defined]
-            "SELECT id FROM entities WHERE platform = $1 AND platform_entity_id = $2",
-            platform,
-            platform_entity_id,
-        )
-        if not tgt_row:
-            return 0
+    src_ids = await backend.find_entities_containing(
+        platform_entity_id, platform, platform_entity_id
+    )
+    for src_id in src_ids:
+        await backend.insert_references_edge(src_id, tgt_id)
 
-        src_rows = await conn.fetch(  # type: ignore[attr-defined]
-            """
-            SELECT id FROM entities
-            WHERE content LIKE '%' || $1 || '%'
-              AND NOT (platform = $2 AND platform_entity_id = $3)
-            """,
-            platform_entity_id,
-            platform,
-            platform_entity_id,
-        )
-        for src_row in src_rows:
-            await conn.execute(_INSERT_EDGE, src_row["id"], tgt_row["id"], json.dumps({}))  # type: ignore[attr-defined]
-            count += 1
-
-    if count:
+    if src_ids:
         logger.info(
-            "Created %d references edge(s) → %s/%s", count, platform, platform_entity_id
+            "Created %d references edge(s) → %s/%s",
+            len(src_ids), platform, platform_entity_id,
         )
-    return count
+    return len(src_ids)
