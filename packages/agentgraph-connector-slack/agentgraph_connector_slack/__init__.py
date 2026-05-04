@@ -113,14 +113,14 @@ class SlackConnector(BaseConnector):
 
 
 async def _touch_last_accessed(channel_id: str) -> None:
-    from agentgraph.db.connection import get_pool
+    from agentgraph.core.context import get_backend
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:  # type: ignore[attr-defined]
-        await conn.execute(  # type: ignore[attr-defined]
-            "UPDATE entities SET last_accessed = now() WHERE platform = 'slack' AND platform_entity_id = $1",
-            channel_id,
-        )
+    backend = get_backend()
+    entity = await backend.get_entity_by_platform("slack", channel_id)
+    if entity:
+        # Re-upsert the same entity to bump last_accessed via the normal path.
+        # The cheapest way is just a stub upsert which only updates last_accessed.
+        await backend.upsert_stub_entity("Channel", "slack", channel_id)
 
 
 async def _fetch_thread_replies(
@@ -344,15 +344,14 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
 
 async def _get_known_channels(platform: str) -> list[tuple[str, datetime | None]]:
     """Return (platform_entity_id, synced_at) for all known Channel entities on the given platform."""
-    from agentgraph.db.connection import get_pool
+    from agentgraph.core.context import get_backend
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT platform_entity_id, synced_at FROM entities
-            WHERE platform = $1 AND entity_type = 'Channel'
-            """,
-            platform,
-        )
-    return [(row["platform_entity_id"], row["synced_at"]) for row in rows]
+    entities = await get_backend().list_entities(
+        entity_types=["Channel"], platform=platform, since=None, limit=10_000
+    )
+    result: list[tuple[str, datetime | None]] = []
+    for e in entities:
+        synced_at_str: str | None = e.get("synced_at")  # type: ignore[assignment]
+        synced_at = datetime.fromisoformat(synced_at_str) if synced_at_str else None
+        result.append((e["platform_entity_id"], synced_at))
+    return result

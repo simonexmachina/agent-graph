@@ -108,7 +108,7 @@ class DiscordConnector(BaseConnector):
         return batch
 
     async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
-        from agentgraph.connectors.slack import _get_known_channels
+        from agentgraph_connector_slack import _get_known_channels
 
         channel_rows = await _get_known_channels("discord")
         combined = EntityBatch()
@@ -125,14 +125,9 @@ class DiscordConnector(BaseConnector):
 
 
 async def _touch_last_accessed(channel_id: str) -> None:
-    from agentgraph.db.connection import get_pool
+    from agentgraph.core.context import get_backend
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE entities SET last_accessed = now() WHERE platform = 'discord' AND platform_entity_id = $1",
-            channel_id,
-        )
+    await get_backend().upsert_stub_entity("Channel", "discord", channel_id)
 
 
 async def _fetch_user(
