@@ -27,5 +27,11 @@ def configure_logging(level: str = "INFO") -> None:
             handler.setLevel(log_level)
 
     # Quiet noisy third-party loggers regardless of level
-    for noisy in ("httpx", "httpcore", "sentence_transformers", "uvicorn.access"):
+    for noisy in (
+        "httpx",
+        "httpcore",
+        "sentence_transformers",
+        "uvicorn.access",
+        "googleapiclient.discovery_cache",
+    ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
