@@ -78,3 +78,79 @@ def test_multiple_attachments() -> None:
     assert len(parsed) == 2
     assert parsed[0]["url"] == "https://cdn.discordapp.com/a/1.jpg"
     assert parsed[1]["url"] == "https://cdn.discordapp.com/a/2.png"
+
+
+# ---------------------------------------------------------------------------
+# refresh_attachment_urls
+# ---------------------------------------------------------------------------
+
+import pytest
+from unittest.mock import AsyncMock, patch
+
+from agentgraph_connector_discord import refresh_attachment_urls
+
+
+STORED_JSON = json.dumps([{
+    "url": "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=old&hm=old",
+    "filename": "img.jpg",
+    "content_type": "image/jpeg",
+    "width": 800,
+    "height": 600,
+}])
+
+FRESH_MESSAGE = {
+    "attachments": [{
+        "url": "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=new&hm=new",
+        "filename": "img.jpg",
+        "content_type": "image/jpeg",
+        "width": 800,
+        "height": 600,
+    }]
+}
+
+
+@pytest.mark.asyncio
+async def test_refresh_returns_fresh_url() -> None:
+    with patch(
+        "agentgraph_connector_discord.load_creds",
+        return_value=type("C", (), {"discord": type("D", (), {"bot_token": "tok"})()})(),
+    ), patch(
+        "agentgraph_connector_discord._api_get",
+        new=AsyncMock(return_value=FRESH_MESSAGE),
+    ):
+        result = await refresh_attachment_urls("111", "222", STORED_JSON)
+    parsed = json.loads(result)
+    assert parsed[0]["url"] == "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=new&hm=new"
+
+
+@pytest.mark.asyncio
+async def test_refresh_falls_back_on_api_error() -> None:
+    with patch(
+        "agentgraph_connector_discord.load_creds",
+        return_value=type("C", (), {"discord": type("D", (), {"bot_token": "tok"})()})(),
+    ), patch(
+        "agentgraph_connector_discord._api_get",
+        new=AsyncMock(side_effect=Exception("404")),
+    ):
+        result = await refresh_attachment_urls("111", "222", STORED_JSON)
+    assert result == STORED_JSON
+
+
+@pytest.mark.asyncio
+async def test_refresh_skips_when_no_credentials() -> None:
+    with patch(
+        "agentgraph_connector_discord.load_creds",
+        return_value=type("C", (), {"discord": None})(),
+    ):
+        result = await refresh_attachment_urls("111", "222", STORED_JSON)
+    assert result == STORED_JSON
+
+
+@pytest.mark.asyncio
+async def test_refresh_falls_back_on_creds_exception() -> None:
+    with patch(
+        "agentgraph_connector_discord.load_creds",
+        side_effect=Exception("no creds file"),
+    ):
+        result = await refresh_attachment_urls("111", "222", STORED_JSON)
+    assert result == STORED_JSON

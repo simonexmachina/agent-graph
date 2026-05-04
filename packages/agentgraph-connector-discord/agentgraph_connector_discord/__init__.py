@@ -74,6 +74,40 @@ def _snowflake_after(dt: datetime) -> str:
     return str(max(ts_ms, 0) << 22)
 
 
+async def refresh_attachment_urls(
+    channel_id: str,
+    message_id: str,
+    stored_json: str,
+) -> str:
+    """Return attachments JSON with fresh CDN URLs fetched from Discord.
+
+    Calls GET /channels/{channel_id}/messages/{message_id} and rebuilds
+    the attachment list from the live response. Falls back to stored_json
+    on any error (missing credentials, 404, rate-limit exhaustion, etc.)
+    so callers always get a usable value.
+    """
+    import json as _json
+
+    try:
+        stored = load_creds()
+        if stored.discord is None:
+            return stored_json
+    except Exception:
+        return stored_json
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            msg = await _api_get(client, f"/channels/{channel_id}/messages/{message_id}")
+        fresh = _extract_attachments(msg)
+        return fresh if fresh is not None else _json.dumps([])
+    except Exception as exc:
+        logger.debug(
+            "discord: could not refresh attachments for %s/%s: %s",
+            channel_id, message_id, exc,
+        )
+        return stored_json
+
+
 def _parse_mentions(content: str) -> list[str]:
     """Extract <@USER_ID> and <@!USER_ID> user IDs from message content."""
     import re

@@ -11,7 +11,9 @@ and other MCP clients.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -24,7 +26,43 @@ from agentgraph.graph.query import (
     traverse_graph,
 )
 
+logger = logging.getLogger(__name__)
 mcp = FastMCP("AgentGraph")
+
+
+async def _refresh_discord_attachments(results: list[dict[str, Any]]) -> None:
+    """Refresh Discord CDN attachment URLs in-place for all results that need it.
+
+    Discord signed CDN URLs expire shortly after ingestion. For any Discord
+    Message entity whose metadata contains attachments, fetch fresh URLs from
+    the Discord API concurrently and update the metadata in-place.
+    Silently skips on missing credentials or any API error.
+    """
+    try:
+        from agentgraph_connector_discord import refresh_attachment_urls
+    except ImportError:
+        return
+
+    async def _refresh_one(entity: dict[str, Any]) -> None:
+        meta = entity.get("metadata")
+        if not isinstance(meta, dict):
+            return
+        stored_json: str | None = meta.get("attachments")
+        if not stored_json:
+            return
+        channel_id: str = meta.get("channel_id", "")
+        message_id: str = meta.get("message_id", "")
+        if not channel_id or not message_id:
+            return
+        fresh_json = await refresh_attachment_urls(channel_id, message_id, stored_json)
+        meta["attachments"] = fresh_json
+
+    discord_messages = [
+        e for e in results
+        if e.get("platform") == "discord" and e.get("entity_type") == "Message"
+    ]
+    if discord_messages:
+        await asyncio.gather(*(_refresh_one(e) for e in discord_messages))
 
 
 # ---------------------------------------------------------------------------
@@ -62,13 +100,15 @@ async def search_entities_tool(
 
     Returns:
         JSON array of matching entities with id, title, content snippet,
-        platform, and relevance score.
+        platform, and relevance score. Discord attachment URLs are
+        automatically refreshed before returning so they are valid at
+        the time of the call.
     """
     results = await search_entities(query, entity_types=entity_types, limit=limit, min_score=min_score)
-    # Trim content to a readable snippet for the LLM
     for r in results:
         if r.get("content") and len(str(r["content"])) > 500:
             r["content"] = str(r["content"])[:500] + "…"
+    await _refresh_discord_attachments(results)
     return json.dumps(results, default=str)
 
 
@@ -264,11 +304,14 @@ async def query_by_filter_tool(
         JSON array of matching entities. For Message entities with
         attachments, each result includes metadata.attachments — a JSON
         string that decodes to a list of {url, filename, content_type,
-        width?, height?} objects.
+        width?, height?} objects. Discord attachment URLs are
+        automatically refreshed before returning so they are valid at
+        the time of the call.
     """
     str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
     results = await query_by_filter(
         entity_type, filters=str_filters, limit=limit, order_by=order_by,
         since=since, authored_by_me=authored_by_me, has_attachments=has_attachments,
     )
+    await _refresh_discord_attachments(results)
     return json.dumps(results, default=str)
