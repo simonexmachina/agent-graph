@@ -85,72 +85,102 @@ def test_multiple_attachments() -> None:
 # ---------------------------------------------------------------------------
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from agentgraph_connector_discord import refresh_attachment_urls
 
+OLD_URL = "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=old&hm=old"
+NEW_URL = "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=new&hm=new"
 
 STORED_JSON = json.dumps([{
-    "url": "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=old&hm=old",
+    "url": OLD_URL,
     "filename": "img.jpg",
     "content_type": "image/jpeg",
     "width": 800,
     "height": 600,
 }])
 
-FRESH_MESSAGE = {
-    "attachments": [{
-        "url": "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=new&hm=new",
-        "filename": "img.jpg",
-        "content_type": "image/jpeg",
-        "width": 800,
-        "height": 600,
-    }]
-}
+REFRESH_RESPONSE = {"refreshed_urls": [{"original": OLD_URL, "refreshed": NEW_URL}]}
+
+
+def _mock_creds(has_discord: bool = True) -> object:
+    discord = type("D", (), {"bot_token": "tok"})() if has_discord else None
+    return type("C", (), {"discord": discord})()
+
+
+def _mock_http_response(data: dict) -> MagicMock:  # type: ignore[type-arg]
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json = MagicMock(return_value=data)
+    return resp
 
 
 @pytest.mark.asyncio
 async def test_refresh_returns_fresh_url() -> None:
-    with patch(
-        "agentgraph_connector_discord.load_creds",
-        return_value=type("C", (), {"discord": type("D", (), {"bot_token": "tok"})()})(),
-    ), patch(
-        "agentgraph_connector_discord._api_get",
-        new=AsyncMock(return_value=FRESH_MESSAGE),
-    ):
+    mock_post = AsyncMock(return_value=_mock_http_response(REFRESH_RESPONSE))
+    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+         patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await refresh_attachment_urls("111", "222", STORED_JSON)
     parsed = json.loads(result)
-    assert parsed[0]["url"] == "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=new&hm=new"
+    assert parsed[0]["url"] == NEW_URL
+
+
+@pytest.mark.asyncio
+async def test_refresh_preserves_non_url_fields() -> None:
+    mock_post = AsyncMock(return_value=_mock_http_response(REFRESH_RESPONSE))
+    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+         patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        result = await refresh_attachment_urls("111", "222", STORED_JSON)
+    parsed = json.loads(result)
+    assert parsed[0]["filename"] == "img.jpg"
+    assert parsed[0]["width"] == 800
+    assert parsed[0]["height"] == 600
 
 
 @pytest.mark.asyncio
 async def test_refresh_falls_back_on_api_error() -> None:
-    with patch(
-        "agentgraph_connector_discord.load_creds",
-        return_value=type("C", (), {"discord": type("D", (), {"bot_token": "tok"})()})(),
-    ), patch(
-        "agentgraph_connector_discord._api_get",
-        new=AsyncMock(side_effect=Exception("404")),
-    ):
+    mock_post = AsyncMock(side_effect=Exception("503"))
+    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+         patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await refresh_attachment_urls("111", "222", STORED_JSON)
     assert result == STORED_JSON
 
 
 @pytest.mark.asyncio
 async def test_refresh_skips_when_no_credentials() -> None:
-    with patch(
-        "agentgraph_connector_discord.load_creds",
-        return_value=type("C", (), {"discord": None})(),
-    ):
+    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds(has_discord=False)):
         result = await refresh_attachment_urls("111", "222", STORED_JSON)
     assert result == STORED_JSON
 
 
 @pytest.mark.asyncio
 async def test_refresh_falls_back_on_creds_exception() -> None:
-    with patch(
-        "agentgraph_connector_discord.load_creds",
-        side_effect=Exception("no creds file"),
-    ):
+    with patch("agentgraph_connector_discord.load_creds", side_effect=Exception("no creds file")):
         result = await refresh_attachment_urls("111", "222", STORED_JSON)
     assert result == STORED_JSON
+
+
+@pytest.mark.asyncio
+async def test_refresh_multiple_attachments() -> None:
+    url_a = "https://cdn.discordapp.com/a/1.jpg?ex=old"
+    url_b = "https://cdn.discordapp.com/a/2.jpg?ex=old"
+    stored = json.dumps([{"url": url_a, "filename": "1.jpg"}, {"url": url_b, "filename": "2.jpg"}])
+    response = {"refreshed_urls": [
+        {"original": url_a, "refreshed": "https://cdn.discordapp.com/a/1.jpg?ex=new"},
+        {"original": url_b, "refreshed": "https://cdn.discordapp.com/a/2.jpg?ex=new"},
+    ]}
+    mock_post = AsyncMock(return_value=_mock_http_response(response))
+    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+         patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
+        mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        result = await refresh_attachment_urls("111", "222", stored)
+    parsed = json.loads(result)
+    assert parsed[0]["url"] == "https://cdn.discordapp.com/a/1.jpg?ex=new"
+    assert parsed[1]["url"] == "https://cdn.discordapp.com/a/2.jpg?ex=new"

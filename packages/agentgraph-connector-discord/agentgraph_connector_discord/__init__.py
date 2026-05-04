@@ -79,12 +79,16 @@ async def refresh_attachment_urls(
     message_id: str,
     stored_json: str,
 ) -> str:
-    """Return attachments JSON with fresh CDN URLs fetched from Discord.
+    """Return attachments JSON with fresh CDN URLs from Discord.
 
-    Calls GET /channels/{channel_id}/messages/{message_id} and rebuilds
-    the attachment list from the live response. Falls back to stored_json
-    on any error (missing credentials, 404, rate-limit exhaustion, etc.)
-    so callers always get a usable value.
+    Uses POST /attachments/refresh-urls — the purpose-built Discord
+    endpoint for renewing expiring signed CDN tokens. Discord only issues
+    new tokens once the current ones have expired; while still valid the
+    same URL is returned unchanged, which is correct behaviour.
+
+    Falls back to stored_json on missing credentials or any API error.
+    channel_id and message_id are accepted for interface compatibility but
+    are not used by this endpoint (it operates on the URLs directly).
     """
     import json as _json
 
@@ -92,14 +96,34 @@ async def refresh_attachment_urls(
         stored = load_creds()
         if stored.discord is None:
             return stored_json
+        token = stored.discord.bot_token
     except Exception:
         return stored_json
 
     try:
+        attachments: list[dict[str, Any]] = _json.loads(stored_json)
+        urls = [a["url"] for a in attachments if a.get("url")]
+        if not urls:
+            return stored_json
+
         async with httpx.AsyncClient(timeout=10) as client:
-            msg = await _api_get(client, f"/channels/{channel_id}/messages/{message_id}")
-        fresh = _extract_attachments(msg)
-        return fresh if fresh is not None else _json.dumps([])
+            resp = await client.post(
+                f"{DISCORD_API}/attachments/refresh-urls",
+                headers={"Authorization": f"Bot {token}", "Content-Type": "application/json"},
+                json={"attachment_urls": urls},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        url_map: dict[str, str] = {
+            r["original"]: r["refreshed"]
+            for r in data.get("refreshed_urls", [])
+        }
+        for a in attachments:
+            if a.get("url") in url_map:
+                a["url"] = url_map[a["url"]]
+        return _json.dumps(attachments)
     except Exception as exc:
         logger.debug(
             "discord: could not refresh attachments for %s/%s: %s",
