@@ -88,6 +88,7 @@ class StorageBackend(ABC):
         order_by: str,
         since: datetime | None,
         authored_by: str | None,
+        has_attachments: bool = False,
     ) -> list[EntityResult]: ...
 
     # --- Read: edges ---

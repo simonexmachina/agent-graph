@@ -44,10 +44,18 @@ async def search_entities_tool(
     Combines semantic vector similarity and full-text search via
     Reciprocal Rank Fusion for high-quality results.
 
+    IMPORTANT — images and file attachments: photos, images, and uploaded
+    files are stored as attachments on Message entities (in
+    metadata.attachments), NOT as Document entities. If the user asks
+    about images, photos, pictures, or uploaded files, search Message
+    entities or use query_by_filter_tool with has_attachments=True.
+    Do NOT query Document for images — Documents are text documents only.
+
     Args:
         query: Natural-language search query.
         entity_types: Optional list of entity types to restrict results
-            (e.g. ["Message", "Document", "Channel"]).
+            (e.g. ["Message", "Document", "Channel"]). To find images or
+            attachments, pass ["Message"].
         limit: Maximum number of results to return (default 10).
         min_score: Minimum relevance score threshold (0–1, default 0.02).
             Results below this score are suppressed as noise.
@@ -208,6 +216,7 @@ async def query_by_filter_tool(
     filters: dict[str, Any] | None = None,
     since: str | None = None,
     authored_by_me: bool = False,
+    has_attachments: bool = False,
     limit: int = 50,
     order_by: str = "created_at",
 ) -> str:
@@ -218,26 +227,48 @@ async def query_by_filter_tool(
     on a platform, activity within a time window, or content authored by
     the current user.
 
+    Entity types and what they contain:
+      - Message: chat messages from Discord, Slack, Gmail, etc. This is
+          also where image and file uploads live — attachments are stored
+          in metadata.attachments as a JSON array with fields: url,
+          filename, content_type, width, height. To find images or
+          uploaded files, query Message (not Document) and set
+          has_attachments=True.
+      - Document: text documents such as Google Docs. Does NOT contain
+          image or file attachments — those are on Message entities.
+      - Channel: a chat channel or DM thread (Discord, Slack, etc.).
+      - Task: a task or to-do item (e.g. from a project tracker).
+      - Project: a project or repository container.
+
+    Example — find images uploaded in the last 7 days:
+        entity_type="Message", has_attachments=True, since="7d"
+
     Args:
-        entity_type: Entity type to query ("Message", "Document",
-            "Channel", "Task", "Project").
+        entity_type: Entity type to query. See above for what each type
+            contains. Use "Message" to find images/attachments.
         filters: Optional dict of key=value filters. Known columns
             (platform, platform_entity_id) are applied as column filters;
             all other keys are matched against the metadata JSONB field.
         since: Optional time cutoff — ISO timestamp or relative duration
-            like "12h", "30m", "2d". Only returns entities created after
+            like "12h", "30m", "2d". Only returns entities updated after
             this time.
         authored_by_me: If true, only return entities with an authored
             edge from the current user (resolved from stored credentials).
+        has_attachments: If true, only return Message entities that have
+            at least one file or image attachment in metadata.attachments.
+            Ignored for non-Message entity types.
         limit: Maximum number of results (default 50).
         order_by: Column to sort by descending (default "created_at").
 
     Returns:
-        JSON array of matching entities.
+        JSON array of matching entities. For Message entities with
+        attachments, each result includes metadata.attachments — a JSON
+        string that decodes to a list of {url, filename, content_type,
+        width?, height?} objects.
     """
     str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
     results = await query_by_filter(
         entity_type, filters=str_filters, limit=limit, order_by=order_by,
-        since=since, authored_by_me=authored_by_me,
+        since=since, authored_by_me=authored_by_me, has_attachments=has_attachments,
     )
     return json.dumps(results, default=str)

@@ -16,7 +16,7 @@ app.add_typer(auth_app, name="auth")
 
 @auth_app.command("google-docs")
 def auth_google_docs() -> None:
-    """Authenticate with Google Docs via OAuth2 browser flow."""
+    """Authenticate with Google (Docs, Drive, Gmail) via OAuth2 browser flow."""
     from agentgraph.auth.google import run_oauth_flow
 
     run_oauth_flow()
@@ -36,6 +36,26 @@ def auth_discord() -> None:
     from agentgraph.auth.discord import run_token_flow
 
     run_token_flow()
+
+
+@auth_app.command("sharepoint")
+def auth_sharepoint() -> None:
+    """Store SharePoint browser cookies (FedAuth + rtFa) for a site."""
+    from agentgraph.auth.sharepoint import run_cookie_flow
+
+    run_cookie_flow()
+
+
+@auth_app.command("microsoft")
+def auth_microsoft() -> None:
+    """Authenticate with Microsoft Graph (SharePoint/OneDrive) via OAuth2 browser flow.
+
+    Tip: if you have the Azure CLI installed, run 'az login' instead and set
+    AGENTGRAPH_MICROSOFT_AUTH_PROVIDER=az — no app registration needed.
+    """
+    from agentgraph.auth.microsoft import run_oauth_flow
+
+    run_oauth_flow()
 
 
 @app.command()
@@ -75,12 +95,13 @@ def search(
 @app.command()
 def get(
     entity_id: str = typer.Argument(..., help="Entity ID"),
+    resolve: bool = typer.Option(False, "--resolve", "-r", help="Fetch from source if entity is a stub (no content)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Fetch full details for an entity."""
     from agentgraph.cli_query import cmd_get
 
-    cmd_get(entity_id=entity_id, as_json=json)
+    cmd_get(entity_id=entity_id, as_json=json, resolve=resolve)
 
 
 @app.command()
@@ -100,12 +121,13 @@ def edges(
 def traverse(
     entity_id: str = typer.Argument(..., help="Start entity ID"),
     depth: int = typer.Option(2, "--depth", "-d", help="Maximum traversal depth"),
+    resolve: bool = typer.Option(False, "--resolve", "-r", help="Fetch stub nodes from source before returning"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Traverse the graph from an entity."""
     from agentgraph.cli_query import cmd_traverse
 
-    cmd_traverse(entity_id=entity_id, max_depth=depth, as_json=json)
+    cmd_traverse(entity_id=entity_id, max_depth=depth, as_json=json, resolve=resolve)
 
 
 @app.command()
@@ -133,25 +155,87 @@ def fetch_entity_cmd(
 
 @app.command()
 def onboard() -> None:
-    """Interactive setup: authenticate with Google Docs, Slack, and Discord."""
+    """Interactive setup: authenticate with Google, Slack, Discord, and Microsoft."""
+    import shutil
+    import subprocess
+
     import typer
 
-    from agentgraph.auth.discord import run_token_flow as discord_flow
-    from agentgraph.auth.google import run_oauth_flow
-    from agentgraph.auth.slack import run_cookie_flow
+    typer.echo("=== AgentGraph Setup ===")
+    typer.echo("Press Enter to proceed with each step, or type 's' to skip it.\n")
 
-    typer.echo("=== AgentGraph Setup ===\n")
+    # --- Google ---
+    typer.echo("Step 1/4: Google (Docs, Sheets, Drive, Gmail)")
+    if typer.confirm("  Set up Google?", default=True):
+        from agentgraph.auth.google import run_oauth_flow as google_oauth_flow
+        google_oauth_flow()
+        _save_user_config("AGENTGRAPH_GOOGLE_AUTH_PROVIDER", "oauth")
+    else:
+        typer.echo("  Skipped.")
 
-    typer.echo("Step 1/3: Google Docs")
-    run_oauth_flow()
+    # --- Slack ---
+    typer.echo("\nStep 2/4: Slack")
+    if typer.confirm("  Set up Slack?", default=True):
+        from agentgraph.auth.slack import run_cookie_flow
+        run_cookie_flow()
+    else:
+        typer.echo("  Skipped.")
 
-    typer.echo("\nStep 2/3: Slack")
-    run_cookie_flow()
+    # --- Discord ---
+    typer.echo("\nStep 3/4: Discord")
+    if typer.confirm("  Set up Discord?", default=True):
+        from agentgraph.auth.discord import run_token_flow as discord_flow
+        discord_flow()
+    else:
+        typer.echo("  Skipped.")
 
-    typer.echo("\nStep 3/3: Discord")
-    discord_flow()
+    # --- Microsoft ---
+    typer.echo("\nStep 4/4: Microsoft (SharePoint, OneDrive)")
+    if typer.confirm("  Set up Microsoft?", default=True):
+        if shutil.which("az"):
+            use_az = typer.confirm(
+                "  'az' (Azure CLI) is installed — use it for auth? (no app registration needed)",
+                default=True,
+            )
+            if use_az:
+                subprocess.run(["az", "login"], check=False)
+                _save_user_config("AGENTGRAPH_MICROSOFT_AUTH_PROVIDER", "az")
+                typer.echo("  Microsoft auth provider set to: az")
+            else:
+                from agentgraph.auth.microsoft import run_oauth_flow as microsoft_oauth_flow
+                microsoft_oauth_flow()
+                _save_user_config("AGENTGRAPH_MICROSOFT_AUTH_PROVIDER", "oauth")
+        else:
+            typer.echo(
+                "  Tip: install Azure CLI (brew install azure-cli) and re-run onboard\n"
+                "  to skip app registration. Falling back to custom OAuth2."
+            )
+            from agentgraph.auth.microsoft import run_oauth_flow as microsoft_oauth_flow
+            microsoft_oauth_flow()
+            _save_user_config("AGENTGRAPH_MICROSOFT_AUTH_PROVIDER", "oauth")
+    else:
+        typer.echo("  Skipped.")
 
     typer.echo("\nSetup complete. Run `agentgraph serve` to start the server.")
+
+
+def _save_user_config(key: str, value: str) -> None:
+    """Persist a setting to ~/.agentgraph/.env."""
+    from agentgraph.config import CONFIG_DIR
+
+    env_file = CONFIG_DIR / ".env"
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    lines = env_file.read_text().splitlines() if env_file.exists() else []
+    prefix = f"{key}="
+    new_line = f"{key}={value}"
+    for i, line in enumerate(lines):
+        if line.startswith(prefix):
+            lines[i] = new_line
+            break
+    else:
+        lines.append(new_line)
+    env_file.write_text("\n".join(lines) + "\n")
 
 
 @app.command()
@@ -277,6 +361,7 @@ def query(
     filter: list[str] = typer.Option([], "--filter", "-f", help="key=value filters (column or metadata)"),
     since: str | None = typer.Option(None, "--since", "-s", help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)"),
     mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
+    has_attachments: bool = typer.Option(False, "--has-attachments", help="Only Message entities that have file/image attachments"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results"),
     order_by: str = typer.Option("created_at", "--order-by", "-o", help="Column to sort by (created_at, updated_at, last_accessed)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -285,4 +370,4 @@ def query(
     from agentgraph.cli_query import cmd_query
 
     parsed_filters = dict(f.split("=", 1) for f in filter if "=" in f)
-    cmd_query(entity_type=entity_type, filters=parsed_filters, limit=limit, order_by=order_by, since=since, authored_by_me=mine, as_json=json)
+    cmd_query(entity_type=entity_type, filters=parsed_filters, limit=limit, order_by=order_by, since=since, authored_by_me=mine, has_attachments=has_attachments, as_json=json)

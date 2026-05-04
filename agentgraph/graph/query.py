@@ -68,11 +68,13 @@ async def query_by_filter(
     order_by: str = "last_accessed",
     since: str | None = None,
     authored_by_me: bool = False,
+    has_attachments: bool = False,
 ) -> list[EntityResult]:
     since_dt = _parse_since(since) if since else None
     authored_by: str | None = _resolve_me() if authored_by_me else None
     return await get_backend().query_by_filter(
-        entity_type, filters, limit, order_by, since_dt, authored_by
+        entity_type, filters, limit, order_by, since_dt, authored_by,
+        has_attachments=has_attachments,
     )
 
 

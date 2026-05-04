@@ -109,6 +109,7 @@ async def cli_query(
     order_by: str = Query(default="last_accessed"),
     since: str | None = Query(default=None),
     mine: bool = Query(default=False),
+    has_attachments: bool = Query(default=False),
     filter: list[str] = Query(default=[]),
 ) -> list[dict[str, Any]]:
     """Query entities by type with optional filters (key=value pairs)."""
@@ -124,6 +125,7 @@ async def cli_query(
         order_by=order_by,
         since=since,
         authored_by_me=mine,
+        has_attachments=has_attachments,
     )
 
 

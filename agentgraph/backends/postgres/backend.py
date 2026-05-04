@@ -356,6 +356,7 @@ class PostgresBackend(StorageBackend):
         order_by: str,
         since: datetime | None,
         authored_by: str | None,
+        has_attachments: bool = False,
     ) -> list[EntityResult]:
         if order_by not in _VALID_ORDER_BY:
             order_by = "last_accessed"
@@ -373,6 +374,11 @@ class PostgresBackend(StorageBackend):
             if since:
                 params.append(since)
                 extra_clauses.append(f"updated_at >= ${len(params)}")
+            if has_attachments:
+                extra_clauses.append(
+                    "metadata->>'attachments' IS NOT NULL"
+                    " AND metadata->>'attachments' != '[]'"
+                )
 
             authored_join = ""
             if authored_by:

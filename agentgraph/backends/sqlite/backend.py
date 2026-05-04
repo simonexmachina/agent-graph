@@ -441,6 +441,7 @@ class SQLiteBackend(StorageBackend):
         order_by: str,
         since: datetime | None,
         authored_by: str | None,
+        has_attachments: bool = False,
     ) -> list[EntityResult]:
         if order_by not in _VALID_ORDER_BY:
             order_by = "last_accessed"
@@ -456,6 +457,11 @@ class SQLiteBackend(StorageBackend):
         if since:
             extra_clauses.append("e.updated_at >= ?")
             params.append(since.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        if has_attachments:
+            extra_clauses.append(
+                "json_extract(e.metadata, '$.attachments') IS NOT NULL"
+                " AND json_extract(e.metadata, '$.attachments') != '[]'"
+            )
 
         authored_join = ""
         if authored_by:

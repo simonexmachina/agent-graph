@@ -107,7 +107,12 @@ def cmd_search(query: str, entity_types: list[str], limit: int, min_score: float
 # get
 # ---------------------------------------------------------------------------
 
-def cmd_get(entity_id: str, as_json: bool) -> None:
+def _is_stub(entity: dict[str, Any]) -> bool:
+    """Return True if the entity has no meaningful content (stub / unfetched)."""
+    return not entity.get("title") and not entity.get("content")
+
+
+def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
     entity = _get(f"/entity/{entity_id}")
     if entity is None:
         _warn_local()
@@ -117,6 +122,14 @@ def cmd_get(entity_id: str, as_json: bool) -> None:
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
+
+    if resolve and _is_stub(entity):
+        console.print("[dim]Stub entity — fetching from source…[/dim]")
+        _post("/fetch-entity", params={"entity_id": entity["id"]})
+        # Re-fetch after resolution attempt
+        refreshed = _get(f"/entity/{entity['id']}")
+        if refreshed is not None:
+            entity = refreshed
 
     if as_json:
         console.print_json(json.dumps(entity, default=str))
@@ -183,7 +196,7 @@ def cmd_edges(
 # traverse
 # ---------------------------------------------------------------------------
 
-def cmd_traverse(entity_id: str, max_depth: int, as_json: bool) -> None:
+def cmd_traverse(entity_id: str, max_depth: int, as_json: bool, resolve: bool = False) -> None:
     result = _get(f"/traverse/{entity_id}", {"depth": max_depth})
     if result is None:
         _warn_local()
@@ -193,6 +206,17 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool) -> None:
             console.print(f"[red]Entity {entity_id!r} not found.[/red]")
             return
         result = _run(traverse_graph(entity["id"], max_depth=max_depth))
+
+    if resolve and result:
+        stubs = [n for n in result.get("nodes", []) if _is_stub(n)]
+        if stubs:
+            console.print(f"[dim]Resolving {len(stubs)} stub node(s)…[/dim]")
+            for stub in stubs:
+                _post("/fetch-entity", params={"entity_id": stub["id"]})
+            # Re-traverse so node data reflects newly fetched content
+            refreshed = _get(f"/traverse/{entity_id}", {"depth": max_depth})
+            if refreshed is not None:
+                result = refreshed
 
     if as_json:
         console.print_json(json.dumps(result, default=str))
@@ -209,7 +233,8 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool) -> None:
     table.add_column("Title")
 
     for n in nodes:
-        table.add_row(str(n["id"])[:8], n["entity_type"], n["platform"], n.get("title") or "")
+        stub_marker = " [dim](stub)[/dim]" if _is_stub(n) else ""
+        table.add_row(str(n["id"])[:8], n["entity_type"], n["platform"], (n.get("title") or "") + stub_marker)
 
     console.print(table)
 
@@ -284,6 +309,7 @@ def cmd_query(
     since: str | None,
     authored_by_me: bool,
     as_json: bool,
+    has_attachments: bool = False,
 ) -> None:
     params: dict[str, Any] = {
         "entity_type": entity_type,
@@ -295,6 +321,8 @@ def cmd_query(
         params["since"] = since
     if filters:
         params["filter"] = [f"{k}={v}" for k, v in filters.items()]
+    if has_attachments:
+        params["has_attachments"] = True
 
     results = _get("/query", params)
     if results is None:
@@ -308,6 +336,7 @@ def cmd_query(
                 order_by=order_by,
                 since=since,
                 authored_by_me=authored_by_me,
+                has_attachments=has_attachments,
             )
         )
 

@@ -9,16 +9,16 @@ Use the `agentgraph` CLI to query the local knowledge graph. Always prefer the C
 agentgraph search "<query>" [--type <type>] [--limit N] [--json]
 
 # Fetch full entity details by ID, UUID prefix, or platform ref (platform/entity_id)
-agentgraph get <entity-id|platform/ref> [--json]
+agentgraph get <entity-id|platform/ref> --resolve [--json]
 
 # List edges for an entity
 agentgraph edges <entity-id|platform/ref> [--type <edge-type>] [--direction in|out|both] [--json]
 
 # Traverse the graph from a starting entity
-agentgraph traverse <entity-id|platform/ref> [--depth N] [--json]
+agentgraph traverse <entity-id|platform/ref> --resolve [--depth N] [--json]
 
 # Filter entities by type and metadata
-agentgraph query --type <entity-type> [--filter key=value] [--since 12h|30m|2d] [--mine] [--limit N] [--order-by created_at|updated_at|last_accessed] [--json]
+agentgraph query --type <entity-type> [--filter key=value] [--since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|last_accessed] [--json]
 
 # Trigger a connector fetch for a platform entity (by platform + platform-specific ID)
 agentgraph fetch <platform> <resource-id> [--json]
@@ -27,12 +27,30 @@ agentgraph fetch <platform> <resource-id> [--json]
 agentgraph fetch-entity <entity-id> [--json]
 
 # Trigger a background poll for one or all connectors
-agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive — omit for all
+agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, sharepoint — omit for all
+
+# Authenticate connectors
+agentgraph auth google-docs   # Google OAuth2 (Docs, Sheets, Drive, Gmail)
+agentgraph auth slack         # Slack cookie credentials
+agentgraph auth discord       # Discord bot token
+agentgraph auth microsoft     # Microsoft OAuth2 (SharePoint, OneDrive) — or: az login + AGENTGRAPH_MICROSOFT_AUTH_PROVIDER=az
 
 # Server
 agentgraph serve [--reload]
 agentgraph mcp-serve
 ```
+
+## Entity types
+
+| Type | Contains |
+|---|---|
+| `Message` | Chat messages (Discord, Slack, Gmail). **Images and file uploads are attachments on Message entities** — stored in `metadata.attachments` (JSON array with `url`, `filename`, `content_type`, `width`, `height`). Use `--has-attachments` to filter to messages with files. |
+| `Document` | Text documents (Google Docs, etc.). Does NOT contain image attachments. |
+| `Channel` | Chat channels and DM threads. |
+| `Task` | Tasks or to-do items. |
+| `Project` | Project/repository containers. |
+
+To find images uploaded this week: `agentgraph query --type Message --has-attachments --since 7d --json`
 
 ## Notes
 
@@ -41,9 +59,12 @@ agentgraph mcp-serve
 - Entity IDs accept: full UUID, UUID prefix, or platform ref (`slack/C123`, `gdocs/doc-id`, `discord/dm/456`)
 - Server logs: `/tmp/agentgraph.log`
 
+## Stub Entities
+
+An entity is a **stub** when it has no title and no content — it was referenced in an edge but never fetched from its source. Using `--resolve` (default for `get` and `traverse`) automatically fetches stubs from their source before returning. If you omitted `--resolve` and get empty results, re-run with it or use `agentgraph fetch-entity <entity-id>` then re-fetch.
+
 ## Workflow
 
 When the user asks about graph data:
 1. Run the appropriate `agentgraph` command with `--json` to get structured output
-2. Parse and summarise the results for the user
-3. Use `edges` or `traverse` to follow relationships when needed
+2. Use `edges` or `traverse` to follow relationships when needed
