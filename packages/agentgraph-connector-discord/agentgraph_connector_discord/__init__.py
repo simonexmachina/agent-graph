@@ -80,6 +80,26 @@ def _parse_mentions(content: str) -> list[str]:
     return re.findall(r"<@!?(\d+)>", content)
 
 
+def _extract_attachments(msg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a compact attachment list from a Discord message payload."""
+    result: list[dict[str, Any]] = []
+    for a in msg.get("attachments", []):
+        url: str = a.get("url", "")
+        if not url:
+            continue
+        entry: dict[str, Any] = {"url": url, "filename": a.get("filename", "")}
+        content_type: str = a.get("content_type", "")
+        if content_type:
+            entry["content_type"] = content_type
+        width = a.get("width")
+        height = a.get("height")
+        if width and height:
+            entry["width"] = width
+            entry["height"] = height
+        result.append(entry)
+    return result
+
+
 class DiscordConnector(BaseConnector):
     source = "discord"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
@@ -190,6 +210,11 @@ async def _fetch_thread_messages(
         if not msg_id:
             continue
 
+        attachments = _extract_attachments(msg)
+        meta: dict[str, Any] = {"channel_id": parent_channel_id, "thread_id": thread_id, "message_id": msg_id}
+        if attachments:
+            meta["attachments"] = attachments
+
         entities.append(EntityRecord(
             entity_type="Message",
             platform="discord",
@@ -197,7 +222,7 @@ async def _fetch_thread_messages(
             content=content,
             created_at=_snowflake_to_dt(msg_id),
             updated_at=_snowflake_to_dt(msg_id),
-            metadata={"channel_id": parent_channel_id, "thread_id": thread_id, "message_id": msg_id},
+            metadata=meta,
         ))
 
         edges.append(EdgeRecord(
@@ -320,6 +345,11 @@ async def _fetch_channel(
             if not msg_id:
                 continue
 
+            attachments = _extract_attachments(msg)
+            meta: dict[str, Any] = {"channel_id": channel_id, "message_id": msg_id, "guild_id": guild_id}
+            if attachments:
+                meta["attachments"] = attachments
+
             entities.append(EntityRecord(
                 entity_type="Message",
                 platform="discord",
@@ -327,7 +357,7 @@ async def _fetch_channel(
                 content=content,
                 created_at=_snowflake_to_dt(msg_id),
                 updated_at=_snowflake_to_dt(msg_id),
-                metadata={"channel_id": channel_id, "message_id": msg_id, "guild_id": guild_id},
+                metadata=meta,
             ))
 
             edges.append(EdgeRecord(
