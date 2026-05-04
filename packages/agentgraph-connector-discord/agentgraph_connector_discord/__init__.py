@@ -80,8 +80,9 @@ def _parse_mentions(content: str) -> list[str]:
     return re.findall(r"<@!?(\d+)>", content)
 
 
-def _extract_attachments(msg: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return a compact attachment list from a Discord message payload."""
+def _extract_attachments(msg: dict[str, Any]) -> str | None:
+    """Return attachments as a JSON string for storage in scalar metadata, or None if none."""
+    import json
     result: list[dict[str, Any]] = []
     for a in msg.get("attachments", []):
         url: str = a.get("url", "")
@@ -97,7 +98,7 @@ def _extract_attachments(msg: dict[str, Any]) -> list[dict[str, Any]]:
             entry["width"] = width
             entry["height"] = height
         result.append(entry)
-    return result
+    return json.dumps(result) if result else None
 
 
 class DiscordConnector(BaseConnector):
@@ -210,10 +211,10 @@ async def _fetch_thread_messages(
         if not msg_id:
             continue
 
-        attachments = _extract_attachments(msg)
+        attachments_json = _extract_attachments(msg)
         meta: dict[str, Any] = {"channel_id": parent_channel_id, "thread_id": thread_id, "message_id": msg_id}
-        if attachments:
-            meta["attachments"] = attachments
+        if attachments_json:
+            meta["attachments"] = attachments_json
 
         entities.append(EntityRecord(
             entity_type="Message",
@@ -345,10 +346,10 @@ async def _fetch_channel(
             if not msg_id:
                 continue
 
-            attachments = _extract_attachments(msg)
+            attachments_json = _extract_attachments(msg)
             meta: dict[str, Any] = {"channel_id": channel_id, "message_id": msg_id, "guild_id": guild_id}
-            if attachments:
-                meta["attachments"] = attachments
+            if attachments_json:
+                meta["attachments"] = attachments_json
 
             entities.append(EntityRecord(
                 entity_type="Message",
