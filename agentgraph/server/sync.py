@@ -21,17 +21,26 @@ async def _poll_connector(connector: BaseConnector) -> None:
     try:
         backend = get_backend()
         cursor = await backend.load_cursor(source)
-        batch, cursor = await connector.poll(cursor)
+        is_first_run = not cursor
+        logger.info("poll %s — starting%s", source, " (first run / bulk ingest)" if is_first_run else "")
+
+        batch, new_cursor = await connector.poll(cursor)
+
+        n_entities = len(batch.entities)
+        n_persons = len(batch.persons)
+        n_edges = len(batch.edges)
+
         if batch.entities or batch.persons or batch.edges:
+            logger.info(
+                "poll %s — upserting %d entities, %d persons, %d edges",
+                source, n_entities, n_persons, n_edges,
+            )
             await upsert_batch(batch)
-        await backend.save_cursor(source, cursor)
-        logger.debug(
-            "poll %s — %d entities, %d persons, %d edges",
-            source,
-            len(batch.entities),
-            len(batch.persons),
-            len(batch.edges),
-        )
+            logger.info("poll %s — upsert complete", source)
+        else:
+            logger.info("poll %s — no new data", source)
+
+        await backend.save_cursor(source, new_cursor)
     except Exception:
         logger.exception("poll failed for connector %s", source)
 

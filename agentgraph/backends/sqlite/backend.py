@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -44,8 +45,13 @@ class SQLiteBackend(StorageBackend):
         self._vector_mode = vector_mode
         self._conn: aiosqlite.Connection | None = None
         self._vec_loaded = False
+        # Serialises concurrent write transactions — SQLite only supports one writer at a time
+        # and we use explicit BEGIN/COMMIT, so concurrent polls would deadlock without this.
+        self._write_lock: asyncio.Lock | None = None
 
     async def initialize(self) -> None:
+        self._write_lock = asyncio.Lock()
+
         if self._db_path != ":memory:":
             Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -102,16 +108,18 @@ class SQLiteBackend(StorageBackend):
         person_embeddings: dict[str, list[float] | None],
         entity_embeddings: dict[str, list[float] | None],
     ) -> None:
-        conn = self._conn_or_raise()
-        await conn.execute("BEGIN")
-        try:
-            person_id_map = await self._upsert_persons(conn, batch.persons, person_embeddings)
-            entity_id_map = await self._upsert_entities(conn, batch.entities, entity_embeddings)
-            await self._upsert_edges(conn, batch, person_id_map, entity_id_map)
-            await conn.execute("COMMIT")
-        except Exception:
-            await conn.execute("ROLLBACK")
-            raise
+        assert self._write_lock is not None
+        async with self._write_lock:
+            conn = self._conn_or_raise()
+            await conn.execute("BEGIN")
+            try:
+                person_id_map = await self._upsert_persons(conn, batch.persons, person_embeddings)
+                entity_id_map = await self._upsert_entities(conn, batch.entities, entity_embeddings)
+                await self._upsert_edges(conn, batch, person_id_map, entity_id_map)
+                await conn.execute("COMMIT")
+            except Exception:
+                await conn.execute("ROLLBACK")
+                raise
 
     async def _upsert_persons(
         self,
@@ -659,25 +667,27 @@ class SQLiteBackend(StorageBackend):
         cutoff_dt = datetime.now(UTC) - timedelta(days=retention_days)
         cutoff = cutoff_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        conn = self._conn_or_raise()
-        await conn.execute("BEGIN")
-        try:
-            cursor = await conn.execute(
-                "SELECT id FROM entities WHERE last_accessed < ?", [cutoff]
-            )
-            to_delete = [row[0] for row in await cursor.fetchall()]
-            if to_delete:
-                placeholders = ",".join("?" * len(to_delete))
-                await conn.execute(
-                    f"DELETE FROM entities WHERE id IN ({placeholders})", to_delete
+        assert self._write_lock is not None
+        async with self._write_lock:
+            conn = self._conn_or_raise()
+            await conn.execute("BEGIN")
+            try:
+                cursor = await conn.execute(
+                    "SELECT id FROM entities WHERE last_accessed < ?", [cutoff]
                 )
-                await conn.execute(
-                    f"DELETE FROM entities_fts WHERE id IN ({placeholders})", to_delete
-                )
-            await conn.execute("COMMIT")
-        except Exception:
-            await conn.execute("ROLLBACK")
-            raise
+                to_delete = [row[0] for row in await cursor.fetchall()]
+                if to_delete:
+                    placeholders = ",".join("?" * len(to_delete))
+                    await conn.execute(
+                        f"DELETE FROM entities WHERE id IN ({placeholders})", to_delete
+                    )
+                    await conn.execute(
+                        f"DELETE FROM entities_fts WHERE id IN ({placeholders})", to_delete
+                    )
+                await conn.execute("COMMIT")
+            except Exception:
+                await conn.execute("ROLLBACK")
+                raise
         return len(to_delete)
 
     # --- Observations ---
