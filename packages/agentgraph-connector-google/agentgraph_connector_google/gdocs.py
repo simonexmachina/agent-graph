@@ -67,6 +67,11 @@ class GoogleDocsConnector(BaseConnector):
         from agentgraph.auth.google_provider import get_user_email
         return get_user_email()
 
+    @classmethod
+    def current_user_id(cls) -> str | None:
+        from agentgraph.auth.google_provider import get_user_email
+        return get_user_email()
+
     def can_handle(self, url: str) -> bool:
         return "docs.google.com/document" in url
 

@@ -359,18 +359,22 @@
       </div>
     </div>
 
+    <hr style="border:none; border-top:1px solid #334155; margin:8px 0;" />
+
     <div class="control-group">
-      <label class="group-label">Jump to node</label>
-      <input type="text" id="lookup-input" placeholder="discord/dm/123… or UUID" />
-      <button id="lookup-btn">Go</button>
-      <div id="lookup-error" style="display:none; color:#f87171; font-size:11px; margin-top:2px;"></div>
-      <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+      <label class="group-label">Focus Node</label>
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
         <label style="font-size:11px; color:#94a3b8; white-space:nowrap;">Depth</label>
         <input type="number" id="depth-input" min="1" max="4" value="2"
                style="width:52px; padding:2px 6px; background:#1e293b; border:1px solid #334155;
                       border-radius:4px; color:#e2e8f0; font-size:12px;" />
       </div>
+      <input type="text" id="lookup-input" placeholder="discord/dm/123… or UUID" />
+      <button id="lookup-btn">Go</button>
+      <div id="lookup-error" style="display:none; color:#f87171; font-size:11px; margin-top:2px;"></div>
     </div>
+
+    <hr style="border:none; border-top:1px solid #334155; margin:8px 0;" />
 
     <button id="reset-btn">Reset view</button>
     <button id="refresh-btn">Refresh graph</button>
@@ -455,7 +459,6 @@
       {
         selector: 'node:selected',
         style: {
-          'border-width': '3px',
           'border-opacity': 1,
           'border-color': '#e8a045',
         },
@@ -486,6 +489,32 @@
     userZoomingEnabled: true,
     userPanningEnabled: true,
   });
+
+  // ── Zoom-invariant sizing ─────────────────────────────────────────────────
+  const Z = { nodeSize: 28, nodeFont: 9, textMaxWidth: 120, textMarginY: 4, nodeBorder: 2, edgeFont: 8, edgeWidth: 1.5 };
+
+  function applyZoomStyles() {
+    const z = cy.zoom();
+    // Below z=0.5 stop compensating — otherwise node model-space radii exceed
+    // inter-node distances and eat the edges, making arrowheads disappear.
+    const zc = Math.max(z, 0.5);
+    cy.batch(() => {
+      cy.nodes().style({
+        'width':          Z.nodeSize / zc,
+        'height':         Z.nodeSize / zc,
+        'font-size':      Z.nodeFont / zc,
+        'text-max-width': Z.textMaxWidth / zc,
+        'text-margin-y':  Z.textMarginY / zc,
+        'border-width':   Z.nodeBorder / zc,
+      });
+      cy.edges().style({
+        'font-size': Z.edgeFont / zc,
+        'width':     Z.edgeWidth / zc,
+      });
+    });
+  }
+
+  cy.on('zoom', applyZoomStyles);
 
   // ── State ─────────────────────────────────────────────────────────────────
   let debounceTimer = null;
@@ -583,6 +612,7 @@
     ];
 
     cy.add(elements);
+    applyZoomStyles();
 
     if (cy.nodes().length === 0) {
       emptyState.style.display = 'flex';
@@ -609,6 +639,7 @@
 
   // ── URL state ─────────────────────────────────────────────────────────────
   let ALL_TYPES = ['Channel', 'Document', 'Folder', 'Message', 'Person', 'Spreadsheet', 'Thread'];
+  let FETCHABLE_PLATFORMS = new Set();
 
   function readUrlState() {
     const p = new URLSearchParams(window.location.search);
@@ -696,6 +727,7 @@
     searchInput.value = '';
     lookupInput.value = '';
     depthInput.value = 1;
+    syncDepthEnabled();
     platformSel.value = '';
     sinceSel.value = '';
     limitSlider.value = 50;
@@ -737,6 +769,14 @@
     }
   }
 
+  function syncDepthEnabled() {
+    const hasNode = lookupInput.value.trim() !== '';
+    depthInput.disabled = !hasNode;
+    depthInput.style.opacity = hasNode ? '1' : '0.4';
+    depthInput.style.cursor = hasNode ? '' : 'not-allowed';
+  }
+
+  lookupInput.addEventListener('input', syncDepthEnabled);
   lookupBtn.addEventListener('click', doLookup);
   lookupInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLookup(); });
 
@@ -825,7 +865,6 @@
     }
 
     // Fetch button for any entity backed by a connector
-    const FETCHABLE_PLATFORMS = new Set(['gdocs', 'gsheets', 'discord', 'slack', 'gmail', 'gdrive']);
     if (FETCHABLE_PLATFORMS.has(entity.platform) && entity.platform_entity_id) {
       const fetchRow = document.createElement('div');
       fetchRow.className = 'control-group';
@@ -921,9 +960,9 @@
   cy.on('dbltap', 'node', (evt) => {
     const node = evt.target;
     const id = node.data('id');
-    searchInput.value = '';
     lookupInput.value = id;
-    refreshGraph({ node_id: id, search: undefined });
+    syncDepthEnabled();
+    refreshGraph({ node_id: id });
   });
 
   cy.on('tap', (evt) => {
@@ -976,8 +1015,9 @@
         });
       }
 
-      // Populate platform dropdown
+      // Populate platform dropdown + fetchable set
       if (Array.isArray(meta.platforms) && meta.platforms.length) {
+        FETCHABLE_PLATFORMS = new Set(meta.platforms);
         const sel = document.getElementById('platform-filter');
         meta.platforms.forEach(p => {
           const opt = document.createElement('option');
@@ -994,6 +1034,7 @@
   loadMeta().then(async () => {
     const _initial = readUrlState();
     applyUrlState(_initial);
+    syncDepthEnabled();
     await loadGraph(collectParams({}, true));
     if (_initial.node_id) showEntityDetail(_initial.node_id);
   });

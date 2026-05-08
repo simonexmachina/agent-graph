@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentgraph.connectors.base import ResourceType
 from agentgraph.core.context import get_backend
 
 
@@ -24,20 +23,7 @@ async def fetch_entity(platform: str, resource_id: str) -> dict[str, Any]:
     backend = get_backend()
     entity_type = await backend.get_entity_type(platform, resource_id) or "Document"
 
-    resource_type_map: dict[str, ResourceType] = {
-        "Document": "document",
-        "Folder": "folder",
-        "Spreadsheet": "spreadsheet",
-        "Channel": "channel",
-        "Message": "message",
-        "Thread": "thread",
-    }
-    resource_type: ResourceType = resource_type_map.get(entity_type, "document")
-
-    # Discord messages: fetch the parent channel
-    if platform == "discord" and entity_type == "Message" and ":" in resource_id:
-        resource_id = resource_id.split(":")[0]
-        resource_type = "channel"
+    resource_id, resource_type = connector.normalise_fetch_id(resource_id, entity_type)
 
     await backend.reset_synced_at(platform, resource_id)
 

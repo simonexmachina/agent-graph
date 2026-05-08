@@ -137,16 +137,12 @@ async def get_entities_by_ids(entity_ids: list[str]) -> list[EntityResult]:
 
 
 def _resolve_me() -> str | None:
-    """Return the current user's email or Slack user ID from stored credentials."""
-    from agentgraph.auth.credentials import load_platform
-    from agentgraph.auth.google_provider import get_user_email as google_user_email
-
-    email = google_user_email()
-    if email:
-        return email
-    slack = load_platform("slack")
-    if slack and slack.get("user_id"):
-        return str(slack["user_id"])
+    """Return the current user's canonical identifier by polling registered connectors."""
+    from agentgraph.connectors.registry import get_all_connectors
+    for connector in get_all_connectors():
+        uid = type(connector).current_user_id()
+        if uid:
+            return uid
     return None
 
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from agentgraph.config import get_settings
 from agentgraph.connectors.base import ResourceType
 
 
@@ -93,9 +92,6 @@ def classify_url(url: str) -> SourceReference | None:
 
     m = _SLACK_CHANNEL_RE.match(url)
     if m:
-        configured = get_settings().slack_workspace_id
-        if configured and m.group("workspace_id") != configured:
-            return None
         return SourceReference(
             source="slack",
             resource_type="channel",

@@ -168,6 +168,35 @@ class BaseConnector(ABC):
         """Return a display string for the currently authenticated user, or None."""
         return None
 
+    def normalise_fetch_id(
+        self, resource_id: str, entity_type: str
+    ) -> tuple[str, ResourceType]:
+        """Map a stored resource_id + entity_type to the (id, resource_type) that fetch() expects.
+
+        The default maps entity_type to ResourceType using the standard table and
+        returns resource_id unchanged. Connectors override this when their stored IDs
+        differ from their fetchable IDs (e.g. Discord message IDs encode the channel).
+        """
+        resource_type_map: dict[str, ResourceType] = {
+            "Document": "document",
+            "Folder": "folder",
+            "Spreadsheet": "spreadsheet",
+            "Channel": "channel",
+            "Message": "message",
+            "Thread": "thread",
+        }
+        return resource_id, resource_type_map.get(entity_type, "document")  # type: ignore[return-value]
+
+    @classmethod
+    def current_user_id(cls) -> str | None:
+        """Return the canonical identifier for the authenticated user on this platform.
+
+        The value returned must match the platform_entity_id stored on the user's
+        Person entity (i.e. canonical_email, or "platform:user_id" if no email).
+        Used by --mine filtering. Returns None if not authenticated or not applicable.
+        """
+        return None
+
     @abstractmethod
     def can_handle(self, url: str) -> bool: ...
 

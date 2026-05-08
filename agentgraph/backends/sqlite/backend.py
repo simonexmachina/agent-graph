@@ -496,9 +496,9 @@ class SQLiteBackend(StorageBackend):
             authored_join = """
             JOIN edges _auth ON _auth.edge_type = 'authored' AND _auth.target_entity_id = e.id
             JOIN entities _p ON _p.id = _auth.source_entity_id AND _p.entity_type = 'Person'
-                AND (_p.platform_entity_id = ? OR json_extract(_p.metadata, '$.slack_user_id') = ?)
+                AND _p.platform_entity_id = ?
             """
-            params.extend([authored_by, authored_by])
+            params.append(authored_by)
 
         where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
         params.append(limit)

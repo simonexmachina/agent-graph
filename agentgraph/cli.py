@@ -277,8 +277,8 @@ async def _migrate_async(from_backend: str, to_backend: str) -> None:
     typer.echo(f"  {len(batch.entities)} entities written.")
 
     # --- Migrate sync cursors ---
-    known_sources = ["slack", "gmail", "gdocs", "gdrive", "gsheets", "discord"]
-    for source in known_sources:
+    from agentgraph.connectors.registry import registered_sources
+    for source in registered_sources():
         cursor = await src.load_cursor(source)  # type: ignore[union-attr]
         if cursor:
             await dst.save_cursor(source, cursor)  # type: ignore[union-attr]

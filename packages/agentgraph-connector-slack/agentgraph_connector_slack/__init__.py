@@ -106,6 +106,13 @@ class SlackConnector(BaseConnector):
         except Exception:
             return None
 
+    @classmethod
+    def current_user_id(cls) -> str | None:
+        try:
+            return f"slack:{load_slack_creds().user_id}"
+        except Exception:
+            return None
+
     def can_handle(self, url: str) -> bool:
         return "app.slack.com" in url
 

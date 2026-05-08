@@ -178,6 +178,12 @@ class DiscordConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return "discord.com/channels/" in url
 
+    def normalise_fetch_id(self, resource_id: str, entity_type: str) -> tuple[str, ResourceType]:
+        # Message IDs are stored as "channel_id:message_id"; fetch operates on the channel.
+        if entity_type == "Message" and ":" in resource_id:
+            return resource_id.split(":")[0], "channel"
+        return super().normalise_fetch_id(resource_id, entity_type)
+
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)

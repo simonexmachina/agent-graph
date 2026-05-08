@@ -409,8 +409,7 @@ class PostgresBackend(StorageBackend):
                     AND _auth.target_entity_id = e.id
                 JOIN entities _p ON _p.id = _auth.source_entity_id
                     AND _p.entity_type = 'Person'
-                    AND (_p.platform_entity_id = ${len(params)}
-                         OR _p.metadata->>'slack_user_id' = ${len(params)})
+                    AND _p.platform_entity_id = ${len(params)}
                 """
 
             where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
