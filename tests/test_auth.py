@@ -6,6 +6,8 @@ import pytest
 from pathlib import Path
 
 from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
+from agentgraph_connector_slack.auth import SlackCredentials, load_slack_creds
+from agentgraph_connector_discord.auth import DiscordCredentials, load_discord_creds
 
 
 @pytest.fixture
@@ -66,3 +68,34 @@ def test_save_model_instance(tmp_creds: Path) -> None:
     assert data is not None
     assert data["client_id"] == "id"
     assert data["user_email"] == "user@example.com"
+
+
+# ---------------------------------------------------------------------------
+# Connector credential loaders
+# ---------------------------------------------------------------------------
+
+def test_load_slack_creds_raises_when_missing(tmp_creds: Path) -> None:
+    with pytest.raises(RuntimeError, match="agentgraph auth slack"):
+        load_slack_creds()
+
+
+def test_load_slack_creds_returns_model(tmp_creds: Path) -> None:
+    save_platform("slack", {"xoxc_token": "xoxc-T123-rest", "d_cookie": "abc", "user_id": "U999"})
+    creds = load_slack_creds()
+    assert isinstance(creds, SlackCredentials)
+    assert creds.xoxc_token == "xoxc-T123-rest"
+    assert creds.d_cookie == "abc"
+    assert creds.user_id == "U999"
+
+
+def test_load_discord_creds_raises_when_missing(tmp_creds: Path) -> None:
+    with pytest.raises(RuntimeError, match="agentgraph auth discord"):
+        load_discord_creds()
+
+
+def test_load_discord_creds_returns_model(tmp_creds: Path) -> None:
+    save_platform("discord", {"bot_token": "Bot.tok.en", "bot_user_id": "B123"})
+    creds = load_discord_creds()
+    assert isinstance(creds, DiscordCredentials)
+    assert creds.bot_token == "Bot.tok.en"
+    assert creds.bot_user_id == "B123"
