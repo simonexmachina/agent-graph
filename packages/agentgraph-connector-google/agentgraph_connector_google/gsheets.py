@@ -123,6 +123,7 @@ def _extract_xlsx(data: bytes) -> tuple[str, str]:
 async def _fetch_excel_via_drive(spreadsheet_id: str, loop: Any) -> EntityBatch:
     """Download an Office-format file from Drive and parse as Excel."""
     import io
+
     from googleapiclient.http import MediaIoBaseDownload  # type: ignore[import-untyped]
 
     drive_service = await loop.run_in_executor(None, _build_drive_service)
@@ -182,6 +183,7 @@ async def _fetch_excel_via_drive(spreadsheet_id: str, loop: Any) -> EntityBatch:
 
 async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
     import asyncio
+
     from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
     loop = asyncio.get_event_loop()

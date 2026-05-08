@@ -53,6 +53,7 @@ class DriveChangesConnector(BaseConnector):
 
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         import asyncio
+
         from agentgraph.graph.upsert import upsert_batch
 
         loop = asyncio.get_event_loop()

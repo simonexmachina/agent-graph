@@ -46,6 +46,24 @@ async def _poll_connector(connector: BaseConnector) -> None:
         logger.exception("poll failed for connector %s", source)
 
 
+async def _run_ingest(connector: BaseConnector) -> None:
+    source = connector.source
+    try:
+        logger.info("ingest %s — starting", source)
+        batch = await connector.ingest()
+        if batch.entities or batch.persons or batch.edges:
+            logger.info(
+                "ingest %s — upserting %d entities, %d persons, %d edges",
+                source, len(batch.entities), len(batch.persons), len(batch.edges),
+            )
+            await upsert_batch(batch)
+            logger.info("ingest %s — complete", source)
+        else:
+            logger.info("ingest %s — no data returned", source)
+    except Exception:
+        logger.exception("ingest failed for connector %s", source)
+
+
 def setup_sync(scheduler: AsyncIOScheduler) -> None:
     """Register a poll job for every connector that has poll_interval set."""
     from agentgraph.connectors.registry import get_all_connectors

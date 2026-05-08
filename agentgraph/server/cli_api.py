@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from agentgraph.graph.query import (
     get_edges,
     get_edges_for_entities,
+    get_entities_by_ids,
     get_entity,
     list_entities,
     query_by_filter,
@@ -160,6 +161,22 @@ async def cli_browse(
             edges = [e for e in edges if e["source_entity_id"] in visible_ids and e["target_entity_id"] in visible_ids]
     else:
         edges = await get_edges_for_entities(list(visible_ids))
+        # When entity_type filters are active, also include adjacent nodes of those
+        # types so that e.g. searching for a Thread also surfaces the Persons in it.
+        if search and entity_type:
+            allowed = set(entity_type)
+            neighbour_ids = {
+                eid
+                for e in edges
+                for eid in (e["source_entity_id"], e["target_entity_id"])
+                if eid not in visible_ids
+            }
+            if neighbour_ids:
+                neighbours = await get_entities_by_ids(list(neighbour_ids))
+                neighbours = [n for n in neighbours if n["entity_type"] in allowed]
+                nodes = nodes + neighbours
+                visible_ids = {n["id"] for n in nodes}
+                edges = await get_edges_for_entities(list(visible_ids))
 
     return {"nodes": nodes, "edges": edges}
 
@@ -233,24 +250,16 @@ async def cli_poll(
 async def cli_ingest(
     source: str = Query(...),
 ) -> dict[str, Any]:
-    """Trigger a one-shot bulk ingest for a connector (e.g. all Gmail labels, not just inbox)."""
+    """Kick off a background bulk ingest for a connector and return immediately."""
     from agentgraph.connectors.registry import get_all_connectors
-    from agentgraph.graph.upsert import upsert_batch
+    from agentgraph.server.sync import _run_ingest
 
     connectors = [c for c in get_all_connectors() if c.source == source]
     if not connectors:
         raise HTTPException(status_code=404, detail=f"No connector registered for source '{source}'")
 
-    connector = connectors[0]
-    batch = await connector.ingest()
-    if batch.entities or batch.persons or batch.edges:
-        await upsert_batch(batch)
-    return {
-        "source": source,
-        "entities": len(batch.entities),
-        "persons": len(batch.persons),
-        "edges": len(batch.edges),
-    }
+    asyncio.create_task(_run_ingest(connectors[0]))
+    return {"source": source, "status": "started"}
 
 
 @router.post("/fetch-entity")

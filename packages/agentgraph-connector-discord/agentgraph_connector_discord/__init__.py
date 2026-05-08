@@ -9,7 +9,6 @@ from typing import Any
 
 import httpx
 
-from agentgraph_connector_discord.auth import load_discord_creds
 from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
@@ -20,6 +19,7 @@ from agentgraph.connectors.base import (
     ResourceType,
 )
 from agentgraph.graph.upsert import upsert_batch
+from agentgraph_connector_discord.auth import load_discord_creds
 
 logger = logging.getLogger(__name__)
 

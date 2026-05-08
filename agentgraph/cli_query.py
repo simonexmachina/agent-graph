@@ -418,7 +418,6 @@ def cmd_ingest(source: str, as_json: bool) -> None:
         return
 
     console.print(
-        f"[green]Ingested:[/green] {result.get('entities', 0)} entities, "
-        f"{result.get('persons', 0)} persons, {result.get('edges', 0)} edges "
-        f"from [bold]{result.get('source')}[/bold]"
+        f"[green]Ingest started[/green] for [bold]{result.get('source')}[/bold] — "
+        "progress in server logs (agentgraph serve)"
     )

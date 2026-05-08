@@ -303,10 +303,9 @@ def _thread_to_items(
     subject = _get_header(first_headers, "Subject") or "(no subject)"
 
     thread_created_at: datetime | None = None
-    try:
+    import contextlib
+    with contextlib.suppress(Exception):
         thread_created_at = parsedate_to_datetime(_get_header(first_headers, "Date"))
-    except Exception:
-        pass
 
     content_blocks: list[str] = []
     persons: list[PersonRecord] = []
@@ -381,6 +380,7 @@ async def _list_threads(service: Any, loop: Any, q: str) -> EntityBatch:
     """Page through threads matching query q and return a combined EntityBatch."""
     combined = EntityBatch()
     page_token: str | None = None
+    fetched = 0
 
     while True:
         kwargs: dict[str, Any] = {"userId": "me", "maxResults": 500, "q": q}
@@ -392,14 +392,19 @@ async def _list_threads(service: Any, loop: Any, q: str) -> EntityBatch:
             lambda kw=kwargs: service.users().threads().list(**kw).execute(),
         )
 
-        for thread_stub in response.get("threads", []):
+        stubs = response.get("threads", [])
+        total_estimate = response.get("resultSizeEstimate", "?")
+        for thread_stub in stubs:
             try:
                 batch = await _fetch_thread_by_thread_id(thread_stub["id"])
                 combined.entities.extend(batch.entities)
                 combined.persons.extend(batch.persons)
                 combined.edges.extend(batch.edges)
+                fetched += 1
+                if fetched % 10 == 0:
+                    logger.info("gmail ingest: %d / ~%s threads fetched", fetched, total_estimate)
             except Exception:
-                logger.exception("gmail bulk ingest: failed to fetch thread %s", thread_stub["id"])
+                logger.exception("gmail ingest: failed to fetch thread %s", thread_stub["id"])
 
         page_token = response.get("nextPageToken")
         if not page_token:

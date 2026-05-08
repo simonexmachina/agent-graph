@@ -8,7 +8,6 @@ from typing import Any
 
 import httpx
 
-from agentgraph_connector_slack.auth import load_slack_creds
 from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
@@ -19,6 +18,7 @@ from agentgraph.connectors.base import (
     ResourceType,
 )
 from agentgraph.graph.upsert import upsert_batch
+from agentgraph_connector_slack.auth import load_slack_creds
 
 logger = logging.getLogger(__name__)
 
