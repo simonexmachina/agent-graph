@@ -11,6 +11,25 @@ from agentgraph.core.storage import EdgeResult, EntityResult
 from agentgraph.graph.embeddings import encode
 
 
+def _enrich_web_url(entities: list[EntityResult]) -> None:
+    """Populate metadata.web_url from the connector for entities that don't store it."""
+    from agentgraph.connectors.registry import get_connector
+
+    for entity in entities:
+        meta = entity.get("metadata")
+        if isinstance(meta, dict) and meta.get("web_url"):
+            continue
+        connector = get_connector(entity.get("platform", ""))
+        if connector is None:
+            continue
+        url = connector.entity_url(entity.get("platform_entity_id", ""))
+        if url:
+            if not isinstance(meta, dict):
+                entity["metadata"] = {"web_url": url}
+            else:
+                meta["web_url"] = url
+
+
 async def search_entities(
     query: str,
     entity_types: list[str] | None = None,
@@ -20,9 +39,11 @@ async def search_entities(
 ) -> list[EntityResult]:
     """Hybrid search: combines vector similarity with full-text via RRF."""
     embedding = encode(query)
-    return await get_backend().search_entities(
+    results = await get_backend().search_entities(
         embedding, query, entity_types, limit, min_score, platform=platform
     )
+    _enrich_web_url(results)
+    return results
 
 
 async def get_entity(entity_id: str) -> EntityResult | None:
@@ -33,20 +54,25 @@ async def get_entity(entity_id: str) -> EntityResult | None:
       - ``"{platform}/{resource_type}/{platform_entity_id}"``  (resource_type ignored)
     """
     backend = get_backend()
+    entity: EntityResult | None
     if len(entity_id) == 36 or (len(entity_id) == 32 and "-" not in entity_id):
-        return await backend.get_entity_by_id(entity_id)
-    if "/" in entity_id:
+        entity = await backend.get_entity_by_id(entity_id)
+    elif "/" in entity_id:
         parts = entity_id.split("/")
         platform = parts[0]
         pid = parts[-1]
-        return await backend.get_entity_by_platform(platform, pid)
-    # UUID prefix — must be unambiguous
-    results = await backend.get_entities_by_id_prefix(entity_id)
-    if len(results) > 1:
-        raise ValueError(
-            f"Ambiguous prefix {entity_id!r} matches {len(results)} entities"
-        )
-    return results[0] if results else None
+        entity = await backend.get_entity_by_platform(platform, pid)
+    else:
+        # UUID prefix — must be unambiguous
+        results = await backend.get_entities_by_id_prefix(entity_id)
+        if len(results) > 1:
+            raise ValueError(
+                f"Ambiguous prefix {entity_id!r} matches {len(results)} entities"
+            )
+        entity = results[0] if results else None
+    if entity is not None:
+        _enrich_web_url([entity])
+    return entity
 
 
 async def get_edges(
@@ -75,10 +101,12 @@ async def query_by_filter(
 ) -> list[EntityResult]:
     since_dt = _parse_since(since) if since else None
     authored_by: str | None = _resolve_me() if authored_by_me else None
-    return await get_backend().query_by_filter(
+    results = await get_backend().query_by_filter(
         entity_type, filters, limit, order_by, since_dt, authored_by,
         has_attachments=has_attachments,
     )
+    _enrich_web_url(results)
+    return results
 
 
 async def list_entities(
@@ -88,7 +116,9 @@ async def list_entities(
     limit: int = 50,
 ) -> list[EntityResult]:
     since_dt = _parse_since(since) if since else None
-    return await get_backend().list_entities(entity_types, platform, since_dt, limit)
+    results = await get_backend().list_entities(entity_types, platform, since_dt, limit)
+    _enrich_web_url(results)
+    return results
 
 
 async def get_edges_for_entities(entity_ids: list[str]) -> list[EdgeResult]:

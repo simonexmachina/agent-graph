@@ -19,6 +19,10 @@ wheels/
 # Local Claude settings (personal permissions, not shared)
 .claude/settings.local.json
 
+# Internal / private docs
+.internal/
+.beans/
+
 # macOS
 .DS_Store
 

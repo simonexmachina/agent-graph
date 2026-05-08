@@ -364,6 +364,12 @@
       <input type="text" id="lookup-input" placeholder="discord/dm/123… or UUID" />
       <button id="lookup-btn">Go</button>
       <div id="lookup-error" style="display:none; color:#f87171; font-size:11px; margin-top:2px;"></div>
+      <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+        <label style="font-size:11px; color:#94a3b8; white-space:nowrap;">Depth</label>
+        <input type="number" id="depth-input" min="1" max="4" value="1"
+               style="width:52px; padding:2px 6px; background:#1e293b; border:1px solid #334155;
+                      border-radius:4px; color:#e2e8f0; font-size:12px;" />
+      </div>
     </div>
 
     <button id="reset-btn">Reset view</button>
@@ -496,6 +502,7 @@
   const lookupInput   = document.getElementById('lookup-input');
   const lookupBtn     = document.getElementById('lookup-btn');
   const lookupError   = document.getElementById('lookup-error');
+  const depthInput    = document.getElementById('depth-input');
   const resetBtn      = document.getElementById('reset-btn');
   const refreshBtn    = document.getElementById('refresh-btn');
   const detail        = document.getElementById('detail');
@@ -611,7 +618,7 @@
       since:       p.get('since')    || '',
       limit:       p.has('limit')    ? Number(p.get('limit')) : 50,
       node_id:   p.get('node_id') || null,
-      depth:       p.has('depth')    ? Number(p.get('depth')) : null,
+      depth:       p.has('depth')    ? Number(p.get('depth')) : 1,
       entity_type: p.has('entity_type') ? p.getAll('entity_type') : ALL_TYPES,
     };
   }
@@ -623,6 +630,7 @@
     limitSlider.value  = state.limit;
     limitDisplay.textContent = state.limit;
     if (state.node_id) lookupInput.value = state.node_id;
+    depthInput.value = state.depth;
     document.querySelectorAll('.type-filter').forEach(cb => {
       cb.checked = state.entity_type.includes(cb.value);
     });
@@ -634,8 +642,8 @@
     if (params.platform)  q.set('platform', params.platform);
     if (params.since)     q.set('since', params.since);
     if (params.limit && params.limit !== 50) q.set('limit', params.limit);
-    if (params.node_id) { q.set('node_id', params.node_id); }
-    if (params.depth && params.depth !== 2)  q.set('depth', params.depth);
+    if (params.node_id) q.set('node_id', params.node_id);
+    if (params.depth && params.depth !== 1) q.set('depth', params.depth);
     const types = params.entity_type || [];
     if (types.length && types.length < ALL_TYPES.length) {
       types.forEach(t => q.append('entity_type', t));
@@ -657,8 +665,8 @@
       platform:    platformSel.value || undefined,
       since:       sinceSel.value || undefined,
       limit:       Number(limitSlider.value),
-      node_id:   current.node_id || undefined,
-      depth:       current.depth || undefined,
+      node_id:   lookupInput.value.trim() || undefined,
+      depth:       Number(depthInput.value) || undefined,
       ...override,
     };
     pushUrlState(params, replace);
@@ -675,12 +683,9 @@
     debounceTimer = setTimeout(() => loadGraph(collectParams({}, true)), 400);
   });
 
-  document.querySelectorAll('.type-filter').forEach(cb => {
-    cb.addEventListener('change', () => refreshGraph());
-  });
-
   platformSel.addEventListener('change', () => refreshGraph());
   sinceSel.addEventListener('change', () => refreshGraph());
+  depthInput.addEventListener('change', () => refreshGraph());
 
   limitSlider.addEventListener('input', () => {
     limitDisplay.textContent = limitSlider.value;
@@ -689,6 +694,8 @@
 
   resetBtn.addEventListener('click', () => {
     searchInput.value = '';
+    lookupInput.value = '';
+    depthInput.value = 1;
     platformSel.value = '';
     sinceSel.value = '';
     limitSlider.value = 50;
@@ -818,7 +825,7 @@
     }
 
     // Fetch button for any entity backed by a connector
-    const FETCHABLE_PLATFORMS = new Set(['gdocs', 'gsheets', 'discord', 'slack', 'gmail', 'sharepoint', 'gdrive']);
+    const FETCHABLE_PLATFORMS = new Set(['gdocs', 'gsheets', 'discord', 'slack', 'gmail', 'gdrive']);
     if (FETCHABLE_PLATFORMS.has(entity.platform) && entity.platform_entity_id) {
       const fetchRow = document.createElement('div');
       fetchRow.className = 'control-group';
@@ -953,6 +960,13 @@
           cb.value = t;
           cb.checked = true;
           cb.addEventListener('change', () => refreshGraph());
+          cb.addEventListener('click', (e) => {
+            if (e.altKey) {
+              e.preventDefault();
+              document.querySelectorAll('.type-filter').forEach(c => { c.checked = c === cb; });
+              refreshGraph();
+            }
+          });
           const span = document.createElement('span');
           span.style.color = TYPE_COLORS[t] || '#94a3b8';
           span.textContent = t;
@@ -977,10 +991,11 @@
 
   const TYPE_COLORS = NODE_COLORS;
 
-  loadMeta().then(() => {
+  loadMeta().then(async () => {
     const _initial = readUrlState();
     applyUrlState(_initial);
-    loadGraph(collectParams({}, true));
+    await loadGraph(collectParams({}, true));
+    if (_initial.node_id) showEntityDetail(_initial.node_id);
   });
 
 })();

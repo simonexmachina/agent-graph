@@ -144,7 +144,7 @@ def onboard() -> None:
     typer.echo("Press Enter to proceed with each step, or type 's' to skip it.\n")
 
     # --- Google ---
-    typer.echo("Step 1/4: Google (Docs, Sheets, Drive, Gmail)")
+    typer.echo("Step 1/3: Google (Docs, Sheets, Drive, Gmail)")
     if typer.confirm("  Set up Google?", default=True):
         from agentgraph.auth.google import run_oauth_flow as google_oauth_flow
         google_oauth_flow()
@@ -153,7 +153,7 @@ def onboard() -> None:
         typer.echo("  Skipped.")
 
     # --- Slack ---
-    typer.echo("\nStep 2/4: Slack")
+    typer.echo("\nStep 2/3: Slack")
     if typer.confirm("  Set up Slack?", default=True):
         from agentgraph.auth.slack import run_cookie_flow
         run_cookie_flow()

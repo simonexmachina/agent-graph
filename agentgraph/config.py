@@ -76,11 +76,6 @@ class Settings(BaseSettings):
         default="oauth",
         description="Google auth provider: 'oauth' (custom OAuth2 flow) or 'gcloud' (Application Default Credentials — limited scope support)",
     )
-    microsoft_auth_provider: str = Field(
-        default="az",
-        description="Microsoft auth provider: 'az' (Azure CLI) or 'oauth' (custom OAuth2 flow)",
-    )
-
     # Logging
     log_level: str = Field(default="INFO")
 

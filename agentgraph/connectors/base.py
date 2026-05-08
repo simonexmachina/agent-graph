@@ -164,6 +164,15 @@ class BaseConnector(ABC):
         """
         return EntityBatch(), cursor
 
+    def entity_url(self, platform_entity_id: str) -> str | None:
+        """Return the canonical web URL for an entity given its platform_entity_id.
+
+        Used to populate metadata.web_url for entities that don't store it at
+        ingest time. Return None if the URL cannot be derived from the ID alone
+        (e.g. it requires metadata like guild_id or team_id).
+        """
+        return None
+
     async def last_synced_at(self, resource_id: str) -> datetime | None:
         """Return the most recent synced_at for a platform entity, or None."""
         from agentgraph.core.context import get_backend

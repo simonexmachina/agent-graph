@@ -62,6 +62,9 @@ class GoogleSheetsConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return "docs.google.com/spreadsheets" in url
 
+    def entity_url(self, platform_entity_id: str) -> str | None:
+        return f"https://docs.google.com/spreadsheets/d/{platform_entity_id}"
+
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)
