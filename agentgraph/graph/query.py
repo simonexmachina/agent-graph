@@ -47,7 +47,7 @@ async def search_entities(
     _enrich_web_url(results)
     if results:
         ids = [r["id"] for r in results]
-        asyncio.ensure_future(backend.touch_last_accessed_by_ids(ids))
+        asyncio.create_task(backend.touch_last_accessed_by_ids(ids))
     return results
 
 

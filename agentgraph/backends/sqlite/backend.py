@@ -363,7 +363,7 @@ class SQLiteBackend(StorageBackend):
         cursor = await conn.execute(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
             FROM entities WHERE id IN ({placeholders})
             """,
             id_list,
@@ -382,7 +382,7 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
             FROM entities WHERE id = ?
             """,
             [entity_id],
@@ -396,7 +396,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
             FROM entities WHERE id IN ({placeholders})
             """,
             entity_ids,
@@ -407,7 +407,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
             FROM entities WHERE id LIKE ?
             """,
             [f"{prefix}%"],
@@ -420,7 +420,7 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
             FROM entities WHERE platform = ? AND platform_entity_id = ?
             """,
             [platform, platform_entity_id],
@@ -451,7 +451,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
             FROM entities
             {where}
             ORDER BY last_accessed DESC
@@ -591,7 +591,7 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at
+                       title, content, metadata, created_at, updated_at, synced_at, last_accessed
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 frontier,
@@ -632,7 +632,7 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at
+                       title, content, metadata, created_at, updated_at, synced_at, last_accessed
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 unvisited,
@@ -814,6 +814,7 @@ def _row_to_entity(row: Any) -> EntityResult:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "synced_at": row["synced_at"] if "synced_at" in keys else None,
+        "last_accessed": row["last_accessed"] if "last_accessed" in keys else None,
         "score": row["score"] if "score" in keys else None,
     }
 
