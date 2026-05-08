@@ -10,7 +10,7 @@ mkdirSync("dist", { recursive: true });
 mkdirSync("dist/lib", { recursive: true });
 
 await esbuild.build({
-  entryPoints: ["background.ts", "popup.ts", "lib/event-queue.ts", "content-gmail.ts"],
+  entryPoints: ["background.ts", "popup.ts", "lib/dwell.ts", "content-gmail.ts"],
   bundle: false,
   format: "esm",
   outdir: "dist",

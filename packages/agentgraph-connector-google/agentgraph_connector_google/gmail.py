@@ -107,6 +107,7 @@ class GmailConnector(BaseConnector):
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     sync_horizon_days: int = 90  # How far back to look on the initial bulk ingest
+    url_patterns = ["https://mail.google.com/*"]
     auth_label = "google"
 
     @classmethod

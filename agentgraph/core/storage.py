@@ -148,36 +148,6 @@ class StorageBackend(ABC):
     @abstractmethod
     async def gc_entities(self, retention_days: int) -> int: ...
 
-    # --- Observations ---
-
-    @abstractmethod
-    async def insert_observation(
-        self,
-        event_type: str,
-        url: str,
-        title: str | None,
-        tab_id: int | None,
-        timestamp: datetime,
-        meta: str | None,
-    ) -> None: ...
-
-    @abstractmethod
-    async def patch_observation_meta(
-        self,
-        event_type: str,
-        tab_id: int,
-        url: str,
-        meta: str,
-    ) -> None: ...
-
-    @abstractmethod
-    async def get_pending_observations(
-        self, cutoff: datetime
-    ) -> list[dict[str, Any]]: ...
-
-    @abstractmethod
-    async def mark_observation_evaluated(self, obs_id: str) -> None: ...
-
     # --- Sync state ---
 
     @abstractmethod

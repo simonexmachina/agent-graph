@@ -148,6 +148,10 @@ class BaseConnector(ABC):
     poll_interval: ClassVar[timedelta | None] = None
     """Interval between background poll() calls. None disables polling for this connector."""
 
+    url_patterns: ClassVar[list[str]] = []
+    """Chrome match-pattern strings (e.g. "https://mail.google.com/*") that identify URLs
+    this connector can handle. Used by the browser extension to decide which tabs to watch."""
+
     # Auth integration — override in subclasses that support interactive auth.
     # auth_label deduplicates across connectors that share credentials (e.g. all Google connectors).
     auth_label: ClassVar[str | None] = None

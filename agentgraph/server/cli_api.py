@@ -26,14 +26,25 @@ router = APIRouter(prefix="/api/cli", tags=["cli"])
 
 @router.get("/meta")
 async def cli_meta() -> dict[str, Any]:
-    """Return registered connector sources and known entity types."""
+    """Return registered connector sources, URL patterns, and known entity types."""
+    from agentgraph.config import get_settings
     from agentgraph.connectors.base import ENTITY_TYPES
     from agentgraph.connectors.registry import get_all_connectors
 
     connectors = get_all_connectors()
+    seen_patterns: list[str] = []
+    seen_set: set[str] = set()
+    for c in connectors:
+        for p in c.url_patterns:
+            if p not in seen_set:
+                seen_patterns.append(p)
+                seen_set.add(p)
+
     return {
         "entity_types": list(ENTITY_TYPES),
         "platforms": sorted({c.source for c in connectors}),
+        "url_patterns": seen_patterns,
+        "dwell_threshold_ms": get_settings().dwell_threshold_seconds * 1000,
     }
 
 

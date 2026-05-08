@@ -52,6 +52,7 @@ def _export_as_markdown(drive_service: Any, doc_id: str) -> str:
 class GoogleDocsConnector(BaseConnector):
     source = "gdocs"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
+    url_patterns = ["https://docs.google.com/document/*"]
     auth_label = "google"
     auth_description = "Google (Docs, Sheets, Drive, Gmail) via OAuth2"
     onboard_prompt = "Set up Google?"

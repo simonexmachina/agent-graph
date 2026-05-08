@@ -58,6 +58,7 @@ def _extract_plain_text(spreadsheet: dict[str, Any], values_by_range: dict[str, 
 class GoogleSheetsConnector(BaseConnector):
     source = "gsheets"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
+    url_patterns = ["https://docs.google.com/spreadsheets/*"]
     auth_label = "google"
 
     @classmethod

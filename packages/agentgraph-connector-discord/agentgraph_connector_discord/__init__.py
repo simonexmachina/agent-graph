@@ -158,6 +158,7 @@ class DiscordConnector(BaseConnector):
     source = "discord"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
+    url_patterns = ["https://discord.com/*"]
     auth_label = "discord"
     auth_description = "Discord (bot token)"
     onboard_prompt = "Set up Discord?"

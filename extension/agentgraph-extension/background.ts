@@ -1,172 +1,115 @@
 /**
- * Service worker: focus/blur event emitter.
+ * Service worker: dwell-based fetch trigger.
  *
- * Tracks the active tab. When focus changes (tab switch, window switch,
- * or navigation) we emit a blur for the previous URL and a focus for
- * the new one. Events are persisted via event-queue before delivery so
- * they survive service-worker termination.
+ * URL patterns and the dwell threshold are loaded from the AgentGraph server
+ * on startup. When the user focuses a matching URL for longer than the
+ * threshold, a POST /fetch-url request is sent to the server.
  */
 
-import { type ObserveEvent, enqueue, flush } from "./lib/event-queue.js";
-
-interface TabState {
-  tabId: number;
-  url: string;
-  title: string;
-  focusedAt: string; // ISO-8601
-}
+import { init, startDwell, cancelDwell, updateMeta } from "./lib/dwell.js";
 
 // Hex Gmail message IDs extracted by the content script, keyed by tab ID.
-// Cleared when the tab navigates away from a thread URL.
 const gmailMessageIdByTab = new Map<number, string>();
 
-const STATE_KEY = "agentgraph_active_tab";
+// ---------------------------------------------------------------------------
+// Tab tracking helpers
+// ---------------------------------------------------------------------------
 
-async function readState(): Promise<TabState | null> {
-  const result = await chrome.storage.local.get(STATE_KEY);
-  return (result[STATE_KEY] as TabState | undefined) ?? null;
-}
+let activeTabId: number | null = null;
+let activeUrl: string = "";
 
-async function writeState(state: TabState | null): Promise<void> {
-  if (state === null) {
-    await chrome.storage.local.remove(STATE_KEY);
-  } else {
-    await chrome.storage.local.set({ [STATE_KEY]: state });
-  }
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
-
-/** Emit a blur for the current state if one exists. */
-async function emitBlur(state: TabState): Promise<void> {
-  const event: ObserveEvent = {
-    type: "blur",
-    url: state.url,
-    tab_id: state.tabId,
-    timestamp: now(),
-  };
-  await enqueue(event);
-}
-
-/** Emit a focus for the given tab. */
-async function emitFocus(tabId: number, url: string, title: string): Promise<void> {
-  const ts = now();
-  const meta: Record<string, string> = {};
-  const gmailMessageId = gmailMessageIdByTab.get(tabId);
-  if (gmailMessageId) meta.gmail_message_id = gmailMessageId;
-
-  const event: ObserveEvent = {
-    type: "focus",
-    url,
-    title,
-    tab_id: tabId,
-    timestamp: ts,
-    ...(Object.keys(meta).length > 0 && { meta }),
-  };
-  const state: TabState = { tabId, url, title, focusedAt: ts };
-  await writeState(state);
-  await enqueue(event);
-}
-
-/** Called whenever the active tab or its URL/title might have changed. */
-async function handleTabChange(tabId: number): Promise<void> {
+async function onFocus(tabId: number): Promise<void> {
   let tab: chrome.tabs.Tab;
   try {
     tab = await chrome.tabs.get(tabId);
   } catch {
-    // Tab may have been closed already
     return;
   }
 
   const url = tab.url ?? "";
-  const title = tab.title ?? "";
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return;
 
-  // Ignore non-web pages
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    return;
+  if (tabId !== activeTabId || url !== activeUrl) {
+    if (activeTabId !== null) cancelDwell(activeTabId);
+    activeTabId = tabId;
+    activeUrl = url;
+
+    const meta: Record<string, string> = {};
+    const gmailId = gmailMessageIdByTab.get(tabId);
+    if (gmailId) meta.gmail_message_id = gmailId;
+
+    startDwell(tabId, url, meta);
   }
+}
 
-  const prev = await readState();
-
-  if (prev && (prev.tabId !== tabId || prev.url !== url)) {
-    await emitBlur(prev);
-  }
-
-  if (!prev || prev.tabId !== tabId || prev.url !== url) {
-    // Clear stale Gmail message ID so the initial focus event carries no meta
-    // and the content script re-sends the correct ID for the new page.
-    if (prev?.url !== url) {
-      gmailMessageIdByTab.delete(tabId);
-    }
-    await emitFocus(tabId, url, title);
+function onBlur(): void {
+  if (activeTabId !== null) {
+    cancelDwell(activeTabId);
+    activeTabId = null;
+    activeUrl = "";
   }
 }
 
 // ---------------------------------------------------------------------------
-// Event listeners
+// Chrome event listeners
 // ---------------------------------------------------------------------------
 
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-  await handleTabChange(tabId);
+  await onFocus(tabId);
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, _tab) => {
-  // Act on URL changes (covers SPA hash navigation like Gmail), status=complete
-  // (covers full page loads), or title changes (covers late title updates).
   if (changeInfo.url || changeInfo.status === "complete" || changeInfo.title) {
-    const activeTab = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab[0]?.id === tabId) {
-      await handleTabChange(tabId);
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab?.id === tabId) {
+      await onFocus(tabId);
     }
   }
 });
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    // Browser lost focus — emit blur for current tab
-    const prev = await readState();
-    if (prev) {
-      await emitBlur(prev);
-      await writeState(null);
-    }
+    onBlur();
     return;
   }
   const [activeTab] = await chrome.tabs.query({ active: true, windowId });
   if (activeTab?.id != null) {
-    await handleTabChange(activeTab.id);
+    await onFocus(activeTab.id);
   }
 });
 
-// Receive Gmail message IDs from the content script.
-// Cache the ID and re-emit a focus event so the server can patch the meta on
-// the existing observation (the content script fires ~300ms after the initial
-// focus event, after which the original observation has no meta yet).
+chrome.tabs.onRemoved.addListener((tabId) => {
+  cancelDwell(tabId);
+  gmailMessageIdByTab.delete(tabId);
+  if (activeTabId === tabId) {
+    activeTabId = null;
+    activeUrl = "";
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Gmail content script messages
+// ---------------------------------------------------------------------------
+
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === "gmail_message_id" && sender.tab?.id != null) {
     const tabId = sender.tab.id;
-    gmailMessageIdByTab.set(tabId, message.messageId as string);
-
-    // Re-emit focus with meta so the server patches the existing observation
-    chrome.tabs.get(tabId, async (tab) => {
-      if (tab?.url?.includes("mail.google.com")) {
-        await emitFocus(tabId, tab.url, tab.title ?? "");
-      }
-    });
+    const messageId = message.messageId as string;
+    gmailMessageIdByTab.set(tabId, messageId);
+    // Inject into any pending dwell for this tab (content script fires ~300ms
+    // after navigation, well within the 3s threshold).
+    updateMeta(tabId, { gmail_message_id: messageId });
   }
 });
 
-// Clear cached message ID when a tab navigates away from a Gmail thread
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.url && !changeInfo.url.includes("mail.google.com")) {
     gmailMessageIdByTab.delete(tabId);
   }
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => {
-  gmailMessageIdByTab.delete(tabId);
-});
+// ---------------------------------------------------------------------------
+// Startup
+// ---------------------------------------------------------------------------
 
-// On service worker startup: flush any queued events from a previous session
-flush().catch(() => {/* best-effort */});
+init().catch(() => {/* server may not be running yet */});

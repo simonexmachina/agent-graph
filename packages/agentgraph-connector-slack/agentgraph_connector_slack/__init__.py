@@ -83,6 +83,7 @@ class SlackConnector(BaseConnector):
     source = "slack"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
+    url_patterns = ["https://app.slack.com/*"]
     auth_label = "slack"
     auth_description = "Slack (cookie credentials)"
     onboard_prompt = "Set up Slack?"

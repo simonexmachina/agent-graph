@@ -1,13 +1,8 @@
 /**
- * Popup UI — shows server health, active tab URL, and queue depth.
- * Allows the user to manually flush the queue.
+ * Popup UI — shows server health and the active tab URL being observed.
  */
 
-import { flush } from "./lib/event-queue.js";
-
 const SERVER_HEALTH = "http://localhost:8765/health";
-const QUEUE_KEY = "agentgraph_event_queue";
-const STATE_KEY = "agentgraph_active_tab";
 
 async function checkHealth(): Promise<boolean> {
   try {
@@ -18,16 +13,9 @@ async function checkHealth(): Promise<boolean> {
   }
 }
 
-async function getQueueCount(): Promise<number> {
-  const result = await chrome.storage.local.get(QUEUE_KEY);
-  const queue = (result[QUEUE_KEY] as unknown[] | undefined) ?? [];
-  return queue.length;
-}
-
 async function getActiveUrl(): Promise<string | null> {
-  const result = await chrome.storage.local.get(STATE_KEY);
-  const state = result[STATE_KEY] as { url?: string } | undefined;
-  return state?.url ?? null;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab?.url ?? null;
 }
 
 function setDot(healthy: boolean | null): void {
@@ -41,30 +29,12 @@ function setDot(healthy: boolean | null): void {
 }
 
 async function render(): Promise<void> {
-  const [healthy, queueCount, activeUrl] = await Promise.all([
-    checkHealth(),
-    getQueueCount(),
-    getActiveUrl(),
-  ]);
+  const [healthy, activeUrl] = await Promise.all([checkHealth(), getActiveUrl()]);
 
   setDot(healthy);
 
   const urlEl = document.getElementById("current-url");
   if (urlEl) urlEl.textContent = activeUrl ?? "None";
-
-  const countEl = document.getElementById("queue-count");
-  if (countEl) countEl.textContent = String(queueCount);
 }
 
-document.getElementById("flush-btn")?.addEventListener("click", async () => {
-  const btn = document.getElementById("flush-btn") as HTMLButtonElement;
-  btn.disabled = true;
-  btn.textContent = "Flushing…";
-  await flush();
-  await render();
-  btn.textContent = "Flush queue";
-  btn.disabled = false;
-});
-
-// Initial render
 render().catch(console.error);
