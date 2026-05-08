@@ -64,6 +64,9 @@ class StorageBackend(ABC):
     async def get_entity_by_id(self, entity_id: str) -> EntityResult | None: ...
 
     @abstractmethod
+    async def get_entities_by_ids(self, entity_ids: list[str]) -> list[EntityResult]: ...
+
+    @abstractmethod
     async def get_entities_by_id_prefix(self, prefix: str) -> list[EntityResult]: ...
 
     @abstractmethod

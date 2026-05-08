@@ -389,6 +389,20 @@ class SQLiteBackend(StorageBackend):
         )
         return _row_to_entity(row) if row else None
 
+    async def get_entities_by_ids(self, entity_ids: list[str]) -> list[EntityResult]:
+        if not entity_ids:
+            return []
+        placeholders = ",".join("?" * len(entity_ids))
+        rows = await self._fetchall(
+            f"""
+            SELECT id, entity_type, platform, platform_entity_id,
+                   title, content, metadata, created_at, updated_at, synced_at
+            FROM entities WHERE id IN ({placeholders})
+            """,
+            entity_ids,
+        )
+        return [_row_to_entity(r) for r in rows]
+
     async def get_entities_by_id_prefix(self, prefix: str) -> list[EntityResult]:
         rows = await self._fetchall(
             """

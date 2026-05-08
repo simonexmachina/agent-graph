@@ -130,6 +130,12 @@ async def get_edges_for_entities(entity_ids: list[str]) -> list[EdgeResult]:
     return await get_backend().get_edges_for_entities(entity_ids)
 
 
+async def get_entities_by_ids(entity_ids: list[str]) -> list[EntityResult]:
+    results = await get_backend().get_entities_by_ids(entity_ids)
+    _enrich_web_url(results)
+    return results
+
+
 def _resolve_me() -> str | None:
     """Return the current user's email or Slack user ID from stored credentials."""
     from agentgraph.auth.credentials import load_platform
