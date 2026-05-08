@@ -42,7 +42,7 @@ class OAuthProvider(GoogleAuthProvider):
         stored = load_creds()
         if stored.google is None:
             raise RuntimeError(
-                "Google credentials not configured. Run: agentgraph auth google-docs"
+                "Google credentials not configured. Run: agentgraph auth google"
             )
 
         g = stored.google
@@ -96,7 +96,7 @@ def run_gcloud_login() -> None:
 
     Note: Drive and Sheets scopes are blocked for the default gcloud client ID.
     This only works if you supply a custom --client-id-file. For most users,
-    use the OAuth flow instead: agentgraph auth google-docs (with provider=oauth).
+    use the OAuth flow instead: agentgraph auth google (with provider=oauth).
     """
     import subprocess
     import typer
@@ -104,7 +104,7 @@ def run_gcloud_login() -> None:
     typer.echo(
         "Warning: gcloud ADC blocks Drive/Sheets scopes for the default client ID.\n"
         "If you see scope errors, switch to OAuth: set AGENTGRAPH_GOOGLE_AUTH_PROVIDER=oauth\n"
-        "and re-run: agentgraph auth google-docs\n"
+        "and re-run: agentgraph auth google\n"
     )
     result = subprocess.run(
         ["gcloud", "auth", "application-default", "login",

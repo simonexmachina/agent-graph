@@ -30,7 +30,7 @@ agentgraph fetch-entity <entity-id> [--json]
 agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive — omit for all
 
 # Authenticate connectors
-agentgraph auth google-docs   # Google OAuth2 (Docs, Sheets, Drive, Gmail)
+agentgraph auth google   # Google OAuth2 (Docs, Sheets, Drive, Gmail)
 agentgraph auth slack         # Slack cookie credentials
 agentgraph auth discord       # Discord bot token
 agentgraph auth microsoft     # Microsoft OAuth2 (SharePoint, OneDrive) — or: az login + AGENTGRAPH_MICROSOFT_AUTH_PROVIDER=az

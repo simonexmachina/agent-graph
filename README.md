@@ -53,7 +53,7 @@ agentgraph onboard
 Or authenticate platforms individually:
 
 ```bash
-agentgraph auth google-docs   # Google (Docs, Sheets, Drive, Gmail) via OAuth2
+agentgraph auth google        # Google (Docs, Sheets, Drive, Gmail) via OAuth2
 agentgraph auth slack         # Slack cookie credentials
 agentgraph auth discord       # Discord bot token
 ```

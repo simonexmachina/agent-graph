@@ -14,9 +14,9 @@ auth_app = typer.Typer(help="Manage source credentials.")
 app.add_typer(auth_app, name="auth")
 
 
-@auth_app.command("google-docs")
-def auth_google_docs() -> None:
-    """Authenticate with Google (Docs, Drive, Gmail) via OAuth2 browser flow."""
+@auth_app.command("google")
+def auth_google() -> None:
+    """Authenticate with Google (Docs, Sheets, Drive, Gmail) via OAuth2 browser flow."""
     from agentgraph.auth.google import run_oauth_flow
 
     run_oauth_flow()
