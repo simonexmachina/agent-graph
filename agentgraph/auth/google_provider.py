@@ -3,7 +3,7 @@
 """Google OAuth2 authentication provider.
 
 Credentials are obtained via the OAuth2 browser flow (agentgraph auth google)
-and stored in ~/.agentgraph/credentials.json.
+and stored in ~/.agentgraph/credentials.json under the 'google' key.
 """
 
 from __future__ import annotations
@@ -27,16 +27,15 @@ def get_credentials() -> Any:
     from google.auth.transport.requests import Request  # type: ignore[import-untyped]
     from google.oauth2.credentials import Credentials  # type: ignore[import-untyped]
 
-    from agentgraph.auth.credentials import GoogleCredentials, update
-    from agentgraph.auth.credentials import load as load_creds
+    from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
 
-    stored = load_creds()
-    if stored.google is None:
+    data = load_platform("google")
+    if data is None:
         raise RuntimeError(
             "Google credentials not configured. Run: agentgraph auth google"
         )
 
-    g = stored.google
+    g = GoogleCredentials(**data)
     creds = Credentials(
         token=g.access_token,
         refresh_token=g.refresh_token,
@@ -47,7 +46,7 @@ def get_credentials() -> Any:
     )
     if not creds.valid and creds.refresh_token:
         creds.refresh(Request())
-        update(
+        save_platform(
             "google",
             GoogleCredentials(
                 client_id=g.client_id,
@@ -64,7 +63,7 @@ def get_credentials() -> Any:
 
 def get_user_email() -> str | None:
     """Return the authenticated user's email, or None if unavailable."""
-    from agentgraph.auth.credentials import load as load_creds
+    from agentgraph.auth.credentials import load_platform
 
-    stored = load_creds()
-    return stored.google.user_email if stored.google else None
+    data = load_platform("google")
+    return data.get("user_email") if data else None

@@ -107,6 +107,17 @@ class GmailConnector(BaseConnector):
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     sync_horizon_days: int = 90  # How far back to look on the initial bulk ingest
+    auth_label = "google"
+
+    @classmethod
+    def run_auth_flow(cls) -> None:
+        from agentgraph_connector_google.auth import run_oauth_flow
+        run_oauth_flow()
+
+    @classmethod
+    def get_authenticated_user(cls) -> str | None:
+        from agentgraph.auth.google_provider import get_user_email
+        return get_user_email()
 
     def can_handle(self, url: str) -> bool:
         return "mail.google.com" in url

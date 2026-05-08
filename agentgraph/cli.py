@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typer
+from agentgraph.connectors.base import BaseConnector
 
 app = typer.Typer(
     name="agentgraph",
@@ -10,33 +11,28 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-auth_app = typer.Typer(help="Manage source credentials.")
-app.add_typer(auth_app, name="auth")
 
 
-@auth_app.command("google")
-def auth_google() -> None:
-    """Authenticate with Google (Docs, Sheets, Drive, Gmail) via OAuth2 browser flow."""
-    from agentgraph.auth.google import run_oauth_flow
+@app.command()
+def auth(
+    platform: str = typer.Argument(..., help="Platform to authenticate (e.g. google, slack, discord)"),
+) -> None:
+    """Authenticate with a platform connector."""
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
 
-    run_oauth_flow()
+    bootstrap()
+    seen: dict[str, BaseConnector] = {}
+    for connector in get_all_connectors():
+        label: str = getattr(connector, "auth_label", None) or connector.source
+        if label not in seen:
+            seen[label] = connector
 
+    if platform not in seen:
+        available = ", ".join(sorted(seen))
+        typer.echo(f"Unknown platform '{platform}'. Available: {available}", err=True)
+        raise typer.Exit(code=1)
 
-@auth_app.command("slack")
-def auth_slack() -> None:
-    """Store Slack cookie credentials (xoxc- token + d cookie)."""
-    from agentgraph.auth.slack import run_cookie_flow
-
-    run_cookie_flow()
-
-
-@auth_app.command("discord")
-def auth_discord() -> None:
-    """Store Discord bot token credentials."""
-    from agentgraph.auth.discord import run_token_flow
-
-    run_token_flow()
-
+    type(seen[platform]).run_auth_flow()
 
 
 @app.command()
@@ -137,35 +133,32 @@ def fetch_entity_cmd(
 
 @app.command()
 def onboard() -> None:
-    """Interactive setup: authenticate with Google, Slack, and Discord."""
-    import typer
+    """Interactive setup: authenticate with each installed connector."""
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
 
-    typer.echo("=== AgentGraph Setup ===")
-    typer.echo("Press Enter to proceed with each step, or type 's' to skip it.\n")
+    bootstrap()
+    # Dedup by auth_label so multi-connector platforms (e.g. Google) appear once.
+    seen: dict[str, BaseConnector] = {}
+    for connector in get_all_connectors():
+        label: str = getattr(connector, "auth_label", None) or connector.source
+        if label not in seen:
+            seen[label] = connector
 
-    # --- Google ---
-    typer.echo("Step 1/3: Google (Docs, Sheets, Drive, Gmail)")
-    if typer.confirm("  Set up Google?", default=True):
-        from agentgraph.auth.google import run_oauth_flow as google_oauth_flow
-        google_oauth_flow()
-    else:
-        typer.echo("  Skipped.")
+    steps = list(seen.items())
+    total = len(steps)
 
-    # --- Slack ---
-    typer.echo("\nStep 2/3: Slack")
-    if typer.confirm("  Set up Slack?", default=True):
-        from agentgraph.auth.slack import run_cookie_flow
-        run_cookie_flow()
-    else:
-        typer.echo("  Skipped.")
+    typer.echo("=== AgentGraph Setup ===\n")
 
-    # --- Discord ---
-    typer.echo("\nStep 3/3: Discord")
-    if typer.confirm("  Set up Discord?", default=True):
-        from agentgraph.auth.discord import run_token_flow as discord_flow
-        discord_flow()
-    else:
-        typer.echo("  Skipped.")
+    for i, (label, connector) in enumerate(steps, 1):
+        prompt: str = getattr(connector, "onboard_prompt", None) or f"Set up {label}?"
+        description: str = getattr(connector, "auth_description", None) or label.title()
+        typer.echo(f"Step {i}/{total}: {description}")
+        if typer.confirm(f"  {prompt}", default=True):
+            type(connector).run_auth_flow()
+        else:
+            typer.echo("  Skipped.")
+        if i < total:
+            typer.echo()
 
     typer.echo("\nSetup complete. Run `agentgraph serve` to start the server.")
 

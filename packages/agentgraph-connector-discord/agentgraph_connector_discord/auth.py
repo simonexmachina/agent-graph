@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
-import typer
+from pydantic import BaseModel
 
-from agentgraph.auth.credentials import DiscordCredentials, update
+
+class DiscordCredentials(BaseModel):
+    bot_token: str
+    bot_user_id: str | None = None
+
+
+def load_discord_creds() -> DiscordCredentials:
+    from agentgraph.auth.credentials import load_platform
+
+    data = load_platform("discord")
+    if data is None:
+        raise RuntimeError("Discord credentials not configured. Run: agentgraph auth discord")
+    return DiscordCredentials(**data)
 
 
 def run_token_flow() -> None:
-    """Guide user through creating a Discord bot and obtaining its token."""
+    """Guide the user through creating a Discord bot and obtaining its token."""
+    import typer
+
+    from agentgraph.auth.credentials import save_platform
+
     typer.echo(
         "\n"
         "To get your Discord bot token:\n"
@@ -29,11 +45,11 @@ def run_token_flow() -> None:
     if not bot_token.startswith("MT") and not bot_token.startswith("OT") and "." not in bot_token:
         typer.echo("Warning: token format looks unexpected — double-check the value.")
 
-    # Verify token and fetch bot identity
     bot_user_id: str | None = None
     bot_username: str | None = None
     try:
         import httpx
+
         resp = httpx.get(
             "https://discord.com/api/v10/users/@me",
             headers={"Authorization": f"Bot {bot_token}"},
@@ -47,7 +63,7 @@ def run_token_flow() -> None:
         pass
 
     creds = DiscordCredentials(bot_token=bot_token, bot_user_id=bot_user_id)
-    update("discord", creds)
+    save_platform("discord", creds)
     msg = "\nDiscord credentials saved to ~/.agentgraph/credentials.json"
     if bot_username:
         msg += f" (bot: {bot_username})"

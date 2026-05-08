@@ -1,4 +1,4 @@
-"""Google OAuth2 flow for Google Docs API access."""
+"""Google OAuth2 flow for all Google connectors (Docs, Sheets, Drive, Gmail)."""
 
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false
@@ -11,9 +11,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import typer
-from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 
-from agentgraph.auth.credentials import GoogleCredentials, update
+from agentgraph.auth.credentials import GoogleCredentials, save_platform
 from agentgraph.auth.google_provider import GOOGLE_SCOPES
 
 
@@ -25,10 +24,10 @@ def _find_free_port() -> int:
 
 def run_oauth_flow() -> None:
     """Interactive OAuth2 browser flow. Stores credentials on completion."""
-    from agentgraph.auth.credentials import load as load_creds
+    from agentgraph.auth.credentials import load_platform
 
-    stored = load_creds()
-    existing = stored.google
+    existing_data = load_platform("google")
+    existing = GoogleCredentials(**existing_data) if existing_data else None
 
     if existing:
         typer.echo(f"Re-authenticating as {existing.user_email or 'existing account'} with updated scopes.")
@@ -46,6 +45,7 @@ def run_oauth_flow() -> None:
             "         • Google Docs API\n"
             "         • Google Sheets API\n"
             "         • Google Drive API\n"
+            "         • Gmail API\n"
             "  4. Create OAuth credentials:\n"
             "       APIs & Services → Credentials → Create Credentials\n"
             "       → OAuth client ID → Application type: Desktop app\n"
@@ -58,6 +58,8 @@ def run_oauth_flow() -> None:
 
     port = _find_free_port()
     redirect_uri = f"http://localhost:{port}"
+
+    from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 
     client_config = {
         "installed": {
@@ -89,11 +91,11 @@ def run_oauth_flow() -> None:
     flow.fetch_token(code=auth_code)
     token = flow.credentials
 
-    # Fetch the authenticated user's identity
     user_email: str | None = None
     display_name: str | None = None
     try:
-        import requests
+        import requests  # type: ignore[import-untyped]
+
         resp = requests.get(
             "https://www.googleapis.com/oauth2/v2/userinfo",
             headers={"Authorization": f"Bearer {token.token}"},
@@ -115,7 +117,7 @@ def run_oauth_flow() -> None:
         user_email=user_email,
         display_name=display_name,
     )
-    update("google", creds)
+    save_platform("google", creds)
     msg = "Google credentials saved to ~/.agentgraph/credentials.json"
     if user_email:
         msg += f" (authenticated as {user_email})"
@@ -138,7 +140,7 @@ def _wait_for_callback(port: int) -> str:
             )
 
         def log_message(self, format: str, *args: object) -> None:
-            pass  # suppress request logs
+            pass
 
     server = HTTPServer(("localhost", port), _Handler)
     server.handle_request()

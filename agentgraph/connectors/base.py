@@ -148,6 +148,22 @@ class BaseConnector(ABC):
     poll_interval: ClassVar[timedelta | None] = None
     """Interval between background poll() calls. None disables polling for this connector."""
 
+    # Auth integration — override in subclasses that support interactive auth.
+    # auth_label deduplicates across connectors that share credentials (e.g. all Google connectors).
+    auth_label: ClassVar[str | None] = None
+    auth_description: ClassVar[str | None] = None
+    onboard_prompt: ClassVar[str | None] = None
+
+    @classmethod
+    def run_auth_flow(cls) -> None:
+        """Run the interactive authentication flow for this connector."""
+        raise NotImplementedError(f"{cls.__name__} does not have an auth flow")
+
+    @classmethod
+    def get_authenticated_user(cls) -> str | None:
+        """Return a display string for the currently authenticated user, or None."""
+        return None
+
     @abstractmethod
     def can_handle(self, url: str) -> bool: ...
 

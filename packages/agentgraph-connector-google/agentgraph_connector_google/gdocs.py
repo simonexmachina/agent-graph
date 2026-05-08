@@ -52,6 +52,19 @@ def _export_as_markdown(drive_service: Any, doc_id: str) -> str:
 class GoogleDocsConnector(BaseConnector):
     source = "gdocs"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
+    auth_label = "google"
+    auth_description = "Google (Docs, Sheets, Drive, Gmail) via OAuth2"
+    onboard_prompt = "Set up Google?"
+
+    @classmethod
+    def run_auth_flow(cls) -> None:
+        from agentgraph_connector_google.auth import run_oauth_flow
+        run_oauth_flow()
+
+    @classmethod
+    def get_authenticated_user(cls) -> str | None:
+        from agentgraph.auth.google_provider import get_user_email
+        return get_user_email()
 
     def can_handle(self, url: str) -> bool:
         return "docs.google.com/document" in url

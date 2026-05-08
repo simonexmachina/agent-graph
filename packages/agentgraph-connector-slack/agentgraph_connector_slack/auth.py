@@ -2,13 +2,30 @@
 
 from __future__ import annotations
 
-import typer
+from pydantic import BaseModel
 
-from agentgraph.auth.credentials import SlackCredentials, update
+
+class SlackCredentials(BaseModel):
+    xoxc_token: str
+    d_cookie: str
+    user_id: str | None = None
+
+
+def load_slack_creds() -> SlackCredentials:
+    from agentgraph.auth.credentials import load_platform
+
+    data = load_platform("slack")
+    if data is None:
+        raise RuntimeError("Slack credentials not configured. Run: agentgraph auth slack")
+    return SlackCredentials(**data)
 
 
 def run_cookie_flow() -> None:
-    """Guide user through extracting Slack cookie credentials from DevTools."""
+    """Guide the user through extracting Slack cookie credentials from DevTools."""
+    import typer
+
+    from agentgraph.auth.credentials import save_platform
+
     typer.echo(
         "\n"
         "To get your Slack credentials:\n"
@@ -31,10 +48,10 @@ def run_cookie_flow() -> None:
 
     d_cookie = typer.prompt("d cookie value").strip()
 
-    # Fetch the authenticated user's Slack identity
     user_id: str | None = None
     try:
         import httpx
+
         resp = httpx.get(
             "https://slack.com/api/auth.test",
             headers={
@@ -50,7 +67,7 @@ def run_cookie_flow() -> None:
         pass
 
     creds = SlackCredentials(xoxc_token=xoxc_token, d_cookie=d_cookie, user_id=user_id)
-    update("slack", creds)
+    save_platform("slack", creds)
     msg = "\nSlack credentials saved to ~/.agentgraph/credentials.json"
     if user_id:
         msg += f" (authenticated as {user_id})"

@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from agentgraph.auth.credentials import load as load_creds
+from agentgraph_connector_discord.auth import load_discord_creds
 from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
@@ -32,10 +32,8 @@ _user_cache: dict[str, PersonRecord] = {}
 
 
 def _get_headers() -> dict[str, str]:
-    stored = load_creds()
-    if stored.discord is None:
-        raise RuntimeError("Discord credentials not configured. Run: agentgraph auth discord")
-    return {"Authorization": f"Bot {stored.discord.bot_token}"}
+    creds = load_discord_creds()
+    return {"Authorization": f"Bot {creds.bot_token}"}
 
 
 async def _api_get(client: httpx.AsyncClient, path: str, **params: Any) -> Any:
@@ -93,10 +91,7 @@ async def refresh_attachment_urls(
     import json as _json
 
     try:
-        stored = load_creds()
-        if stored.discord is None:
-            return stored_json
-        token = stored.discord.bot_token
+        token = load_discord_creds().bot_token
     except Exception:
         return stored_json
 
@@ -163,6 +158,21 @@ class DiscordConnector(BaseConnector):
     source = "discord"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
+    auth_label = "discord"
+    auth_description = "Discord (bot token)"
+    onboard_prompt = "Set up Discord?"
+
+    @classmethod
+    def run_auth_flow(cls) -> None:
+        from agentgraph_connector_discord.auth import run_token_flow
+        run_token_flow()
+
+    @classmethod
+    def get_authenticated_user(cls) -> str | None:
+        try:
+            return load_discord_creds().bot_user_id
+        except Exception:
+            return None
 
     def can_handle(self, url: str) -> bool:
         return "discord.com/channels/" in url

@@ -103,9 +103,10 @@ STORED_JSON = json.dumps([{
 REFRESH_RESPONSE = {"refreshed_urls": [{"original": OLD_URL, "refreshed": NEW_URL}]}
 
 
-def _mock_creds(has_discord: bool = True) -> object:
-    discord = type("D", (), {"bot_token": "tok"})() if has_discord else None
-    return type("C", (), {"discord": discord})()
+def _mock_discord_creds(has_creds: bool = True) -> object:
+    if not has_creds:
+        raise RuntimeError("no creds")
+    return type("D", (), {"bot_token": "tok", "bot_user_id": None})()
 
 
 def _mock_http_response(data: dict) -> MagicMock:  # type: ignore[type-arg]
@@ -118,7 +119,7 @@ def _mock_http_response(data: dict) -> MagicMock:  # type: ignore[type-arg]
 @pytest.mark.asyncio
 async def test_refresh_returns_fresh_url() -> None:
     mock_post = AsyncMock(return_value=_mock_http_response(REFRESH_RESPONSE))
-    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+    with patch("agentgraph_connector_discord.load_discord_creds", return_value=_mock_discord_creds()), \
          patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -130,7 +131,7 @@ async def test_refresh_returns_fresh_url() -> None:
 @pytest.mark.asyncio
 async def test_refresh_preserves_non_url_fields() -> None:
     mock_post = AsyncMock(return_value=_mock_http_response(REFRESH_RESPONSE))
-    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+    with patch("agentgraph_connector_discord.load_discord_creds", return_value=_mock_discord_creds()), \
          patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -144,7 +145,7 @@ async def test_refresh_preserves_non_url_fields() -> None:
 @pytest.mark.asyncio
 async def test_refresh_falls_back_on_api_error() -> None:
     mock_post = AsyncMock(side_effect=Exception("503"))
-    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+    with patch("agentgraph_connector_discord.load_discord_creds", return_value=_mock_discord_creds()), \
          patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -154,14 +155,14 @@ async def test_refresh_falls_back_on_api_error() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_skips_when_no_credentials() -> None:
-    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds(has_discord=False)):
+    with patch("agentgraph_connector_discord.load_discord_creds", side_effect=RuntimeError("no creds")):
         result = await refresh_attachment_urls("111", "222", STORED_JSON)
     assert result == STORED_JSON
 
 
 @pytest.mark.asyncio
 async def test_refresh_falls_back_on_creds_exception() -> None:
-    with patch("agentgraph_connector_discord.load_creds", side_effect=Exception("no creds file")):
+    with patch("agentgraph_connector_discord.load_discord_creds", side_effect=Exception("no creds file")):
         result = await refresh_attachment_urls("111", "222", STORED_JSON)
     assert result == STORED_JSON
 
@@ -176,7 +177,7 @@ async def test_refresh_multiple_attachments() -> None:
         {"original": url_b, "refreshed": "https://cdn.discordapp.com/a/2.jpg?ex=new"},
     ]}
     mock_post = AsyncMock(return_value=_mock_http_response(response))
-    with patch("agentgraph_connector_discord.load_creds", return_value=_mock_creds()), \
+    with patch("agentgraph_connector_discord.load_discord_creds", return_value=_mock_discord_creds()), \
          patch("httpx.AsyncClient") as mock_client_cls:
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=mock_post))
         mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)

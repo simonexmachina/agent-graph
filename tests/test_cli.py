@@ -20,8 +20,7 @@ def test_help() -> None:
 def test_auth_help() -> None:
     result = runner.invoke(app, ["auth", "--help"])
     assert result.exit_code == 0
-    assert "google-docs" in result.output
-    assert "slack" in result.output
+    assert "platform" in result.output.lower()
 
 
 def test_search_requires_query() -> None:

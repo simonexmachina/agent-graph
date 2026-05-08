@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from agentgraph.auth.credentials import load as load_creds
+from agentgraph_connector_slack.auth import load_slack_creds
 from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
@@ -28,22 +28,21 @@ _PADDING_MESSAGES = 20  # messages to fetch on first visit as immediate context
 
 
 def _get_headers() -> dict[str, str]:
-    stored = load_creds()
-    if stored.slack is None:
-        raise RuntimeError("Slack credentials not configured. Run: agentgraph auth slack")
+    creds = load_slack_creds()
     return {
-        "Authorization": f"Bearer {stored.slack.xoxc_token}",
-        "Cookie": f"d={stored.slack.d_cookie}",
+        "Authorization": f"Bearer {creds.xoxc_token}",
+        "Cookie": f"d={creds.d_cookie}",
         "Content-Type": "application/json",
     }
 
 
 def _team_id_from_token() -> str | None:
     """Extract the Slack team ID from the stored xoxc token (format: xoxc-TEAMID-...)."""
-    stored = load_creds()
-    if stored.slack is None:
+    try:
+        creds = load_slack_creds()
+    except RuntimeError:
         return None
-    parts = stored.slack.xoxc_token.split("-")
+    parts = creds.xoxc_token.split("-")
     return parts[1] if len(parts) >= 2 else None
 
 
@@ -84,6 +83,21 @@ class SlackConnector(BaseConnector):
     source = "slack"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
+    auth_label = "slack"
+    auth_description = "Slack (cookie credentials)"
+    onboard_prompt = "Set up Slack?"
+
+    @classmethod
+    def run_auth_flow(cls) -> None:
+        from agentgraph_connector_slack.auth import run_cookie_flow
+        run_cookie_flow()
+
+    @classmethod
+    def get_authenticated_user(cls) -> str | None:
+        try:
+            return load_slack_creds().user_id
+        except Exception:
+            return None
 
     def can_handle(self, url: str) -> bool:
         return "app.slack.com" in url

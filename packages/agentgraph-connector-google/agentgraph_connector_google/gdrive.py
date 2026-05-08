@@ -33,6 +33,17 @@ class DriveChangesConnector(BaseConnector):
     source = "gdrive"
     fetch_policy = FetchPolicy(stale_after_seconds=15 * 60)
     poll_interval: timedelta | None = timedelta(minutes=10)  # type: ignore[assignment]
+    auth_label = "google"
+
+    @classmethod
+    def run_auth_flow(cls) -> None:
+        from agentgraph_connector_google.auth import run_oauth_flow
+        run_oauth_flow()
+
+    @classmethod
+    def get_authenticated_user(cls) -> str | None:
+        from agentgraph.auth.google_provider import get_user_email
+        return get_user_email()
 
     def can_handle(self, url: str) -> bool:
         return "drive.google.com/drive/folders/" in url

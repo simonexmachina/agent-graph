@@ -126,16 +126,16 @@ async def get_edges_for_entities(entity_ids: list[str]) -> list[EdgeResult]:
 
 
 def _resolve_me() -> str | None:
-    """Return the current user's email or Slack user ID from the configured provider."""
-    from agentgraph.auth.credentials import load as load_creds
+    """Return the current user's email or Slack user ID from stored credentials."""
+    from agentgraph.auth.credentials import load_platform
     from agentgraph.auth.google_provider import get_user_email as google_user_email
 
     email = google_user_email()
     if email:
         return email
-    stored = load_creds()
-    if stored.slack and stored.slack.user_id:
-        return stored.slack.user_id
+    slack = load_platform("slack")
+    if slack and slack.get("user_id"):
+        return str(slack["user_id"])
     return None
 
 
