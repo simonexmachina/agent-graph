@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -39,10 +40,14 @@ async def search_entities(
 ) -> list[EntityResult]:
     """Hybrid search: combines vector similarity with full-text via RRF."""
     embedding = encode(query)
-    results = await get_backend().search_entities(
+    backend = get_backend()
+    results = await backend.search_entities(
         embedding, query, entity_types, limit, min_score, platform=platform
     )
     _enrich_web_url(results)
+    if results:
+        ids = [r["id"] for r in results]
+        asyncio.ensure_future(backend.touch_last_accessed_by_ids(ids))
     return results
 
 

@@ -397,3 +397,28 @@ def cmd_poll(source: str | None, as_json: bool) -> None:
         console.print(f"[green]Polled:[/green] {', '.join(polled)}")
     else:
         console.print("[dim]No connectors polled (none matched or none have poll_interval set).[/dim]")
+
+
+def cmd_ingest(source: str, as_json: bool) -> None:
+    try:
+        result = _post("/ingest", params={"source": source})
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        console.print(f"[red]{detail}[/red]")
+        return
+    if result is None:
+        console.print("[red]Server not available. Start with: agentgraph serve[/red]")
+        return
+
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+
+    console.print(
+        f"[green]Ingested:[/green] {result.get('entities', 0)} entities, "
+        f"{result.get('persons', 0)} persons, {result.get('edges', 0)} edges "
+        f"from [bold]{result.get('source')}[/bold]"
+    )

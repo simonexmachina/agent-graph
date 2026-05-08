@@ -301,6 +301,17 @@ def poll(
 
 
 @app.command()
+def ingest(
+    source: str = typer.Argument(..., help="Connector source to ingest (e.g. gmail)"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Run a one-shot bulk ingest for a connector (all data within the retention window)."""
+    from agentgraph.cli_query import cmd_ingest
+
+    cmd_ingest(source=source, as_json=json)
+
+
+@app.command()
 def query(
     entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
     filter: list[str] = typer.Option([], "--filter", "-f", help="key=value filters (column or metadata)"),

@@ -29,6 +29,9 @@ agentgraph fetch-entity <entity-id> [--json]
 # Trigger a background poll for one or all connectors
 agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive — omit for all
 
+# Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
+agentgraph ingest <source> [--json]   # e.g. gmail — fetches all labels, not just inbox
+
 # Authenticate connectors
 agentgraph auth google   # Google OAuth2 (Docs, Sheets, Drive, Gmail)
 agentgraph auth slack         # Slack cookie credentials

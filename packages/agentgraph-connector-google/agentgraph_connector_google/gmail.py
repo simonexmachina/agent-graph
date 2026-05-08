@@ -125,6 +125,18 @@ class GmailConnector(BaseConnector):
     def entity_url(self, platform_entity_id: str) -> str | None:
         return f"https://mail.google.com/mail/u/0/#all/{platform_entity_id}"
 
+    async def ingest(self) -> EntityBatch:
+        import asyncio
+
+        loop = asyncio.get_event_loop()
+        service = await loop.run_in_executor(None, _build_service)
+        after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime("%Y/%m/%d")
+        q = f"after:{after_date} -in:spam -in:trash"
+        logger.info("gmail ingest: fetching all threads (query: %s)", q)
+        batch = await _list_threads(service, loop, q)
+        logger.info("gmail ingest: fetched %d thread(s)", len(batch.entities))
+        return batch
+
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         if resource_type != "thread":
             logger.debug("gmail connector: unsupported resource_type %r — skipping", resource_type)
@@ -166,7 +178,7 @@ class GmailConnector(BaseConnector):
             logger.info("gmail poll: initialised cursor at historyId %s; starting bulk ingest", history_id)
 
             after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime("%Y/%m/%d")
-            bulk_batch = await _list_inbox_threads_since(service, loop, after_date)
+            bulk_batch = await _list_threads(service, loop, f"in:inbox after:{after_date}")
             logger.info("gmail poll: bulk ingest fetched %d thread(s)", len(bulk_batch.entities))
             return bulk_batch, {"history_id": history_id}
 
@@ -365,11 +377,10 @@ def _thread_to_items(
     return entity, persons, edges
 
 
-async def _list_inbox_threads_since(service: Any, loop: Any, after_date: str) -> EntityBatch:
-    """Page through inbox threads newer than after_date (YYYY/MM/DD) and return a combined EntityBatch."""
+async def _list_threads(service: Any, loop: Any, q: str) -> EntityBatch:
+    """Page through threads matching query q and return a combined EntityBatch."""
     combined = EntityBatch()
     page_token: str | None = None
-    q = f"in:inbox after:{after_date}"
 
     while True:
         kwargs: dict[str, Any] = {"userId": "me", "maxResults": 500, "q": q}

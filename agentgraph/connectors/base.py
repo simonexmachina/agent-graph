@@ -170,6 +170,15 @@ class BaseConnector(ABC):
     @abstractmethod
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch: ...
 
+    async def ingest(self) -> EntityBatch:
+        """Run a one-shot bulk ingest of all available historical data for this connector.
+
+        Override in connectors that support a full-history sweep beyond what poll() covers
+        on first run (e.g. fetching all labels, not just inbox). The default no-ops so that
+        connectors which don't need this remain unchanged.
+        """
+        return EntityBatch()
+
     async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
         """Fetch all changes since cursor for background sync.
 

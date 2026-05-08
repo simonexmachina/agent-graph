@@ -229,6 +229,30 @@ async def cli_poll(
     return {"polled": polled}
 
 
+@router.post("/ingest")
+async def cli_ingest(
+    source: str = Query(...),
+) -> dict[str, Any]:
+    """Trigger a one-shot bulk ingest for a connector (e.g. all Gmail labels, not just inbox)."""
+    from agentgraph.connectors.registry import get_all_connectors
+    from agentgraph.graph.upsert import upsert_batch
+
+    connectors = [c for c in get_all_connectors() if c.source == source]
+    if not connectors:
+        raise HTTPException(status_code=404, detail=f"No connector registered for source '{source}'")
+
+    connector = connectors[0]
+    batch = await connector.ingest()
+    if batch.entities or batch.persons or batch.edges:
+        await upsert_batch(batch)
+    return {
+        "source": source,
+        "entities": len(batch.entities),
+        "persons": len(batch.persons),
+        "edges": len(batch.edges),
+    }
+
+
 @router.post("/fetch-entity")
 async def cli_fetch_entity(
     entity_id: str = Query(...),

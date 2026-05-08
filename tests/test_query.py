@@ -71,6 +71,7 @@ def _mock_backend(**method_overrides: Any) -> Any:
         "traverse_graph": AsyncMock(return_value={"nodes": [], "edges": []}),
         "query_by_filter": AsyncMock(return_value=[]),
         "list_entities": AsyncMock(return_value=[]),
+        "touch_last_accessed_by_ids": AsyncMock(return_value=None),
     }
     for name, value in {**defaults, **method_overrides}.items():
         setattr(backend, name, value)

@@ -850,6 +850,16 @@ class SQLiteBackend(StorageBackend):
             [now, platform, platform_entity_id],
         )
 
+    async def touch_last_accessed_by_ids(self, entity_ids: list[str]) -> None:
+        if not entity_ids:
+            return
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        placeholders = ",".join("?" * len(entity_ids))
+        await self._execute(
+            f"UPDATE entities SET last_accessed = ? WHERE id IN ({placeholders})",
+            [now, *entity_ids],
+        )
+
     async def get_entity_type(self, platform: str, platform_entity_id: str) -> str | None:
         return await self._fetchval(
             "SELECT entity_type FROM entities WHERE platform = ? AND platform_entity_id = ?",

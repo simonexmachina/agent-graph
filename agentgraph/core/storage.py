@@ -201,6 +201,9 @@ class StorageBackend(ABC):
     ) -> None: ...
 
     @abstractmethod
+    async def touch_last_accessed_by_ids(self, entity_ids: list[str]) -> None: ...
+
+    @abstractmethod
     async def get_entity_type(
         self, platform: str, platform_entity_id: str
     ) -> str | None: ...
