@@ -148,7 +148,6 @@ def onboard() -> None:
     if typer.confirm("  Set up Google?", default=True):
         from agentgraph.auth.google import run_oauth_flow as google_oauth_flow
         google_oauth_flow()
-        _save_user_config("AGENTGRAPH_GOOGLE_AUTH_PROVIDER", "oauth")
     else:
         typer.echo("  Skipped.")
 

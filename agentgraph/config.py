@@ -72,10 +72,6 @@ class Settings(BaseSettings):
         default=None,
         description="Slack workspace ID (e.g. T01ABC123) to observe; others are ignored",
     )
-    google_auth_provider: str = Field(
-        default="oauth",
-        description="Google auth provider: 'oauth' (custom OAuth2 flow) or 'gcloud' (Application Default Credentials — limited scope support)",
-    )
     # Logging
     log_level: str = Field(default="INFO")
 

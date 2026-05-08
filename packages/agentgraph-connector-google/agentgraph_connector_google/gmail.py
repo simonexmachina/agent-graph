@@ -14,7 +14,7 @@ from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
-from agentgraph.auth.google_provider import get_provider
+from agentgraph.auth.google_provider import get_credentials as google_credentials
 from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
@@ -38,7 +38,7 @@ _GMAIL_THREAD_ID_RE = re.compile(r"[0-9a-f]{16,}")
 
 
 def _build_service() -> Any:
-    return build("gmail", "v1", credentials=get_provider().get_credentials())
+    return build("gmail", "v1", credentials=google_credentials())
 
 
 def _get_header(headers: list[dict[str, str]], name: str) -> str:

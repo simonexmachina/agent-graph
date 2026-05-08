@@ -11,7 +11,7 @@ from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
-from agentgraph.auth.google_provider import get_provider
+from agentgraph.auth.google_provider import get_credentials as google_credentials
 from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
@@ -29,11 +29,11 @@ _STALE_AFTER = 15 * 60
 
 
 def _build_sheets_service() -> Any:
-    return build("sheets", "v4", credentials=get_provider().get_credentials())
+    return build("sheets", "v4", credentials=google_credentials())
 
 
 def _build_drive_service() -> Any:
-    return build("drive", "v3", credentials=get_provider().get_credentials())
+    return build("drive", "v3", credentials=google_credentials())
 
 
 def _extract_plain_text(spreadsheet: dict[str, Any], values_by_range: dict[str, list[list[str]]]) -> str:

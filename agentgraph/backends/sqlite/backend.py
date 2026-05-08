@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import re
+
 import aiosqlite
 
 from agentgraph.backends.sqlite.vector import (
@@ -27,6 +29,13 @@ from agentgraph.core.storage import EdgeResult, EntityResult, StorageBackend
 logger = logging.getLogger(__name__)
 
 _SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
+
+_FTS5_SPECIAL = re.compile(r'[^\w\s]', re.UNICODE)
+
+
+def _fts5_query(text: str) -> str:
+    """Strip FTS5 syntax characters so arbitrary user text doesn't cause parse errors."""
+    return _FTS5_SPECIAL.sub(" ", text).strip()
 _VALID_ORDER_BY = {"created_at", "updated_at", "last_accessed", "synced_at"}
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 
@@ -311,7 +320,7 @@ class SQLiteBackend(StorageBackend):
                 ORDER BY f.rank
                 LIMIT ?
                 """,
-                [query_text, *fts_extra_params, limit * 5],
+                [_fts5_query(query_text), *fts_extra_params, limit * 5],
             )
             rows = await cursor.fetchall()
             fts_ids = [(row[0], i + 1) for i, row in enumerate(rows)]

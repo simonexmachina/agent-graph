@@ -66,15 +66,7 @@ agentgraph auth discord       # Discord bot token
 
 **Discord** — requires a bot token. Create one at [discord.com/developers/applications](https://discord.com/developers/applications), enable the **Message Content Intent**, and invite the bot to your server with **Read Messages** and **Read Message History** permissions.
 
-**Google** — an OAuth2 browser flow. You'll need a Google Cloud project with the Docs, Drive, and Gmail APIs enabled and an OAuth 2.0 client ID configured. Alternatively, use Application Default Credentials:
-
-```bash
-gcloud auth application-default login \
-  --scopes=https://www.googleapis.com/auth/documents.readonly,https://www.googleapis.com/auth/drive.metadata.readonly,https://www.googleapis.com/auth/spreadsheets.readonly,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/userinfo.email
-
-# Then set:
-AGENTGRAPH_GOOGLE_AUTH_PROVIDER=gcloud
-```
+**Google** — an OAuth2 browser flow. You'll need a Google Cloud project with the Docs, Drive, Sheets, and Gmail APIs enabled and an OAuth 2.0 client ID configured.
 
 ### 3. Start the server
 
@@ -168,7 +160,6 @@ Settings are read from environment variables (prefixed `AGENTGRAPH_`) or from `~
 | `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unvisited entity is garbage collected |
 | `AGENTGRAPH_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | sentence-transformers model for embeddings |
 | `AGENTGRAPH_SLACK_WORKSPACE_ID` | _(none)_ | If set, ignore activity from other Slack workspaces |
-| `AGENTGRAPH_GOOGLE_AUTH_PROVIDER` | `oauth` | `oauth` or `gcloud` |
 | `AGENTGRAPH_LOG_LEVEL` | `INFO` | Log level |
 
 ### Switching to PostgreSQL
