@@ -74,6 +74,12 @@ async def link_entity_from_content(platform_entity_id: str, platform: str) -> in
     platform_entity_id (which appears in any URL pointing at this entity).
     Returns the number of edges created.
     """
+    # Short IDs (display names, single words) produce too many substring false positives.
+    # All legitimate URL-embeddable IDs (Gmail thread IDs, Slack channel/message IDs,
+    # Google Doc IDs) are at least 8 characters long.
+    if len(platform_entity_id) < 8:
+        return 0
+
     backend = get_backend()
     tgt_id = await backend.find_entity_id(platform, platform_entity_id)
     if not tgt_id:
