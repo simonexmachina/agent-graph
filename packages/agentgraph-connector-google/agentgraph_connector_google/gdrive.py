@@ -48,6 +48,9 @@ class DriveChangesConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return "drive.google.com/drive/folders/" in url
 
+    def entity_url(self, platform_entity_id: str) -> str | None:
+        return f"https://drive.google.com/drive/folders/{platform_entity_id}"
+
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         import asyncio
         from agentgraph.graph.upsert import upsert_batch
@@ -172,7 +175,7 @@ def _list_drive_folder_sync(folder_id: str) -> EntityBatch:
         platform="gdrive",
         platform_entity_id=folder_id,
         title=folder_name,
-        metadata={"web_url": f"{_GDRIVE_VIEW_BASE}/drive/folders/{folder_id}"},
+        metadata={},
     )
 
     stubs: list[EntityRecord] = []

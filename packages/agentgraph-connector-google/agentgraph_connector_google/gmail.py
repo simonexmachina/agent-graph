@@ -122,6 +122,9 @@ class GmailConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return "mail.google.com" in url
 
+    def entity_url(self, platform_entity_id: str) -> str | None:
+        return f"https://mail.google.com/mail/u/0/#all/{platform_entity_id}"
+
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
         if resource_type != "thread":
             logger.debug("gmail connector: unsupported resource_type %r — skipping", resource_type)
@@ -342,7 +345,6 @@ def _thread_to_items(
             "message_count": len(messages),
             "snippet": thread.get("snippet", ""),
             "label_ids": ",".join(label_ids),
-            "web_url": f"https://mail.google.com/mail/u/0/#inbox/{thread_id}",
         },
     )
     return entity, persons, edges

@@ -108,6 +108,9 @@ async def cli_browse(
         nodes = await search_entities(search, entity_types=entity_type or None, limit=search_limit)
         if neighbourhood_ids is not None:
             nodes = [n for n in nodes if n["id"] in neighbourhood_ids]
+            # Always include the focal node even if it doesn't match the search term
+            if focal["id"] not in {n["id"] for n in nodes}:  # type: ignore[possibly-undefined]
+                nodes = [focal] + nodes  # type: ignore[possibly-undefined]
     elif neighbourhood_ids is not None:
         nodes = [n for n in result["nodes"]]  # type: ignore[possibly-undefined]
         if entity_type:
@@ -136,13 +139,10 @@ async def cli_browse(
             e for e in traverse_edges
             if e["source_entity_id"] in visible_ids and e["target_entity_id"] in visible_ids
         ]
-        # Without entity_type filters every node has an unbroken visible path back to the
-        # focal node, so prune anything that lost its path due to hidden intermediates.
-        # With entity_type filters the user explicitly chose which types to show; all nodes
-        # in the traversal result ARE reachable from the focal node by definition, so skip
-        # the pruning — it would wrongly remove nodes whose only path runs through a
-        # filtered-out type.
-        if not entity_type and focal["id"] in visible_ids:  # type: ignore[possibly-undefined]
+        # Prune nodes with no path back to the focal node through the visible (filtered)
+        # edge set. This respects the entity_type filter: a Person reachable only via a
+        # Thread is excluded when Thread is not in the selected types.
+        if focal["id"] in visible_ids:  # type: ignore[possibly-undefined]
             reachable: set[str] = set()
             adjacency: dict[str, set[str]] = {}
             for e in edges:
