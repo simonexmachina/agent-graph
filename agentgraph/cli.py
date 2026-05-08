@@ -205,11 +205,17 @@ def mcp_config() -> None:
     typer.echo("  Claude Code:     ~/.claude/mcp.json  (or .claude/mcp.json in your project)\n")
     typer.echo(json.dumps(config, indent=2))
     typer.echo()
+    typer.echo("For SSE / streamable-http transport instead of stdio:")
+    typer.echo(f"  {binary} mcp-serve --transport sse --port 8808")
+    typer.echo()
 
 
 @app.command()
-def mcp_serve() -> None:
-    """Start the AgentGraph MCP server (stdio transport)."""
+def mcp_serve(
+    transport: str = typer.Option("stdio", "--transport", help="Transport: stdio, sse, or streamable-http"),
+    port: int = typer.Option(8808, "--port", help="Port for sse / streamable-http transports"),
+) -> None:
+    """Start the AgentGraph MCP server."""
     import asyncio
 
     from agentgraph.backends import get_backend_class
@@ -230,7 +236,9 @@ def mcp_serve() -> None:
 
     from agentgraph.mcp.server import mcp
 
-    mcp.run(transport="stdio")
+    if transport in ("sse", "streamable-http"):
+        mcp.settings.port = port
+    mcp.run(transport=transport)  # type: ignore[arg-type]
 
 
 @app.command()

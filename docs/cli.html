@@ -424,15 +424,22 @@ agentgraph serve --reload   # auto-restart on code changes (development)</pre>
 }</pre>
       </div>
       <p>No additional configuration is needed — the MCP server reads the same settings as the CLI (database path, connector credentials, etc.).</p>
+      <p style="margin-top:8px;">For SSE or streamable-http transports, start the server manually and point your client at <code>http://localhost:8808/sse</code> instead of using the stdio snippet above.</p>
     </div>
 
     <div class="cmd">
       <div class="cmd-header">
         <span class="cmd-name">agentgraph mcp-serve</span>
-        <span class="cmd-desc">Start the MCP server directly (stdio transport)</span>
+        <span class="cmd-desc">Start the MCP server directly</span>
       </div>
-      <pre>agentgraph mcp-serve</pre>
-      <p>Usually invoked by the MCP client automatically — you don't need to run this manually.</p>
+      <pre>agentgraph mcp-serve                                   # stdio (default)
+agentgraph mcp-serve --transport sse --port 8808       # SSE over HTTP
+agentgraph mcp-serve --transport streamable-http --port 8808</pre>
+      <div class="options">
+        <div class="option-row"><div class="option-flag">--transport</div><div class="option-desc"><code>stdio</code> (default), <code>sse</code>, or <code>streamable-http</code></div></div>
+        <div class="option-row"><div class="option-flag">--port N</div><div class="option-desc">Port for SSE / streamable-http transports (default: 8808)</div></div>
+      </div>
+      <p>For <strong>stdio</strong>, the MCP client spawns the process and owns the pipes — usually invoked automatically, not manually. For <strong>SSE</strong> or <strong>streamable-http</strong>, the server binds to the given port and clients connect over HTTP.</p>
     </div>
 
   </section>
