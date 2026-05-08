@@ -241,6 +241,7 @@
 <header>
   <div class="logo">Agent<span>Graph</span></div>
   <nav>
+    <a href="cli.html">CLI Reference</a>
     <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
     <a href="privacy.html">Privacy</a>
   </nav>
@@ -263,10 +264,8 @@
   </section>
 
   <!-- ── Diagram ── -->
-  <div class="diagram"><span class="hl">Browser extension</span> → /observe (focus/blur events)
-             ↓
-   Dwell evaluator <span class="muted">(3 s threshold)</span>
-             ↓
+  <div class="diagram"><span class="hl">Browser extension</span> <span class="muted">(dwell detection)</span>
+             ↓  POST /fetch-url
    Connector <span class="muted">(Slack / Discord / Google / Gmail)</span>
              ↓
    <span class="hl2">SQLite knowledge graph</span> <span class="muted">(local, ~/.agentgraph/)</span>
@@ -350,7 +349,7 @@ uv sync --extra all</pre>
         <div class="step-body">
           <h3>Install the browser extension</h3>
           <p>Build and load the unpacked extension in Chrome.</p>
-          <pre>cd extension/agentgraph-extension
+          <pre>cd extension
 npm install &amp;&amp; npm run build</pre>
           <p style="margin-top:10px;">Then go to <code>chrome://extensions</code> → Enable Developer mode → Load unpacked → select <code>dist/</code>.</p>
         </div>

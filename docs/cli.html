@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI Reference — AgentGraph</title>
+  <meta name="description" content="Complete reference for the agentgraph CLI: search, query, fetch, poll, ingest, MCP configuration, and more." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --accent:   #38bdf8;
+      --accent2:  #818cf8;
+      --green:    #4ade80;
+      --radius:   8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    header, main, footer { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 28px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+    .logo span { color: var(--accent); }
+    nav a {
+      font-size: 14px;
+      color: var(--muted);
+      margin-left: 24px;
+    }
+    nav a:hover { color: var(--text); text-decoration: none; }
+
+    /* ── Page header ── */
+    .page-header {
+      padding: 56px 0 40px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+    .page-header .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .page-header h1 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+    .page-header p {
+      font-size: 17px;
+      color: var(--muted);
+      max-width: 600px;
+    }
+
+    /* ── TOC ── */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 48px;
+    }
+    .toc p {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .toc ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+    .toc li a { font-size: 13px; color: var(--accent); }
+
+    /* ── Sections ── */
+    .cmd-group {
+      margin-bottom: 56px;
+    }
+    .cmd-group-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cmd {
+      margin-bottom: 32px;
+    }
+    .cmd-header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .cmd-name {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .cmd-desc {
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .cmd p {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      color: var(--text);
+      overflow-x: auto;
+      line-height: 1.7;
+      margin-bottom: 12px;
+    }
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+    .options {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .option-row {
+      display: grid;
+      grid-template-columns: minmax(180px, auto) 1fr;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .option-row:last-child { border-bottom: none; }
+    .option-flag {
+      font-family: "SF Mono", "Fira Code", monospace;
+      color: var(--accent2);
+      padding: 10px 16px;
+      border-right: 1px solid var(--border);
+    }
+    .option-desc {
+      color: var(--muted);
+      padding: 10px 16px;
+    }
+
+    /* ── Callout ── */
+    .callout {
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .callout strong { color: var(--accent); }
+
+    /* ── Footer ── */
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 24px;
+      border-top: 1px solid var(--border);
+      margin-top: 64px;
+      font-size: 13px;
+      color: var(--muted);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    @media (max-width: 600px) {
+      .option-row { grid-template-columns: 1fr; }
+      .option-flag { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="index.html">Agent<span>Graph</span></a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+    <a href="privacy.html">Privacy</a>
+  </nav>
+</header>
+
+<main>
+
+  <div class="page-header">
+    <div class="section-label">Reference</div>
+    <h1>Command Reference</h1>
+    <p>Every operation below is available both as a CLI command and as an MCP tool — the same interface whether you're running it in a terminal or asking an AI agent to do it.</p>
+  </div>
+
+  <div class="callout" style="margin-bottom:32px;">
+    <strong>CLI or MCP — your choice.</strong>
+    The <code>agentgraph</code> CLI and MCP server expose identical operations.
+    Use the CLI directly in a terminal, or <a href="#mcp">configure the MCP server</a> to give any compatible AI assistant (Claude Desktop, Claude Code, etc.) direct access to your knowledge graph.
+  </div>
+
+  <nav class="toc" aria-label="Page contents">
+    <p>On this page</p>
+    <ul>
+      <li><a href="#query">Query</a></li>
+      <li><a href="#fetch">Fetch</a></li>
+      <li><a href="#sync">Sync</a></li>
+      <li><a href="#server">Server</a></li>
+      <li><a href="#mcp">MCP</a></li>
+      <li><a href="#auth">Auth</a></li>
+    </ul>
+  </nav>
+
+  <!-- ── Query ── -->
+  <section class="cmd-group" id="query">
+    <div class="cmd-group-title">Query</div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph search</span>
+        <span class="cmd-desc">Semantic search across all entities</span>
+      </div>
+      <pre>agentgraph search "project kickoff notes" --type Document --limit 10 --json</pre>
+      <div class="options">
+        <div class="option-row"><div class="option-flag">QUERY</div><div class="option-desc">Search query (required)</div></div>
+        <div class="option-row"><div class="option-flag">--type</div><div class="option-desc">Filter by entity type: Message, Document, Channel, Thread, Spreadsheet, Folder, Person</div></div>
+        <div class="option-row"><div class="option-flag">--limit N</div><div class="option-desc">Maximum results (default: 10)</div></div>
+        <div class="option-row"><div class="option-flag">--json</div><div class="option-desc">Output as JSON</div></div>
+      </div>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph query</span>
+        <span class="cmd-desc">Filter entities by type and metadata</span>
+      </div>
+      <pre>agentgraph query --type Message --filter platform=slack --since 24h --mine --limit 20</pre>
+      <div class="options">
+        <div class="option-row"><div class="option-flag">--type</div><div class="option-desc">Entity type (required)</div></div>
+        <div class="option-row"><div class="option-flag">--filter key=value</div><div class="option-desc">Metadata filter; may be repeated</div></div>
+        <div class="option-row"><div class="option-flag">--since</div><div class="option-desc">Time window: <code>30m</code>, <code>12h</code>, <code>7d</code>, or ISO timestamp</div></div>
+        <div class="option-row"><div class="option-flag">--mine</div><div class="option-desc">Filter to entities authored by the authenticated user</div></div>
+        <div class="option-row"><div class="option-flag">--has-attachments</div><div class="option-desc">Only return messages with file attachments</div></div>
+        <div class="option-row"><div class="option-flag">--order-by</div><div class="option-desc"><code>last_accessed</code> (default), <code>created_at</code>, <code>updated_at</code></div></div>
+        <div class="option-row"><div class="option-flag">--limit N</div><div class="option-desc">Maximum results (default: 50)</div></div>
+        <div class="option-row"><div class="option-flag">--json</div><div class="option-desc">Output as JSON</div></div>
+      </div>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph get</span>
+        <span class="cmd-desc">Fetch full details for an entity</span>
+      </div>
+      <pre>agentgraph get abc123ef --json
+agentgraph get slack/C0J2L41FT --resolve</pre>
+      <p>Accepts a full UUID, UUID prefix, or platform reference (<code>platform/entity_id</code>). <code>--resolve</code> fetches stub entities from their source before returning.</p>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph edges</span>
+        <span class="cmd-desc">List edges for an entity</span>
+      </div>
+      <pre>agentgraph edges abc123ef --direction both --type mentions --json</pre>
+      <div class="options">
+        <div class="option-row"><div class="option-flag">--type</div><div class="option-desc">Filter by edge type: authored, posted_in, replied_to, mentions, references</div></div>
+        <div class="option-row"><div class="option-flag">--direction</div><div class="option-desc"><code>in</code>, <code>out</code>, or <code>both</code> (default: both)</div></div>
+        <div class="option-row"><div class="option-flag">--json</div><div class="option-desc">Output as JSON</div></div>
+      </div>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph traverse</span>
+        <span class="cmd-desc">Walk the graph from a starting entity</span>
+      </div>
+      <pre>agentgraph traverse abc123ef --depth 2 --resolve --json</pre>
+      <div class="options">
+        <div class="option-row"><div class="option-flag">--depth N</div><div class="option-desc">Maximum hops from the starting entity (default: 2)</div></div>
+        <div class="option-row"><div class="option-flag">--resolve</div><div class="option-desc">Fetch any stub entities encountered</div></div>
+        <div class="option-row"><div class="option-flag">--json</div><div class="option-desc">Output as JSON</div></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ── Fetch ── -->
+  <section class="cmd-group" id="fetch">
+    <div class="cmd-group-title">Fetch</div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph fetch</span>
+        <span class="cmd-desc">Trigger a connector fetch for a platform entity</span>
+      </div>
+      <pre>agentgraph fetch slack C0J2L41FT
+agentgraph fetch gdocs 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms</pre>
+      <p>Resets the entity's sync timestamp and re-fetches from the source, regardless of freshness policy.</p>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph fetch-entity</span>
+        <span class="cmd-desc">Re-fetch an entity by its internal UUID</span>
+      </div>
+      <pre>agentgraph fetch-entity abc123ef-9d6b-4bbe-b5ab-200faecb70e9 --json</pre>
+    </div>
+
+  </section>
+
+  <!-- ── Sync ── -->
+  <section class="cmd-group" id="sync">
+    <div class="cmd-group-title">Sync</div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph poll</span>
+        <span class="cmd-desc">Trigger a background poll for one or all connectors</span>
+      </div>
+      <pre>agentgraph poll          # all connectors
+agentgraph poll slack    # Slack only
+agentgraph poll gmail</pre>
+      <p>Polls for new content since the last sync. Equivalent to what the scheduler runs automatically in the background.</p>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph ingest</span>
+        <span class="cmd-desc">Bulk ingest all data within the retention window</span>
+      </div>
+      <pre>agentgraph ingest gmail   # all mail (not just inbox) within 90 days</pre>
+      <p>One-shot full-history import. Useful on first setup or after a long gap. The server returns immediately and logs progress to <code>/tmp/agentgraph.log</code>.</p>
+    </div>
+
+  </section>
+
+  <!-- ── Server ── -->
+  <section class="cmd-group" id="server">
+    <div class="cmd-group-title">Server</div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph serve</span>
+        <span class="cmd-desc">Start the AgentGraph backend server</span>
+      </div>
+      <pre>agentgraph serve
+agentgraph serve --reload   # auto-restart on code changes (development)</pre>
+      <p>Starts the HTTP server on <code>http://localhost:8765</code>. The web graph viewer is available at <code>/viewer</code>. Logs to <code>/tmp/agentgraph.log</code>.</p>
+    </div>
+
+  </section>
+
+  <!-- ── MCP ── -->
+  <section class="cmd-group" id="mcp">
+    <div class="cmd-group-title">MCP</div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph mcp-config</span>
+        <span class="cmd-desc">Print the MCP config snippet for your AI client</span>
+      </div>
+      <pre>agentgraph mcp-config</pre>
+      <p>Outputs a ready-to-paste JSON block with the correct path to the <code>agentgraph</code> binary on your machine. Add it to:</p>
+      <div class="options">
+        <div class="option-row">
+          <div class="option-flag">Claude Desktop</div>
+          <div class="option-desc"><code>~/Library/Application Support/Claude/claude_desktop_config.json</code></div>
+        </div>
+        <div class="option-row">
+          <div class="option-flag">Claude Code (global)</div>
+          <div class="option-desc"><code>~/.claude/mcp.json</code></div>
+        </div>
+        <div class="option-row">
+          <div class="option-flag">Claude Code (project)</div>
+          <div class="option-desc"><code>.claude/mcp.json</code> in your project root</div>
+        </div>
+      </div>
+      <div class="callout">
+        <strong>Example output</strong><br/>
+        <pre style="margin-top:10px;margin-bottom:0;">{
+  "mcpServers": {
+    "agentgraph": {
+      "command": "/path/to/.venv/bin/agentgraph",
+      "args": ["mcp-serve"]
+    }
+  }
+}</pre>
+      </div>
+      <p>No additional configuration is needed — the MCP server reads the same settings as the CLI (database path, connector credentials, etc.).</p>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph mcp-serve</span>
+        <span class="cmd-desc">Start the MCP server directly (stdio transport)</span>
+      </div>
+      <pre>agentgraph mcp-serve</pre>
+      <p>Usually invoked by the MCP client automatically — you don't need to run this manually.</p>
+    </div>
+
+  </section>
+
+  <!-- ── Auth ── -->
+  <section class="cmd-group" id="auth">
+    <div class="cmd-group-title">Auth</div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph onboard</span>
+        <span class="cmd-desc">Interactive setup wizard</span>
+      </div>
+      <pre>agentgraph onboard</pre>
+      <p>Walks through authentication for each installed connector in sequence. The recommended way to get started.</p>
+    </div>
+
+    <div class="cmd">
+      <div class="cmd-header">
+        <span class="cmd-name">agentgraph auth</span>
+        <span class="cmd-desc">Authenticate a specific connector</span>
+      </div>
+      <pre>agentgraph auth google     # Google OAuth2 — Docs, Sheets, Drive, Gmail
+agentgraph auth slack      # Slack cookie credentials
+agentgraph auth discord    # Discord bot token</pre>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  <span>AgentGraph — open source, MIT license</span>
+  <span>
+    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a> ·
+    <a href="privacy.html">Privacy Policy</a>
+  </span>
+</footer>
+
+</body>
+</html>

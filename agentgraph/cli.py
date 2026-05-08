@@ -184,6 +184,30 @@ def _save_user_config(key: str, value: str) -> None:
 
 
 @app.command()
+def mcp_config() -> None:
+    """Print the MCP server config snippet for Claude Desktop / Claude Code."""
+    import json
+    import sys
+
+    binary = sys.argv[0]
+
+    config = {
+        "mcpServers": {
+            "agentgraph": {
+                "command": binary,
+                "args": ["mcp-serve"],
+            }
+        }
+    }
+
+    typer.echo("\nAdd this to your MCP client config:\n")
+    typer.echo("  Claude Desktop:  ~/Library/Application Support/Claude/claude_desktop_config.json")
+    typer.echo("  Claude Code:     ~/.claude/mcp.json  (or .claude/mcp.json in your project)\n")
+    typer.echo(json.dumps(config, indent=2))
+    typer.echo()
+
+
+@app.command()
 def mcp_serve() -> None:
     """Start the AgentGraph MCP server (stdio transport)."""
     import asyncio
