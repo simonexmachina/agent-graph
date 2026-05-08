@@ -70,11 +70,7 @@ agentgraph auth discord       # Discord bot token
 
 ```bash
 gcloud auth application-default login \
-  --scopes=https://www.googleapis.com/auth/documents.readonly,\
-           https://www.googleapis.com/auth/drive.metadata.readonly,\
-           https://www.googleapis.com/auth/spreadsheets.readonly,\
-           https://www.googleapis.com/auth/gmail.readonly,\
-           https://www.googleapis.com/auth/userinfo.email
+  --scopes=https://www.googleapis.com/auth/documents.readonly,https://www.googleapis.com/auth/drive.metadata.readonly,https://www.googleapis.com/auth/spreadsheets.readonly,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/userinfo.email
 
 # Then set:
 AGENTGRAPH_GOOGLE_AUTH_PROVIDER=gcloud
