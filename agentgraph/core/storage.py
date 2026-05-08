@@ -57,6 +57,7 @@ class StorageBackend(ABC):
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
+        platform: str | None = None,
     ) -> list[EntityResult]: ...
 
     @abstractmethod
@@ -191,6 +192,11 @@ class StorageBackend(ABC):
 
     @abstractmethod
     async def reset_synced_at(
+        self, platform: str, platform_entity_id: str
+    ) -> None: ...
+
+    @abstractmethod
+    async def touch_last_accessed(
         self, platform: str, platform_entity_id: str
     ) -> None: ...
 

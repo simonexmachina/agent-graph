@@ -77,22 +77,52 @@ class OAuthProvider(GoogleAuthProvider):
         return stored.google.user_email if stored.google else None
 
 
+GOOGLE_SCOPES = [
+    "https://www.googleapis.com/auth/documents.readonly",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "openid",
+]
+
+# Comma-separated for passing to gcloud --scopes flag
+GCLOUD_SCOPES_ARG = ",".join(GOOGLE_SCOPES)
+
+
+def run_gcloud_login() -> None:
+    """Run `gcloud auth application-default login` with the required scopes.
+
+    Note: Drive and Sheets scopes are blocked for the default gcloud client ID.
+    This only works if you supply a custom --client-id-file. For most users,
+    use the OAuth flow instead: agentgraph auth google-docs (with provider=oauth).
+    """
+    import subprocess
+    import typer
+
+    typer.echo(
+        "Warning: gcloud ADC blocks Drive/Sheets scopes for the default client ID.\n"
+        "If you see scope errors, switch to OAuth: set AGENTGRAPH_GOOGLE_AUTH_PROVIDER=oauth\n"
+        "and re-run: agentgraph auth google-docs\n"
+    )
+    result = subprocess.run(
+        ["gcloud", "auth", "application-default", "login",
+         f"--scopes={GCLOUD_SCOPES_ARG},https://www.googleapis.com/auth/cloud-platform"],
+        check=False,
+    )
+    if result.returncode != 0:
+        typer.echo("gcloud login failed.", err=True)
+
+
 class GCloudProvider(GoogleAuthProvider):
     """Uses Application Default Credentials (gcloud auth application-default login)."""
-
-    _SCOPES = [
-        "https://www.googleapis.com/auth/documents.readonly",
-        "https://www.googleapis.com/auth/spreadsheets.readonly",
-        "https://www.googleapis.com/auth/drive.readonly",
-        "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/userinfo.email",
-    ]
 
     def get_credentials(self) -> Any:
         import google.auth  # type: ignore[import-untyped]
         from google.auth.transport.requests import Request  # type: ignore[import-untyped]
 
-        creds, _ = google.auth.default(scopes=self._SCOPES)
+        creds, _ = google.auth.default(scopes=GOOGLE_SCOPES)
         if hasattr(creds, "refresh") and not creds.valid:
             creds.refresh(Request())
         return creds

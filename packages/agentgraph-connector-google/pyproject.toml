@@ -16,7 +16,7 @@ dependencies = [
 gdocs   = "agentgraph_connector_google.gdocs:GoogleDocsConnector"
 gsheets = "agentgraph_connector_google.gsheets:GoogleSheetsConnector"
 gmail   = "agentgraph_connector_google.gmail:GmailConnector"
-gdrive  = "agentgraph_connector_google.gdrive:DriveChangesConnector"
+gdrive = "agentgraph_connector_google.gdrive:DriveChangesConnector"
 
 [tool.uv]
 package = true

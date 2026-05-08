@@ -18,13 +18,14 @@ dependencies = [
     "uvicorn>=0.42.0",
     "mcp>=1.26.0",
     "sqlite-vec>=0.1.9",
+    "openpyxl>=3.1.5",
 ]
 
 [project.optional-dependencies]
-google  = ["agentgraph-connector-google"]
-slack   = ["agentgraph-connector-slack"]
-discord = ["agentgraph-connector-discord"]
-all     = [
+google     = ["agentgraph-connector-google"]
+slack      = ["agentgraph-connector-slack"]
+discord    = ["agentgraph-connector-discord"]
+all        = [
     "agentgraph-connector-google",
     "agentgraph-connector-slack",
     "agentgraph-connector-discord",

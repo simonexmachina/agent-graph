@@ -38,6 +38,15 @@ def _get_headers() -> dict[str, str]:
     }
 
 
+def _team_id_from_token() -> str | None:
+    """Extract the Slack team ID from the stored xoxc token (format: xoxc-TEAMID-...)."""
+    stored = load_creds()
+    if stored.slack is None:
+        return None
+    parts = stored.slack.xoxc_token.split("-")
+    return parts[1] if len(parts) >= 2 else None
+
+
 async def _api_get(client: httpx.AsyncClient, method: str, **params: Any) -> dict[str, Any]:
     resp = await client.get(
         f"{SLACK_API}/{method}",
@@ -131,6 +140,7 @@ async def _fetch_thread_replies(
     persons: list[PersonRecord],
     edges: list[EdgeRecord],
     seen_users: set[str],
+    team_id: str | None = None,
 ) -> None:
     """Fetch replies to a threaded message and add them to the batch in-place."""
     try:
@@ -151,6 +161,10 @@ async def _fetch_thread_replies(
         user_id: str = reply.get("user", "")
         text: str = reply.get("text", "")
 
+        reply_meta: dict[str, Any] = {"channel_id": channel_id, "ts": ts, "thread_ts": thread_ts}
+        if team_id:
+            ts_compact = ts.replace(".", "")
+            reply_meta["web_url"] = f"https://app.slack.com/client/{team_id}/{channel_id}/p{ts_compact}"
         entities.append(EntityRecord(
             entity_type="Message",
             platform="slack",
@@ -158,7 +172,7 @@ async def _fetch_thread_replies(
             content=text,
             created_at=_ts_to_dt(ts),
             updated_at=_ts_to_dt(ts),
-            metadata={"channel_id": channel_id, "ts": ts, "thread_ts": thread_ts},
+            metadata=reply_meta,
         ))
 
         edges.append(EdgeRecord(
@@ -226,17 +240,23 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
     edges: list[EdgeRecord] = []
     seen_users: set[str] = set()
 
+    team_id = _team_id_from_token()
+
     async with httpx.AsyncClient(timeout=30) as client:
         # Channel entity
         channel_info = await _fetch_channel_info(client, channel_id)
         channel_name = channel_info.get("name", channel_id)
 
+        channel_meta: dict[str, Any] = {}
+        if team_id:
+            channel_meta["web_url"] = f"https://app.slack.com/client/{team_id}/{channel_id}"
         channel_entity = EntityRecord(
             entity_type="Channel",
             platform="slack",
             platform_entity_id=channel_id,
             title=f"#{channel_name}",
             updated_at=datetime.now(UTC),
+            metadata=channel_meta,
         )
         entities.append(channel_entity)
 
@@ -258,6 +278,10 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
             if not ts:
                 continue
 
+            msg_meta: dict[str, Any] = {"channel_id": channel_id, "ts": ts}
+            if team_id:
+                ts_compact = ts.replace(".", "")
+                msg_meta["web_url"] = f"https://app.slack.com/client/{team_id}/{channel_id}/p{ts_compact}"
             msg_entity = EntityRecord(
                 entity_type="Message",
                 platform="slack",
@@ -265,7 +289,7 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
                 content=text,
                 created_at=_ts_to_dt(ts),
                 updated_at=_ts_to_dt(ts),
-                metadata={"channel_id": channel_id, "ts": ts},
+                metadata=msg_meta,
             )
             entities.append(msg_entity)
 
@@ -333,7 +357,7 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
             # Fetch thread replies for messages that have them
             if reply_count > 0 and not (thread_ts and thread_ts != ts):
                 await _fetch_thread_replies(
-                    client, channel_id, ts, entities, persons, edges, seen_users
+                    client, channel_id, ts, entities, persons, edges, seen_users, team_id=team_id
                 )
 
     batch = EntityBatch(entities=entities, persons=persons, edges=edges)

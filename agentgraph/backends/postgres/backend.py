@@ -138,6 +138,7 @@ class PostgresBackend(StorageBackend):
                          content_embedding, metadata, created_at, updated_at)
                     VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
+                        entity_type        = CASE WHEN entities.entity_type = 'Document' THEN EXCLUDED.entity_type ELSE entities.entity_type END,
                         title              = COALESCE(EXCLUDED.title, entities.title),
                         content            = COALESCE(EXCLUDED.content, entities.content),
                         content_embedding  = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
@@ -211,15 +212,20 @@ class PostgresBackend(StorageBackend):
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
+        platform: str | None = None,
     ) -> list[EntityResult]:
         pool = self._pool_or_raise()
         async with pool.acquire() as conn:
             await conn.execute("SET ivfflat.probes = 10")
-            type_filter = ""
+            extra_filter = ""
             params: list[Any] = [str(query_vec), query_text, limit * 5]
             if entity_types:
-                type_filter = "AND entity_type = ANY($4::text[])"
                 params.append(entity_types)
+                extra_filter += f" AND entity_type = ANY(${len(params)}::text[])"
+            if platform:
+                params.append(platform)
+                extra_filter += f" AND platform = ${len(params)}"
+            type_filter = extra_filter
 
             rows = await conn.fetch(
                 f"""
@@ -338,7 +344,7 @@ class PostgresBackend(StorageBackend):
             rows = await conn.fetch(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at
+                       title, content, metadata, created_at, updated_at, synced_at
                 FROM entities
                 {where}
                 ORDER BY last_accessed DESC NULLS LAST
@@ -783,6 +789,17 @@ class PostgresBackend(StorageBackend):
                 platform_entity_id,
             )
 
+    async def touch_last_accessed(
+        self, platform: str, platform_entity_id: str
+    ) -> None:
+        pool = self._pool_or_raise()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE entities SET last_accessed = now() WHERE platform = $1 AND platform_entity_id = $2",
+                platform,
+                platform_entity_id,
+            )
+
     async def get_entity_type(
         self, platform: str, platform_entity_id: str
     ) -> str | None:
@@ -825,6 +842,7 @@ def _row_to_entity(row: Any) -> EntityResult:
         ),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+        "synced_at": row["synced_at"].isoformat() if row.get("synced_at") else None,
         "score": float(row["score"]) if "score" in row.keys() else None,
     }
 

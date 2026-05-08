@@ -72,14 +72,9 @@ class GoogleDocsConnector(BaseConnector):
 
 
 async def _touch_last_accessed(doc_id: str) -> None:
-    from agentgraph.db.connection import get_pool
+    from agentgraph.core.context import get_backend
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:  # type: ignore[attr-defined]
-        await conn.execute(  # type: ignore[attr-defined]
-            "UPDATE entities SET last_accessed = now() WHERE platform = 'gdocs' AND platform_entity_id = $1",
-            doc_id,
-        )
+    await get_backend().touch_last_accessed("gdocs", doc_id)
 
 
 async def _fetch_doc(doc_id: str) -> EntityBatch:

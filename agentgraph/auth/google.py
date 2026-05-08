@@ -14,16 +14,7 @@ import typer
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 
 from agentgraph.auth.credentials import GoogleCredentials, update
-
-SCOPES = [
-    "https://www.googleapis.com/auth/documents.readonly",
-    "https://www.googleapis.com/auth/spreadsheets.readonly",
-    "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "openid",
-]
+from agentgraph.auth.google_provider import GOOGLE_SCOPES
 
 
 def _find_free_port() -> int:
@@ -80,7 +71,7 @@ def run_oauth_flow() -> None:
 
     flow: Flow = Flow.from_client_config(
         client_config,
-        scopes=SCOPES,
+        scopes=GOOGLE_SCOPES,
         redirect_uri=redirect_uri,
     )
 

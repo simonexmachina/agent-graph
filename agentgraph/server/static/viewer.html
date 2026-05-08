@@ -332,38 +332,14 @@
       <input type="text" id="search-input" placeholder="Search entities…" />
     </div>
 
-    <div class="control-group">
+    <div class="control-group" id="type-filter-group">
       <label class="group-label">Entity Types</label>
-      <label class="checkbox-row">
-        <input type="checkbox" class="type-filter" value="Message" checked />
-        <span style="color:#60a5fa">Message</span>
-      </label>
-      <label class="checkbox-row">
-        <input type="checkbox" class="type-filter" value="Document" checked />
-        <span style="color:#22d3ee">Document</span>
-      </label>
-      <label class="checkbox-row">
-        <input type="checkbox" class="type-filter" value="Channel" checked />
-        <span style="color:#a78bfa">Channel</span>
-      </label>
-      <label class="checkbox-row">
-        <input type="checkbox" class="type-filter" value="Person" checked />
-        <span style="color:#4ade80">Person</span>
-      </label>
-      <label class="checkbox-row">
-        <input type="checkbox" class="type-filter" value="Thread" checked />
-        <span style="color:#f97316">Thread</span>
-      </label>
     </div>
 
     <div class="control-group">
       <label class="group-label" for="platform-filter">Platform</label>
       <select id="platform-filter">
         <option value="">All platforms</option>
-        <option value="slack">Slack</option>
-        <option value="gdocs">Google Docs</option>
-        <option value="gsheets">Google Sheets</option>
-        <option value="gmail">Gmail</option>
       </select>
     </div>
 
@@ -423,6 +399,7 @@
     Channel:     '#a78bfa',
     Document:    '#22d3ee',
     Spreadsheet: '#34d399',
+    Folder:      '#fbbf24',
     Thread:      '#f97316',
   };
 
@@ -565,10 +542,15 @@
     return { data: { id: edge.id, source: src, target: tgt, edge_type: edge.edge_type } };
   }
 
+  let _lastBrowseUrl = null;
+
   async function loadGraph(params) {
+    const url = buildUrl('/api/cli/browse', params);
+    if (url === _lastBrowseUrl) return;
+    _lastBrowseUrl = url;
     showSpinner();
     try {
-      const res = await fetch(buildUrl('/api/cli/browse', params));
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const nodes = (data.nodes || []).map(entityToNode);
@@ -619,7 +601,7 @@
   }
 
   // ── URL state ─────────────────────────────────────────────────────────────
-  const ALL_TYPES = ['Message', 'Document', 'Channel', 'Person', 'Spreadsheet', 'Thread'];
+  let ALL_TYPES = ['Channel', 'Document', 'Folder', 'Message', 'Person', 'Spreadsheet', 'Thread'];
 
   function readUrlState() {
     const p = new URLSearchParams(window.location.search);
@@ -640,6 +622,7 @@
     sinceSel.value     = state.since;
     limitSlider.value  = state.limit;
     limitDisplay.textContent = state.limit;
+    if (state.node_id) lookupInput.value = state.node_id;
     document.querySelectorAll('.type-filter').forEach(cb => {
       cb.checked = state.entity_type.includes(cb.value);
     });
@@ -815,6 +798,12 @@
       detailBody.appendChild(row('Platform', entity.platform));
     }
 
+    const platformUrl = getPlatformUrl(entity);
+    if (platformUrl) {
+      const linkHtml = `<a href="${escHtml(platformUrl)}" target="_blank" rel="noopener" style="color:#60a5fa">Open ↗</a>`;
+      detailBody.appendChild(row('Link', linkHtml));
+    }
+
     const email = (entity.metadata && entity.metadata.canonical_email) || entity.content;
     if (entity.entity_type === 'Person' && email) {
       detailBody.appendChild(row('Email', email));
@@ -829,7 +818,7 @@
     }
 
     // Fetch button for any entity backed by a connector
-    const FETCHABLE_PLATFORMS = new Set(['gdocs', 'gsheets', 'discord', 'slack', 'gmail']);
+    const FETCHABLE_PLATFORMS = new Set(['gdocs', 'gsheets', 'discord', 'slack', 'gmail', 'sharepoint', 'gdrive']);
     if (FETCHABLE_PLATFORMS.has(entity.platform) && entity.platform_entity_id) {
       const fetchRow = document.createElement('div');
       fetchRow.className = 'control-group';
@@ -845,9 +834,8 @@
             { method: 'POST' }
           );
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          // Reload the entity detail and refresh the graph node
           await showEntityDetail(entity.id);
-          refreshGraph({ node_id: entity.id, depth: 1 });
+          refreshGraph();
         } catch (err) {
           fetchBtn.textContent = 'Fetch failed';
           console.error('fetch error:', err);
@@ -913,6 +901,10 @@
       .replace(/>/g, '&gt;');
   }
 
+  function getPlatformUrl(entity) {
+    return (entity.metadata && entity.metadata.web_url) || null;
+  }
+
   // ── Cytoscape events ──────────────────────────────────────────────────────
   cy.on('tap', 'node', (evt) => {
     const node = evt.target;
@@ -922,8 +914,9 @@
   cy.on('dbltap', 'node', (evt) => {
     const node = evt.target;
     const id = node.data('id');
+    searchInput.value = '';
     lookupInput.value = id;
-    refreshGraph({ node_id: id });
+    refreshGraph({ node_id: id, search: undefined });
   });
 
   cy.on('tap', (evt) => {
@@ -937,21 +930,58 @@
   window.addEventListener('popstate', () => {
     const state = readUrlState();
     applyUrlState(state);
-    if (state.node_id) {
-      loadGraph({ node_id: state.node_id, depth: state.depth || 2 });
-    } else {
-      loadGraph(collectParams({}, true));
-    }
+    loadGraph(collectParams({}, true));
   });
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
-  const _initial = readUrlState();
-  applyUrlState(_initial);
-  if (_initial.node_id) {
-    loadGraph({ node_id: _initial.node_id, depth: _initial.depth || 2 });
-  } else {
-    refreshGraph();
+  async function loadMeta() {
+    try {
+      const res = await fetch('/api/cli/meta');
+      if (!res.ok) return;
+      const meta = await res.json();
+
+      // Populate entity type checkboxes
+      if (Array.isArray(meta.entity_types) && meta.entity_types.length) {
+        ALL_TYPES = meta.entity_types;
+        const group = document.getElementById('type-filter-group');
+        meta.entity_types.forEach(t => {
+          const label = document.createElement('label');
+          label.className = 'checkbox-row';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'type-filter';
+          cb.value = t;
+          cb.checked = true;
+          cb.addEventListener('change', () => refreshGraph());
+          const span = document.createElement('span');
+          span.style.color = TYPE_COLORS[t] || '#94a3b8';
+          span.textContent = t;
+          label.appendChild(cb);
+          label.appendChild(span);
+          group.appendChild(label);
+        });
+      }
+
+      // Populate platform dropdown
+      if (Array.isArray(meta.platforms) && meta.platforms.length) {
+        const sel = document.getElementById('platform-filter');
+        meta.platforms.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p;
+          opt.textContent = p;
+          sel.appendChild(opt);
+        });
+      }
+    } catch (_) { /* server not running yet — static fallbacks remain empty */ }
   }
+
+  const TYPE_COLORS = NODE_COLORS;
+
+  loadMeta().then(() => {
+    const _initial = readUrlState();
+    applyUrlState(_initial);
+    loadGraph(collectParams({}, true));
+  });
 
 })();
 </script>

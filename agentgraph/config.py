@@ -15,7 +15,9 @@ CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AGENTGRAPH_",
-        env_file=".env",
+        # User-level config (~/.agentgraph/.env) is loaded first;
+        # project-local .env takes precedence.
+        env_file=[str(Path.home() / ".agentgraph" / ".env"), ".env"],
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -72,7 +74,11 @@ class Settings(BaseSettings):
     )
     google_auth_provider: str = Field(
         default="oauth",
-        description="Google auth provider: 'oauth' (custom OAuth2 flow) or 'gcloud' (Application Default Credentials)",
+        description="Google auth provider: 'oauth' (custom OAuth2 flow) or 'gcloud' (Application Default Credentials — limited scope support)",
+    )
+    microsoft_auth_provider: str = Field(
+        default="az",
+        description="Microsoft auth provider: 'az' (Azure CLI) or 'oauth' (custom OAuth2 flow)",
     )
 
     # Logging

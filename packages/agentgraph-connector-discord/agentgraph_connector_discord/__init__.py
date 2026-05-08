@@ -248,6 +248,7 @@ async def _fetch_thread_messages(
     seen_users: dict[str, PersonRecord],
     persons: list[PersonRecord],
     after_snowflake: str | None,
+    guild_id: str = "",
 ) -> None:
     """Fetch messages in a Discord thread (threads are channels in Discord API)."""
     try:
@@ -271,6 +272,8 @@ async def _fetch_thread_messages(
 
         attachments_json = _extract_attachments(msg)
         meta: dict[str, Any] = {"channel_id": parent_channel_id, "thread_id": thread_id, "message_id": msg_id}
+        if guild_id:
+            meta["web_url"] = f"https://discord.com/channels/{guild_id}/{parent_channel_id}/{msg_id}"
         if attachments_json:
             meta["attachments"] = attachments_json
 
@@ -374,13 +377,17 @@ async def _fetch_channel(
         else:
             channel_name = channel_info.get("name", channel_id)
 
+        channel_meta: dict[str, Any] = {}
+        if guild_id:
+            channel_meta["guild_id"] = guild_id
+            channel_meta["web_url"] = f"https://discord.com/channels/{guild_id}/{channel_id}"
         entities.append(EntityRecord(
             entity_type="Channel",
             platform="discord",
             platform_entity_id=channel_id,
             title=f"#{channel_name}",
             updated_at=datetime.now(UTC),
-            metadata={"guild_id": guild_id} if guild_id else {},
+            metadata=channel_meta,
         ))
 
         # Fetch messages (Discord returns newest-first; reverse for chronological)
@@ -406,6 +413,8 @@ async def _fetch_channel(
 
             attachments_json = _extract_attachments(msg)
             meta: dict[str, Any] = {"channel_id": channel_id, "message_id": msg_id, "guild_id": guild_id}
+            if guild_id:
+                meta["web_url"] = f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
             if attachments_json:
                 meta["attachments"] = attachments_json
 
@@ -455,6 +464,7 @@ async def _fetch_channel(
                     await _fetch_thread_messages(
                         client, thread_id, channel_id, msg_id,
                         entities, edges, seen_users, persons, after_snowflake,
+                        guild_id=guild_id,
                     )
 
     batch = EntityBatch(entities=entities, persons=persons, edges=edges)

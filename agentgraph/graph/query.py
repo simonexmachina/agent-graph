@@ -16,10 +16,13 @@ async def search_entities(
     entity_types: list[str] | None = None,
     limit: int = 10,
     min_score: float = 0.03,
+    platform: str | None = None,
 ) -> list[EntityResult]:
     """Hybrid search: combines vector similarity with full-text via RRF."""
     embedding = encode(query)
-    return await get_backend().search_entities(embedding, query, entity_types, limit, min_score)
+    return await get_backend().search_entities(
+        embedding, query, entity_types, limit, min_score, platform=platform
+    )
 
 
 async def get_entity(entity_id: str) -> EntityResult | None:

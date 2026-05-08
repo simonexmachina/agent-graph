@@ -6,7 +6,7 @@ Use the `agentgraph` CLI to query the local knowledge graph. Always prefer the C
 
 ```bash
 # Semantic search across entities
-agentgraph search "<query>" [--type <type>] [--limit N] [--json]
+agentgraph search "<query>" [--type <type>] [--platform <platform>] [--limit N] [--json]
 
 # Fetch full entity details by ID, UUID prefix, or platform ref (platform/entity_id)
 agentgraph get <entity-id|platform/ref> --resolve [--json]
@@ -27,7 +27,7 @@ agentgraph fetch <platform> <resource-id> [--json]
 agentgraph fetch-entity <entity-id> [--json]
 
 # Trigger a background poll for one or all connectors
-agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, sharepoint — omit for all
+agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive — omit for all
 
 # Authenticate connectors
 agentgraph auth google-docs   # Google OAuth2 (Docs, Sheets, Drive, Gmail)

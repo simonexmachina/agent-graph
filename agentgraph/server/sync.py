@@ -41,6 +41,7 @@ async def _poll_connector(connector: BaseConnector) -> None:
             logger.info("poll %s — no new data", source)
 
         await backend.save_cursor(source, new_cursor)
+        logger.info("poll %s — completed", source)
     except Exception:
         logger.exception("poll failed for connector %s", source)
 

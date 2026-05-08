@@ -14,7 +14,18 @@ from pydantic import BaseModel
 
 # All resource_type values understood by the connector layer.
 # Each value maps to a distinct fetch strategy within a connector.
-ResourceType = Literal["channel", "dm", "document", "message", "spreadsheet", "thread"]
+ResourceType = Literal["channel", "dm", "document", "folder", "message", "spreadsheet", "thread"]
+
+# All valid entity_type values stored in the DB.
+ENTITY_TYPES: tuple[str, ...] = (
+    "Channel",
+    "Document",
+    "Folder",
+    "Message",
+    "Person",
+    "Spreadsheet",
+    "Thread",
+)
 
 # Broad URL extractor — classify_url does fine-grained matching
 _URL_RE = re.compile(r"https?://\S+")
@@ -24,6 +35,7 @@ RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
     "channel":     "Channel",
     "dm":          "Channel",
     "document":    "Document",
+    "folder":      "Folder",
     "message":     "Message",
     "spreadsheet": "Spreadsheet",
     "thread":      "Thread",
@@ -80,7 +92,7 @@ class EntityBatch(BaseModel):
 
         seen: set[str] = set()
         for raw_url in _URL_RE.findall(entity.content):
-            ref = classify_url(raw_url.rstrip(".,)>\"'"))
+            ref = classify_url(raw_url)
             if ref is None:
                 continue
             key = f"{ref.source}/{ref.resource_id}"

@@ -26,6 +26,11 @@ _GSHEETS_RE = re.compile(
     r"https://docs\.google\.com/spreadsheets/d/(?P<spreadsheet_id>[a-zA-Z0-9_-]+)"
 )
 
+# Pattern: https://drive.google.com/drive/folders/{folderId}
+_GDRIVE_FOLDER_RE = re.compile(
+    r"https://drive\.google\.com/drive/folders/(?P<folder_id>[a-zA-Z0-9_-]+)"
+)
+
 # Pattern: https://app.slack.com/client/{workspaceId}/{channelId}
 _SLACK_CHANNEL_RE = re.compile(
     r"https://app\.slack\.com/client/(?P<workspace_id>[A-Z0-9]+)/(?P<channel_id>[A-Z0-9]+)"
@@ -50,8 +55,17 @@ _GMAIL_THREAD_RE = re.compile(
 )
 
 
+# U+200B zero-width space, U+200C/D/E/F directional marks, U+00AD soft hyphen, U+FEFF BOM
+_INVISIBLE_CHARS_RE = re.compile(
+    "[­​‌‍‎‏﻿]+"
+)
+
+
 def classify_url(url: str) -> SourceReference | None:
     """Return a SourceReference for a known URL, or None if unrecognised."""
+    # Strip invisible Unicode chars first (e.g. zero-width spaces from email HTML),
+    # then strip trailing punctuation that commonly wraps URLs in prose/markdown.
+    url = _INVISIBLE_CHARS_RE.sub("", url).rstrip(".,)>\"'")
     # Sheets must be checked before Docs — both live under docs.google.com
     m = _GSHEETS_RE.match(url)
     if m:
@@ -59,6 +73,14 @@ def classify_url(url: str) -> SourceReference | None:
             source="gsheets",
             resource_type="spreadsheet",
             resource_id=m.group("spreadsheet_id"),
+        )
+
+    m = _GDRIVE_FOLDER_RE.match(url)
+    if m:
+        return SourceReference(
+            source="gdrive",
+            resource_type="folder",
+            resource_id=m.group("folder_id"),
         )
 
     m = _GDOCS_RE.match(url)

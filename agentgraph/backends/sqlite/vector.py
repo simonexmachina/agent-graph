@@ -62,6 +62,7 @@ async def vector_ranked(
     limit: int,
     mode: str,
     vec_loaded: bool,
+    platform: str | None = None,
 ) -> list[tuple[str, int]]:
     """Return (entity_id, rank) pairs with rank starting at 1 (best).
 
@@ -76,6 +77,9 @@ async def vector_ranked(
         placeholders = ",".join("?" * len(entity_types))
         type_clause = f"AND entity_type IN ({placeholders})"
         type_params = list(entity_types)
+    if platform:
+        type_clause += " AND platform = ?"
+        type_params.append(platform)
 
     query_blob = pack_embedding(query_vec)
     candidate_limit = limit * 5

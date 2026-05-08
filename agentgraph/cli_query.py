@@ -69,16 +69,27 @@ def _warn_local() -> None:
 # search
 # ---------------------------------------------------------------------------
 
-def cmd_search(query: str, entity_types: list[str], limit: int, min_score: float, as_json: bool) -> None:
+def cmd_search(
+    query: str,
+    entity_types: list[str],
+    limit: int,
+    min_score: float,
+    as_json: bool,
+    platform: str | None = None,
+) -> None:
     params: dict[str, Any] = {"q": query, "limit": limit, "min_score": min_score}
     if entity_types:
         params["entity_type"] = entity_types
+    if platform:
+        params["platform"] = platform
 
     results = _get("/search", params)
     if results is None:
         _warn_local()
         from agentgraph.graph.query import search_entities
-        results = _run(search_entities(query, entity_types=entity_types or None, limit=limit, min_score=min_score))
+        results = _run(search_entities(
+            query, entity_types=entity_types or None, limit=limit, min_score=min_score, platform=platform
+        ))
 
     if as_json:
         console.print_json(json.dumps(results, default=str))

@@ -109,6 +109,38 @@ async def test_search_entities_empty_results() -> None:
     assert results == []
 
 
+@pytest.mark.asyncio
+async def test_search_entities_passes_platform_to_backend() -> None:
+    from agentgraph.graph.query import search_entities
+
+    mock_search = AsyncMock(return_value=[])
+    backend = _mock_backend(search_entities=mock_search)
+    set_backend(backend)
+
+    with patch("agentgraph.graph.query.encode", return_value=[0.1] * 384):
+        await search_entities("discord stuff", platform="discord")
+
+    mock_search.assert_called_once()
+    _, kwargs = mock_search.call_args
+    assert kwargs.get("platform") == "discord"
+
+
+@pytest.mark.asyncio
+async def test_search_entities_platform_none_by_default() -> None:
+    from agentgraph.graph.query import search_entities
+
+    mock_search = AsyncMock(return_value=[])
+    backend = _mock_backend(search_entities=mock_search)
+    set_backend(backend)
+
+    with patch("agentgraph.graph.query.encode", return_value=[0.1] * 384):
+        await search_entities("anything")
+
+    mock_search.assert_called_once()
+    _, kwargs = mock_search.call_args
+    assert kwargs.get("platform") is None
+
+
 # ---------------------------------------------------------------------------
 # get_entity
 # ---------------------------------------------------------------------------

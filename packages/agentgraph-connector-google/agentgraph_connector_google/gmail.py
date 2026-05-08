@@ -331,6 +331,7 @@ def _thread_to_items(
             "message_count": len(messages),
             "snippet": thread.get("snippet", ""),
             "label_ids": ",".join(label_ids),
+            "web_url": f"https://mail.google.com/mail/u/0/#inbox/{thread_id}",
         },
     )
     return entity, persons, edges

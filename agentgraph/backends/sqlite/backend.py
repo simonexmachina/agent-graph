@@ -206,6 +206,7 @@ class SQLiteBackend(StorageBackend):
                          content_embedding, metadata, created_at, updated_at, synced_at, last_accessed)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
+                        entity_type       = CASE WHEN entities.entity_type = 'Document' THEN EXCLUDED.entity_type ELSE entities.entity_type END,
                         title             = COALESCE(EXCLUDED.title, entities.title),
                         content           = COALESCE(EXCLUDED.content, entities.content),
                         content_embedding = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
@@ -284,29 +285,33 @@ class SQLiteBackend(StorageBackend):
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
+        platform: str | None = None,
     ) -> list[EntityResult]:
         conn = self._conn_or_raise()
 
         # BM25 via FTS5
         fts_ids: list[tuple[str, int]] = []
         try:
-            type_clause = ""
-            type_params: list[Any] = [query_text, limit * 5]
+            extra_clause = ""
+            fts_extra_params: list[Any] = []
             if entity_types:
                 placeholders = ",".join("?" * len(entity_types))
-                type_clause = f"AND e.entity_type IN ({placeholders})"
-                type_params = [query_text, *entity_types, limit * 5]
+                extra_clause += f" AND e.entity_type IN ({placeholders})"
+                fts_extra_params.extend(entity_types)
+            if platform:
+                extra_clause += " AND e.platform = ?"
+                fts_extra_params.append(platform)
 
             cursor = await conn.execute(
                 f"""
                 SELECT e.id
                 FROM entities_fts f
                 JOIN entities e ON e.id = f.id
-                WHERE entities_fts MATCH ? {type_clause}
+                WHERE entities_fts MATCH ? {extra_clause}
                 ORDER BY f.rank
                 LIMIT ?
                 """,
-                type_params,
+                [query_text, *fts_extra_params, limit * 5],
             )
             rows = await cursor.fetchall()
             fts_ids = [(row[0], i + 1) for i, row in enumerate(rows)]
@@ -315,7 +320,8 @@ class SQLiteBackend(StorageBackend):
 
         # Vector search
         vec_ids = await vector_ranked(
-            conn, query_vec, entity_types, limit, self._vector_mode, self._vec_loaded
+            conn, query_vec, entity_types, limit, self._vector_mode, self._vec_loaded,
+            platform=platform,
         )
 
         # RRF fusion (k=60, fulltext weight=2x)
@@ -423,7 +429,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at
+                   title, content, metadata, created_at, updated_at, synced_at
             FROM entities
             {where}
             ORDER BY last_accessed DESC
@@ -829,6 +835,13 @@ class SQLiteBackend(StorageBackend):
             [platform, platform_entity_id],
         )
 
+    async def touch_last_accessed(self, platform: str, platform_entity_id: str) -> None:
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        await self._execute(
+            "UPDATE entities SET last_accessed = ? WHERE platform = ? AND platform_entity_id = ?",
+            [now, platform, platform_entity_id],
+        )
+
     async def get_entity_type(self, platform: str, platform_entity_id: str) -> str | None:
         return await self._fetchval(
             "SELECT entity_type FROM entities WHERE platform = ? AND platform_entity_id = ?",
@@ -859,6 +872,7 @@ def _row_to_entity(row: Any) -> EntityResult:
         "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "synced_at": row["synced_at"] if "synced_at" in keys else None,
         "score": row["score"] if "score" in keys else None,
     }
 

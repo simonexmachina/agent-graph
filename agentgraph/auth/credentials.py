@@ -31,10 +31,21 @@ class DiscordCredentials(BaseModel):
     bot_user_id: str | None = None
 
 
+class MicrosoftCredentials(BaseModel):
+    client_id: str
+    client_secret: str
+    access_token: str
+    refresh_token: str
+    token_expiry: datetime | None = None
+    user_email: str | None = None
+    display_name: str | None = None
+
+
 class Credentials(BaseModel):
     google: GoogleCredentials | None = None
     slack: SlackCredentials | None = None
     discord: DiscordCredentials | None = None
+    microsoft: MicrosoftCredentials | None = None
 
 
 def load() -> Credentials:

@@ -38,25 +38,6 @@ def auth_discord() -> None:
     run_token_flow()
 
 
-@auth_app.command("sharepoint")
-def auth_sharepoint() -> None:
-    """Store SharePoint browser cookies (FedAuth + rtFa) for a site."""
-    from agentgraph.auth.sharepoint import run_cookie_flow
-
-    run_cookie_flow()
-
-
-@auth_app.command("microsoft")
-def auth_microsoft() -> None:
-    """Authenticate with Microsoft Graph (SharePoint/OneDrive) via OAuth2 browser flow.
-
-    Tip: if you have the Azure CLI installed, run 'az login' instead and set
-    AGENTGRAPH_MICROSOFT_AUTH_PROVIDER=az — no app registration needed.
-    """
-    from agentgraph.auth.microsoft import run_oauth_flow
-
-    run_oauth_flow()
-
 
 @app.command()
 def serve(
@@ -82,6 +63,7 @@ def serve(
 def search(
     query: str = typer.Argument(..., help="Search query"),
     type: list[str] = typer.Option([], "--type", "-t", help="Filter by entity type"),
+    platform: str | None = typer.Option(None, "--platform", "-p", help="Scope to a single platform (e.g. slack, discord)"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results"),
     min_score: float = typer.Option(0.03, "--min-score", help="Minimum relevance score (0–1)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -89,7 +71,7 @@ def search(
     """Search the knowledge graph."""
     from agentgraph.cli_query import cmd_search
 
-    cmd_search(query=query, entity_types=type, limit=limit, min_score=min_score, as_json=json)
+    cmd_search(query=query, entity_types=type, platform=platform, limit=limit, min_score=min_score, as_json=json)
 
 
 @app.command()
@@ -155,10 +137,7 @@ def fetch_entity_cmd(
 
 @app.command()
 def onboard() -> None:
-    """Interactive setup: authenticate with Google, Slack, Discord, and Microsoft."""
-    import shutil
-    import subprocess
-
+    """Interactive setup: authenticate with Google, Slack, and Discord."""
     import typer
 
     typer.echo("=== AgentGraph Setup ===")
@@ -182,37 +161,10 @@ def onboard() -> None:
         typer.echo("  Skipped.")
 
     # --- Discord ---
-    typer.echo("\nStep 3/4: Discord")
+    typer.echo("\nStep 3/3: Discord")
     if typer.confirm("  Set up Discord?", default=True):
         from agentgraph.auth.discord import run_token_flow as discord_flow
         discord_flow()
-    else:
-        typer.echo("  Skipped.")
-
-    # --- Microsoft ---
-    typer.echo("\nStep 4/4: Microsoft (SharePoint, OneDrive)")
-    if typer.confirm("  Set up Microsoft?", default=True):
-        if shutil.which("az"):
-            use_az = typer.confirm(
-                "  'az' (Azure CLI) is installed — use it for auth? (no app registration needed)",
-                default=True,
-            )
-            if use_az:
-                subprocess.run(["az", "login"], check=False)
-                _save_user_config("AGENTGRAPH_MICROSOFT_AUTH_PROVIDER", "az")
-                typer.echo("  Microsoft auth provider set to: az")
-            else:
-                from agentgraph.auth.microsoft import run_oauth_flow as microsoft_oauth_flow
-                microsoft_oauth_flow()
-                _save_user_config("AGENTGRAPH_MICROSOFT_AUTH_PROVIDER", "oauth")
-        else:
-            typer.echo(
-                "  Tip: install Azure CLI (brew install azure-cli) and re-run onboard\n"
-                "  to skip app registration. Falling back to custom OAuth2."
-            )
-            from agentgraph.auth.microsoft import run_oauth_flow as microsoft_oauth_flow
-            microsoft_oauth_flow()
-            _save_user_config("AGENTGRAPH_MICROSOFT_AUTH_PROVIDER", "oauth")
     else:
         typer.echo("  Skipped.")
 

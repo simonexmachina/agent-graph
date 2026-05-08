@@ -73,6 +73,7 @@ async def _refresh_discord_attachments(results: list[dict[str, Any]]) -> None:
 async def search_entities_tool(
     query: str,
     entity_types: list[str] | None = None,
+    platform: str | None = None,
     limit: int = 10,
     min_score: float = 0.03,
 ) -> str:
@@ -94,6 +95,10 @@ async def search_entities_tool(
         entity_types: Optional list of entity types to restrict results
             (e.g. ["Message", "Document", "Channel"]). To find images or
             attachments, pass ["Message"].
+        platform: Optional platform name to scope the search to a single
+            source (e.g. "slack", "discord", "gdocs", "gmail"). When
+            omitted, all platforms are searched. Use this to avoid
+            cross-platform noise when the user specifies a source.
         limit: Maximum number of results to return (default 10).
         min_score: Minimum relevance score threshold (0–1, default 0.02).
             Results below this score are suppressed as noise.
@@ -104,7 +109,9 @@ async def search_entities_tool(
         automatically refreshed before returning so they are valid at
         the time of the call.
     """
-    results = await search_entities(query, entity_types=entity_types, limit=limit, min_score=min_score)
+    results = await search_entities(
+        query, entity_types=entity_types, limit=limit, min_score=min_score, platform=platform
+    )
     for r in results:
         if r.get("content") and len(str(r["content"])) > 500:
             r["content"] = str(r["content"])[:500] + "…"
@@ -276,7 +283,10 @@ async def query_by_filter_tool(
           has_attachments=True.
       - Document: text documents such as Google Docs. Does NOT contain
           image or file attachments — those are on Message entities.
+      - Spreadsheet: Google Sheets or Excel files.
+      - Folder: a Google Drive folder containing other entities.
       - Channel: a chat channel or DM thread (Discord, Slack, etc.).
+      - Thread: an email thread (Gmail).
       - Task: a task or to-do item (e.g. from a project tracker).
       - Project: a project or repository container.
 

@@ -12,31 +12,39 @@ from typing import Any
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
 from agentgraph.auth.google_provider import get_provider
-from agentgraph.connectors.base import BaseConnector, EntityBatch, FetchPolicy, ResourceType
+from agentgraph.connectors.base import (
+    BaseConnector,
+    EdgeRecord,
+    EntityBatch,
+    EntityRecord,
+    FetchPolicy,
+    ResourceType,
+)
 
 logger = logging.getLogger(__name__)
-
-# Stub fetch_policy — DriveChangesConnector never handles direct fetches.
-_STUB_POLICY = FetchPolicy(stale_after_seconds=0)
-
 
 def _build_drive_service() -> Any:
     return build("drive", "v3", credentials=get_provider().get_credentials())
 
 
 class DriveChangesConnector(BaseConnector):
-    """Polls drive.changes.list and dispatches each changed file to the matching connector."""
+    """Polls drive.changes.list and handles folder fetches."""
 
-    source = "drive"
-    fetch_policy = _STUB_POLICY
+    source = "gdrive"
+    fetch_policy = FetchPolicy(stale_after_seconds=15 * 60)
     poll_interval: timedelta | None = timedelta(minutes=10)  # type: ignore[assignment]
 
     def can_handle(self, url: str) -> bool:
-        # DriveChangesConnector is a coordinator — it never handles direct URL fetches.
-        return False
+        return "drive.google.com/drive/folders/" in url
 
     async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
-        return EntityBatch()
+        import asyncio
+        from agentgraph.graph.upsert import upsert_batch
+
+        loop = asyncio.get_event_loop()
+        batch = await loop.run_in_executor(None, _list_drive_folder_sync, resource_id)
+        await upsert_batch(batch)
+        return batch
 
     async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
         import asyncio
@@ -113,17 +121,97 @@ class DriveChangesConnector(BaseConnector):
         return combined, {"page_token": new_page_token}
 
 
-async def _get_known_file_ids(file_ids: set[str]) -> set[str]:
-    """Return the subset of file_ids that already exist in the entities table."""
-    from agentgraph.db.connection import get_pool
+_GDRIVE_MIME_TO_RESOURCE: dict[str, tuple[str, str]] = {
+    "application/vnd.google-apps.document":     ("gdocs",   "document"),
+    "application/vnd.google-apps.spreadsheet":  ("gsheets", "spreadsheet"),
+    "application/vnd.google-apps.folder":       ("gdrive",  "folder"),
+}
+_GDRIVE_VIEW_BASE = "https://drive.google.com"
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT platform_entity_id FROM entities
-            WHERE platform IN ('gdocs', 'gsheets') AND platform_entity_id = ANY($1)
-            """,
-            list(file_ids),
-        )
-    return {row["platform_entity_id"] for row in rows}
+
+def _list_drive_folder_sync(folder_id: str) -> EntityBatch:
+    service = _build_drive_service()
+
+    # Get folder metadata
+    meta: dict[str, Any] = service.files().get(
+        fileId=folder_id,
+        fields="id,name",
+    ).execute()
+    folder_name: str = meta.get("name", "")
+
+    # List immediate children (non-trashed)
+    children: list[dict[str, Any]] = []
+    page_token: str | None = None
+    while True:
+        kwargs: dict[str, Any] = {
+            "q": f"'{folder_id}' in parents and trashed=false",
+            "fields": "nextPageToken,files(id,name,mimeType,webViewLink)",
+            "pageSize": 1000,
+        }
+        if page_token:
+            kwargs["pageToken"] = page_token
+        resp: dict[str, Any] = service.files().list(**kwargs).execute()
+        children.extend(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+
+    folder_entity = EntityRecord(
+        entity_type="Folder",
+        platform="gdrive",
+        platform_entity_id=folder_id,
+        title=folder_name,
+        metadata={"web_url": f"{_GDRIVE_VIEW_BASE}/drive/folders/{folder_id}"},
+    )
+
+    stubs: list[EntityRecord] = []
+    edges: list[EdgeRecord] = []
+
+    for child in children:
+        child_id: str = child["id"]
+        child_name: str = child.get("name", "")
+        mime: str = child.get("mimeType", "")
+        web_link: str = child.get("webViewLink", "")
+
+        if mime in _GDRIVE_MIME_TO_RESOURCE:
+            platform, resource_type_str = _GDRIVE_MIME_TO_RESOURCE[mime]
+        else:
+            # Non-Google native file — stub as a generic document under gdrive
+            platform = "gdrive"
+            resource_type_str = "document"
+
+        from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE
+        entity_type = RESOURCE_TYPE_TO_ENTITY_TYPE.get(resource_type_str, "Document")
+
+        stubs.append(EntityRecord(
+            entity_type=entity_type,
+            platform=platform,
+            platform_entity_id=child_id,
+            title=child_name,
+            metadata={"web_url": web_link, "mime_type": mime} if web_link else {"mime_type": mime},
+            is_stub=True,
+        ))
+        edges.append(EdgeRecord(
+            edge_type="contains",
+            source_platform_entity_id=folder_id,
+            target_platform_entity_id=child_id,
+            platform="gdrive",
+        ))
+
+    logger.info("Listed %d items in Drive folder '%s' (%s)", len(stubs), folder_name, folder_id)
+    return EntityBatch(entities=[folder_entity, *stubs], edges=edges)
+
+
+async def _get_known_file_ids(file_ids: set[str]) -> set[str]:
+    """Return the subset of file_ids that already exist as gdocs or gsheets entities."""
+    from agentgraph.core.context import get_backend
+
+    backend = get_backend()
+    known: set[str] = set()
+    for file_id in file_ids:
+        for platform in ("gdocs", "gsheets"):
+            result = await backend.get_entity_by_platform(platform, file_id)
+            if result is not None:
+                known.add(file_id)
+                break
+    return known
