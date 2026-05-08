@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AgentGraph Extension",
   "version": "0.1.0",
-  "description": "Observes browser activity and sends focus/blur events to AgentGraph.",
+  "description": "Watches browser activity and triggers AgentGraph to fetch content when you dwell on a supported URL.",
   "permissions": ["tabs", "storage"],
   "background": {
     "service_worker": "background.js",
