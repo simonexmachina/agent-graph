@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Install — AgentGraph</title>
+  <meta name="description" content="Install AgentGraph, authenticate with your data sources, and run it as a background service on macOS or Linux." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --accent:   #38bdf8;
+      --accent2:  #818cf8;
+      --green:    #4ade80;
+      --radius:   8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    header, main, footer { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 28px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+    .logo span { color: var(--accent); }
+    nav a {
+      font-size: 14px;
+      color: var(--muted);
+      margin-left: 24px;
+    }
+    nav a:hover { color: var(--text); text-decoration: none; }
+
+    /* ── Page header ── */
+    .page-header {
+      padding: 56px 0 40px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+    .page-header .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .page-header h1 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+    .page-header p {
+      font-size: 17px;
+      color: var(--muted);
+      max-width: 600px;
+    }
+
+    /* ── TOC ── */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 48px;
+    }
+    .toc p {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .toc ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+    .toc li a { font-size: 13px; color: var(--accent); }
+
+    /* ── Steps ── */
+    .section { margin-bottom: 64px; }
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .steps { display: flex; flex-direction: column; gap: 36px; }
+    .step { display: flex; gap: 20px; }
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      color: #0f172a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      margin-top: 2px;
+    }
+    .step-body h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .step-body p  { font-size: 14px; color: var(--muted); margin-bottom: 10px; }
+
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      color: var(--green);
+      overflow-x: auto;
+      line-height: 1.7;
+      margin-bottom: 10px;
+    }
+    pre .comment { color: var(--muted); }
+    pre .hl { color: var(--accent); }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+
+    /* ── Callout ── */
+    .callout {
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .callout strong { color: var(--accent); }
+
+    .callout-warn {
+      background: color-mix(in srgb, #facc15 8%, var(--surface));
+      border: 1px solid color-mix(in srgb, #facc15 30%, var(--border));
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      color: var(--muted);
+    }
+    .callout-warn strong { color: #fde68a; }
+
+    /* ── Tabs ── */
+    .tabs { margin-bottom: 0; }
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: -1px;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: var(--radius) var(--radius) 0 0;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color .15s;
+    }
+    .tab-btn.active { color: var(--text); background: var(--bg); border-color: var(--border); }
+    .tab-panel {
+      display: none;
+      border: 1px solid var(--border);
+      border-radius: 0 var(--radius) var(--radius) var(--radius);
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .tab-panel.active { display: block; }
+    .tab-panel pre {
+      border: none;
+      border-radius: 0;
+      margin: 0;
+    }
+
+    /* ── Footer ── */
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 24px;
+      border-top: 1px solid var(--border);
+      margin-top: 64px;
+      font-size: 13px;
+      color: var(--muted);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    @media (max-width: 600px) {
+      header { flex-direction: column; align-items: flex-start; gap: 12px; }
+      nav { display: flex; flex-wrap: wrap; gap: 4px; }
+      nav a { margin-left: 0; margin-right: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="index.html">Agent<span>Graph</span></a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="commands.html">Commands</a>
+    <a href="connectors.html">Connectors</a>
+    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+    <a href="privacy.html">Privacy</a>
+  </nav>
+</header>
+
+<main>
+
+  <div class="page-header">
+    <div class="section-label">Guide</div>
+    <h1>Install &amp; Setup</h1>
+    <p>Get AgentGraph running in minutes — from install to a fully indexed knowledge graph accessible to your AI agents.</p>
+  </div>
+
+  <nav class="toc" aria-label="Page contents">
+    <p>On this page</p>
+    <ul>
+      <li><a href="#prerequisites">Prerequisites</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#auth">Authenticate</a></li>
+      <li><a href="#serve">Run the server</a></li>
+      <li><a href="#extension">Browser extension</a></li>
+      <li><a href="#mcp">Connect to Claude</a></li>
+      <li><a href="#background">Run in background</a></li>
+    </ul>
+  </nav>
+
+  <!-- ── Prerequisites ── -->
+  <section class="section" id="prerequisites">
+    <div class="section-title">Prerequisites</div>
+    <p style="font-size:14px; color:var(--muted); margin-bottom:16px;">You need Python 3.12 or later and <a href="https://docs.astral.sh/uv/">uv</a> (the fast Python package manager).</p>
+    <pre><span class="comment"># Install uv if you don't have it</span>
+curl -LsSf https://astral.sh/uv/install.sh | sh</pre>
+  </section>
+
+  <!-- ── Install ── -->
+  <section class="section" id="install">
+    <div class="section-title">Install</div>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Clone and sync dependencies</h3>
+          <pre>git clone https://github.com/simonexmachina/agent-graph
+cd agent-graph
+uv sync --extra all</pre>
+          <p>The <code>--extra all</code> flag installs all connector packages (Slack, Discord, Google, Gmail). You can install only what you need — see the <a href="connectors.html">connector guide</a>.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Authenticate ── -->
+  <section class="section" id="auth">
+    <div class="section-title">Authenticate</div>
+    <p style="font-size:14px; color:var(--muted); margin-bottom:20px;">Run the interactive setup wizard to connect your data sources. It steps through each installed connector and opens the relevant auth flow.</p>
+    <pre>agentgraph onboard</pre>
+    <p style="font-size:14px; color:var(--muted); margin:12px 0;">Or authenticate with a specific platform:</p>
+    <pre>agentgraph auth google     <span class="comment"># Google OAuth2 (Docs, Sheets, Drive, Gmail)</span>
+agentgraph auth slack      <span class="comment"># Slack cookie credentials</span>
+agentgraph auth discord    <span class="comment"># Discord bot token</span></pre>
+    <div class="callout">
+      <strong>Credentials are stored locally.</strong> All tokens and cookies are written to <code>~/.agentgraph/</code> on your machine. Nothing is sent to any external server.
+    </div>
+  </section>
+
+  <!-- ── Serve ── -->
+  <section class="section" id="serve">
+    <div class="section-title">Run the server</div>
+    <p style="font-size:14px; color:var(--muted); margin-bottom:16px;">The server handles connector polling, incoming fetch-URL requests from the browser extension, and serves the web viewer at <code>http://localhost:8899</code>.</p>
+    <pre>agentgraph serve</pre>
+    <p style="font-size:14px; color:var(--muted); margin:12px 0 16px;">To auto-reload on code changes during development:</p>
+    <pre>agentgraph serve --reload</pre>
+    <p style="font-size:14px; color:var(--muted); margin:12px 0 16px;">Server logs are written to <code>/tmp/agentgraph.log</code>.</p>
+  </section>
+
+  <!-- ── Extension ── -->
+  <section class="section" id="extension">
+    <div class="section-title">Browser extension</div>
+    <p style="font-size:14px; color:var(--muted); margin-bottom:16px;">The extension passively indexes content as you browse — triggering a fetch whenever you dwell on a supported page (Slack, Discord, Google Docs/Sheets/Drive, Gmail).</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Build</h3>
+          <pre>cd extension
+npm install &amp;&amp; npm run build</pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Load in Chrome</h3>
+          <p>Go to <code>chrome://extensions</code> → enable <strong>Developer mode</strong> → click <strong>Load unpacked</strong> → select the <code>extension/dist/</code> directory.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Verify</h3>
+          <p>Open a Slack channel or Google Doc in Chrome. After a few seconds the extension icon should show activity, and the entity should appear in the knowledge graph.</p>
+          <pre>agentgraph search "slack" --limit 5</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── MCP ── -->
+  <section class="section" id="mcp">
+    <div class="section-title">Connect to Claude</div>
+    <p style="font-size:14px; color:var(--muted); margin-bottom:16px;">The MCP server exposes the full knowledge graph to Claude Desktop, Claude Code, and any other MCP-compatible AI assistant. Run this to get the config snippet:</p>
+    <pre>agentgraph mcp-config</pre>
+    <p style="font-size:14px; color:var(--muted); margin:12px 0 16px;">Then paste the output into your MCP client's config file. See the <a href="commands.html#mcp">command reference</a> for transport options (stdio, SSE, streamable-http).</p>
+  </section>
+
+  <!-- ── Background ── -->
+  <section class="section" id="background">
+    <div class="section-title">Run in the background</div>
+    <p style="font-size:14px; color:var(--muted); margin-bottom:24px;">To keep AgentGraph running automatically without a terminal window, register it as a system service.</p>
+
+    <div class="tabs" id="bg-tabs">
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('bg-tabs','macos')">macOS (launchd)</button>
+        <button class="tab-btn" onclick="switchTab('bg-tabs','linux')">Linux (systemd)</button>
+        <button class="tab-btn" onclick="switchTab('bg-tabs','nohup')">nohup fallback</button>
+      </div>
+
+      <div class="tab-panel active" id="bg-tabs-macos">
+        <pre><span class="comment"># 1. Find the full path to your agentgraph binary</span>
+which agentgraph
+<span class="comment"># → e.g. /Users/you/.local/bin/agentgraph</span>
+
+<span class="comment"># 2. Create the plist (replace the Exec path as needed)</span>
+cat &gt; ~/Library/LaunchAgents/com.agentgraph.serve.plist &lt;&lt;'EOF'
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;
+&lt;plist version="1.0"&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;
+  &lt;string&gt;com.agentgraph.serve&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/Users/you/.local/bin/agentgraph&lt;/string&gt;
+    &lt;string&gt;serve&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;
+  &lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;
+  &lt;true/&gt;
+  &lt;key&gt;StandardOutPath&lt;/key&gt;
+  &lt;string&gt;/tmp/agentgraph.log&lt;/string&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt;
+  &lt;string&gt;/tmp/agentgraph.log&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;
+EOF
+
+<span class="comment"># 3. Load it now (also starts automatically on login)</span>
+launchctl load ~/Library/LaunchAgents/com.agentgraph.serve.plist
+
+<span class="comment"># Check it's running</span>
+launchctl list | grep agentgraph
+
+<span class="comment"># Stop / restart</span>
+launchctl unload ~/Library/LaunchAgents/com.agentgraph.serve.plist
+launchctl load   ~/Library/LaunchAgents/com.agentgraph.serve.plist</pre>
+      </div>
+
+      <div class="tab-panel" id="bg-tabs-linux">
+        <pre><span class="comment"># 1. Find the full path to your agentgraph binary</span>
+which agentgraph
+<span class="comment"># → e.g. /home/you/.local/bin/agentgraph</span>
+
+<span class="comment"># 2. Create a user-level systemd unit</span>
+mkdir -p ~/.config/systemd/user
+cat &gt; ~/.config/systemd/user/agentgraph.service &lt;&lt;'EOF'
+[Unit]
+Description=AgentGraph local knowledge graph server
+After=network.target
+
+[Service]
+ExecStart=/home/you/.local/bin/agentgraph serve
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/tmp/agentgraph.log
+StandardError=append:/tmp/agentgraph.log
+
+[Install]
+WantedBy=default.target
+EOF
+
+<span class="comment"># 3. Enable and start</span>
+systemctl --user daemon-reload
+systemctl --user enable --now agentgraph
+
+<span class="comment"># Check status / logs</span>
+systemctl --user status agentgraph
+journalctl --user -u agentgraph -f</pre>
+      </div>
+
+      <div class="tab-panel" id="bg-tabs-nohup">
+        <pre><span class="comment"># Start in background, persist across terminal close</span>
+nohup agentgraph serve &gt;&gt; /tmp/agentgraph.log 2&gt;&amp;1 &amp;
+echo "PID: $!"
+
+<span class="comment"># Stop it later</span>
+pkill -f "agentgraph serve"</pre>
+      </div>
+    </div>
+
+    <div class="callout-warn" style="margin-top:16px;">
+      <strong>Note on the MCP server.</strong>
+      The <code>agentgraph mcp-serve</code> command (stdio transport) does not need to run as a background service — the MCP client launches it on demand. Only <code>agentgraph serve</code> (the HTTP backend + connector poller) benefits from the above setup.
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span>AgentGraph — open source, MIT license</span>
+  <span>
+    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a> ·
+    <a href="privacy.html">Privacy Policy</a>
+  </span>
+</footer>
+
+<script>
+  function switchTab(groupId, tabId) {
+    const group = document.getElementById(groupId);
+    group.querySelectorAll('.tab-btn').forEach((btn, i) => {
+      const panels = group.querySelectorAll('.tab-panel');
+      const active = btn.textContent.toLowerCase().replace(/[^a-z]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      btn.classList.toggle('active', tabId === panels[i].id.replace(groupId + '-', ''));
+    });
+    group.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('active', p.id === groupId + '-' + tabId);
+    });
+  }
+</script>
+
+</body>
+</html>
