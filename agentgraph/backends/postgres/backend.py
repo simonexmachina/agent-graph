@@ -607,26 +607,6 @@ class PostgresBackend(StorageBackend):
                 json.dumps({}),
             )
 
-    async def find_entities_containing(
-        self,
-        text: str,
-        exclude_platform: str,
-        exclude_platform_entity_id: str,
-    ) -> list[str]:
-        pool = self._pool_or_raise()
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT id FROM entities
-                WHERE content LIKE '%' || $1 || '%'
-                  AND NOT (platform = $2 AND platform_entity_id = $3)
-                """,
-                text,
-                exclude_platform,
-                exclude_platform_entity_id,
-            )
-        return [str(row["id"]) for row in rows]
-
     # --- GC ---
 
     async def gc_entities(self, retention_days: int) -> int:

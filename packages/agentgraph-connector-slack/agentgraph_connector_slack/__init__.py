@@ -79,6 +79,12 @@ def _parse_mentions(text: str) -> list[str]:
     return re.findall(r"<@([A-Z0-9]+)>", text)
 
 
+def _parse_channel_mentions(text: str) -> list[str]:
+    """Extract <#CXXXXXXX> channel IDs from message text."""
+    import re
+    return re.findall(r"<#([A-Z0-9]+)(?:\|[^>]*)?>", text)
+
+
 class SlackConnector(BaseConnector):
     source = "slack"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
@@ -248,6 +254,14 @@ async def _fetch_thread_replies(
                 platform="slack",
             ))
 
+        for mentioned_channel_id in _parse_channel_mentions(text):
+            edges.append(EdgeRecord(
+                edge_type="mentions",
+                source_platform_entity_id=f"{channel_id}:{ts}",
+                target_platform_entity_id=mentioned_channel_id,
+                platform="slack",
+            ))
+
 
 async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBatch:
     entities: list[EntityRecord] = []
@@ -346,7 +360,7 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
                     platform="slack",
                 ))
 
-            # Mention edges
+            # User mention edges
             for mentioned_id in _parse_mentions(text):
                 if mentioned_id not in seen_users:
                     seen_users.add(mentioned_id)
@@ -366,6 +380,15 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
                     edge_type="mentions",
                     source_platform_entity_id=f"{channel_id}:{ts}",
                     target_platform_user_id=mentioned_id,
+                    platform="slack",
+                ))
+
+            # Channel mention edges
+            for mentioned_channel_id in _parse_channel_mentions(text):
+                edges.append(EdgeRecord(
+                    edge_type="mentions",
+                    source_platform_entity_id=f"{channel_id}:{ts}",
+                    target_platform_entity_id=mentioned_channel_id,
                     platform="slack",
                 ))
 

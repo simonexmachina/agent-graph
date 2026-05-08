@@ -676,22 +676,6 @@ class SQLiteBackend(StorageBackend):
             [_new_id(), source_id, target_id],
         )
 
-    async def find_entities_containing(
-        self,
-        text: str,
-        exclude_platform: str,
-        exclude_platform_entity_id: str,
-    ) -> list[str]:
-        rows = await self._fetchall(
-            """
-            SELECT id FROM entities
-            WHERE content LIKE '%' || ? || '%'
-              AND NOT (platform = ? AND platform_entity_id = ?)
-            """,
-            [text, exclude_platform, exclude_platform_entity_id],
-        )
-        return [row[0] for row in rows]
-
     # --- GC ---
 
     async def gc_entities(self, retention_days: int) -> int:

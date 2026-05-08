@@ -133,16 +133,6 @@ class StorageBackend(ABC):
     @abstractmethod
     async def insert_references_edge(self, source_id: str, target_id: str) -> None: ...
 
-    @abstractmethod
-    async def find_entities_containing(
-        self,
-        text: str,
-        exclude_platform: str,
-        exclude_platform_entity_id: str,
-    ) -> list[str]:
-        """Return internal IDs of entities whose content contains `text`."""
-        ...
-
     # --- GC ---
 
     @abstractmethod

@@ -1,11 +1,7 @@
 """Cross-platform URL reference linking.
 
-Creates 'references' edges between any entity whose content links to another
-known entity (Google Doc, Sheet, Discord channel, Slack channel, etc.).
-
-Two directions, both called from upsert_batch:
-  - forward:  entity just ingested → find known URLs in its content
-  - backward: entity just ingested → find other entities that link to it
+Creates 'references' edges from a newly ingested entity to any known entities
+it links to via URL in its content.
 """
 
 from __future__ import annotations
@@ -65,35 +61,3 @@ async def link_entity_to_urls(platform_entity_id: str, platform: str, content: s
         count += 1
 
     return count
-
-
-async def link_entity_from_content(platform_entity_id: str, platform: str) -> int:
-    """Create 'references' edges from any entities whose content links to this one.
-
-    Called after any entity is ingested. Searches all entity content for the
-    platform_entity_id (which appears in any URL pointing at this entity).
-    Returns the number of edges created.
-    """
-    # Short IDs (display names, single words) produce too many substring false positives.
-    # All legitimate URL-embeddable IDs (Gmail thread IDs, Slack channel/message IDs,
-    # Google Doc IDs) are at least 8 characters long.
-    if len(platform_entity_id) < 8:
-        return 0
-
-    backend = get_backend()
-    tgt_id = await backend.find_entity_id(platform, platform_entity_id)
-    if not tgt_id:
-        return 0
-
-    src_ids = await backend.find_entities_containing(
-        platform_entity_id, platform, platform_entity_id
-    )
-    for src_id in src_ids:
-        await backend.insert_references_edge(src_id, tgt_id)
-
-    if src_ids:
-        logger.info(
-            "Created %d references edge(s) → %s/%s",
-            len(src_ids), platform, platform_entity_id,
-        )
-    return len(src_ids)

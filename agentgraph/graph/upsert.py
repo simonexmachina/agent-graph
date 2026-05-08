@@ -32,9 +32,8 @@ async def upsert_batch(batch: EntityBatch) -> None:
 
 async def _link_references(batch: EntityBatch) -> None:
     """After a batch is persisted, create cross-platform 'references' edges."""
-    from agentgraph.graph.link import link_entity_from_content, link_entity_to_urls
+    from agentgraph.graph.link import link_entity_to_urls
 
     for entity in batch.entities:
         if entity.content:
             await link_entity_to_urls(entity.platform_entity_id, entity.platform, entity.content)
-        await link_entity_from_content(entity.platform_entity_id, entity.platform)
