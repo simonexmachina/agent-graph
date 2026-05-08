@@ -323,3 +323,71 @@ def query(
 
     parsed_filters = dict(f.split("=", 1) for f in filter if "=" in f)
     cmd_query(entity_type=entity_type, filters=parsed_filters, limit=limit, order_by=order_by, since=since, authored_by_me=mine, has_attachments=has_attachments, as_json=json)
+
+
+_DOCKER_COMPOSE = """\
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: agentgraph
+      POSTGRES_PASSWORD: agentgraph
+      POSTGRES_DB: agentgraph
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentgraph"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+"""
+
+_DATABASE_URL = "postgresql://agentgraph:agentgraph@localhost:5432/agentgraph"
+
+
+@app.command("use-postgres")
+def use_postgres(
+    database_url: str = typer.Option(
+        _DATABASE_URL,
+        "--url",
+        help="PostgreSQL connection URL",
+    ),
+    compose_path: str = typer.Option(
+        "docker-compose.yml",
+        "--compose-out",
+        help="Where to write the docker-compose.yml (use '-' to print to stdout)",
+    ),
+) -> None:
+    """Switch to PostgreSQL backend and generate a docker-compose.yml.
+
+    Writes docker-compose.yml to the current directory, saves AGENTGRAPH_BACKEND=postgres
+    and AGENTGRAPH_DATABASE_URL to ~/.agentgraph/.env, then prints next steps.
+    """
+    import sys
+
+    # Write docker-compose
+    if compose_path == "-":
+        typer.echo(_DOCKER_COMPOSE, nl=False)
+    else:
+        from pathlib import Path
+        out = Path(compose_path)
+        if out.exists():
+            typer.echo(f"  {compose_path} already exists — skipping.")
+        else:
+            out.write_text(_DOCKER_COMPOSE)
+            typer.echo(f"  Written {compose_path}")
+
+    # Persist config
+    _save_user_config("AGENTGRAPH_BACKEND", "postgres")
+    _save_user_config("AGENTGRAPH_DATABASE_URL", database_url)
+    typer.echo(f"  Config saved to ~/.agentgraph/.env (backend=postgres, url={database_url})")
+
+    if compose_path != "-":
+        typer.echo("\nNext steps:")
+        typer.echo("  1. docker compose up -d")
+        typer.echo("  2. agentgraph serve")

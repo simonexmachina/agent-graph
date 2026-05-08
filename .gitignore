@@ -27,5 +27,5 @@ wheels/
 .DS_Store
 
 # Node (extension)
-extension/horizon-observer/node_modules/
-extension/horizon-observer/dist/
+extension/agentgraph-extension/node_modules/
+extension/agentgraph-extension/dist/

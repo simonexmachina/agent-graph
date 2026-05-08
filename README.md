@@ -4,7 +4,7 @@ A local knowledge graph for AI agents. AgentGraph indexes your Slack channels, D
 
 ## How it works
 
-**The browser extension decides what gets added.** As you browse, the Horizon Observer extension watches which Slack channels, Google Docs, Discord threads, and Gmail conversations you visit. When you dwell on a supported URL for more than 3 seconds, it triggers a fetch. That resource — its content, collaborators, and relationships — is ingested into the local graph.
+**The browser extension decides what gets added.** As you browse, the AgentGraph Extension watches which Slack channels, Google Docs, Discord threads, and Gmail conversations you visit. When you dwell on a supported URL for more than 3 seconds, it triggers a fetch. That resource — its content, collaborators, and relationships — is ingested into the local graph.
 
 **Background polling keeps everything current.** Once a resource is in the graph, connectors poll it on a schedule (every few minutes for chat, less frequently for documents) to pick up new messages, replies, and edits without any further browser activity.
 
@@ -92,14 +92,14 @@ The server listens on `http://127.0.0.1:8765` by default.
 ### 4. Install the browser extension
 
 ```bash
-cd extension/horizon-observer
+cd extension/agentgraph-extension
 npm install && npm run build
 ```
 
 Load the unpacked extension in Chrome:
 1. Go to `chrome://extensions`
 2. Enable **Developer mode**
-3. Click **Load unpacked** and select `extension/horizon-observer/dist`
+3. Click **Load unpacked** and select `extension/agentgraph-extension/dist`
 
 Once installed, browse Slack, Discord, Google Docs, or Gmail normally. AgentGraph will detect your dwell activity and begin indexing.
 
@@ -165,6 +165,7 @@ Settings are read from environment variables (prefixed `AGENTGRAPH_`) or from `~
 |---|---|---|
 | `AGENTGRAPH_BACKEND` | `sqlite` | Persistence backend: `sqlite` or `postgres` |
 | `AGENTGRAPH_BACKEND_SQLITE_PATH` | `~/.agentgraph/agentgraph.db` | SQLite database path |
+| `AGENTGRAPH_DATABASE_URL` | `postgresql://agentgraph:agentgraph@localhost:5432/agentgraph` | PostgreSQL connection URL (only used when backend=`postgres`) |
 | `AGENTGRAPH_SERVER_HOST` | `127.0.0.1` | Server bind address |
 | `AGENTGRAPH_SERVER_PORT` | `8765` | Server port |
 | `AGENTGRAPH_DWELL_THRESHOLD_SECONDS` | `3` | Seconds of focus before triggering a fetch |
@@ -173,6 +174,16 @@ Settings are read from environment variables (prefixed `AGENTGRAPH_`) or from `~
 | `AGENTGRAPH_SLACK_WORKSPACE_ID` | _(none)_ | If set, ignore activity from other Slack workspaces |
 | `AGENTGRAPH_GOOGLE_AUTH_PROVIDER` | `oauth` | `oauth` or `gcloud` |
 | `AGENTGRAPH_LOG_LEVEL` | `INFO` | Log level |
+
+### Switching to PostgreSQL
+
+SQLite is the default backend. To switch to PostgreSQL, run:
+
+```bash
+agentgraph use-postgres
+```
+
+This writes a `docker-compose.yml` to the current directory, saves the backend config to `~/.agentgraph/.env`, and prints next steps. You can supply a custom connection URL with `--url`. To print the compose file to stdout instead of writing it, pass `--compose-out -`.
 
 ## Architecture
 

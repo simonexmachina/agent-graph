@@ -137,11 +137,12 @@ async def cli_browse(
             if e["source_entity_id"] in visible_ids and e["target_entity_id"] in visible_ids
         ]
         # When entity_type filters hide intermediate nodes, some visible nodes may no longer
-        # have a path back to the focal node through the visible edge set. Remove them.
+        # have a visible path back to the focal node. Prune using the FULL traverse_edges so
+        # nodes reachable only through filtered-out intermediates are still retained.
         if focal["id"] in visible_ids:  # type: ignore[possibly-undefined]
             reachable: set[str] = set()
             adjacency: dict[str, set[str]] = {}
-            for e in edges:
+            for e in traverse_edges:
                 adjacency.setdefault(e["source_entity_id"], set()).add(e["target_entity_id"])
                 adjacency.setdefault(e["target_entity_id"], set()).add(e["source_entity_id"])
             queue = [focal["id"]]  # type: ignore[possibly-undefined]
