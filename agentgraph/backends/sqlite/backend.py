@@ -8,13 +8,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-import re
 
 import aiosqlite
 

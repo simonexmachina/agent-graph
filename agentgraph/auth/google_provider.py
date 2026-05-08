@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/documents.readonly",
     "https://www.googleapis.com/auth/spreadsheets.readonly",

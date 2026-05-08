@@ -45,10 +45,9 @@ def save_platform(platform: str, data: Any) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     raw: dict[str, Any] = {}
     if CREDENTIALS_FILE.exists():
-        try:
+        import contextlib
+        with contextlib.suppress(Exception):
             raw = json.loads(CREDENTIALS_FILE.read_text())
-        except Exception:
-            pass
     raw[platform] = data.model_dump(mode="json") if hasattr(data, "model_dump") else data
     CREDENTIALS_FILE.write_text(json.dumps(raw, indent=2, default=str))
     CREDENTIALS_FILE.chmod(0o600)

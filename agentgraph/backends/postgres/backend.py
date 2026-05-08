@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -843,7 +843,7 @@ def _row_to_entity(row: Any) -> EntityResult:
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
         "synced_at": row["synced_at"].isoformat() if row.get("synced_at") else None,
-        "score": float(row["score"]) if "score" in row.keys() else None,
+        "score": float(row["score"]) if "score" in row else None,
     }
 
 

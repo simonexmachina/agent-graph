@@ -171,8 +171,11 @@ class GmailConnector(BaseConnector):
             return bulk_batch, {"history_id": history_id}
 
         # Incremental poll via history list.
+        # No labelId filter: we want replies to any thread already in the graph,
+        # not just new inbox messages.
         start_history_id: str = cursor["history_id"]
-        thread_ids: set[str] = set()
+        all_thread_ids: set[str] = set()
+        inbox_thread_ids: set[str] = set()
         page_token: str | None = None
         latest_history_id = start_history_id
 
@@ -181,7 +184,6 @@ class GmailConnector(BaseConnector):
                 "userId": "me",
                 "startHistoryId": start_history_id,
                 "historyTypes": ["messageAdded"],
-                "labelId": "INBOX",
             }
             if page_token:
                 kwargs["pageToken"] = page_token
@@ -203,13 +205,26 @@ class GmailConnector(BaseConnector):
             latest_history_id = response.get("historyId", latest_history_id)
             for record in response.get("history", []):
                 for msg_added in record.get("messagesAdded", []):
-                    thread_ids.add(msg_added["message"]["threadId"])
+                    msg = msg_added["message"]
+                    tid = msg["threadId"]
+                    all_thread_ids.add(tid)
+                    if "INBOX" in msg.get("labelIds", []):
+                        inbox_thread_ids.add(tid)
 
             page_token = response.get("nextPageToken")
             if not page_token:
                 break
 
-        logger.info("gmail poll: fetching %d thread(s)", len(thread_ids))
+        # Always fetch inbox threads (new conversations).
+        # For non-inbox threads, only re-fetch those already in the graph
+        # (replies to archived/sent threads the user has previously viewed).
+        known_thread_ids = await _get_known_thread_ids(all_thread_ids - inbox_thread_ids)
+        thread_ids = inbox_thread_ids | known_thread_ids
+
+        logger.info(
+            "gmail poll: %d inbox + %d known non-inbox thread(s)",
+            len(inbox_thread_ids), len(known_thread_ids),
+        )
         combined = EntityBatch()
         for tid in thread_ids:
             try:
@@ -380,3 +395,15 @@ async def _list_inbox_threads_since(service: Any, loop: Any, after_date: str) ->
             break
 
     return combined
+
+
+async def _get_known_thread_ids(thread_ids: set[str]) -> set[str]:
+    """Return the subset of thread_ids already stored as gmail Thread entities."""
+    from agentgraph.core.context import get_backend
+
+    backend = get_backend()
+    known: set[str] = set()
+    for tid in thread_ids:
+        if await backend.get_entity_by_platform("gmail", tid) is not None:
+            known.add(tid)
+    return known

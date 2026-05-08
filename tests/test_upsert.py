@@ -44,7 +44,7 @@ def test_fetch_policy_stale() -> None:
 # Integration tests
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()
 async def pg_backend():
     settings = get_settings()
     backend = PostgresBackend(settings.database_url)

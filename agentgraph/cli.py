@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typer
+
 from agentgraph.connectors.base import BaseConnector
 
 app = typer.Typer(
@@ -360,7 +361,6 @@ def use_postgres(
     Writes docker-compose.yml to the current directory, saves AGENTGRAPH_BACKEND=postgres
     and AGENTGRAPH_DATABASE_URL to ~/.agentgraph/.env, then prints next steps.
     """
-    import sys
 
     # Write docker-compose
     if compose_path == "-":

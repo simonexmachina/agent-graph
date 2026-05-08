@@ -32,14 +32,13 @@ async def evaluate_once() -> None:
     for row in rows:
         ref = classify_url(row["url"])
         if ref is not None:
+            import contextlib
             import json as _json
 
             meta: dict[str, str] | None = None
             if row["meta"]:
-                try:
+                with contextlib.suppress(Exception):
                     meta = _json.loads(row["meta"])
-                except Exception:
-                    pass
             logger.info(
                 "Dwell detected: %s %s/%s (tab %s)",
                 ref.source,
