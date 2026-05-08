@@ -33,7 +33,6 @@ async def _dispatch(
     meta: dict[str, str] | None = None,
 ) -> None:
     from agentgraph.connectors.registry import get_connector
-    from agentgraph.graph.upsert import upsert_batch
 
     connector = get_connector(source)
     if connector is None:
@@ -44,8 +43,6 @@ async def _dispatch(
         batch = await connector.fetch(
             resource_type=resource_type, resource_id=resource_id, meta=meta
         )
-        if batch.entities or batch.persons or batch.edges:
-            await upsert_batch(batch)
         logger.info(
             "Fetch complete %s/%s/%s — %d entities, %d persons, %d edges",
             source, resource_type, resource_id,
