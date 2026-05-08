@@ -194,8 +194,12 @@ Hybrid search via Reciprocal Rank Fusion (RRF) over:
 | Discord | Channel, Message | Browser dwell + 5 min polling |
 | Google Docs | Document | Browser dwell + 30 min polling |
 | Google Sheets | Spreadsheet | Browser dwell + 30 min polling |
-| Google Drive | Folder, Document | Browser dwell |
-| Gmail | Thread | Background polling (inbox) |
+| Google Drive | Folder, Document | Browser dwell + 10 min polling |
+| Gmail | Thread | Browser dwell + 5 min polling (inbox) |
+
+**Gmail:** browser dwell indexes any thread you open — inbox, archive, sent, search results, or any label. The background poll additionally sweeps new inbox arrivals so threads arrive in the graph even without browser activity.
+
+**Google Drive:** polling uses the Drive Changes API to re-fetch any document or spreadsheet already in the graph whenever it is modified. Folders and new files are added via browser dwell.
 
 ### Fetch policy
 

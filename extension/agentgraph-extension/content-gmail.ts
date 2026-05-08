@@ -39,7 +39,6 @@ function reportIfChanged(): void {
   if (!isThreadUrl()) return;
 
   const messageId = extractMessageId();
-  console.log({messageId})
   if (!messageId) return;
 
   const url = location.href;
