@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 _scheduler: AsyncIOScheduler | None = None
 
 
+def viewer_url(host: str, port: int) -> str:
+    browser_host = "127.0.0.1" if host in {"", "0.0.0.0", "::"} else host
+    if ":" in browser_host and not browser_host.startswith("["):
+        browser_host = f"[{browser_host}]"
+    return f"http://{browser_host}:{port}/viewer"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global _scheduler
@@ -40,7 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     configure_logging(settings.log_level)
 
-    backend_class = get_backend_class(settings.backend)
+    backend_class: Any = get_backend_class(settings.backend)
     if settings.backend == "postgres":
         backend = backend_class(settings.database_url)
     elif settings.backend == "sqlite":
@@ -59,6 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _scheduler.start()
 
     logger.info("AgentGraph server started (backend=%s)", settings.backend)
+    logger.info("Web viewer: %s", viewer_url(settings.server_host, settings.server_port))
     yield
 
     if _scheduler:
