@@ -2,6 +2,8 @@
 
 Use `agent-browser` to extract Slack credentials from an open browser session and save them non-interactively.
 
+If Slack login uses Google SSO, prefer connecting to the user's real Chrome session. Google may block sign-in from agent-browser's bundled "Google Chrome for Testing" with "This browser or app may not be secure."
+
 ## Prerequisites
 
 Load the agent-browser skill before running any commands:
@@ -39,7 +41,16 @@ agent-browser wait 3000
 If the user needs to log in interactively, use a headed browser at the same URL and wait for them to finish:
 
 ```bash
-agent-browser --headed open https://app.slack.com/workspace-signin
+agent-browser --profile Default --headed open https://app.slack.com/workspace-signin
+agent-browser wait 3000
+```
+
+If Google SSO blocks that browser, ask the user to open regular Chrome with remote debugging enabled, log in there, then connect to it:
+
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+agent-browser connect 9222
+agent-browser open https://app.slack.com/workspace-signin
 agent-browser wait 3000
 ```
 
@@ -101,6 +112,7 @@ Expect `"auth_status": "ok"` with a user ID in `auth_detail`.
 | Symptom | Fix |
 |---------|-----|
 | `connect 9222` fails | Chrome isn't running with CDP — use `agent-browser open https://app.slack.com/workspace-signin` instead |
+| Google says "This browser or app may not be secure" | The browser is likely Google Chrome for Testing. Use regular Chrome with `--remote-debugging-port=9222`, then `agent-browser connect 9222`. |
 | `localConfig_v2` eval returns null | User isn't in a workspace — take a snapshot and navigate into one first |
 | Cookie named `d` not found | Look for `d-s` — some Slack regions use a different cookie name |
 | `auth.test` returns `invalid_auth` | The d cookie is expired — re-extract from a fresh browser session |
