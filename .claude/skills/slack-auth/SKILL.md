@@ -1,0 +1,107 @@
+# /slack-auth — Slack Browser Auth Skill
+
+Use `agent-browser` to extract Slack credentials from an open browser session and save them non-interactively.
+
+## Prerequisites
+
+Load the agent-browser skill before running any commands:
+
+```bash
+agent-browser skills get agent-browser
+```
+
+## Steps
+
+### 1. Verify current auth status
+
+```bash
+agentgraph connectors --json | jq '.[] | select(.source == "slack") | {auth_status, auth_detail}'
+```
+
+If `auth_status` is `"ok"`, credentials are already valid — confirm with the user before overwriting.
+
+### 2. Connect to Slack
+
+Reuse the user's existing Chrome session (fastest — preserves their logged-in state):
+
+```bash
+agent-browser connect 9222
+agent-browser get url
+```
+
+If that fails (Chrome not running or no CDP port), open Slack's workspace sign-in flow:
+
+```bash
+agent-browser open https://app.slack.com/workspace-signin
+agent-browser wait 3000
+```
+
+If the user needs to log in interactively, use a headed browser at the same URL and wait for them to finish:
+
+```bash
+agent-browser --headed open https://app.slack.com/workspace-signin
+agent-browser wait 3000
+```
+
+Confirm you're on a Slack workspace page (not the login screen) with a snapshot:
+
+```bash
+agent-browser snapshot -i
+```
+
+### 3. Extract the xoxc token
+
+Slack stores auth tokens in `localStorage`. Run:
+
+```bash
+agent-browser eval "const c = JSON.parse(localStorage.getItem('localConfig_v2')); const t = Object.keys(c.teams)[0]; c.teams[t].token"
+```
+
+The result should be a string starting with `xoxc-`. If null or undefined, the user may need to navigate into a workspace first:
+
+```bash
+agent-browser snapshot -i   # find the workspace link
+agent-browser click @e<n>   # click into the workspace
+agent-browser wait 2000
+# then retry the eval above
+```
+
+### 4. Extract the d cookie
+
+```bash
+agent-browser cookies get
+```
+
+Find the cookie named `d` in the output (domain: `.slack.com`). Copy its `value`.
+
+If multiple Slack sessions are visible, filter:
+
+```bash
+agent-browser cookies get | grep '"name": "d"' -A 2
+```
+
+### 5. Save the credentials
+
+```bash
+agentgraph auth slack --xoxc-token "<TOKEN>" --d-cookie "<D_COOKIE_VALUE>"
+```
+
+The CLI verifies against `slack.com/api/auth.test` and prints the authenticated user ID.
+
+### 6. Verify
+
+```bash
+agentgraph connectors --json | jq '.[] | select(.source == "slack")'
+```
+
+Expect `"auth_status": "ok"` with a user ID in `auth_detail`.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `connect 9222` fails | Chrome isn't running with CDP — use `agent-browser open https://app.slack.com/workspace-signin` instead |
+| `localConfig_v2` eval returns null | User isn't in a workspace — take a snapshot and navigate into one first |
+| Cookie named `d` not found | Look for `d-s` — some Slack regions use a different cookie name |
+| `auth.test` returns `invalid_auth` | The d cookie is expired — re-extract from a fresh browser session |
+| Multiple workspaces in token | `Object.keys(c.teams)` lists all team IDs — pick the one the user wants |
