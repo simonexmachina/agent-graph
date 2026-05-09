@@ -32,11 +32,13 @@ agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive —
 # Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
 agentgraph ingest <source> [--json]   # e.g. gmail — fetches all labels, not just inbox
 
+# List installed connectors and their auth status
+agentgraph connectors [--json] # auth_status/auth_detail, url_patterns, polls; run first to check auth
+
 # Authenticate connectors
-agentgraph auth google   # Google OAuth2 (Docs, Sheets, Drive, Gmail)
+agentgraph auth google        # Google OAuth2; use when Google auth_status is missing/invalid
 agentgraph auth slack         # Slack cookie credentials
 agentgraph auth discord       # Discord bot token
-agentgraph auth microsoft     # Microsoft OAuth2 (SharePoint, OneDrive) — or: az login + AGENTGRAPH_MICROSOFT_AUTH_PROVIDER=az
 
 # Server
 agentgraph serve [--reload]
@@ -69,5 +71,7 @@ An entity is a **stub** when it has no title and no content — it was reference
 ## Workflow
 
 When the user asks about graph data:
-1. Run the appropriate `agentgraph` command with `--json` to get structured output
-2. Use `edges` or `traverse` to follow relationships when needed
+1. Run `agentgraph connectors --json` to verify the relevant connector is installed and authenticated
+2. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
+3. Run the appropriate `agentgraph` command with `--json` to get structured output
+4. Use `edges` or `traverse` to follow relationships when needed

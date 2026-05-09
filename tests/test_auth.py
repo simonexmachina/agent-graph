@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+from typing import Any
+
+import pytest
+from agentgraph_connector_discord.auth import DiscordCredentials, load_discord_creds
+from agentgraph_connector_slack.auth import SlackCredentials, load_slack_creds
 
 from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
-from agentgraph_connector_slack.auth import SlackCredentials, load_slack_creds
-from agentgraph_connector_discord.auth import DiscordCredentials, load_discord_creds
+from agentgraph.auth.google_provider import verify_google_auth
 
 
 @pytest.fixture
@@ -68,6 +71,89 @@ def test_save_model_instance(tmp_creds: Path) -> None:
     assert data is not None
     assert data["client_id"] == "id"
     assert data["user_email"] == "user@example.com"
+
+
+# ---------------------------------------------------------------------------
+# Google auth verification
+# ---------------------------------------------------------------------------
+
+class _FakeGoogleAuthCredentials:
+    def __init__(self, *, valid: bool) -> None:
+        self.valid = valid
+
+
+def test_verify_google_auth_missing_returns_missing(tmp_creds: Path) -> None:
+    assert verify_google_auth() == ("missing", None)
+
+
+def test_verify_google_auth_missing_refresh_token_returns_invalid(tmp_creds: Path) -> None:
+    save_platform(
+        "google",
+        GoogleCredentials(
+            client_id="id",
+            client_secret="secret",
+            access_token="tok",
+            refresh_token="",
+            user_email="user@example.com",
+        ),
+    )
+
+    status, detail = verify_google_auth()
+
+    assert status == "invalid"
+    assert detail is not None
+    assert "missing Google refresh token" in detail
+    assert "agentgraph auth google" in detail
+
+
+def test_verify_google_auth_refresh_failure_returns_invalid(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_platform(
+        "google",
+        GoogleCredentials(
+            client_id="id",
+            client_secret="secret",
+            access_token="tok",
+            refresh_token="ref",
+            user_email="user@example.com",
+        ),
+    )
+
+    def _raise_refresh_error() -> Any:
+        raise RuntimeError("nope")
+
+    monkeypatch.setattr("agentgraph.auth.google_provider.get_credentials", _raise_refresh_error)
+
+    status, detail = verify_google_auth()
+
+    assert status == "invalid"
+    assert detail is not None
+    assert "Google refresh token was rejected (RuntimeError)" in detail
+    assert "agentgraph auth google" in detail
+
+
+def test_verify_google_auth_valid_returns_email(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_platform(
+        "google",
+        GoogleCredentials(
+            client_id="id",
+            client_secret="secret",
+            access_token="tok",
+            refresh_token="ref",
+            user_email="user@example.com",
+        ),
+    )
+    monkeypatch.setattr(
+        "agentgraph.auth.google_provider.get_credentials",
+        lambda: _FakeGoogleAuthCredentials(valid=True),
+    )
+
+    assert verify_google_auth() == ("ok", "user@example.com")
 
 
 # ---------------------------------------------------------------------------

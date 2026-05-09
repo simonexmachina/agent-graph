@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Callable
+from importlib import import_module
+from pathlib import Path
+from types import ModuleType
+from typing import Any, cast
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
+from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
 from agentgraph.cli import app
 
 runner = CliRunner()
+
+
+@pytest.fixture
+def tmp_creds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    creds_file = tmp_path / "credentials.json"
+    monkeypatch.setattr("agentgraph.auth.credentials.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.auth.credentials.CREDENTIALS_FILE", creds_file)
+    return creds_file
 
 
 def test_help() -> None:
@@ -41,6 +57,73 @@ class _FakeConnector:
         return None
 
 
+class _FakeGoogleConnector:
+    source = "gdocs"
+    auth_label = "google"
+    auth_description = "Google"
+    onboard_prompt = "Set up Google?"
+
+    @classmethod
+    def run_auth_flow(cls) -> None:
+        google_auth = cast(Any, import_module("agentgraph_connector_google.auth"))
+        run_oauth_flow = cast(Callable[[], None], google_auth.run_oauth_flow)
+        run_oauth_flow()
+
+
+class _FakeGoogleToken:
+    token = "new-access-token"
+    refresh_token = "new-refresh-token"
+    expiry = None
+
+
+class _FakeGoogleFlow:
+    captured_client_config: dict[str, Any] | None = None
+
+    def __init__(self) -> None:
+        self.credentials = _FakeGoogleToken()
+
+    @classmethod
+    def from_client_config(
+        cls,
+        client_config: dict[str, Any],
+        *,
+        scopes: list[str],
+        redirect_uri: str,
+    ) -> _FakeGoogleFlow:
+        cls.captured_client_config = client_config
+        return cls()
+
+    def authorization_url(self, *, access_type: str, prompt: str) -> tuple[str, None]:
+        return ("https://accounts.google.test/auth", None)
+
+    def fetch_token(self, *, code: str) -> None:
+        return None
+
+
+class _FakeUserInfoResponse:
+    ok = True
+
+    def json(self) -> dict[str, str]:
+        return {"email": "new@example.com", "name": "New User"}
+
+
+def _fake_requests_get(
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout: int,
+) -> _FakeUserInfoResponse:
+    return _FakeUserInfoResponse()
+
+
+def _fake_wait_for_callback(port: int) -> str:
+    return "auth-code"
+
+
+def _fake_webbrowser_open(url: str) -> bool:
+    return True
+
+
 def test_auth_unknown_platform_exits_nonzero() -> None:
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]):
@@ -56,6 +139,87 @@ def test_auth_dispatches_to_connector() -> None:
         result = runner.invoke(app, ["auth", "slack"])
     assert result.exit_code == 0
     assert _FakeConnector.auth_called
+
+
+def test_auth_google_invalid_existing_credentials_reuses_client_config(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_platform(
+        "google",
+        GoogleCredentials(
+            client_id="stored-client-id",
+            client_secret="stored-client-secret",
+            access_token="old-access-token",
+            refresh_token="old-refresh-token",
+            user_email="old@example.com",
+        ),
+    )
+    _FakeGoogleFlow.captured_client_config = None
+
+    flow_module = ModuleType("google_auth_oauthlib.flow")
+    flow_module.__dict__["Flow"] = _FakeGoogleFlow
+    package_module = ModuleType("google_auth_oauthlib")
+    monkeypatch.setitem(sys.modules, "google_auth_oauthlib", package_module)
+    monkeypatch.setitem(sys.modules, "google_auth_oauthlib.flow", flow_module)
+
+    requests_module = ModuleType("requests")
+    requests_module.__dict__["get"] = _fake_requests_get
+    monkeypatch.setitem(sys.modules, "requests", requests_module)
+
+    monkeypatch.setattr(
+        "agentgraph.auth.google_provider.verify_google_auth",
+        lambda: ("invalid", "Google refresh token was rejected (RefreshError) - run: agentgraph auth google"),
+    )
+    monkeypatch.setattr("agentgraph_connector_google.auth._find_free_port", lambda: 9999)
+    monkeypatch.setattr("agentgraph_connector_google.auth._wait_for_callback", _fake_wait_for_callback)
+    monkeypatch.setattr("webbrowser.open", _fake_webbrowser_open)
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
+        result = runner.invoke(app, ["auth", "google"])
+
+    assert result.exit_code == 0
+    assert "Google credentials need re-authentication" in result.output
+    assert "saved OAuth client ID and secret" in result.output
+    assert "Google OAuth client ID" not in result.output
+    assert _FakeGoogleFlow.captured_client_config is not None
+    installed = _FakeGoogleFlow.captured_client_config["installed"]
+    assert installed["client_id"] == "stored-client-id"
+    assert installed["client_secret"] == "stored-client-secret"
+
+    saved = load_platform("google")
+    assert saved is not None
+    assert saved["access_token"] == "new-access-token"
+    assert saved["refresh_token"] == "new-refresh-token"
+
+
+def test_auth_google_valid_credentials_can_skip_reauth(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_platform(
+        "google",
+        GoogleCredentials(
+            client_id="stored-client-id",
+            client_secret="stored-client-secret",
+            access_token="access-token",
+            refresh_token="refresh-token",
+            user_email="user@example.com",
+        ),
+    )
+    monkeypatch.setattr(
+        "agentgraph.auth.google_provider.verify_google_auth",
+        lambda: ("ok", "user@example.com"),
+    )
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
+        result = runner.invoke(app, ["auth", "google"], input="n\n")
+
+    assert result.exit_code == 0
+    assert "Google is already authenticated as user@example.com" in result.output
+    assert "Keeping existing credentials" in result.output
 
 
 def test_search_requires_query() -> None:

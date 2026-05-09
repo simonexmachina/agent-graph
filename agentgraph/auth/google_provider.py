@@ -20,6 +20,12 @@ GOOGLE_SCOPES = [
     "openid",
 ]
 
+GOOGLE_REAUTH_HINT = "run: agentgraph auth google"
+
+
+def _invalid_auth_detail(reason: str) -> str:
+    return f"{reason} - {GOOGLE_REAUTH_HINT} to re-authorize Google"
+
 
 def get_credentials() -> Any:
     """Return a valid google.auth.credentials.Credentials instance."""
@@ -66,3 +72,37 @@ def get_user_email() -> str | None:
 
     data = load_platform("google")
     return data.get("user_email") if data else None
+
+
+def verify_google_auth() -> tuple[str, str | None]:
+    """Verify Google credentials by exercising the refresh token.
+
+    Returns a (status, detail) tuple where status is "ok", "missing", or
+    "invalid". On "ok", detail is the authenticated user_email; on
+    "invalid", detail is a short error message.
+    """
+    from pydantic import ValidationError
+
+    from agentgraph.auth.credentials import GoogleCredentials, load_platform
+
+    data = load_platform("google")
+    if data is None:
+        return ("missing", None)
+
+    try:
+        stored = GoogleCredentials(**data)
+    except ValidationError:
+        return ("invalid", _invalid_auth_detail("stored Google credentials are unreadable"))
+
+    if not stored.refresh_token:
+        return ("invalid", _invalid_auth_detail("missing Google refresh token"))
+
+    try:
+        creds = get_credentials()
+    except Exception as exc:
+        return ("invalid", _invalid_auth_detail(f"Google refresh token was rejected ({type(exc).__name__})"))
+
+    if not creds.valid:
+        return ("invalid", _invalid_auth_detail("Google token is expired"))
+
+    return ("ok", data.get("user_email") or "authenticated")

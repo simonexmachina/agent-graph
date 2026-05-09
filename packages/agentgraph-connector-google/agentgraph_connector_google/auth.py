@@ -25,33 +25,37 @@ def _find_free_port() -> int:
 def run_oauth_flow() -> None:
     """Interactive OAuth2 browser flow. Stores credentials on completion."""
     from agentgraph.auth.credentials import load_platform
+    from agentgraph.auth.google_provider import verify_google_auth
 
     existing_data = load_platform("google")
     existing = GoogleCredentials(**existing_data) if existing_data else None
 
     if existing:
+        # Probe the saved refresh token before forcing the user back through
+        # the browser. If it still works, offer to skip.
+        status, detail = verify_google_auth()
+        if status == "ok":
+            typer.echo(f"\nGoogle is already authenticated as {detail}.")
+            if not typer.confirm(
+                "Re-authenticate anyway (e.g. to switch accounts or grant new scopes)?",
+                default=False,
+            ):
+                typer.echo("Keeping existing credentials.")
+                return
+        else:
+            typer.echo(f"\nGoogle credentials need re-authentication: {detail or status}.")
+            typer.echo("Re-opening browser consent using the saved OAuth client ID and secret.")
+
         typer.echo(f"Re-authenticating as {existing.user_email or 'existing account'} with updated scopes.")
-        client_id = existing.client_id
-        client_secret = existing.client_secret
+        client_id = existing.client_id or typer.prompt("Google OAuth client ID")
+        client_secret = existing.client_secret or typer.prompt("Google OAuth client secret", hide_input=True)
     else:
         typer.echo(
+            "\nCreate (or reuse) a Desktop OAuth client:"
+            "\n  https://console.cloud.google.com/apis/credentials"
+            "\nFirst-time setup also needs the Docs, Sheets, Drive, and Gmail APIs enabled,"
+            "\nand your email added as a Test user under OAuth consent screen → Audience."
             "\n"
-            "To get your Google OAuth credentials:\n"
-            "\n"
-            "  1. Go to https://console.cloud.google.com/\n"
-            "  2. Create a project (or select an existing one)\n"
-            "  3. Enable the APIs:\n"
-            "       APIs & Services → Enable APIs → search for and enable:\n"
-            "         • Google Docs API\n"
-            "         • Google Sheets API\n"
-            "         • Google Drive API\n"
-            "         • Gmail API\n"
-            "  4. Create OAuth credentials:\n"
-            "       APIs & Services → Credentials → Create Credentials\n"
-            "       → OAuth client ID → Application type: Desktop app\n"
-            "  5. Copy the Client ID and Client Secret from the dialog\n"
-            "  6. Under OAuth consent screen → Audience, add your email\n"
-            "     as a Test user (required while the app is in testing mode)\n"
         )
         client_id = typer.prompt("Google OAuth client ID")
         client_secret = typer.prompt("Google OAuth client secret", hide_input=True)
