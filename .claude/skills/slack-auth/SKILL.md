@@ -62,13 +62,14 @@ agent-browser snapshot -i
 
 ### 3. Extract the xoxc token
 
-Slack stores auth tokens in `localStorage`. Run:
+Slack stores auth tokens in `localStorage`. Prefer the team ID from the current `/client/T...` URL so this works across workspaces:
 
 ```bash
-agent-browser eval "const c = JSON.parse(localStorage.getItem('localConfig_v2')); const t = Object.keys(c.teams)[0]; c.teams[t].token"
+TEAM_ID=$(agent-browser get url | sed -n 's#.*app\.slack\.com/client/\(T[A-Z0-9]*\).*#\1#p')
+TOKEN=$(agent-browser eval "(() => { const cfg = JSON.parse(localStorage.getItem('localConfig_v2')); const team = '$TEAM_ID' || Object.keys(cfg.teams || {})[0]; return cfg.teams[team].token; })()" | jq -r .)
 ```
 
-The result should be a string starting with `xoxc-`. If null or undefined, the user may need to navigate into a workspace first:
+The decoded token should start with `xoxc-`. If `TEAM_ID` is empty, navigate into a Slack workspace first:
 
 ```bash
 agent-browser snapshot -i   # find the workspace link
@@ -79,22 +80,25 @@ agent-browser wait 2000
 
 ### 4. Extract the d cookie
 
+Use the actual `d` cookie. Do not use `d-s` for the CLI's `--d-cookie` value; `agentgraph auth slack` sends it as `d=<value>`.
+
 ```bash
-agent-browser cookies get
+COOKIE=$(agent-browser --json cookies get | jq -r '.data.cookies[] | select(.name == "d" and (.domain | contains("slack"))) | .value' | head -n 1)
 ```
 
-Find the cookie named `d` in the output (domain: `.slack.com`). Copy its `value`.
-
-If multiple Slack sessions are visible, filter:
+If you need to inspect cookie availability without printing values:
 
 ```bash
-agent-browser cookies get | grep '"name": "d"' -A 2
+agent-browser --json cookies get | jq '[.data.cookies[] | select(.domain | contains("slack")) | {name, domain}]'
 ```
 
 ### 5. Save the credentials
 
 ```bash
-agentgraph auth slack --xoxc-token "<TOKEN>" --d-cookie "<D_COOKIE_VALUE>"
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then echo "missing token" >&2; exit 1; fi
+if [ -z "$COOKIE" ] || [ "$COOKIE" = "null" ]; then echo "missing d cookie" >&2; exit 1; fi
+case "$TOKEN" in xoxc-*) ;; *) echo "token did not decode to xoxc prefix" >&2; exit 1;; esac
+agentgraph auth slack --xoxc-token "$TOKEN" --d-cookie "$COOKIE"
 ```
 
 The CLI verifies against `slack.com/api/auth.test` and prints the authenticated user ID.
@@ -114,6 +118,6 @@ Expect `"auth_status": "ok"` with a user ID in `auth_detail`.
 | `connect 9222` fails | Chrome isn't running with CDP — use `agent-browser open https://app.slack.com/workspace-signin` instead |
 | Google says "This browser or app may not be secure" | The browser is likely Google Chrome for Testing. Use regular Chrome with `--remote-debugging-port=9222`, then `agent-browser connect 9222`. |
 | `localConfig_v2` eval returns null | User isn't in a workspace — take a snapshot and navigate into one first |
-| Cookie named `d` not found | Look for `d-s` — some Slack regions use a different cookie name |
+| Cookie named `d` not found | Confirm the user is logged into `app.slack.com`; do not substitute `d-s` unless the CLI is changed to send it as `d-s=<value>`. |
 | `auth.test` returns `invalid_auth` | The d cookie is expired — re-extract from a fresh browser session |
-| Multiple workspaces in token | `Object.keys(c.teams)` lists all team IDs — pick the one the user wants |
+| Multiple workspaces in token | Use the team ID from the current `/client/T...` URL; `Object.keys(cfg.teams)` is only a fallback |
