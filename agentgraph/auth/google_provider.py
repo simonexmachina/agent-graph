@@ -3,7 +3,7 @@
 """Google OAuth2 authentication provider.
 
 Credentials are obtained via the OAuth2 browser flow (agentgraph auth google)
-and stored in ~/.agentgraph/credentials.json under the 'google' key.
+and stored in the AgentGraph config directory under the 'google' key.
 """
 
 from __future__ import annotations

@@ -80,7 +80,9 @@ def run_cookie_flow(xoxc_token: str | None = None, d_cookie: str | None = None) 
 
     creds = SlackCredentials(xoxc_token=xoxc_token_val, d_cookie=d_cookie_val, user_id=user_id)
     save_platform("slack", creds)
-    msg = "\nSlack credentials saved to ~/.agentgraph/credentials.json"
+    from agentgraph.config import CREDENTIALS_FILE
+
+    msg = f"\nSlack credentials saved to {CREDENTIALS_FILE}"
     if user_id:
         msg += f" (authenticated as {user_id})"
     typer.echo(msg)

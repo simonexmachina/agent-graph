@@ -122,7 +122,9 @@ def run_oauth_flow() -> None:
         display_name=display_name,
     )
     save_platform("google", creds)
-    msg = "Google credentials saved to ~/.agentgraph/credentials.json"
+    from agentgraph.config import CREDENTIALS_FILE
+
+    msg = f"Google credentials saved to {CREDENTIALS_FILE}"
     if user_email:
         msg += f" (authenticated as {user_email})"
     typer.echo(msg)

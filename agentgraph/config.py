@@ -1,23 +1,31 @@
-"""Application configuration loaded from environment variables and ~/.agentgraph/config.toml."""
+"""Application configuration loaded from environment variables and the config directory."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-CONFIG_DIR = Path.home() / ".agentgraph"
+
+def _default_config_dir() -> Path:
+    raw = os.environ.get("AGENTGRAPH_CONFIG_DIR")
+    return Path(raw).expanduser() if raw else Path.home() / ".agentgraph"
+
+
+CONFIG_DIR = _default_config_dir()
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
+DEFAULT_SQLITE_PATH = str(CONFIG_DIR / "agentgraph.db")
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AGENTGRAPH_",
-        # User-level config (~/.agentgraph/.env) is loaded first;
+        # User-level config is loaded first;
         # project-local .env takes precedence.
-        env_file=[str(Path.home() / ".agentgraph" / ".env"), ".env"],
+        env_file=[str(CONFIG_DIR / ".env"), ".env"],
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -28,7 +36,7 @@ class Settings(BaseSettings):
         description="Persistence backend: 'sqlite' | 'postgres' | any installed plugin",
     )
     backend_sqlite_path: str = Field(
-        default="~/.agentgraph/agentgraph.db",
+        default=DEFAULT_SQLITE_PATH,
         description="Path to SQLite database file (only used when backend='sqlite')",
     )
     backend_sqlite_vector_mode: str = Field(

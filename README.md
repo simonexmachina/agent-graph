@@ -149,12 +149,13 @@ Available tools: `search_entities`, `get_entity`, `get_edges`, `traverse_graph`,
 
 ## Configuration
 
-Settings are read from environment variables (prefixed `AGENTGRAPH_`) or from `~/.agentgraph/.env`.
+Settings are read from environment variables (prefixed `AGENTGRAPH_`) or from `.env` in the config directory. The config directory defaults to `~/.agentgraph` and can be changed with `AGENTGRAPH_CONFIG_DIR`.
 
 | Variable | Default | Description |
 |---|---|---|
+| `AGENTGRAPH_CONFIG_DIR` | `~/.agentgraph` | Directory for AgentGraph config, credentials, and the default SQLite database |
 | `AGENTGRAPH_BACKEND` | `sqlite` | Persistence backend: `sqlite` or `postgres` |
-| `AGENTGRAPH_BACKEND_SQLITE_PATH` | `~/.agentgraph/agentgraph.db` | SQLite database path |
+| `AGENTGRAPH_BACKEND_SQLITE_PATH` | `$AGENTGRAPH_CONFIG_DIR/agentgraph.db` | SQLite database path |
 | `AGENTGRAPH_DATABASE_URL` | `postgresql://agentgraph:agentgraph@localhost:5432/agentgraph` | PostgreSQL connection URL (only used when backend=`postgres`) |
 | `AGENTGRAPH_SERVER_HOST` | `127.0.0.1` | Server bind address |
 | `AGENTGRAPH_SERVER_PORT` | `8765` | Server port |

@@ -118,8 +118,8 @@
   <h2>Data collection and storage</h2>
   <p>AgentGraph does not operate any servers or cloud infrastructure. When you run AgentGraph:</p>
   <ul>
-    <li>All indexed content is stored in a SQLite database on your local machine (by default at <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">~/.agentgraph/agentgraph.db</code>).</li>
-    <li>Credentials (OAuth tokens, API keys) are stored in <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">~/.agentgraph/credentials.json</code> on your local machine.</li>
+    <li>All indexed content is stored in a SQLite database on your local machine (by default at <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">~/.agentgraph/agentgraph.db</code>, or under <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">AGENTGRAPH_CONFIG_DIR</code> if configured).</li>
+    <li>Credentials (OAuth tokens, API keys) are stored in <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">credentials.json</code> in the AgentGraph config directory on your local machine.</li>
     <li>No data is transmitted to the developers of AgentGraph or any third party controlled by AgentGraph.</li>
   </ul>
 

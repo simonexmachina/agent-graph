@@ -218,7 +218,7 @@ def onboard() -> None:
 
 
 def _save_user_config(key: str, value: str) -> None:
-    """Persist a setting to ~/.agentgraph/.env."""
+    """Persist a setting to the AgentGraph config directory .env file."""
     from agentgraph.config import CONFIG_DIR
 
     env_file = CONFIG_DIR / ".env"
@@ -461,7 +461,7 @@ def use_postgres(
     """Switch to PostgreSQL backend and generate a docker-compose.yml.
 
     Writes docker-compose.yml to the current directory, saves AGENTGRAPH_BACKEND=postgres
-    and AGENTGRAPH_DATABASE_URL to ~/.agentgraph/.env, then prints next steps.
+    and AGENTGRAPH_DATABASE_URL to the AgentGraph config directory .env, then prints next steps.
     """
 
     # Write docker-compose
@@ -479,7 +479,9 @@ def use_postgres(
     # Persist config
     _save_user_config("AGENTGRAPH_BACKEND", "postgres")
     _save_user_config("AGENTGRAPH_DATABASE_URL", database_url)
-    typer.echo(f"  Config saved to ~/.agentgraph/.env (backend=postgres, url={database_url})")
+    from agentgraph.config import CONFIG_DIR
+
+    typer.echo(f"  Config saved to {CONFIG_DIR / '.env'} (backend=postgres, url={database_url})")
 
     if compose_path != "-":
         typer.echo("\nNext steps:")

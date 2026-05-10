@@ -1,4 +1,4 @@
-"""Credential storage at ~/.agentgraph/credentials.json.
+"""Credential storage in the AgentGraph config directory.
 
 Each platform stores its credentials under its own top-level key so
 connectors remain fully independent. Use load_platform / save_platform.

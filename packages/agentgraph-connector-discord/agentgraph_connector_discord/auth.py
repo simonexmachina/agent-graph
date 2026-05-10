@@ -120,7 +120,9 @@ def run_token_flow() -> None:
         typer.echo("Warning: token format looks unexpected — double-check the value.")
 
     username = _save_token(bot_token)
-    msg = "\nDiscord credentials saved to ~/.agentgraph/credentials.json"
+    from agentgraph.config import CREDENTIALS_FILE
+
+    msg = f"\nDiscord credentials saved to {CREDENTIALS_FILE}"
     if username:
         msg += f" (bot: {username})"
     else:
