@@ -58,7 +58,9 @@ agentgraph auth slack         # Slack cookie credentials
 agentgraph auth discord       # Discord bot token
 ```
 
-**Slack** — cookie-based auth using your browser session. To find the credentials:
+**Slack** — cookie-based auth using your browser session. If you are working with an agent that has the `/slack-auth` skill, ask it to run that skill; it extracts the browser token/cookie and saves them for AgentGraph.
+
+Manual fallback:
 1. Open Slack in Chrome → DevTools → Network tab
 2. Find any request to `slack.com/api/`
 3. **Payload** → Form Data → copy the `token` field (starts with `xoxc-`)
