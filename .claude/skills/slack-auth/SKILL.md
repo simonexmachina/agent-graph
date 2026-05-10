@@ -2,8 +2,6 @@
 
 Use `agent-browser` to extract Slack credentials from an open browser session and save them non-interactively.
 
-If Slack login uses Google SSO, prefer connecting to the user's real Chrome session. Google may block sign-in from agent-browser's bundled "Google Chrome for Testing" with "This browser or app may not be secure."
-
 ## Prerequisites
 
 Load the agent-browser skill before running any commands:
@@ -24,41 +22,27 @@ If `auth_status` is `"ok"`, credentials are already valid — confirm with the u
 
 ### 2. Connect to Slack
 
-Reuse the user's existing Chrome session (fastest — preserves their logged-in state):
+First ask the user if they use Google to login to Slack, because Google may block sign-in from agent-browser's bundled "Google Chrome for Testing" with "This browser or app may not be secure." If they use Google to login, open regular Chrome with remote debugging enabled:
 
 ```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir=/private/tmp/agentgraph-slack-auth-chrome
 agent-browser connect 9222
-agent-browser get url
 ```
 
-If that fails (Chrome not running or no CDP port), open Slack's workspace sign-in flow:
+Otherwise, use agent-browser to open Slack's workspace sign-in flow:
 
 ```bash
-agent-browser open https://app.slack.com/workspace-signin
-agent-browser wait 3000
-```
-
-If the user needs to log in interactively, use a headed browser at the same URL and wait for them to finish:
-
-```bash
-agent-browser --profile Default --headed open https://app.slack.com/workspace-signin
-agent-browser wait 3000
-```
-
-If Google SSO blocks that browser, ask the user to open regular Chrome with remote debugging enabled, log in there, then connect to it:
-
-```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
-agent-browser connect 9222
-agent-browser open https://app.slack.com/workspace-signin
-agent-browser wait 3000
+agent-browser --headed open https://app.slack.com/workspace-signin
 ```
 
 Confirm you're on a Slack workspace page (not the login screen) with a snapshot:
 
 ```bash
+agent-browser wait 3000
 agent-browser snapshot -i
 ```
+
+Then ask the user to login to Slack and wait to proceed.
 
 ### 3. Extract the xoxc token
 
