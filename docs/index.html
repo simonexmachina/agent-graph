@@ -91,23 +91,6 @@
     .btn-primary { background: var(--accent); color: #0f172a; }
     .btn-ghost   { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 
-    /* ── Diagram ── */
-    .diagram {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px 32px;
-      font-family: "SF Mono", "Fira Code", monospace;
-      font-size: 13px;
-      color: var(--muted);
-      line-height: 1.8;
-      margin: 48px 0;
-      overflow-x: auto;
-      white-space: pre;
-    }
-    .diagram .hl { color: var(--accent); }
-    .diagram .hl2 { color: var(--green); }
-
     /* ── Features ── */
     .section-label {
       font-size: 12px;
@@ -264,15 +247,6 @@
       </a>
     </div>
   </section>
-
-  <!-- ── Diagram ── -->
-  <div class="diagram"><span class="hl">Browser extension</span> <span class="muted">(dwell detection)</span>
-             ↓  POST /fetch-url
-   Connector <span class="muted">(Slack / Discord / Google / Gmail)</span>
-             ↓
-   <span class="hl2">SQLite knowledge graph</span> <span class="muted">(local, ~/.agentgraph/)</span>
-          ↙          ↘
-CLI / Web viewer     <span class="hl">MCP server</span> → AI agents</div>
 
   <!-- ── Features ── -->
   <section>
