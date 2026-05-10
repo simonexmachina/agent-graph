@@ -102,7 +102,16 @@ async def cli_browse(
     depth: int = Query(default=2, ge=1, le=4),
     limit: int = Query(default=50, ge=1, le=1000),
 ) -> dict[str, Any]:
-    """Return graph nodes and edges for the viewer. All active filters are intersected."""
+    """Return graph nodes and edges for the viewer.
+
+    Rules:
+    - depth only applies when node_id is provided (neighbourhood traversal)
+    - focal node (node_id) is always included regardless of other filters
+    - entity_type / platform / since filter all non-focal nodes
+    - reachability prune removes nodes with no visible path back to focal
+    """
+    # --- Phase 1: neighbourhood (only when node_id given) ---
+    focal: dict[str, Any] | None = None
     neighbourhood_ids: set[str] | None = None
     traverse_edges: list[dict[str, Any]] = []
 
@@ -110,24 +119,21 @@ async def cli_browse(
         focal = await get_entity(node_id)
         if focal is None:
             raise HTTPException(status_code=404, detail="Entity not found")
-        result = await traverse_graph(focal["id"], max_depth=depth)
-        neighbourhood_ids = {n["id"] for n in result["nodes"]}
-        traverse_edges = result["edges"]
+        tresult = await traverse_graph(focal["id"], max_depth=depth)
+        neighbourhood_ids = {n["id"] for n in tresult["nodes"]}
+        traverse_edges = tresult["edges"]
 
+    # --- Phase 2: candidate nodes ---
     if search:
-        # Use a high limit when intersecting with neighbourhood so we don't miss matches
         search_limit = limit if neighbourhood_ids is None else max(limit, 500)
         nodes = await search_entities(search, entity_types=entity_type or None, limit=search_limit)
         if neighbourhood_ids is not None:
             nodes = [n for n in nodes if n["id"] in neighbourhood_ids]
-            # Always include the focal node even if it doesn't match the search term
-            if focal["id"] not in {n["id"] for n in nodes}:  # type: ignore[possibly-undefined]
-                nodes = [focal] + nodes  # type: ignore[possibly-undefined]
     elif neighbourhood_ids is not None:
-        nodes = [n for n in result["nodes"]]  # type: ignore[possibly-undefined]
+        nodes = [n for n in tresult["nodes"]]  # type: ignore[possibly-undefined]
         if entity_type:
-            allowed = set(entity_type)
-            nodes = [n for n in nodes if n["entity_type"] in allowed]
+            allowed_types = set(entity_type)
+            nodes = [n for n in nodes if n["entity_type"] in allowed_types]
     else:
         nodes = await list_entities(
             entity_types=entity_type or None,
@@ -136,44 +142,49 @@ async def cli_browse(
             limit=limit,
         )
 
-    # Apply platform / since filters on all paths that don't already handle them
+    # Apply platform / since on search and neighbourhood paths (list_entities handles them natively)
     if platform and (search or neighbourhood_ids is not None):
         nodes = [n for n in nodes if n.get("platform") == platform]
     if since and (search or neighbourhood_ids is not None):
         nodes = [n for n in nodes if (n.get("updated_at") or "") >= since]
 
     nodes = nodes[:limit]
+
+    # Focal node is always shown, even when it doesn't match the active filters
+    if focal is not None and focal["id"] not in {n["id"] for n in nodes}:
+        nodes = [focal] + nodes
+
     visible_ids = {n["id"] for n in nodes}
 
+    # --- Phase 3: edges + prune / adjacent expansion ---
     if neighbourhood_ids is not None:
-        # Build edges between visible nodes only
         edges = [
             e for e in traverse_edges
             if e["source_entity_id"] in visible_ids and e["target_entity_id"] in visible_ids
         ]
-        # Prune nodes with no path back to the focal node through the visible (filtered)
-        # edge set. This respects the entity_type filter: a Person reachable only via a
-        # Thread is excluded when Thread is not in the selected types.
-        if focal["id"] in visible_ids:  # type: ignore[possibly-undefined]
-            reachable: set[str] = set()
-            adjacency: dict[str, set[str]] = {}
-            for e in edges:
-                adjacency.setdefault(e["source_entity_id"], set()).add(e["target_entity_id"])
-                adjacency.setdefault(e["target_entity_id"], set()).add(e["source_entity_id"])
-            queue = [focal["id"]]  # type: ignore[possibly-undefined]
-            while queue:
-                nid = queue.pop()
-                if nid in reachable:
-                    continue
-                reachable.add(nid)
-                queue.extend(adjacency.get(nid, set()) - reachable)
-            nodes = [n for n in nodes if n["id"] in reachable]
-            visible_ids = {n["id"] for n in nodes}
-            edges = [e for e in edges if e["source_entity_id"] in visible_ids and e["target_entity_id"] in visible_ids]
+        # BFS from focal through filtered edges; removes nodes only reachable via hidden types
+        reachable: set[str] = set()
+        adjacency: dict[str, set[str]] = {}
+        for e in edges:
+            adjacency.setdefault(e["source_entity_id"], set()).add(e["target_entity_id"])
+            adjacency.setdefault(e["target_entity_id"], set()).add(e["source_entity_id"])
+        queue = [focal["id"]]  # type: ignore[possibly-undefined]
+        while queue:
+            nid = queue.pop()
+            if nid in reachable:
+                continue
+            reachable.add(nid)
+            queue.extend(adjacency.get(nid, set()) - reachable)
+        nodes = [n for n in nodes if n["id"] in reachable]
+        visible_ids = {n["id"] for n in nodes}
+        edges = [
+            e for e in edges
+            if e["source_entity_id"] in visible_ids and e["target_entity_id"] in visible_ids
+        ]
     else:
         edges = await get_edges_for_entities(list(visible_ids))
-        # When entity_type filters are active, also include adjacent nodes of those
-        # types so that e.g. searching for a Thread also surfaces the Persons in it.
+        # When search + entity_type active, pull in adjacent nodes of those types so that
+        # e.g. searching for a Thread also surfaces the Persons connected to it.
         if search and entity_type:
             allowed = set(entity_type)
             neighbour_ids = {
@@ -185,7 +196,7 @@ async def cli_browse(
             if neighbour_ids:
                 neighbours = await get_entities_by_ids(list(neighbour_ids))
                 neighbours = [n for n in neighbours if n["entity_type"] in allowed]
-                nodes = nodes + neighbours
+                nodes = (nodes + neighbours)[:limit]
                 visible_ids = {n["id"] for n in nodes}
                 edges = await get_edges_for_entities(list(visible_ids))
 

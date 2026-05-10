@@ -35,6 +35,7 @@ class DriveChangesConnector(BaseConnector):
     poll_interval: timedelta | None = timedelta(minutes=10)  # type: ignore[assignment]
     url_patterns = ["https://drive.google.com/*", "https://docs.google.com/file/*"]
     auth_label = "google"
+    auth_description = "Google Drive: Document entities for non-native files (PDFs, etc.) and Folder entities listing their contents; polls the Drive Changes API to keep gdocs and gsheets current."
 
     @classmethod
     def run_auth_flow(cls) -> None:
@@ -45,6 +46,13 @@ class DriveChangesConnector(BaseConnector):
     def get_authenticated_user(cls) -> str | None:
         from agentgraph.auth.google_provider import get_user_email
         return get_user_email()
+
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        import asyncio
+
+        from agentgraph.auth.google_provider import verify_google_auth
+        return await asyncio.to_thread(verify_google_auth)
 
     @classmethod
     def current_user_id(cls) -> str | None:

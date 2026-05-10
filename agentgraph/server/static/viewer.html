@@ -443,12 +443,12 @@
             return `[${type}]\n${lbl}`;
           },
           'color': '#e2e8f0',
-          'font-size': '9px',
+          'font-size': '12px',
           'text-valign': 'bottom',
           'text-halign': 'center',
           'text-margin-y': '4px',
           'text-wrap': 'wrap',
-          'text-max-width': '120px',
+          'text-max-width': '150px',
           'width': '28px',
           'height': '28px',
           'border-width': '2px',
@@ -473,7 +473,7 @@
           'opacity': 0.65,
           'width': 1.5,
           'label': (ele) => ele.data('edge_type') || '',
-          'font-size': '8px',
+          'font-size': '10px',
           'color': '#64748b',
           'text-background-color': '#0d0f14',
           'text-background-opacity': 0.7,
@@ -491,7 +491,7 @@
   });
 
   // ── Zoom-invariant sizing ─────────────────────────────────────────────────
-  const Z = { nodeSize: 28, nodeFont: 9, textMaxWidth: 120, textMarginY: 4, nodeBorder: 2, edgeFont: 8, edgeWidth: 1.5 };
+  const Z = { nodeSize: 28, nodeFont: 12, textMaxWidth: 150, textMarginY: 4, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
 
   function applyZoomStyles() {
     const z = cy.zoom();
@@ -508,8 +508,9 @@
         'border-width':   Z.nodeBorder / zc,
       });
       cy.edges().style({
-        'font-size': Z.edgeFont / zc,
-        'width':     Z.edgeWidth / zc,
+        'font-size':   Z.edgeFont / zc,
+        'width':       Z.edgeWidth / zc,
+        'arrow-scale': Z.arrowScale / z,
       });
     });
   }

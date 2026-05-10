@@ -108,6 +108,7 @@ class GmailConnector(BaseConnector):
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     sync_horizon_days: int = 90  # How far back to look on the initial bulk ingest
     url_patterns = ["https://mail.google.com/*"]
+    auth_description = "Gmail conversations (last 90 days by default): Thread entities containing full message bodies with senders, recipients, and cc participants."
     auth_label = "google"
 
     @classmethod
@@ -119,6 +120,13 @@ class GmailConnector(BaseConnector):
     def get_authenticated_user(cls) -> str | None:
         from agentgraph.auth.google_provider import get_user_email
         return get_user_email()
+
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        import asyncio
+
+        from agentgraph.auth.google_provider import verify_google_auth
+        return await asyncio.to_thread(verify_google_auth)
 
     @classmethod
     def current_user_id(cls) -> str | None:

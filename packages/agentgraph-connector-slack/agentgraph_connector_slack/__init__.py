@@ -91,7 +91,7 @@ class SlackConnector(BaseConnector):
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     url_patterns = ["https://app.slack.com/*"]
     auth_label = "slack"
-    auth_description = "Slack (cookie credentials)"
+    auth_description = "Slack workspace channels and DMs: Channel and Message entities with thread replies, authors, and user/channel mentions."
     onboard_prompt = "Set up Slack?"
 
     @classmethod

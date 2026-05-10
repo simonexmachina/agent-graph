@@ -54,7 +54,7 @@ class GoogleDocsConnector(BaseConnector):
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     url_patterns = ["https://docs.google.com/document/*"]
     auth_label = "google"
-    auth_description = "Google (Docs, Sheets, Drive, Gmail) via OAuth2"
+    auth_description = "Google Docs: Document entities with full markdown-rendered body content and owner authorship."
     onboard_prompt = "Set up Google?"
 
     @classmethod
@@ -66,6 +66,13 @@ class GoogleDocsConnector(BaseConnector):
     def get_authenticated_user(cls) -> str | None:
         from agentgraph.auth.google_provider import get_user_email
         return get_user_email()
+
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        import asyncio
+
+        from agentgraph.auth.google_provider import verify_google_auth
+        return await asyncio.to_thread(verify_google_auth)
 
     @classmethod
     def current_user_id(cls) -> str | None:

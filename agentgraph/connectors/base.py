@@ -168,6 +168,24 @@ class BaseConnector(ABC):
         """Return a display string for the currently authenticated user, or None."""
         return None
 
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        """Check whether stored credentials are valid.
+
+        Returns a (status, detail) tuple where status is one of:
+          - "ok": credentials present and (where verified) accepted by the platform
+          - "missing": no credentials stored
+          - "invalid": credentials present but rejected by the platform
+
+        The default implementation only checks credential presence via
+        get_authenticated_user(). Override in subclasses that want to make a
+        live API call (e.g. /users/@me) to detect token resets or expiry.
+        """
+        user = cls.get_authenticated_user()
+        if user is None:
+            return ("missing", None)
+        return ("ok", user)
+
     def normalise_fetch_id(
         self, resource_id: str, entity_type: str
     ) -> tuple[str, ResourceType]:

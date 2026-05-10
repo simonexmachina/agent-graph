@@ -17,6 +17,8 @@ app = typer.Typer(
 @app.command()
 def auth(
     platform: str = typer.Argument(..., help="Platform to authenticate (e.g. google, slack, discord)"),
+    xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
+    d_cookie: str | None = typer.Option(None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"),
 ) -> None:
     """Authenticate with a platform connector."""
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
@@ -33,7 +35,58 @@ def auth(
         typer.echo(f"Unknown platform '{platform}'. Available: {available}", err=True)
         raise typer.Exit(code=1)
 
+    if platform == "slack" and (xoxc_token is not None or d_cookie is not None):
+        from agentgraph_connector_slack.auth import run_cookie_flow
+        run_cookie_flow(xoxc_token=xoxc_token, d_cookie=d_cookie)
+        return
+
     type(seen[platform]).run_auth_flow()
+
+
+@app.command()
+def connectors(
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List installed connectors and their auth status."""
+    import asyncio
+    import json as _json
+
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+
+    bootstrap()
+    all_connectors = get_all_connectors()
+
+    async def _gather() -> list[tuple[str, str | None]]:
+        return await asyncio.gather(*(type(c).verify_auth() for c in all_connectors))
+
+    statuses = asyncio.run(_gather())
+
+    items: list[dict[str, object]] = []
+    for c, (status, detail) in zip(all_connectors, statuses, strict=True):
+        items.append({
+            "source": c.source,
+            "description": type(c).auth_description,
+            "auth_status": status,
+            "auth_detail": detail,
+            "url_patterns": type(c).url_patterns,
+            "polls": c.poll_interval is not None,
+        })
+
+    if json:
+        typer.echo(_json.dumps(items, indent=2))
+        return
+
+    status_label = {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}
+    for item in items:
+        sync = "polling" if item["polls"] else "on-demand"
+        desc = item["description"] or item["source"]
+        status = str(item["auth_status"])
+        detail = item["auth_detail"]
+        auth = status_label.get(status, status)
+        if detail:
+            auth = f"{auth} ({detail})" if status != "ok" else f"{auth} as {detail}"
+        typer.echo(f"  {item['source']:<12}  {desc}")
+        typer.echo(f"  {'':<12}  auth: {auth}  |  sync: {sync}")
 
 
 @app.command()
@@ -214,6 +267,7 @@ def mcp_config() -> None:
 def mcp_serve(
     transport: str = typer.Option("stdio", "--transport", help="Transport: stdio, sse, or streamable-http"),
     port: int = typer.Option(8808, "--port", help="Port for sse / streamable-http transports"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind for sse / streamable-http transports"),
 ) -> None:
     """Start the AgentGraph MCP server."""
     import asyncio
@@ -238,6 +292,11 @@ def mcp_serve(
 
     if transport in ("sse", "streamable-http"):
         mcp.settings.port = port
+        mcp.settings.host = host
+        # Clear DNS rebinding protection when binding to a non-localhost address
+        # (the singleton is initialized with host=127.0.0.1 which enables it by default)
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            mcp.settings.transport_security = None
     mcp.run(transport=transport)  # type: ignore[arg-type]
 
 

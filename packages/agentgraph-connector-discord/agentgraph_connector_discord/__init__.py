@@ -160,7 +160,7 @@ class DiscordConnector(BaseConnector):
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     url_patterns = ["https://discord.com/*"]
     auth_label = "discord"
-    auth_description = "Discord (bot token)"
+    auth_description = "Discord guild channels, DMs, and threads (channels the bot is in): Channel and Message entities with attachments, authors, and mentions."
     onboard_prompt = "Set up Discord?"
 
     @classmethod
@@ -174,6 +174,29 @@ class DiscordConnector(BaseConnector):
             return load_discord_creds().bot_user_id
         except Exception:
             return None
+
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        try:
+            creds = load_discord_creds()
+        except Exception:
+            return ("missing", None)
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    "https://discord.com/api/v10/users/@me",
+                    headers={"Authorization": f"Bot {creds.bot_token}"},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                username: str | None = data.get("username")
+                return ("ok", username or data.get("id"))
+            if resp.status_code == 401:
+                return ("invalid", "token rejected (401) — run: agentgraph auth discord")
+            return ("invalid", f"HTTP {resp.status_code}")
+        except Exception as exc:
+            return ("invalid", f"network error: {type(exc).__name__}")
 
     def can_handle(self, url: str) -> bool:
         return "discord.com/channels/" in url

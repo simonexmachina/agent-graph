@@ -7,13 +7,5 @@
       "Bash(python:*)",
       "Bash(pytest:*)"
     ]
-  },
-  "hooks": {
-    "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "beans prime" }] }
-    ],
-    "PreCompact": [
-      { "hooks": [{ "type": "command", "command": "beans prime" }] }
-    ]
   }
 }

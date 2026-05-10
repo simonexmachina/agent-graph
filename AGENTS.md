@@ -1,5 +1,3 @@
-**IMPORTANT**: before you do anything else, run the `beans prime` command and heed its output.
-
 ## Committing
 
 Commit incrementally as you complete each logical unit of work — don't batch everything into one commit at the end. Include related bean files in the same commit as the code changes they track.

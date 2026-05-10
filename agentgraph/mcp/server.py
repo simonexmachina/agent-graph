@@ -30,6 +30,47 @@ logger = logging.getLogger(__name__)
 mcp = FastMCP("AgentGraph")
 
 
+# ---------------------------------------------------------------------------
+# list_connectors — connector discovery for agents
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def list_connectors_tool() -> str:
+    """
+    List all installed connectors and their capabilities.
+
+    Call this first to understand which data sources are available and
+    which platform values are valid for the platform= parameter in other
+    tools (search_entities_tool, query_by_filter_tool, fetch_entity_tool).
+
+    Returns:
+        JSON array of connector objects, each with:
+          - source: platform name to pass as the platform= argument
+          - description: what this connector ingests
+          - auth_status: "ok" | "missing" | "invalid"
+          - auth_detail: authenticated user or error message; null if missing
+          - url_patterns: URL patterns this connector recognises
+          - polls: true if background sync is enabled
+    """
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+
+    bootstrap()
+    all_connectors = get_all_connectors()
+    statuses = await asyncio.gather(*(type(c).verify_auth() for c in all_connectors))
+
+    result = []
+    for c, (status, detail) in zip(all_connectors, statuses, strict=True):
+        result.append({
+            "source": c.source,
+            "description": type(c).auth_description,
+            "auth_status": status,
+            "auth_detail": detail,
+            "url_patterns": type(c).url_patterns,
+            "polls": c.poll_interval is not None,
+        })
+    return json.dumps(result)
+
+
 async def _refresh_discord_attachments(results: list[dict[str, Any]]) -> None:
     """Refresh Discord CDN attachment URLs in-place for all results that need it.
 
