@@ -413,6 +413,10 @@ agentgraph serve --reload   # auto-restart on code changes (development)</pre>
           <div class="option-flag">Claude Code (project)</div>
           <div class="option-desc"><code>.claude/mcp.json</code> in your project root</div>
         </div>
+        <div class="option-row">
+          <div class="option-flag">ChatGPT</div>
+          <div class="option-desc">Settings → Apps &amp; Connectors → Advanced settings → Developer mode, then add a remote MCP connector using SSE or streaming HTTP</div>
+        </div>
       </div>
       <div class="callout">
         <strong>Example output</strong><br/>
@@ -426,7 +430,7 @@ agentgraph serve --reload   # auto-restart on code changes (development)</pre>
 }</pre>
       </div>
       <p>No additional configuration is needed — the MCP server reads the same settings as the CLI (database path, connector credentials, etc.).</p>
-      <p style="margin-top:8px;">For SSE or streamable-http transports, start the server manually and point your client at <code>http://localhost:8808/sse</code> instead of using the stdio snippet above.</p>
+      <p style="margin-top:8px;">For SSE or streamable-http transports, start the server manually and point your client at the remote MCP endpoint instead of using the stdio snippet above. ChatGPT uses that remote connector flow rather than a local stdio config.</p>
     </div>
 
     <div class="cmd">

@@ -43,6 +43,7 @@ agentgraph auth discord       # Discord bot token
 # Server
 agentgraph serve [--reload]
 agentgraph mcp-serve
+agentgraph mcp-config   # config snippet for Claude Desktop, Claude Code, and ChatGPT developer mode
 ```
 
 ## Entity types

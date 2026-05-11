@@ -238,7 +238,7 @@ def _save_user_config(key: str, value: str) -> None:
 
 @app.command()
 def mcp_config() -> None:
-    """Print the MCP server config snippet for Claude Desktop / Claude Code."""
+    """Print the MCP server config snippet for Claude Desktop / Claude Code / ChatGPT."""
     import json
     import sys
 
@@ -256,10 +256,14 @@ def mcp_config() -> None:
     typer.echo("\nAdd this to your MCP client config:\n")
     typer.echo("  Claude Desktop:  ~/Library/Application Support/Claude/claude_desktop_config.json")
     typer.echo("  Claude Code:     ~/.claude/mcp.json  (or .claude/mcp.json in your project)\n")
+    typer.echo("  ChatGPT:         Settings → Apps & Connectors → Advanced settings → Developer mode")
+    typer.echo("                   Add a remote MCP connector using SSE or streaming HTTP.\n")
     typer.echo(json.dumps(config, indent=2))
     typer.echo()
     typer.echo("For SSE / streamable-http transport instead of stdio:")
     typer.echo(f"  {binary} mcp-serve --transport sse --port 8808")
+    typer.echo(f"  {binary} mcp-serve --transport streamable-http --port 8808")
+    typer.echo("  Then point ChatGPT at the remote MCP endpoint instead of using the stdio snippet above.")
     typer.echo()
 
 

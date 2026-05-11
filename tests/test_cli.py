@@ -41,6 +41,15 @@ def test_auth_help() -> None:
     assert "platform" in result.output.lower()
 
 
+def test_mcp_config_includes_chatgpt() -> None:
+    result = runner.invoke(app, ["mcp-config"])
+    assert result.exit_code == 0
+    assert "Claude Desktop" in result.output
+    assert "Claude Code" in result.output
+    assert "ChatGPT" in result.output
+    assert "streamable-http" in result.output
+
+
 class _FakeConnector:
     source = "slack"
     auth_label = "slack"
