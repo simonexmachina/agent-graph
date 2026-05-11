@@ -314,26 +314,11 @@ def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
 
 def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None:
     async def _download() -> dict[str, Any]:
-        from agentgraph.backends import get_backend_class
-        from agentgraph.config import get_settings
-        from agentgraph.core.context import set_backend
+        from agentgraph.core.runtime import backend_context
         from agentgraph.graph.download import download_entity
 
-        settings = get_settings()
-        backend_class = get_backend_class(settings.backend)
-        if settings.backend == "postgres":
-            backend = backend_class(settings.database_url)
-        elif settings.backend == "sqlite":
-            backend = backend_class(settings.backend_sqlite_path, settings.backend_sqlite_vector_mode)
-        else:
-            backend = backend_class(settings)
-
-        await backend.initialize()
-        set_backend(backend)
-        try:
+        async with backend_context():
             return await download_entity(entity_id, output_path)
-        finally:
-            await backend.close()
 
     try:
         result = _run(_download())

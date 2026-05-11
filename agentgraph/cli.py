@@ -288,19 +288,10 @@ def mcp_serve(
     """Start the AgentGraph MCP server."""
     import asyncio
 
-    from agentgraph.backends import get_backend_class
-    from agentgraph.config import get_settings
     from agentgraph.core.context import set_backend
+    from agentgraph.core.runtime import create_backend
 
-    settings = get_settings()
-    backend_class = get_backend_class(settings.backend)
-    if settings.backend == "postgres":
-        backend = backend_class(settings.database_url)
-    elif settings.backend == "sqlite":
-        backend = backend_class(settings.backend_sqlite_path, settings.backend_sqlite_vector_mode)
-    else:
-        backend = backend_class(settings)
-
+    backend = create_backend()
     asyncio.run(backend.initialize())
     set_backend(backend)
 
