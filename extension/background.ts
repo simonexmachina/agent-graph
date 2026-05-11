@@ -6,7 +6,14 @@
  * threshold, a POST /fetch-url request is sent to the server.
  */
 
-import { init, startDwell, cancelDwell, refreshMeta, updateMeta } from "./lib/dwell.js";
+import {
+  init,
+  startDwell,
+  cancelDwell,
+  getObservationStatus,
+  refreshMeta,
+  updateMeta,
+} from "./lib/dwell.js";
 
 // Hex Gmail message IDs extracted by the content script, keyed by tab ID.
 const gmailMessageIdByTab = new Map<number, string>();
@@ -112,6 +119,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         await onFocus(activeTabId);
       }
       sendResponse({ ok: true, meta });
+    })
+    .catch((error: unknown) => {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+    });
+
+  return true;
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "get_observation_status") return false;
+
+  chrome.tabs.query({ active: true, currentWindow: true })
+    .then(async ([tab]) => {
+      if (tab?.id == null || tab.url == null) {
+        sendResponse({ ok: true, status: null });
+        return;
+      }
+      await onFocus(tab.id);
+      sendResponse({ ok: true, status: getObservationStatus(tab.id, tab.url) });
     })
     .catch((error: unknown) => {
       sendResponse({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });

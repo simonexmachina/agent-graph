@@ -24,6 +24,18 @@ export interface DwellMeta {
   dwell_threshold_ms: number;
 }
 
+export interface ObservationStatus {
+  url: string;
+  matches: boolean;
+  state: "not_matched" | "waiting" | "sending" | "sent" | "failed" | "canceled";
+  threshold_ms: number;
+  started_at?: number;
+  fires_at?: number;
+  sent_at?: number;
+  http_status?: number;
+  error?: string;
+}
+
 // In-memory state — rebuilt from cache on service worker restart.
 let patterns: string[] = [];
 let thresholdMs: number = DEFAULT_THRESHOLD_MS;
@@ -33,8 +45,11 @@ interface DwellEntry {
   timer: ReturnType<typeof setTimeout>;
   url: string;
   meta: Record<string, string>;
+  started_at: number;
+  fires_at: number;
 }
 const pending = new Map<number, DwellEntry>();
+const observations = new Map<number, ObservationStatus>();
 
 // ---------------------------------------------------------------------------
 // Pattern matching
@@ -96,14 +111,66 @@ export function startDwell(
   meta: Record<string, string> = {},
 ): void {
   cancelDwell(tabId);
-  if (!matchesAny(url, patterns)) return;
+  if (!matchesAny(url, patterns)) {
+    observations.set(tabId, {
+      url,
+      matches: false,
+      state: "not_matched",
+      threshold_ms: thresholdMs,
+    });
+    return;
+  }
+
+  const startedAt = Date.now();
+  const firesAt = startedAt + thresholdMs;
+  observations.set(tabId, {
+    url,
+    matches: true,
+    state: "waiting",
+    threshold_ms: thresholdMs,
+    started_at: startedAt,
+    fires_at: firesAt,
+  });
 
   const timer = setTimeout(() => {
     pending.delete(tabId);
-    sendFetch(url, meta).catch(() => {/* best-effort */});
+    observations.set(tabId, {
+      url,
+      matches: true,
+      state: "sending",
+      threshold_ms: thresholdMs,
+      started_at: startedAt,
+      fires_at: firesAt,
+    });
+
+    sendFetch(url, meta)
+      .then((httpStatus) => {
+        observations.set(tabId, {
+          url,
+          matches: true,
+          state: "sent",
+          threshold_ms: thresholdMs,
+          started_at: startedAt,
+          fires_at: firesAt,
+          sent_at: Date.now(),
+          http_status: httpStatus,
+        });
+      })
+      .catch((error: unknown) => {
+        observations.set(tabId, {
+          url,
+          matches: true,
+          state: "failed",
+          threshold_ms: thresholdMs,
+          started_at: startedAt,
+          fires_at: firesAt,
+          sent_at: Date.now(),
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      });
   }, thresholdMs);
 
-  pending.set(tabId, { timer, url, meta });
+  pending.set(tabId, { timer, url, meta, started_at: startedAt, fires_at: firesAt });
 }
 
 export function cancelDwell(tabId: number): void {
@@ -111,6 +178,14 @@ export function cancelDwell(tabId: number): void {
   if (entry) {
     clearTimeout(entry.timer);
     pending.delete(tabId);
+    observations.set(tabId, {
+      url: entry.url,
+      matches: true,
+      state: "canceled",
+      threshold_ms: thresholdMs,
+      started_at: entry.started_at,
+      fires_at: entry.fires_at,
+    });
   }
 }
 
@@ -126,12 +201,29 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
 // Server request
 // ---------------------------------------------------------------------------
 
-async function sendFetch(url: string, meta: Record<string, string>): Promise<void> {
-  await fetch(FETCH_URL, {
+async function sendFetch(url: string, meta: Record<string, string>): Promise<number> {
+  const response = await fetch(FETCH_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, meta: Object.keys(meta).length ? meta : undefined }),
   });
+  if (!response.ok) {
+    throw new Error(`POST /fetch-url failed with HTTP ${response.status}`);
+  }
+  return response.status;
+}
+
+export function getObservationStatus(tabId: number, url: string): ObservationStatus {
+  const current = observations.get(tabId);
+  if (current?.url === url) return current;
+
+  const matches = matchesAny(url, patterns);
+  return {
+    url,
+    matches,
+    state: matches ? "canceled" : "not_matched",
+    threshold_ms: thresholdMs,
+  };
 }
 
 // ---------------------------------------------------------------------------

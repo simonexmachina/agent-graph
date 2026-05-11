@@ -70,6 +70,28 @@ section {
   color: #111;
 }
 
+.status {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #374151;
+}
+
+.status--ok {
+  color: #166534;
+}
+
+.status--warn {
+  color: #92400e;
+}
+
+.status--error {
+  color: #991b1b;
+}
+
+.status--unknown {
+  color: #6b7280;
+}
+
 button {
   width: 100%;
   padding: 7px 12px;
