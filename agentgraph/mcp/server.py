@@ -295,6 +295,37 @@ async def fetch_entity_by_id_tool(entity_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# download_entity — authenticated source-file download
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def download_entity_tool(entity_id: str, output_path: str | None = None) -> str:
+    """
+    Download an entity's source file using the connector's stored auth.
+
+    Supports entity UUIDs, UUID prefixes, and platform refs such as
+    "gdrive/file-id" when those resolve to a graph entity. The file is written
+    to output_path when supplied, or to the MCP server's current directory using
+    the source filename.
+
+    Args:
+        entity_id: Entity UUID, UUID prefix, or platform/entity_id reference.
+        output_path: Optional output file path or directory.
+
+    Returns:
+        JSON object with path, byte count, filename, platform, and MIME type, or
+        an error message if the entity or connector cannot be downloaded.
+    """
+    from agentgraph.graph.download import download_entity
+
+    try:
+        result = await download_entity(entity_id, output_path)
+        return json.dumps(result, default=str)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
 # query_by_filter — type + metadata filters
 # ---------------------------------------------------------------------------
 

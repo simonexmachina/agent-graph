@@ -249,6 +249,19 @@ class BaseConnector(ABC):
         """
         return None
 
+    async def download(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        output_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Download an entity's source file using the connector's stored auth.
+
+        Connectors that expose downloadable files should override this method
+        and return metadata including the written path.
+        """
+        raise NotImplementedError(f"{self.source} does not support authenticated downloads")
+
     async def last_synced_at(self, resource_id: str) -> datetime | None:
         """Return the most recent synced_at for a platform entity, or None."""
         from agentgraph.core.context import get_backend

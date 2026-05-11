@@ -11,7 +11,6 @@ import pytest
 
 from agentgraph.core.context import set_backend
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -256,3 +255,14 @@ async def test_mcp_query_by_filter_tool() -> None:
 
     parsed = json.loads(result)
     assert isinstance(parsed, list)
+
+
+@pytest.mark.asyncio
+async def test_mcp_download_entity_tool() -> None:
+    from agentgraph.mcp.server import download_entity_tool
+
+    fake_result = {"path": "/tmp/file.pdf", "bytes": 7, "filename": "file.pdf"}
+    with patch("agentgraph.graph.download.download_entity", new=AsyncMock(return_value=fake_result)):
+        result = await download_entity_tool("abc123", "/tmp")
+
+    assert json.loads(result) == fake_result

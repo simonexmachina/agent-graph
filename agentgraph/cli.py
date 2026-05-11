@@ -186,6 +186,18 @@ def fetch_entity_cmd(
 
 
 @app.command()
+def download(
+    entity_id: str = typer.Argument(..., help="Entity ID, UUID prefix, or platform ref"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Output file path or directory"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Download an entity's source file using connector auth."""
+    from agentgraph.cli_query import cmd_download
+
+    cmd_download(entity_id=entity_id, output_path=output, as_json=json)
+
+
+@app.command()
 def onboard() -> None:
     """Interactive setup: authenticate with each installed connector."""
     from agentgraph.connectors.registry import bootstrap, get_all_connectors

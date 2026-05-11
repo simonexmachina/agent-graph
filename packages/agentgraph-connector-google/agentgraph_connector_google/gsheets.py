@@ -123,6 +123,16 @@ class GoogleSheetsConnector(BaseConnector):
         await upsert_batch(batch)
         return batch
 
+    async def download(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        output_path: str | None = None,
+    ) -> dict[str, Any]:
+        from agentgraph_connector_google.gdrive import download_drive_file
+
+        return await download_drive_file(resource_id, output_path)
+
 
 async def _touch_last_accessed(spreadsheet_id: str) -> None:
     from agentgraph.core.context import get_backend

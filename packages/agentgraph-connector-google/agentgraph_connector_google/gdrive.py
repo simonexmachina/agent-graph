@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
@@ -27,10 +28,21 @@ logger = logging.getLogger(__name__)
 
 _GDRIVE_FILE_MEDIA_URL = "https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
 _GDRIVE_DOC_EXPORT_URL = "https://www.googleapis.com/drive/v3/files/{file_id}/export?mimeType=text/html"
+_GDRIVE_DOC_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_GDRIVE_SHEET_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _GDRIVE_SHEET_EXPORT_URL = (
     "https://www.googleapis.com/drive/v3/files/{file_id}/export?"
-    "mimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    f"mimeType={_GDRIVE_SHEET_EXPORT_MIME}"
 )
+_MIME_EXTENSIONS: dict[str, str] = {
+    "application/pdf": ".pdf",
+    "application/vnd.google-apps.document": ".docx",
+    "application/vnd.google-apps.spreadsheet": ".xlsx",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "text/html": ".html",
+    "text/plain": ".txt",
+}
 
 
 def _build_drive_service() -> Any:
@@ -94,6 +106,16 @@ class DriveChangesConnector(BaseConnector):
         if batch.entities or batch.persons or batch.edges:
             await upsert_batch(batch)
         return batch
+
+    async def download(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        output_path: str | None = None,
+    ) -> dict[str, Any]:
+        if resource_type == "folder":
+            raise ValueError("Drive folders cannot be downloaded as a single file")
+        return await download_drive_file(resource_id, output_path)
 
     async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
         import asyncio
@@ -378,3 +400,76 @@ def _file_metadata(
     if mime_type:
         metadata["mime_type"] = mime_type
     return metadata
+
+
+async def download_drive_file(file_id: str, output_path: str | None = None) -> dict[str, Any]:
+    import asyncio
+    import io
+
+    from googleapiclient.http import MediaIoBaseDownload  # type: ignore[import-untyped]
+
+    loop = asyncio.get_event_loop()
+    service = await loop.run_in_executor(None, _build_drive_service)
+
+    file_meta: dict[str, Any] = await loop.run_in_executor(
+        None,
+        lambda: service.files().get(
+            fileId=file_id,
+            fields="id,name,mimeType,size",
+        ).execute(),
+    )
+    name: str = file_meta.get("name") or file_id
+    mime_type: str = file_meta.get("mimeType", "")
+    export_mime = _export_mime_for_download(mime_type)
+
+    def _download() -> bytes:
+        buf = io.BytesIO()
+        if export_mime is not None:
+            req = service.files().export(fileId=file_id, mimeType=export_mime)
+        else:
+            req = service.files().get_media(fileId=file_id)
+        dl = MediaIoBaseDownload(buf, req)
+        done = False
+        while not done:
+            _, done = dl.next_chunk()
+        return buf.getvalue()
+
+    raw = await loop.run_in_executor(None, _download)
+    target = _resolve_output_path(output_path, name, export_mime or mime_type)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(raw)
+
+    return {
+        "path": str(target),
+        "bytes": len(raw),
+        "platform": "gdrive",
+        "platform_entity_id": file_id,
+        "filename": target.name,
+        "mime_type": export_mime or mime_type,
+    }
+
+
+def _export_mime_for_download(mime_type: str) -> str | None:
+    if mime_type == "application/vnd.google-apps.document":
+        return _GDRIVE_DOC_EXPORT_MIME
+    if mime_type == "application/vnd.google-apps.spreadsheet":
+        return _GDRIVE_SHEET_EXPORT_MIME
+    return None
+
+
+def _resolve_output_path(output_path: str | None, name: str, mime_type: str) -> Path:
+    if output_path is not None:
+        path = Path(output_path).expanduser()
+        if path.exists() and path.is_dir():
+            return path / _filename_with_extension(name, mime_type)
+        if output_path.endswith(("/", "\\")):
+            return path / _filename_with_extension(name, mime_type)
+        return path
+    return Path.cwd() / _filename_with_extension(name, mime_type)
+
+
+def _filename_with_extension(name: str, mime_type: str) -> str:
+    suffix = _MIME_EXTENSIONS.get(mime_type)
+    if suffix is None or Path(name).suffix:
+        return name
+    return f"{name}{suffix}"

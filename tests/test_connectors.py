@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
-from agentgraph_connector_google.gdrive import _fetch_drive_file
+from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
+from agentgraph_connector_google.gsheets import GoogleSheetsConnector
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
 from agentgraph.connectors.base import EntityBatch
@@ -45,6 +48,9 @@ class _FakeDriveFiles:
     def export(self, *, fileId: str, mimeType: str) -> _FakeDriveRequest:  # noqa: N803
         return _FakeDriveRequest(self._exported)
 
+    def get_media(self, *, fileId: str) -> _FakeDriveRequest:  # noqa: N803
+        return _FakeDriveRequest(self._exported)
+
 
 class _FakeDriveService:
     def __init__(self, meta: dict[str, object], exported: bytes | None = None) -> None:
@@ -52,6 +58,16 @@ class _FakeDriveService:
 
     def files(self) -> _FakeDriveFiles:
         return self._files
+
+
+class _FakeMediaIoBaseDownload:
+    def __init__(self, fd: Any, request: _FakeDriveRequest) -> None:
+        self._fd = fd
+        self._request = request
+
+    def next_chunk(self) -> tuple[None, bool]:
+        self._fd.write(self._request.execute())
+        return None, True
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +187,54 @@ async def test_drive_file_fetch_adds_download_metadata(monkeypatch: pytest.Monke
     assert entity.metadata["mime_type"] == "application/pdf"
     assert entity.metadata["download_url"] == "https://drive.google.com/uc?id=file-123&export=download"
     assert entity.metadata["web_url"] == "https://drive.google.com/file/d/file-123/view"
+
+
+@pytest.mark.asyncio
+async def test_drive_file_download_uses_google_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "agentgraph_connector_google.gdrive._build_drive_service",
+        lambda: _FakeDriveService(
+            {
+                "name": "Tax Return 2025.pdf",
+                "mimeType": "application/pdf",
+                "size": "7",
+            },
+            b"pdfdata",
+        ),
+    )
+    monkeypatch.setattr("googleapiclient.http.MediaIoBaseDownload", _FakeMediaIoBaseDownload)
+
+    result = await DriveChangesConnector().download("document", "file-123", str(tmp_path))
+
+    assert result["path"] == str(tmp_path / "Tax Return 2025.pdf")
+    assert result["bytes"] == 7
+    assert result["mime_type"] == "application/pdf"
+    assert (tmp_path / "Tax Return 2025.pdf").read_bytes() == b"pdfdata"
+
+
+@pytest.mark.asyncio
+async def test_gdocs_download_delegates_to_drive(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_download = AsyncMock(return_value={"path": "/tmp/doc.docx"})
+    monkeypatch.setattr("agentgraph_connector_google.gdrive.download_drive_file", fake_download)
+
+    result = await GoogleDocsConnector().download("document", "doc-123", "/tmp")
+
+    assert result["path"] == "/tmp/doc.docx"
+    fake_download.assert_awaited_once_with("doc-123", "/tmp")
+
+
+@pytest.mark.asyncio
+async def test_gsheets_download_delegates_to_drive(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_download = AsyncMock(return_value={"path": "/tmp/sheet.xlsx"})
+    monkeypatch.setattr("agentgraph_connector_google.gdrive.download_drive_file", fake_download)
+
+    result = await GoogleSheetsConnector().download("spreadsheet", "sheet-123", "/tmp")
+
+    assert result["path"] == "/tmp/sheet.xlsx"
+    fake_download.assert_awaited_once_with("sheet-123", "/tmp")
 
 
 # ---------------------------------------------------------------------------

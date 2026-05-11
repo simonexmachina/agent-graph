@@ -33,6 +33,7 @@ def test_help() -> None:
     assert "serve" in result.output
     assert "search" in result.output
     assert "auth" in result.output
+    assert "download" in result.output
 
 
 def test_auth_help() -> None:

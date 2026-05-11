@@ -26,6 +26,9 @@ agentgraph fetch <platform> <resource-id> [--json]
 # Trigger a connector re-fetch for an entity by its internal UUID
 agentgraph fetch-entity <entity-id> [--json]
 
+# Download an entity's source file using connector auth
+agentgraph download <entity-id|platform/ref> [--output <file-or-dir>] [--json]
+
 # Trigger a background poll for one or all connectors
 agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive — omit for all
 
@@ -63,6 +66,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 - The CLI automatically falls back to local DB if the server isn't running (prints a dim warning)
 - Use `--json` when you need to parse results programmatically
 - Entity IDs accept: full UUID, UUID prefix, or platform ref (`slack/C123`, `gdocs/doc-id`, `discord/dm/456`)
+- Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs or exported Google Docs/Sheets
 - Server logs: `/tmp/agentgraph.log`
 
 ## Stub Entities
