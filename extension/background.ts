@@ -6,7 +6,7 @@
  * threshold, a POST /fetch-url request is sent to the server.
  */
 
-import { init, startDwell, cancelDwell, updateMeta } from "./lib/dwell.js";
+import { init, startDwell, cancelDwell, refreshMeta, updateMeta } from "./lib/dwell.js";
 
 // Hex Gmail message IDs extracted by the content script, keyed by tab ID.
 const gmailMessageIdByTab = new Map<number, string>();
@@ -100,6 +100,24 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     // after navigation, well within the 3s threshold).
     updateMeta(tabId, { gmail_message_id: messageId });
   }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "reload_url_patterns") return false;
+
+  refreshMeta()
+    .then(async (meta) => {
+      if (activeTabId !== null) {
+        activeUrl = "";
+        await onFocus(activeTabId);
+      }
+      sendResponse({ ok: true, meta });
+    })
+    .catch((error: unknown) => {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+    });
+
+  return true;
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {

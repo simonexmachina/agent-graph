@@ -3,6 +3,18 @@
  */
 
 const SERVER_HEALTH = "http://localhost:8765/health";
+const CACHE_KEY = "agentgraph_meta_cache";
+
+interface DwellMeta {
+  url_patterns: string[];
+  dwell_threshold_ms: number;
+}
+
+interface ReloadResponse {
+  ok: boolean;
+  meta?: DwellMeta;
+  error?: string;
+}
 
 async function checkHealth(): Promise<boolean> {
   try {
@@ -18,6 +30,11 @@ async function getActiveUrl(): Promise<string | null> {
   return tab?.url ?? null;
 }
 
+async function getCachedMeta(): Promise<DwellMeta | null> {
+  const result = await chrome.storage.local.get(CACHE_KEY);
+  return result[CACHE_KEY] as DwellMeta | null;
+}
+
 function setDot(healthy: boolean | null): void {
   const dot = document.getElementById("status-dot");
   if (!dot) return;
@@ -29,12 +46,40 @@ function setDot(healthy: boolean | null): void {
 }
 
 async function render(): Promise<void> {
-  const [healthy, activeUrl] = await Promise.all([checkHealth(), getActiveUrl()]);
+  const [healthy, activeUrl, meta] = await Promise.all([
+    checkHealth(),
+    getActiveUrl(),
+    getCachedMeta(),
+  ]);
 
   setDot(healthy);
 
   const urlEl = document.getElementById("current-url");
   if (urlEl) urlEl.textContent = activeUrl ?? "None";
+
+  const patternCountEl = document.getElementById("pattern-count");
+  if (patternCountEl) patternCountEl.textContent = String(meta?.url_patterns.length ?? 0);
 }
+
+async function reloadPatterns(): Promise<void> {
+  const button = document.getElementById("reload-patterns") as HTMLButtonElement | null;
+  if (button) button.disabled = true;
+
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "reload_url_patterns" }) as ReloadResponse;
+    if (!response.ok) throw new Error(response.error ?? "Failed to reload URL patterns");
+
+    const patternCountEl = document.getElementById("pattern-count");
+    if (patternCountEl && response.meta) {
+      patternCountEl.textContent = String(response.meta.url_patterns.length);
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+document.getElementById("reload-patterns")?.addEventListener("click", () => {
+  reloadPatterns().catch(console.error);
+});
 
 render().catch(console.error);

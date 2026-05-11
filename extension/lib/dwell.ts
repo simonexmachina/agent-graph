@@ -19,6 +19,11 @@ interface MetaCache {
   fetched_at: number; // ms since epoch
 }
 
+export interface DwellMeta {
+  url_patterns: string[];
+  dwell_threshold_ms: number;
+}
+
 // In-memory state — rebuilt from cache on service worker restart.
 let patterns: string[] = [];
 let thresholdMs: number = DEFAULT_THRESHOLD_MS;
@@ -61,10 +66,10 @@ async function loadCachedMeta(): Promise<void> {
   }
 }
 
-async function refreshMeta(): Promise<void> {
+export async function refreshMeta(): Promise<DwellMeta> {
   try {
     const resp = await fetch(META_URL, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) return;
+    if (!resp.ok) return { url_patterns: patterns, dwell_threshold_ms: thresholdMs };
     const data = await resp.json() as { url_patterns?: string[]; dwell_threshold_ms?: number };
     patterns = data.url_patterns ?? [];
     thresholdMs = data.dwell_threshold_ms ?? DEFAULT_THRESHOLD_MS;
@@ -77,6 +82,8 @@ async function refreshMeta(): Promise<void> {
   } catch {
     // Server not running — keep cached values
   }
+
+  return { url_patterns: patterns, dwell_threshold_ms: thresholdMs };
 }
 
 // ---------------------------------------------------------------------------

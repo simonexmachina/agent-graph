@@ -64,6 +64,12 @@ section {
   color: #111;
 }
 
+#pattern-count {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111;
+}
+
 button {
   width: 100%;
   padding: 7px 12px;
