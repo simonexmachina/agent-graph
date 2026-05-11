@@ -35,6 +35,22 @@ def _build_drive_service() -> Any:
     return build("drive", "v3", credentials=google_credentials())
 
 
+def _web_url(doc_id: str) -> str:
+    return f"https://docs.google.com/document/d/{doc_id}/view"
+
+
+def _download_url(doc_id: str) -> str:
+    return f"https://www.googleapis.com/drive/v3/files/{doc_id}/export?mimeType=text/html"
+
+
+def _metadata(doc_id: str) -> dict[str, str | int | float | bool | None]:
+    return {
+        "web_url": _web_url(doc_id),
+        "download_url": _download_url(doc_id),
+        "mime_type": "text/html",
+    }
+
+
 
 def _export_as_markdown(drive_service: Any, doc_id: str) -> str:
     """Export a Google Doc as HTML via Drive and convert to Markdown."""
@@ -154,6 +170,7 @@ async def _fetch_doc(doc_id: str) -> EntityBatch:
         platform_entity_id=doc_id,
         title=title,
         content=content,
+        metadata=_metadata(doc_id),
         updated_at=datetime.now(UTC),
     )
 

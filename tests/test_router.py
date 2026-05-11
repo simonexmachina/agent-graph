@@ -19,6 +19,10 @@ from agentgraph.server.router import SourceReference, classify_url
             SourceReference(source="gdocs", resource_type="document", resource_id="abc123"),
         ),
         (
+            "https://drive.google.com/file/d/19ccFHOXCcr4s62HJb3Eih3JqAd2xIZDq/view",
+            SourceReference(source="gdrive", resource_type="document", resource_id="19ccFHOXCcr4s62HJb3Eih3JqAd2xIZDq"),
+        ),
+        (
             "https://app.slack.com/client/T012AB3CD/C01234567",
             SourceReference(source="slack", resource_type="channel", resource_id="C01234567"),
         ),

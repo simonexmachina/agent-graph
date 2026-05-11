@@ -36,6 +36,25 @@ def _build_drive_service() -> Any:
     return build("drive", "v3", credentials=google_credentials())
 
 
+def _web_url(spreadsheet_id: str) -> str:
+    return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/view"
+
+
+def _download_url(spreadsheet_id: str) -> str:
+    return (
+        "https://www.googleapis.com/drive/v3/files/"
+        f"{spreadsheet_id}/export?mimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+def _metadata(spreadsheet_id: str) -> dict[str, str | int | float | bool | None]:
+    return {
+        "web_url": _web_url(spreadsheet_id),
+        "download_url": _download_url(spreadsheet_id),
+        "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+
+
 def _extract_plain_text(spreadsheet: dict[str, Any], values_by_range: dict[str, list[list[str]]]) -> str:
     """Render each sheet as a labelled table of tab-separated rows."""
     sections: list[str] = []
@@ -188,6 +207,7 @@ async def _fetch_excel_via_drive(spreadsheet_id: str, loop: Any) -> EntityBatch:
         platform_entity_id=spreadsheet_id,
         title=title,
         content=content,
+        metadata=_metadata(spreadsheet_id),
         updated_at=datetime.now(UTC),
     )
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
@@ -202,6 +222,7 @@ async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
 
     loop = asyncio.get_event_loop()
     sheets_service = await loop.run_in_executor(None, _build_sheets_service)
+    file_meta: dict[str, Any] = {}
 
     try:
         spreadsheet: dict[str, Any] = await loop.run_in_executor(
@@ -243,11 +264,11 @@ async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
     # Fetch owner via Drive API
     try:
         drive_service = await loop.run_in_executor(None, _build_drive_service)
-        file_meta: dict[str, Any] = await loop.run_in_executor(
+        file_meta = await loop.run_in_executor(
             None,
             lambda: drive_service.files().get(
                 fileId=spreadsheet_id,
-                fields="owners",
+                fields="owners,mimeType,webViewLink,webContentLink",
             ).execute(),
         )
         for owner in file_meta.get("owners", []):
@@ -269,12 +290,19 @@ async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
     except Exception:
         logger.debug("Could not fetch Drive ownership for sheet %s", spreadsheet_id)
 
+    metadata: dict[str, str | int | float | bool | None] = {
+        "web_url": file_meta.get("webViewLink") or _web_url(spreadsheet_id),
+        "download_url": file_meta.get("webContentLink") or _download_url(spreadsheet_id),
+        "mime_type": file_meta.get("mimeType") or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+
     entity = EntityRecord(
         entity_type="Spreadsheet",
         platform="gsheets",
         platform_entity_id=spreadsheet_id,
         title=title,
         content=content,
+        metadata=metadata,
         updated_at=datetime.now(UTC),
     )
 

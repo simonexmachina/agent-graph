@@ -30,6 +30,16 @@ _GDRIVE_FOLDER_RE = re.compile(
     r"https://drive\.google\.com/drive/folders/(?P<folder_id>[a-zA-Z0-9_-]+)"
 )
 
+# Pattern: https://drive.google.com/file/d/{fileId}/...
+_GDRIVE_FILE_RE = re.compile(
+    r"https://drive\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
+)
+
+# Pattern: https://docs.google.com/file/d/{fileId}/...
+_GDOCS_FILE_RE = re.compile(
+    r"https://docs\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
+)
+
 # Pattern: https://app.slack.com/client/{workspaceId}/{channelId}
 _SLACK_CHANNEL_RE = re.compile(
     r"https://app\.slack\.com/client/(?P<workspace_id>[A-Z0-9]+)/(?P<channel_id>[A-Z0-9]+)"
@@ -80,6 +90,22 @@ def classify_url(url: str) -> SourceReference | None:
             source="gdrive",
             resource_type="folder",
             resource_id=m.group("folder_id"),
+        )
+
+    m = _GDRIVE_FILE_RE.match(url)
+    if m:
+        return SourceReference(
+            source="gdrive",
+            resource_type="document",
+            resource_id=m.group("file_id"),
+        )
+
+    m = _GDOCS_FILE_RE.match(url)
+    if m:
+        return SourceReference(
+            source="gdrive",
+            resource_type="document",
+            resource_id=m.group("file_id"),
         )
 
     m = _GDOCS_RE.match(url)

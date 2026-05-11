@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from agentgraph.connectors.base import EntityBatch
-from agentgraph_connector_google.gdocs import GoogleDocsConnector
+from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
+from agentgraph_connector_google.gdrive import _fetch_drive_file
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
+from agentgraph.connectors.base import EntityBatch
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -18,12 +18,40 @@ from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
 def _recent_dt() -> datetime:
     from datetime import timedelta
-    return datetime.now(timezone.utc) - timedelta(seconds=60)
+    return datetime.now(UTC) - timedelta(seconds=60)
 
 
 def _stale_dt() -> datetime:
     from datetime import timedelta
-    return datetime.now(timezone.utc) - timedelta(seconds=3600)
+    return datetime.now(UTC) - timedelta(seconds=3600)
+
+
+class _FakeDriveRequest:
+    def __init__(self, payload: object) -> None:
+        self._payload = payload
+
+    def execute(self) -> object:
+        return self._payload
+
+
+class _FakeDriveFiles:
+    def __init__(self, meta: dict[str, object], exported: bytes | None = None) -> None:
+        self._meta = meta
+        self._exported = exported or b""
+
+    def get(self, *, fileId: str, fields: str) -> _FakeDriveRequest:  # noqa: N803
+        return _FakeDriveRequest(self._meta)
+
+    def export(self, *, fileId: str, mimeType: str) -> _FakeDriveRequest:  # noqa: N803
+        return _FakeDriveRequest(self._exported)
+
+
+class _FakeDriveService:
+    def __init__(self, meta: dict[str, object], exported: bytes | None = None) -> None:
+        self._files = _FakeDriveFiles(meta, exported)
+
+    def files(self) -> _FakeDriveFiles:
+        return self._files
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +124,53 @@ async def test_gdocs_fetch_first_visit_calls_fetch_doc(gdocs_connector: GoogleDo
         batch = await gdocs_connector.fetch("document", "doc-new")
 
     assert batch is fake_batch
+
+
+@pytest.mark.asyncio
+async def test_gdocs_fetch_doc_adds_download_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "agentgraph_connector_google.gdocs._build_drive_service",
+        lambda: _FakeDriveService(
+            {
+                "name": "Tax Return 2025",
+                "owners": [{"emailAddress": "owner@example.com", "displayName": "Owner"}],
+            },
+            b"<html><body><h1>Tax Return 2025</h1></body></html>",
+        ),
+    )
+
+    batch = await _fetch_doc("doc-123")
+
+    assert batch.entities
+    entity = batch.entities[0]
+    assert entity.metadata["mime_type"] == "text/html"
+    assert entity.metadata["download_url"].endswith("/export?mimeType=text/html")
+    assert entity.metadata["web_url"] == "https://docs.google.com/document/d/doc-123/view"
+
+
+@pytest.mark.asyncio
+async def test_drive_file_fetch_adds_download_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "agentgraph_connector_google.gdrive._build_drive_service",
+        lambda: _FakeDriveService(
+            {
+                "name": "Tax Return 2025.pdf",
+                "mimeType": "application/pdf",
+                "webViewLink": "https://drive.google.com/file/d/file-123/view",
+                "webContentLink": "https://drive.google.com/uc?id=file-123&export=download",
+                "owners": [{"emailAddress": "owner@example.com", "displayName": "Owner"}],
+            }
+        ),
+    )
+
+    batch = await _fetch_drive_file("file-123")
+
+    assert batch.entities
+    entity = batch.entities[0]
+    assert entity.platform == "gdrive"
+    assert entity.metadata["mime_type"] == "application/pdf"
+    assert entity.metadata["download_url"] == "https://drive.google.com/uc?id=file-123&export=download"
+    assert entity.metadata["web_url"] == "https://drive.google.com/file/d/file-123/view"
 
 
 # ---------------------------------------------------------------------------
