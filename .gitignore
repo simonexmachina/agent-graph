@@ -23,6 +23,9 @@ wheels/
 .internal/
 .beans/
 
+# Generated docs output
+docs/
+
 # macOS
 .DS_Store
 

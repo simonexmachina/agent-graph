@@ -385,6 +385,11 @@ def write_redirect(alias: Path, target: str) -> None:
 
 def copy_static_assets() -> None:
     DOCS_OUT.mkdir(parents=True, exist_ok=True)
+    for path in DOCS_OUT.iterdir():
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
     shutil.copy2(ROOT / "docs-src" / "docs.css", DOCS_OUT / "docs.css")
 
 
