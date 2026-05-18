@@ -3,152 +3,120 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgentGraph documentation</title>
-  <meta name="description" content="AgentGraph documentation: install, connect data sources, expose the graph to AI assistants, and operate the local knowledge graph." />
-  <link rel="stylesheet" href="docs.css" />
+  <title>AgentGraph documentation - AgentGraph</title>
+  <meta name="description" content="AgentGraph docs home: install, quickstart, configuration, connectors, command reference, and MCP." />
+  <link rel="stylesheet" href="/docs.css" />
 </head>
 <body>
-
-<header class="site-header">
-  <div class="brand-group">
-    <div class="brand-row">
-      <a class="logo" href="index.html">Agent<span>Graph</span></a>
-      <nav class="header-nav" aria-label="Primary">
-        <a href="index.html" aria-current="page">Home</a>
-        <a href="install.html">Install</a>
-        <a href="commands.html">Commands</a>
-        <a href="connectors.html">Connectors</a>
-        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-        <a href="privacy.html">Privacy</a>
+  <div class="site-shell">
+    <aside class="site-sidebar">
+      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
+      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
+      <nav class="sidebar-nav" aria-label="Documentation">
+<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/" aria-current="page">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
+<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
       </nav>
-    </div>
-    <p class="tagline">Local knowledge graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same graph.</p>
+      <div class="sidebar-footer">
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
+
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="utility-links">
+          <a href="/">Home</a>
+          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/index.md">Edit page</a>
+        </div>
+        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+      </header>
+
+      <div class="page-grid">
+        <article class="page-content">
+          <h1>AgentGraph documentation</h1>
+          <p class="page-summary">AgentGraph indexes the work you already do in Slack, Discord, Google Docs, Sheets, Drive, and Gmail into a local graph that humans and AI clients can query through the CLI, the viewer, or MCP.</p>
+<blockquote>TL;DR: <code>uv sync --extra all</code>, <code>agentgraph onboard</code>, <code>agentgraph serve</code>, then connect your assistant with <code>agentgraph mcp-config</code>.</blockquote>
+
+<h2 id="where-to-start">Where to start</h2>
+
+<div class="doc-card-grid">
+  <section class="doc-card">
+    <h3><a href="/install.html">Install</a></h3>
+    <p>Set up Python, sync dependencies, authenticate connectors, start the server, and connect the browser extension.</p>
+  </section>
+  <section class="doc-card">
+    <h3><a href="/quickstart.html">Quickstart</a></h3>
+    <p>Get to a working local graph fast: onboard, serve, browse a supported page, and verify the first entities landed.</p>
+  </section>
+  <section class="doc-card">
+    <h3><a href="/configuration.html">Configuration</a></h3>
+    <p>Choose the config directory, database path, retention window, dwell threshold, and transport settings.</p>
+  </section>
+  <section class="doc-card">
+    <h3><a href="/commands/">Command docs</a></h3>
+    <p>Search, query, fetch, poll, auth, serve, and MCP. One reference surface for both terminal users and agent clients.</p>
+  </section>
+</div>
+
+
+<h2 id="what-agentgraph-does">What AgentGraph does</h2>
+
+<ul><li><strong>Connector fetches:</strong> turns messages, documents, spreadsheets, folders, and email threads into graph entities, people, and edges.</li><li><strong>Browser-driven capture:</strong> watches supported URLs and triggers targeted fetches once you stay on a page long enough for it to matter.</li><li><strong>Background refresh:</strong> pollers keep already-known resources current after the first visit.</li><li><strong>Shared interfaces:</strong> the CLI, web viewer, and MCP server all operate on the same local graph.</li></ul>
+
+<h2 id="reference">Reference</h2>
+
+<ul><li><a href="/connectors.html">Connectors</a> for supported sources, auth behavior, and connector authoring.</li><li><a href="/commands/">Command docs</a> for the CLI and MCP surface.</li><li><a href="/privacy.html">Privacy</a> for the local storage and browser observation model.</li></ul>
+
+<h2 id="surfaces">Surfaces</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Surface</th>
+      <th>Use it for</th>
+      <th>Entry point</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CLI</td>
+      <td>Ad hoc search, fetch, ingest, debugging, and operations.</td>
+      <td><code>agentgraph search</code>, <code>agentgraph fetch</code>, <code>agentgraph serve</code></td>
+    </tr>
+    <tr>
+      <td>MCP</td>
+      <td>ChatGPT developer mode, Claude Desktop, Claude Code, and other MCP clients.</td>
+      <td><code>agentgraph mcp-config</code>, <code>agentgraph mcp-serve</code></td>
+    </tr>
+    <tr>
+      <td>Browser extension</td>
+      <td>Passive indexing from supported browser tabs.</td>
+      <td><code>extension/dist/</code> in Chrome Developer Mode</td>
+    </tr>
+    <tr>
+      <td>Viewer</td>
+      <td>Visual graph inspection and manual exploration.</td>
+      <td><code>http://127.0.0.1:8765/viewer</code></td>
+    </tr>
+  </tbody>
+</table>
+
+
+<h2 id="get-help">Get help</h2>
+
+<ul><li>File issues: <a href="https://github.com/simonexmachina/agent-graph/issues">github.com/simonexmachina/agent-graph/issues</a></li><li>Source: <a href="https://github.com/simonexmachina/agent-graph">github.com/simonexmachina/agent-graph</a></li><li>Privacy model: <a href="/privacy.html">Privacy</a></li></ul>
+<nav class="page-pager"><span class="pager-link pager-link-empty"></span><a class="pager-link" href="/install.html"><span>Next</span><strong>Install</strong></a></nav>
+        </article>
+
+        <aside class="page-aside">
+          <div class="on-page-card">
+            <h2>On this page</h2>
+            <ul><li><a href="#where-to-start">Where to start</a></li><li><a href="#what-agentgraph-does">What AgentGraph does</a></li><li><a href="#reference">Reference</a></li><li><a href="#surfaces">Surfaces</a></li><li><a href="#get-help">Get help</a></li></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
   </div>
-  <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
-</header>
-
-<main class="doc-grid">
-  <div class="doc-main">
-    <span class="eyebrow">Start</span>
-    <h1 class="hero-title">AgentGraph documentation</h1>
-    <p class="hero-copy">AgentGraph indexes the work you already do in Slack, Discord, Google Docs, Sheets, Drive, and Gmail into a local graph that humans and AI clients can query through the CLI, the web viewer, or MCP.</p>
-
-    <div class="lede">
-      <strong>Quick path:</strong> <code>uv sync --extra all</code>, <code>agentgraph onboard</code>, <code>agentgraph serve</code>, then connect your assistant with <code>agentgraph mcp-config</code>.
-    </div>
-
-    <div class="link-grid">
-      <section class="link-panel">
-        <h2>Where to start</h2>
-        <ul class="link-list">
-          <li><a href="install.html">Install &amp; setup</a><br/><span>Environment, auth, extension, background service, and MCP client setup.</span></li>
-          <li><a href="commands.html">Command reference</a><br/><span>Search, query, fetch, ingest, serve, and MCP operations.</span></li>
-          <li><a href="connectors.html#supported">Supported connectors</a><br/><span>What each data source indexes, how it authenticates, and how it refreshes.</span></li>
-        </ul>
-      </section>
-
-      <section class="link-panel">
-        <h2>How AgentGraph works</h2>
-        <ul class="link-list">
-          <li><a href="#capture">Capture model</a><br/><span>Browser dwell triggers targeted fetches; pollers keep sources current in the background.</span></li>
-          <li><a href="#interfaces">Interfaces</a><br/><span>CLI, MCP, and the web viewer all operate on the same local graph.</span></li>
-          <li><a href="#reference">Operational reference</a><br/><span>Storage, config directory, background service, and connector lifecycle.</span></li>
-        </ul>
-      </section>
-    </div>
-
-    <section class="content-section" id="capture">
-      <h2>What AgentGraph does</h2>
-      <ul class="simple-list">
-        <li><strong>Connectors:</strong> Pull messages, documents, spreadsheets, folders, and email threads into normalized graph entities.</li>
-        <li><strong>Browser observation:</strong> Watches supported URLs and triggers fetches when you dwell on a page long enough for it to be meaningful.</li>
-        <li><strong>Local graph query:</strong> Supports search, structured filters, graph traversal, and targeted re-fetches over one local store.</li>
-        <li><strong>Assistant access:</strong> Exposes the same graph to CLI users and AI clients through MCP.</li>
-      </ul>
-    </section>
-
-    <section class="content-section" id="interfaces">
-      <h2>Interfaces</h2>
-      <table class="surface-table">
-        <thead>
-          <tr>
-            <th>Surface</th>
-            <th>Use it for</th>
-            <th>Entry point</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>CLI</td>
-            <td>Ad hoc search, fetch, ingest, debugging, and operations.</td>
-            <td><code>agentgraph search</code>, <code>agentgraph fetch</code>, <code>agentgraph serve</code></td>
-          </tr>
-          <tr>
-            <td>MCP</td>
-            <td>Claude Desktop, Claude Code, ChatGPT developer mode, and other MCP clients.</td>
-            <td><code>agentgraph mcp-config</code>, <code>agentgraph mcp-serve</code></td>
-          </tr>
-          <tr>
-            <td>Browser extension</td>
-            <td>Passive indexing from supported browser tabs.</td>
-            <td><code>extension/dist/</code> in Chrome Developer Mode</td>
-          </tr>
-          <tr>
-            <td>Viewer</td>
-            <td>Visual graph inspection and manual exploration.</td>
-            <td><code>http://localhost:8765/viewer</code></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="content-section" id="reference">
-      <h2>Reference</h2>
-      <ul class="link-list">
-        <li><a href="commands.html">Command reference</a><br/><span>Every supported command, grouped by workflow.</span></li>
-        <li><a href="connectors.html#supported">Connector reference</a><br/><span>Supported sources, auth shape, refresh behavior, and file handling.</span></li>
-        <li><a href="connectors.html#authoring">Connector author guide</a><br/><span>The `BaseConnector` contract, data model, and packaging entry points.</span></li>
-        <li><a href="install.html#background">Background service</a><br/><span>Run the server continuously on macOS or Linux.</span></li>
-      </ul>
-    </section>
-
-    <section class="content-section">
-      <h2>Get help</h2>
-      <ul class="simple-list">
-        <li><strong>Source:</strong> <a href="https://github.com/simonexmachina/agent-graph">github.com/simonexmachina/agent-graph</a></li>
-        <li><strong>Issues:</strong> Use the GitHub issue tracker for bugs, missing connector behavior, and auth edge cases.</li>
-        <li><strong>Privacy:</strong> See <a href="privacy.html">Privacy</a> for the current local-storage model and browser extension behavior.</li>
-      </ul>
-    </section>
-  </div>
-
-  <aside class="doc-aside">
-    <div class="aside-card">
-      <h2>Documentation map</h2>
-      <ul>
-        <li><a href="install.html">Install &amp; setup</a></li>
-        <li><a href="commands.html">Command reference</a></li>
-        <li><a href="connectors.html">Connectors</a></li>
-        <li><a href="privacy.html">Privacy</a></li>
-      </ul>
-    </div>
-
-    <div class="aside-card">
-      <h2>Core paths</h2>
-      <ul>
-        <li><a href="install.html#auth">Authenticate connectors</a></li>
-        <li><a href="install.html#mcp">Connect Claude or ChatGPT</a></li>
-        <li><a href="commands.html#query">Search and query</a></li>
-        <li><a href="commands.html#sync">Poll and ingest</a></li>
-      </ul>
-    </div>
-  </aside>
-</main>
-
-<footer class="site-footer">
-  <span>AgentGraph documentation</span>
-  <span><a href="https://github.com/simonexmachina/agent-graph">GitHub</a> · <a href="privacy.html">Privacy</a></span>
-</footer>
-
 </body>
 </html>

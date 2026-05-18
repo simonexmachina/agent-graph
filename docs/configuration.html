@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configuration - AgentGraph</title>
+  <meta name="description" content="Configuration directory, database settings, dwell threshold, retention, and server settings." />
+  <link rel="stylesheet" href="/docs.css" />
+</head>
+<body>
+  <div class="site-shell">
+    <aside class="site-sidebar">
+      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
+      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
+      <nav class="sidebar-nav" aria-label="Documentation">
+<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html" aria-current="page">Configuration</a></li></ul></section>
+<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
+
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="utility-links">
+          <a href="/">Home</a>
+          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/configuration.md">Edit page</a>
+        </div>
+        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+      </header>
+
+      <div class="page-grid">
+        <article class="page-content">
+          <h1>Configuration</h1>
+          <p class="page-summary">AgentGraph reads settings from environment variables and from a `.env` file in the config directory. The defaults are local-first, but the storage location and backend are configurable.</p>
+<h2 id="config-directory">Config directory</h2>
+
+<p>The config directory defaults to <code>~/.agentgraph</code>. Change it with <code>AGENTGRAPH_CONFIG_DIR</code>.</p>
+
+<pre><code class="language-bash">AGENTGRAPH_CONFIG_DIR=/path/to/agentgraph agentgraph serve</code></pre>
+
+<p>That directory controls:</p>
+
+<ul><li><code>credentials.json</code></li><li>the config <code>.env</code></li><li>the default SQLite database path</li></ul>
+
+<h2 id="core-settings">Core settings</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Variable</th>
+      <th>Default</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>AGENTGRAPH_CONFIG_DIR</code></td>
+      <td><code>~/.agentgraph</code></td>
+      <td>Directory for AgentGraph config, credentials, and the default SQLite database.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_BACKEND</code></td>
+      <td><code>sqlite</code></td>
+      <td>Persistence backend: <code>sqlite</code> or <code>postgres</code>.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_BACKEND_SQLITE_PATH</code></td>
+      <td><code>$AGENTGRAPH_CONFIG_DIR/agentgraph.db</code></td>
+      <td>SQLite database path.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_DATABASE_URL</code></td>
+      <td><code>postgresql://agentgraph:agentgraph@localhost:5432/agentgraph</code></td>
+      <td>PostgreSQL connection URL when backend is <code>postgres</code>.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_SERVER_HOST</code></td>
+      <td><code>127.0.0.1</code></td>
+      <td>Server bind address.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_SERVER_PORT</code></td>
+      <td><code>8765</code></td>
+      <td>Server port.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_DWELL_THRESHOLD_SECONDS</code></td>
+      <td><code>3</code></td>
+      <td>Seconds of focus before a fetch is triggered.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_RETENTION_DAYS</code></td>
+      <td><code>90</code></td>
+      <td>Days before an unvisited entity is garbage collected.</td>
+    </tr>
+    <tr>
+      <td><code>AGENTGRAPH_EMBEDDING_MODEL</code></td>
+      <td><code>all-MiniLM-L6-v2</code></td>
+      <td>Sentence-transformers model used for embeddings.</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<h2 id="postgresql">PostgreSQL</h2>
+
+<p>SQLite is the default backend. To switch to PostgreSQL:</p>
+
+<pre><code class="language-bash">agentgraph use-postgres</code></pre>
+
+<p>This writes <code>docker-compose.yml</code> to the current directory, saves backend config to the AgentGraph config directory, and prints next steps.</p>
+
+<h2 id="slack-workspace-filter">Slack workspace filter</h2>
+
+<p>If you only want Slack data from one workspace, set <code>AGENTGRAPH_SLACK_WORKSPACE_ID</code>.</p>
+
+<pre><code class="language-bash">AGENTGRAPH_SLACK_WORKSPACE_ID=T04T4TH8W agentgraph serve</code></pre>
+<nav class="page-pager"><a class="pager-link" href="/quickstart.html"><span>Previous</span><strong>Quickstart</strong></a><a class="pager-link" href="/commands/"><span>Next</span><strong>Command docs</strong></a></nav>
+        </article>
+
+        <aside class="page-aside">
+          <div class="on-page-card">
+            <h2>On this page</h2>
+            <ul><li><a href="#config-directory">Config directory</a></li><li><a href="#core-settings">Core settings</a></li><li><a href="#postgresql">PostgreSQL</a></li><li><a href="#slack-workspace-filter">Slack workspace filter</a></li></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

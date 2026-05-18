@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Command docs index - AgentGraph</title>
+  <meta name="description" content="Command reference for the AgentGraph CLI and MCP workflows." />
+  <link rel="stylesheet" href="/docs.css" />
+</head>
+<body>
+  <div class="site-shell">
+    <aside class="site-sidebar">
+      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
+      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
+      <nav class="sidebar-nav" aria-label="Documentation">
+<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
+<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/" aria-current="page">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
+
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="utility-links">
+          <a href="/">Home</a>
+          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/commands/index.md">Edit page</a>
+        </div>
+        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+      </header>
+
+      <div class="page-grid">
+        <article class="page-content">
+          <h1>Command docs index</h1>
+          <p class="page-summary">The CLI and MCP server expose the same graph operations. Use the terminal directly for local work, or connect an MCP client to run the same actions from an assistant.</p>
+<h2 id="query">Query</h2>
+
+<ul><li><code>agentgraph search</code> - hybrid semantic and lexical search across the local graph.</li><li><code>agentgraph query</code> - filter entities by type, ownership, time window, and attachment presence.</li><li><code>agentgraph get</code> - return one entity by UUID, UUID prefix, or platform reference.</li><li><code>agentgraph edges</code> - list connected edges for one entity, filtered by direction and edge type.</li><li><code>agentgraph traverse</code> - walk outward from an entity across graph edges.</li></ul>
+
+<pre><code class="language-bash">agentgraph search &quot;project kickoff notes&quot; --type Document --limit 10 --json
+agentgraph query --type Message --filter platform=slack --since 24h --mine --limit 20
+agentgraph get abc123ef --json
+agentgraph traverse abc123ef --depth 2 --resolve --json</code></pre>
+
+<h2 id="fetch">Fetch</h2>
+
+<ul><li><code>agentgraph fetch</code> - trigger a connector fetch by source and platform-specific identifier.</li><li><code>agentgraph fetch-entity</code> - re-fetch a known entity by internal UUID.</li></ul>
+
+<pre><code class="language-bash">agentgraph fetch slack C0J2L41FT
+agentgraph fetch gdocs 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
+agentgraph fetch-entity abc123ef-9d6b-4bbe-b5ab-200faecb70e9 --json</code></pre>
+
+<h2 id="sync">Sync</h2>
+
+<ul><li><code>agentgraph poll</code> - run background polling immediately for one connector or all installed connectors.</li><li><code>agentgraph ingest</code> - run a one-shot historical ingest where the connector supports it.</li></ul>
+
+<pre><code class="language-bash">agentgraph poll
+agentgraph poll slack
+agentgraph ingest gmail</code></pre>
+
+<h2 id="connector-status">Connector status</h2>
+
+<ul><li><code>agentgraph connectors</code> - list installed connectors, auth status, URL patterns, and whether they poll.</li></ul>
+
+<pre><code class="language-bash">agentgraph connectors
+agentgraph connectors --json</code></pre>
+
+<h2 id="authentication">Authentication</h2>
+
+<ul><li><code>agentgraph onboard</code> - walk through auth setup for every installed connector.</li><li><code>agentgraph auth</code> - authenticate a specific connector directly.</li></ul>
+
+<pre><code class="language-bash">agentgraph onboard
+agentgraph auth google
+agentgraph auth slack
+agentgraph auth discord</code></pre>
+
+<h2 id="server-and-mcp">Server and MCP</h2>
+
+<ul><li><code>agentgraph serve</code> - start the local HTTP server, connector pollers, and viewer.</li><li><code>agentgraph mcp-config</code> - print the client config snippet for local and remote MCP clients.</li><li><code>agentgraph mcp-serve</code> - run the MCP server over stdio, SSE, or streaming HTTP.</li></ul>
+
+<pre><code class="language-bash">agentgraph serve
+agentgraph mcp-config
+agentgraph mcp-serve --transport sse --port 8808
+agentgraph mcp-serve --transport streamable-http --port 8808</code></pre>
+<nav class="page-pager"><a class="pager-link" href="/configuration.html"><span>Previous</span><strong>Configuration</strong></a><a class="pager-link" href="/connectors.html"><span>Next</span><strong>Connectors</strong></a></nav>
+        </article>
+
+        <aside class="page-aside">
+          <div class="on-page-card">
+            <h2>On this page</h2>
+            <ul><li><a href="#query">Query</a></li><li><a href="#fetch">Fetch</a></li><li><a href="#sync">Sync</a></li><li><a href="#connector-status">Connector status</a></li><li><a href="#authentication">Authentication</a></li><li><a href="#server-and-mcp">Server and MCP</a></li></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

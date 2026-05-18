@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quickstart - AgentGraph</title>
+  <meta name="description" content="Get AgentGraph indexing quickly with the shortest useful path." />
+  <link rel="stylesheet" href="/docs.css" />
+</head>
+<body>
+  <div class="site-shell">
+    <aside class="site-sidebar">
+      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
+      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
+      <nav class="sidebar-nav" aria-label="Documentation">
+<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html" aria-current="page">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
+<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
+
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="utility-links">
+          <a href="/">Home</a>
+          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/quickstart.md">Edit page</a>
+        </div>
+        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+      </header>
+
+      <div class="page-grid">
+        <article class="page-content">
+          <h1>Quickstart</h1>
+          <p class="page-summary">This page assumes the repo is already cloned and dependencies are installed. The goal is one working local graph, not a full production setup.</p>
+<h2 id="1-authenticate">1. Authenticate</h2>
+
+<p>Run the guided onboarding flow:</p>
+
+<pre><code class="language-bash">agentgraph onboard</code></pre>
+
+<p>If you only want one source, authenticate it directly with <code>agentgraph auth &amp;lt;source&amp;gt;</code>.</p>
+
+<h2 id="2-start-agentgraph">2. Start AgentGraph</h2>
+
+<pre><code class="language-bash">agentgraph serve</code></pre>
+
+<p>The default server URL is <code>http://127.0.0.1:8765</code>.</p>
+
+<h2 id="3-install-the-browser-extension">3. Install the browser extension</h2>
+
+<p>Build the extension and load <code>extension/dist/</code> as an unpacked Chrome extension.</p>
+
+<pre><code class="language-bash">cd extension
+npm install
+npm run build</code></pre>
+
+<h2 id="4-browse-something-supported">4. Browse something supported</h2>
+
+<p>Open a Slack channel, a Google Doc, a Google Sheet, a Gmail thread, or a Drive folder. Leave the tab focused long enough for the dwell threshold to trigger a fetch.</p>
+
+<h2 id="5-verify-entities-landed">5. Verify entities landed</h2>
+
+<pre><code class="language-bash">agentgraph connectors --json
+agentgraph search &quot;slack&quot; --limit 5
+agentgraph query --type Document --limit 5</code></pre>
+
+<h2 id="6-connect-an-assistant">6. Connect an assistant</h2>
+
+<pre><code class="language-bash">agentgraph mcp-config</code></pre>
+
+<p>Use the printed config in Claude Desktop or Claude Code, or expose SSE / streaming HTTP for ChatGPT developer mode.</p>
+<nav class="page-pager"><a class="pager-link" href="/install.html"><span>Previous</span><strong>Install</strong></a><a class="pager-link" href="/configuration.html"><span>Next</span><strong>Configuration</strong></a></nav>
+        </article>
+
+        <aside class="page-aside">
+          <div class="on-page-card">
+            <h2>On this page</h2>
+            <ul><li><a href="#1-authenticate">1. Authenticate</a></li><li><a href="#2-start-agentgraph">2. Start AgentGraph</a></li><li><a href="#3-install-the-browser-extension">3. Install the browser extension</a></li><li><a href="#4-browse-something-supported">4. Browse something supported</a></li><li><a href="#5-verify-entities-landed">5. Verify entities landed</a></li><li><a href="#6-connect-an-assistant">6. Connect an assistant</a></li></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

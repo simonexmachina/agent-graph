@@ -3,157 +3,141 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Connectors - AgentGraph documentation</title>
-  <meta name="description" content="Supported AgentGraph connectors, how they behave, and how to build a custom connector package." />
-  <link rel="stylesheet" href="docs.css" />
+  <title>Connectors - AgentGraph</title>
+  <meta name="description" content="Supported AgentGraph connectors, fetch behavior, and the connector authoring contract." />
+  <link rel="stylesheet" href="/docs.css" />
 </head>
 <body>
-
-<header class="site-header">
-  <div class="brand-group">
-    <div class="brand-row">
-      <a class="logo" href="index.html">Agent<span>Graph</span></a>
-      <nav class="header-nav" aria-label="Primary">
-        <a href="index.html">Home</a>
-        <a href="install.html">Install</a>
-        <a href="commands.html">Commands</a>
-        <a href="connectors.html" aria-current="page">Connectors</a>
-        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-        <a href="privacy.html">Privacy</a>
+  <div class="site-shell">
+    <aside class="site-sidebar">
+      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
+      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
+      <nav class="sidebar-nav" aria-label="Documentation">
+<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
+<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html" aria-current="page">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
       </nav>
-    </div>
-    <p class="tagline">Supported data sources on top, authoring model below.</p>
+      <div class="sidebar-footer">
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
+
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="utility-links">
+          <a href="/">Home</a>
+          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/connectors.md">Edit page</a>
+        </div>
+        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+      </header>
+
+      <div class="page-grid">
+        <article class="page-content">
+          <h1>Connectors</h1>
+          <p class="page-summary">Connectors turn external systems into graph entities, people, and edges. The first half of this page is operational reference; the second half is the author guide.</p>
+<h2 id="supported-connectors">Supported connectors</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Source</th>
+      <th>Entities</th>
+      <th>Auth</th>
+      <th>Refresh model</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Slack</td>
+      <td>Channel, Message</td>
+      <td>Browser-derived cookie credentials</td>
+      <td>Browser dwell plus 5 minute polling</td>
+    </tr>
+    <tr>
+      <td>Discord</td>
+      <td>Channel, Message</td>
+      <td>Bot token</td>
+      <td>Browser dwell plus 5 minute polling</td>
+    </tr>
+    <tr>
+      <td>Google Docs</td>
+      <td>Document</td>
+      <td>Google OAuth</td>
+      <td>Browser dwell plus Drive-backed refresh</td>
+    </tr>
+    <tr>
+      <td>Google Sheets</td>
+      <td>Spreadsheet</td>
+      <td>Google OAuth</td>
+      <td>Browser dwell plus Drive-backed refresh</td>
+    </tr>
+    <tr>
+      <td>Google Drive</td>
+      <td>Folder, Document</td>
+      <td>Google OAuth</td>
+      <td>Browser dwell for folders and files, plus Drive changes polling</td>
+    </tr>
+    <tr>
+      <td>Gmail</td>
+      <td>Thread</td>
+      <td>Google OAuth</td>
+      <td>Browser dwell plus background poll and ingest</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<h2 id="connector-behavior">Connector behavior</h2>
+
+<ul><li><strong>Browser dwell:</strong> supported URLs trigger targeted fetches after the configured dwell threshold.</li><li><strong>Polling:</strong> connectors that support it store cursor state and fetch changes on a schedule.</li><li><strong>Ingest:</strong> some connectors expose a broader one-shot historical ingest beyond poll behavior.</li><li><strong>Download metadata:</strong> file-backed entities can expose <code>metadata.download_url</code> and <code>metadata.mime_type</code> when an agent needs source bytes.</li></ul>
+
+<h2 id="authoring-a-connector">Authoring a connector</h2>
+
+<p>A connector is a Python package that subclasses <code>BaseConnector</code>, implements the required fetch path, and registers itself through the <code>agentgraph.connectors</code> entry point group.</p>
+
+<h3 id="base-contract">Base contract</h3>
+
+<p>The required shape is small: identify which URLs the connector owns, implement <code>fetch()</code>, and optionally implement polling, ingest, auth, and user identity hooks.</p>
+
+<pre><code class="language-python">class MyConnector(BaseConnector):
+    source = &quot;myplatform&quot;
+    url_patterns = [&quot;https://app.example.com/*&quot;]
+    auth_label = &quot;myplatform&quot;
+    auth_description = &quot;Example platform&quot;
+
+    def can_handle(self, url: str) -&gt; bool:
+        return &quot;app.example.com&quot; in url
+
+    async def fetch(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        meta: dict[str, str] | None = None,
+    ) -&gt; EntityBatch:
+        ...</code></pre>
+
+<h3 id="output-model">Output model</h3>
+
+<ul><li><code>EntityRecord</code> for messages, documents, channels, folders, spreadsheets, and threads.</li><li><code>PersonRecord</code> for authors and participants.</li><li><code>EdgeRecord</code> for authored, posted-in, replied-to, mentions, references, and similar relationships.</li></ul>
+
+<h3 id="packaging">Packaging</h3>
+
+<p>Register the connector in <code>pyproject.toml</code>.</p>
+
+<pre><code class="language-toml">[project.entry-points.&quot;agentgraph.connectors&quot;]
+myplatform = &quot;agentgraph_connector_myplatform:MyConnector&quot;</code></pre>
+<nav class="page-pager"><a class="pager-link" href="/commands/"><span>Previous</span><strong>Command docs</strong></a><a class="pager-link" href="/privacy.html"><span>Next</span><strong>Privacy</strong></a></nav>
+        </article>
+
+        <aside class="page-aside">
+          <div class="on-page-card">
+            <h2>On this page</h2>
+            <ul><li><a href="#supported-connectors">Supported connectors</a></li><li><a href="#connector-behavior">Connector behavior</a></li><li><a href="#authoring-a-connector">Authoring a connector</a></li></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
   </div>
-  <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
-</header>
-
-<main class="doc-grid">
-  <div class="doc-main">
-    <span class="eyebrow">Connectors</span>
-    <h1 class="page-title">Data sources and connector model</h1>
-    <p class="page-copy">AgentGraph connectors are responsible for turning one external surface into graph entities, people, and edges. The first half of this page is operational reference; the second half is the author guide for custom connectors.</p>
-
-    <section class="content-section" id="supported">
-      <h2>Supported connectors</h2>
-      <table class="surface-table">
-        <thead>
-          <tr>
-            <th>Source</th>
-            <th>Entities</th>
-            <th>Auth</th>
-            <th>Refresh model</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Slack</td>
-            <td>Channel, Message</td>
-            <td>Browser-derived cookie credentials</td>
-            <td>Browser dwell plus 5 minute polling</td>
-          </tr>
-          <tr>
-            <td>Discord</td>
-            <td>Channel, Message</td>
-            <td>Bot token</td>
-            <td>Browser dwell plus 5 minute polling</td>
-          </tr>
-          <tr>
-            <td>Google Docs</td>
-            <td>Document</td>
-            <td>Google OAuth</td>
-            <td>Browser dwell plus Drive-backed refresh</td>
-          </tr>
-          <tr>
-            <td>Google Sheets</td>
-            <td>Spreadsheet</td>
-            <td>Google OAuth</td>
-            <td>Browser dwell plus Drive-backed refresh</td>
-          </tr>
-          <tr>
-            <td>Google Drive</td>
-            <td>Folder, Document</td>
-            <td>Google OAuth</td>
-            <td>Browser dwell for folders and files, plus Drive changes polling</td>
-          </tr>
-          <tr>
-            <td>Gmail</td>
-            <td>Thread</td>
-            <td>Google OAuth</td>
-            <td>Browser dwell plus background poll and ingest</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="content-section" id="behavior">
-      <h2>Connector behavior</h2>
-      <ul class="simple-list">
-        <li><strong>Browser dwell:</strong> supported URLs trigger targeted fetches after the configured dwell threshold.</li>
-        <li><strong>Polling:</strong> connectors that support it store cursor state and fetch changes on a schedule.</li>
-        <li><strong>Ingest:</strong> some connectors expose a broader one-shot historical ingest beyond poll behavior.</li>
-        <li><strong>Download metadata:</strong> file-backed entities can expose <code>metadata.download_url</code> and <code>metadata.mime_type</code> when the caller may need the source bytes.</li>
-      </ul>
-    </section>
-
-    <section class="content-section" id="authoring">
-      <h2>Authoring a connector</h2>
-      <p>A connector is a Python package that subclasses <code>BaseConnector</code>, implements the required fetch path, and registers itself through the <code>agentgraph.connectors</code> entry point group.</p>
-
-      <h3>Base contract</h3>
-      <p>The required shape is small: identify which URLs the connector owns, implement <code>fetch()</code>, and optionally implement polling, ingest, auth, and user identity hooks.</p>
-
-      <pre>class MyConnector(BaseConnector):
-    source = "myplatform"
-    url_patterns = ["https://app.example.com/*"]
-    auth_label = "myplatform"
-    auth_description = "Example platform"
-
-    def can_handle(self, url: str) -> bool:
-        return "app.example.com" in url
-
-    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -&gt; EntityBatch:
-        ...
-</pre>
-
-      <h3>What a connector returns</h3>
-      <p>Connectors emit three record types:</p>
-      <ul>
-        <li><strong>EntityRecord</strong> for messages, documents, channels, folders, spreadsheets, and threads.</li>
-        <li><strong>PersonRecord</strong> for authors and participants.</li>
-        <li><strong>EdgeRecord</strong> for authored, posted-in, replied-to, mentions, references, and similar relationships.</li>
-      </ul>
-
-      <h3>Packaging</h3>
-      <p>Register the connector in <code>pyproject.toml</code>.</p>
-      <pre>[project.entry-points."agentgraph.connectors"]
-myplatform = "agentgraph_connector_myplatform:MyConnector"</pre>
-    </section>
-  </div>
-
-  <aside class="doc-aside">
-    <div class="aside-card">
-      <h2>On this page</h2>
-      <ul>
-        <li><a href="#supported">Supported connectors</a></li>
-        <li><a href="#behavior">Connector behavior</a></li>
-        <li><a href="#authoring">Authoring</a></li>
-      </ul>
-    </div>
-
-    <div class="aside-card">
-      <h2>Related</h2>
-      <ul>
-        <li><a href="install.html#auth">Connector authentication</a></li>
-        <li><a href="commands.html#connectors">Connector status command</a></li>
-      </ul>
-    </div>
-  </aside>
-</main>
-
-<footer class="site-footer">
-  <span>AgentGraph documentation</span>
-  <span><a href="index.html">Home</a> · <a href="commands.html">Commands</a> · <a href="privacy.html">Privacy</a></span>
-</footer>
-
 </body>
 </html>

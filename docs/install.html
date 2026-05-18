@@ -3,122 +3,116 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Install &amp; setup - AgentGraph documentation</title>
-  <meta name="description" content="Install AgentGraph, authenticate connectors, run the server, connect MCP clients, and keep the system running in the background." />
-  <link rel="stylesheet" href="docs.css" />
+  <title>Install - AgentGraph</title>
+  <meta name="description" content="Install AgentGraph, authenticate connectors, run the server, connect the extension, and expose MCP." />
+  <link rel="stylesheet" href="/docs.css" />
 </head>
 <body>
-
-<header class="site-header">
-  <div class="brand-group">
-    <div class="brand-row">
-      <a class="logo" href="index.html">Agent<span>Graph</span></a>
-      <nav class="header-nav" aria-label="Primary">
-        <a href="index.html">Home</a>
-        <a href="install.html" aria-current="page">Install</a>
-        <a href="commands.html">Commands</a>
-        <a href="connectors.html">Connectors</a>
-        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-        <a href="privacy.html">Privacy</a>
+  <div class="site-shell">
+    <aside class="site-sidebar">
+      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
+      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
+      <nav class="sidebar-nav" aria-label="Documentation">
+<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html" aria-current="page">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
+<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
       </nav>
-    </div>
-    <p class="tagline">From local install to a continuously indexed graph that your assistants can query over MCP.</p>
-  </div>
-  <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
-</header>
+      <div class="sidebar-footer">
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
 
-<main class="doc-grid">
-  <div class="doc-main">
-    <span class="eyebrow">Guide</span>
-    <h1 class="page-title">Install &amp; setup</h1>
-    <p class="page-copy">Set up AgentGraph once, authenticate the data sources you care about, then keep the graph running as a local service that your browser and AI clients can use.</p>
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="utility-links">
+          <a href="/">Home</a>
+          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/install.md">Edit page</a>
+        </div>
+        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+      </header>
 
-    <section class="content-section" id="prerequisites">
-      <h2>Prerequisites</h2>
-      <p>AgentGraph expects Python 3.12 or later and <a href="https://docs.astral.sh/uv/">uv</a>.</p>
-      <pre>curl -LsSf https://astral.sh/uv/install.sh | sh</pre>
-    </section>
+      <div class="page-grid">
+        <article class="page-content">
+          <h1>Install</h1>
+          <p class="page-summary">Set up AgentGraph once, authenticate the sources you care about, then run it as a local service for your browser and AI clients.</p>
+<h2 id="prerequisites">Prerequisites</h2>
 
-    <section class="content-section" id="install">
-      <h2>Install</h2>
-      <ol class="step-list">
-        <li>
-          <h3>Clone the repository and sync dependencies</h3>
-          <p><code>--extra all</code> installs every first-party connector package.</p>
-          <pre>git clone https://github.com/simonexmachina/agent-graph
+<p>AgentGraph expects Python 3.12 or later and <a href="https://docs.astral.sh/uv/">uv</a>.</p>
+
+<pre><code class="language-bash">curl -LsSf https://astral.sh/uv/install.sh | sh</code></pre>
+
+<h2 id="sync-dependencies">Sync dependencies</h2>
+
+<p>Clone the repository and install the first-party connectors you need.</p>
+
+<pre><code class="language-bash">git clone https://github.com/simonexmachina/agent-graph
 cd agent-graph
-uv sync --extra all</pre>
-        </li>
-      </ol>
-    </section>
+uv sync --extra all</code></pre>
 
-    <section class="content-section" id="auth">
-      <h2>Authenticate</h2>
-      <p>The fastest path is the setup wizard. It walks every installed connector and opens the required auth flow.</p>
-      <pre>agentgraph onboard</pre>
-      <p>You can also authenticate one connector at a time.</p>
-      <pre>agentgraph auth google
+<p>You can also sync only the connectors you want:</p>
+
+<pre><code class="language-bash">uv sync --extra google
+uv sync --extra slack
+uv sync --extra discord</code></pre>
+
+<h2 id="authenticate-connectors">Authenticate connectors</h2>
+
+<p>The fastest path is the setup wizard:</p>
+
+<pre><code class="language-bash">agentgraph onboard</code></pre>
+
+<p>You can also authenticate one connector at a time:</p>
+
+<pre><code class="language-bash">agentgraph auth google
 agentgraph auth slack
-agentgraph auth discord</pre>
-      <div class="callout">
-        <strong>Local credential storage:</strong> credentials live in <code>~/.agentgraph/</code> by default, or under <code>AGENTGRAPH_CONFIG_DIR</code> if you set a custom config directory.
-      </div>
-    </section>
+agentgraph auth discord</code></pre>
 
-    <section class="content-section" id="serve">
-      <h2>Run the server</h2>
-      <p>The server accepts browser dwell events, runs connector pollers, serves the graph viewer, and provides the local HTTP backend.</p>
-      <pre>agentgraph serve</pre>
-      <p>Use reload mode during development.</p>
-      <pre>agentgraph serve --reload</pre>
-      <p>Logs are written to <code>/tmp/agentgraph.log</code>.</p>
-    </section>
+<div class="callout">
+  <p><strong>Credential storage:</strong> credentials live in <code>~/.agentgraph/</code> by default, or under <code>AGENTGRAPH_CONFIG_DIR</code> if you set a custom config directory.</p>
+</div>
 
-    <section class="content-section" id="extension">
-      <h2>Browser extension</h2>
-      <p>The extension is the browser-side observation layer. It watches supported URLs and asks the server to fetch the underlying resource after the dwell threshold is met.</p>
-      <ol class="step-list">
-        <li>
-          <h3>Build the extension</h3>
-          <pre>cd extension
+
+<h2 id="run-the-server">Run the server</h2>
+
+<p><code>agentgraph serve</code> accepts browser dwell events, runs connector pollers, serves the viewer, and exposes the local HTTP backend.</p>
+
+<pre><code class="language-bash">agentgraph serve
+agentgraph serve --reload</code></pre>
+
+<p>Logs are written to <code>/tmp/agentgraph.log</code>.</p>
+
+<h2 id="install-the-browser-extension">Install the browser extension</h2>
+
+<p>Build the extension:</p>
+
+<pre><code class="language-bash">cd extension
 npm install
-npm run build</pre>
-        </li>
-        <li>
-          <h3>Load it in Chrome</h3>
-          <p>Open <code>chrome://extensions</code>, enable Developer Mode, then load <code>extension/dist/</code> as an unpacked extension.</p>
-        </li>
-        <li>
-          <h3>Verify capture</h3>
-          <p>Open a supported page such as a Slack channel or Google Doc and confirm entities start appearing in the graph.</p>
-          <pre>agentgraph search "slack" --limit 5</pre>
-        </li>
-      </ol>
-    </section>
+npm run build</code></pre>
 
-    <section class="content-section" id="mcp">
-      <h2>Connect Claude or ChatGPT</h2>
-      <p>Use the generated MCP config for stdio clients, or run a remote transport for clients that expect SSE or streaming HTTP.</p>
-      <pre>agentgraph mcp-config</pre>
-      <div class="callout">
-        <strong>ChatGPT:</strong> enable Developer mode in Settings, then add a remote MCP connector that points at an AgentGraph SSE or streaming HTTP endpoint.
-      </div>
-      <p>The command reference has the exact MCP transport options.</p>
-      <p><a href="commands.html#mcp">See MCP reference</a></p>
-    </section>
+<p>Then load <code>extension/dist/</code> from <code>chrome://extensions</code> with Developer Mode enabled.</p>
 
-    <section class="content-section" id="background">
-      <h2>Run in the background</h2>
-      <p>Only <code>agentgraph serve</code> needs to be long-running. MCP stdio mode is spawned on demand by the client.</p>
+<h2 id="connect-mcp-clients">Connect MCP clients</h2>
 
-      <h3>macOS launchd</h3>
-      <pre>which agentgraph
+<p>Print the client config:</p>
 
-cat &gt; ~/Library/LaunchAgents/com.agentgraph.serve.plist &lt;&lt;'EOF'
-&lt;?xml version="1.0" encoding="UTF-8"?&gt;
-&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;
-&lt;plist version="1.0"&gt;
+<pre><code class="language-bash">agentgraph mcp-config</code></pre>
+
+<p>For ChatGPT, enable Developer mode and point a remote MCP connector at an AgentGraph SSE or streaming HTTP endpoint.</p>
+
+<h2 id="run-in-the-background">Run in the background</h2>
+
+<p>Only <code>agentgraph serve</code> needs to be long-running. MCP stdio mode is spawned on demand by the client.</p>
+
+<h3 id="macos-launchd">macOS launchd</h3>
+
+<pre><code class="language-bash">which agentgraph
+
+cat &gt; ~/Library/LaunchAgents/com.agentgraph.serve.plist &lt;&lt;&#x27;EOF&#x27;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot;
+  &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
 &lt;dict&gt;
   &lt;key&gt;Label&lt;/key&gt;
   &lt;string&gt;com.agentgraph.serve&lt;/string&gt;
@@ -139,13 +133,14 @@ cat &gt; ~/Library/LaunchAgents/com.agentgraph.serve.plist &lt;&lt;'EOF'
 &lt;/plist&gt;
 EOF
 
-launchctl load ~/Library/LaunchAgents/com.agentgraph.serve.plist</pre>
+launchctl load ~/Library/LaunchAgents/com.agentgraph.serve.plist</code></pre>
 
-      <h3>Linux systemd</h3>
-      <pre>which agentgraph
+<h3 id="linux-systemd">Linux systemd</h3>
+
+<pre><code class="language-bash">which agentgraph
 
 mkdir -p ~/.config/systemd/user
-cat &gt; ~/.config/systemd/user/agentgraph.service &lt;&lt;'EOF'
+cat &gt; ~/.config/systemd/user/agentgraph.service &lt;&lt;&#x27;EOF&#x27;
 [Unit]
 Description=AgentGraph local knowledge graph server
 After=network.target
@@ -162,38 +157,18 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable --now agentgraph</pre>
-    </section>
+systemctl --user enable --now agentgraph</code></pre>
+<nav class="page-pager"><a class="pager-link" href="/"><span>Previous</span><strong>Overview</strong></a><a class="pager-link" href="/quickstart.html"><span>Next</span><strong>Quickstart</strong></a></nav>
+        </article>
+
+        <aside class="page-aside">
+          <div class="on-page-card">
+            <h2>On this page</h2>
+            <ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#sync-dependencies">Sync dependencies</a></li><li><a href="#authenticate-connectors">Authenticate connectors</a></li><li><a href="#run-the-server">Run the server</a></li><li><a href="#install-the-browser-extension">Install the browser extension</a></li><li><a href="#connect-mcp-clients">Connect MCP clients</a></li><li><a href="#run-in-the-background">Run in the background</a></li></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
   </div>
-
-  <aside class="doc-aside">
-    <div class="aside-card">
-      <h2>On this page</h2>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#install">Install</a></li>
-        <li><a href="#auth">Authenticate</a></li>
-        <li><a href="#serve">Run the server</a></li>
-        <li><a href="#extension">Browser extension</a></li>
-        <li><a href="#mcp">MCP clients</a></li>
-        <li><a href="#background">Background service</a></li>
-      </ul>
-    </div>
-
-    <div class="aside-card">
-      <h2>Next</h2>
-      <ul>
-        <li><a href="commands.html">Read the command reference</a></li>
-        <li><a href="connectors.html#supported">Review connector behavior</a></li>
-      </ul>
-    </div>
-  </aside>
-</main>
-
-<footer class="site-footer">
-  <span>AgentGraph documentation</span>
-  <span><a href="index.html">Home</a> · <a href="commands.html">Commands</a> · <a href="privacy.html">Privacy</a></span>
-</footer>
-
 </body>
 </html>

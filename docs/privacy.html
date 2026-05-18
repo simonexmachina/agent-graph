@@ -3,167 +3,75 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Privacy Policy — AgentGraph</title>
-  <meta name="description" content="AgentGraph Privacy Policy" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:       #0f172a;
-      --surface:  #1e293b;
-      --border:   #334155;
-      --text:     #e2e8f0;
-      --muted:    #94a3b8;
-      --accent:   #38bdf8;
-      --radius:   8px;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.7;
-    }
-
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    header, main, footer { max-width: 720px; margin: 0 auto; padding: 0 24px; }
-
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-top: 28px;
-      padding-bottom: 28px;
-      border-bottom: 1px solid var(--border);
-    }
-    .logo { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
-    .logo span { color: var(--accent); }
-    nav a { font-size: 14px; color: var(--muted); margin-left: 24px; }
-    nav a:hover { color: var(--text); text-decoration: none; }
-
-    main { padding-top: 56px; padding-bottom: 72px; }
-
-    .page-title {
-      font-size: 36px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      margin-bottom: 8px;
-    }
-    .updated {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 48px;
-    }
-
-    h2 {
-      font-size: 18px;
-      font-weight: 700;
-      margin-top: 40px;
-      margin-bottom: 12px;
-      color: var(--text);
-    }
-    p { font-size: 15px; color: var(--muted); margin-bottom: 16px; }
-    ul { padding-left: 20px; margin-bottom: 16px; }
-    li { font-size: 15px; color: var(--muted); margin-bottom: 6px; }
-
-    .callout {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      margin: 20px 0;
-    }
-    .callout p { margin: 0; }
-
-    footer {
-      border-top: 1px solid var(--border);
-      padding-top: 32px;
-      padding-bottom: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    footer a { color: var(--muted); }
-    footer a:hover { color: var(--text); }
-  </style>
+  <title>Privacy - AgentGraph</title>
+  <meta name="description" content="AgentGraph privacy policy." />
+  <link rel="stylesheet" href="/docs.css" />
 </head>
 <body>
+  <div class="site-shell">
+    <aside class="site-sidebar">
+      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
+      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
+      <nav class="sidebar-nav" aria-label="Documentation">
+<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
+<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html" aria-current="page">Privacy</a></li></ul></section>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="/privacy.html">Privacy</a>
+      </div>
+    </aside>
 
-<header>
-  <a class="logo" href="index.html">Agent<span>Graph</span></a>
-  <nav>
-    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-    <a href="index.html">Home</a>
-  </nav>
-</header>
+    <main class="page-shell">
+      <header class="page-header">
+        <div class="utility-links">
+          <a href="/">Home</a>
+          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/privacy.md">Edit page</a>
+        </div>
+        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+      </header>
 
-<main>
-  <h1 class="page-title">Privacy Policy</h1>
-  <p class="updated">Last updated: May 2025</p>
+      <div class="page-grid">
+        <article class="page-content">
+          <h1>Privacy</h1>
+          <p class="page-summary">AgentGraph is a local tool. Indexed content, credentials, and query traffic stay on your machine unless another client you choose reads from your local graph.</p>
+<h2 id="what-agentgraph-is">What AgentGraph is</h2>
 
-  <div class="callout">
-    <p><strong>Short version:</strong> AgentGraph is a local tool. Your data stays on your machine. Nothing is sent to any external server by AgentGraph itself.</p>
+<p>AgentGraph is an open-source application that you install and run locally on your own computer. It indexes content from connected sources into a local database and makes that data searchable via a CLI, web viewer, and MCP server.</p>
+
+<h2 id="data-collection-and-storage">Data collection and storage</h2>
+
+<ul><li>Indexed content is stored in a local SQLite database by default.</li><li>Credentials are stored in <code>credentials.json</code> inside the AgentGraph config directory.</li><li>AgentGraph does not operate a hosted service and does not send indexed content to a server controlled by the project.</li></ul>
+
+<h2 id="google-api-usage">Google API usage</h2>
+
+<p>AgentGraph uses Google APIs to read Google Docs, Google Sheets, Google Drive, and Gmail content on your behalf. AgentGraph&#x27;s use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2 id="third-party-api-calls">Third-party API calls</h2>
+
+<p>AgentGraph makes outbound API calls directly from your machine to the services you have authenticated with, such as Google, Slack, and Discord. Those calls run under your own credentials and are subject to those services&#x27; privacy policies.</p>
+
+<p>If you connect an MCP client, that client can receive content from your local AgentGraph database. That part of the flow is governed by the privacy policy of the client you chose.</p>
+
+<h2 id="open-source">Open source</h2>
+
+<p>The project source is public at <a href="https://github.com/simonexmachina/agent-graph">github.com/simonexmachina/agent-graph</a>. There is no hidden telemetry layer in AgentGraph itself.</p>
+
+<h2 id="changes">Changes</h2>
+
+<p>If this policy changes materially, the updated version will be published at this URL with a revised date.</p>
+<nav class="page-pager"><a class="pager-link" href="/connectors.html"><span>Previous</span><strong>Connectors</strong></a><span class="pager-link pager-link-empty"></span></nav>
+        </article>
+
+        <aside class="page-aside">
+          <div class="on-page-card">
+            <h2>On this page</h2>
+            <ul><li><a href="#what-agentgraph-is">What AgentGraph is</a></li><li><a href="#data-collection-and-storage">Data collection and storage</a></li><li><a href="#google-api-usage">Google API usage</a></li><li><a href="#third-party-api-calls">Third-party API calls</a></li><li><a href="#open-source">Open source</a></li><li><a href="#changes">Changes</a></li></ul>
+          </div>
+        </aside>
+      </div>
+    </main>
   </div>
-
-  <h2>What is AgentGraph?</h2>
-  <p>AgentGraph is an open-source application that you install and run locally on your own computer. It indexes content from connected data sources (Slack, Discord, Google Docs, Google Sheets, Google Drive, Gmail) into a local SQLite database, and makes that data searchable via a CLI, web viewer, and MCP server for use with AI assistants.</p>
-
-  <h2>Data collection and storage</h2>
-  <p>AgentGraph does not operate any servers or cloud infrastructure. When you run AgentGraph:</p>
-  <ul>
-    <li>All indexed content is stored in a SQLite database on your local machine (by default at <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">~/.agentgraph/agentgraph.db</code>, or under <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">AGENTGRAPH_CONFIG_DIR</code> if configured).</li>
-    <li>Credentials (OAuth tokens, API keys) are stored in <code style="font-family:monospace; font-size:13px; background:#1e293b; padding:1px 5px; border-radius:3px;">credentials.json</code> in the AgentGraph config directory on your local machine.</li>
-    <li>No data is transmitted to the developers of AgentGraph or any third party controlled by AgentGraph.</li>
-  </ul>
-
-  <h2>Google API usage</h2>
-  <p>AgentGraph uses the following Google APIs to read content on your behalf:</p>
-  <ul>
-    <li>Google Docs API — to read document content</li>
-    <li>Google Sheets API — to read spreadsheet content</li>
-    <li>Google Drive API — to list and access files in Drive</li>
-    <li>Gmail API — to read email threads in your inbox</li>
-  </ul>
-  <p>AgentGraph's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
-  <p>Specifically:</p>
-  <ul>
-    <li>Data obtained from Google APIs is used only to provide the core functionality of AgentGraph: building and querying a local knowledge graph for your personal use.</li>
-    <li>Google user data is not used for advertising, is not sold to third parties, and is not used to train machine learning models.</li>
-    <li>Google user data is not shared with humans except as necessary to provide the service you requested (i.e., displaying it to you in the AgentGraph interface).</li>
-    <li>All Google API data is stored locally on your machine and is not transmitted to AgentGraph developers or any third-party server.</li>
-  </ul>
-
-  <h2>Third-party API calls</h2>
-  <p>AgentGraph makes outbound API calls directly from your machine to the services you have authenticated with (Google, Slack, Discord). These calls are made under your own credentials and are subject to those services' own privacy policies. AgentGraph does not intermediate or log these requests.</p>
-  <p>If you use the MCP server integration, your AI assistant (e.g. Claude Desktop) will receive content from your local AgentGraph database. This is governed by the privacy policy of the AI assistant you have chosen.</p>
-
-  <h2>Open source</h2>
-  <p>AgentGraph is fully open source. You can review exactly what the software does at <a href="https://github.com/simonexmachina/agent-graph">github.com/simonexmachina/agent-graph</a>. There are no hidden network calls or telemetry.</p>
-
-  <h2>Children's privacy</h2>
-  <p>AgentGraph is a developer tool not directed at children under 13. We do not knowingly collect personal information from children.</p>
-
-  <h2>Changes to this policy</h2>
-  <p>If this policy changes materially, the updated version will be published at this URL with a revised date.</p>
-
-  <h2>Contact</h2>
-  <p>Questions about this privacy policy can be directed to the project maintainer via <a href="https://github.com/simonexmachina/agent-graph/issues">GitHub Issues</a>.</p>
-</main>
-
-<footer>
-  <span>AgentGraph — open source, MIT license</span>
-  <span>
-    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a> ·
-    <a href="index.html">Home</a>
-  </span>
-</footer>
-
 </body>
 </html>
