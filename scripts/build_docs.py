@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS_SRC = ROOT / "docs-src"
 DOCS_OUT = ROOT / "docs"
 GITHUB_ROOT = "https://github.com/simonexmachina/agent-graph/blob/main"
-SITE_TITLE = "AgentGraph documentation"
 SECTION_ORDER = {"Start": 10, "Reference": 20}
 
 
@@ -119,7 +118,8 @@ def render_markdown(body: str) -> tuple[str, tuple[Heading, ...]]:
             text = heading_match.group(2).strip()
             slug = slugify(text)
             headings.append(Heading(level=level, text=text, slug=slug))
-            parts.append(f"<h{level} id=\"{slug}\">{render_inline(text)}</h{level}>")
+            anchor = f'<a class="anchor" href="#{slug}" aria-label="Anchor link">#</a>'
+            parts.append(f"<h{level} id=\"{slug}\">{anchor}{render_inline(text)}</h{level}>")
             i += 1
             continue
 
@@ -224,23 +224,22 @@ def build_global_nav(pages: list[Page], current_page: Page) -> str:
     for section in section_order:
         links = ""
         for page in grouped[section]:
-            current_attr = ' aria-current="page"' if page.meta.output_path == current_page.meta.output_path else ""
+            current_class = "nav-link active" if page.meta.output_path == current_page.meta.output_path else "nav-link"
             links += (
-                f'<li><a href="{page_permalink(page.meta)}"{current_attr}>{page.meta.nav_title}</a></li>'
+                f'<a class="{current_class}" href="{page_permalink(page.meta)}">{page.meta.nav_title}</a>'
             )
-        section_blocks.append(
-            f'<section class="sidebar-section"><h2>{html.escape(section)}</h2><ul>{links}</ul></section>'
-        )
+        section_blocks.append(f"<section><h2>{html.escape(section)}</h2>{links}</section>")
     return "\n".join(section_blocks)
 
 
 def build_on_page_nav(page: Page) -> str:
-    items = [heading for heading in page.headings if heading.level == 2]
+    items = [heading for heading in page.headings if heading.level in (2, 3)]
     if not items:
-        return "<p class=\"on-page-empty\">This page is short.</p>"
-    return "<ul>" + "".join(
-        f'<li><a href="#{heading.slug}">{html.escape(heading.text)}</a></li>' for heading in items
-    ) + "</ul>"
+        return ""
+    return "".join(
+        f'<a class="toc-l{heading.level}" href="#{heading.slug}">{html.escape(heading.text)}</a>'
+        for heading in items
+    )
 
 
 def page_permalink(meta: PageMeta) -> str:
@@ -257,74 +256,111 @@ def build_prev_next(pages: list[Page], index: int) -> str:
     if index > 0:
         previous = pages[index - 1]
         links.append(
-            f'<a class="pager-link" href="{page_permalink(previous.meta)}"><span>Previous</span><strong>{html.escape(previous.meta.nav_title)}</strong></a>'
+            f'<a class="page-nav-prev" href="{page_permalink(previous.meta)}"><small>Previous</small><span>{html.escape(previous.meta.nav_title)}</span></a>'
         )
-    else:
-        links.append('<span class="pager-link pager-link-empty"></span>')
     if index + 1 < len(pages):
         next_page = pages[index + 1]
         links.append(
-            f'<a class="pager-link" href="{page_permalink(next_page.meta)}"><span>Next</span><strong>{html.escape(next_page.meta.nav_title)}</strong></a>'
+            f'<a class="page-nav-next" href="{page_permalink(next_page.meta)}"><small>Next</small><span>{html.escape(next_page.meta.nav_title)}</span></a>'
         )
-    else:
-        links.append('<span class="pager-link pager-link-empty"></span>')
-    return "<nav class=\"page-pager\">" + "".join(links) + "</nav>"
+    return "<nav class=\"page-nav\" aria-label=\"Pager\">" + "".join(links) + "</nav>"
 
 
 def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
     source_href = f"{GITHUB_ROOT}/{page.meta.source_path.as_posix()}"
     title = html.escape(page.meta.title)
     description = html.escape(page.meta.description, quote=True)
+    body_class = "home" if page.meta.output_path == Path("index.html") else ""
+    toc_html = build_on_page_nav(page)
+    article_title = "" if body_class == "home" else f"          <h1>{title}</h1>\n"
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07080a" />
+  <meta name="color-scheme" content="light dark" />
   <title>{title} - AgentGraph</title>
   <meta name="description" content="{description}" />
+  <script>try{{const t=localStorage.getItem('agentgraph-docs-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}}catch{{document.documentElement.dataset.theme='dark'}}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/docs.css" />
 </head>
-<body>
-  <div class="site-shell">
-    <aside class="site-sidebar">
-      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
-      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
-      <nav class="sidebar-nav" aria-label="Documentation">
+<body class="{body_class}">
+  <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+    <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+  </button>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <a class="brand" href="/" aria-label="AgentGraph home">
+          <span class="mark" aria-hidden="true"></span>
+          <span><strong>AgentGraph</strong><small>local graph docs</small></span>
+        </a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+          <span class="theme-toggle__icon" aria-hidden="true"></span>
+        </button>
+      </div>
+      <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
+      <nav aria-label="Documentation">
 {nav_html}
       </nav>
-      <div class="sidebar-footer">
-        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-        <a href="/privacy.html">Privacy</a>
-      </div>
     </aside>
-
     <main class="page-shell">
-      <header class="page-header">
-        <div class="utility-links">
-          <a href="/">Home</a>
-          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-          <a href="{source_href}">Edit page</a>
-        </div>
-        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
-      </header>
-
-      <div class="page-grid">
-        <article class="page-content">
+      <header class="hero">
+        <div class="hero-text">
+          <p class="eyebrow">{html.escape(page.meta.section)}</p>
           <h1>{title}</h1>
+        </div>
+        <div class="hero-meta">
+          <a class="repo" href="/">Home</a>
+          <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
+          <a class="edit" href="{source_href}">Edit page</a>
+        </div>
+      </header>
+      <div class="doc-grid">
+        <article class="doc">
+{article_title}\
           <p class="page-summary">{html.escape(page.meta.summary)}</p>
 {page.body}
 {build_prev_next(pages, index)}
         </article>
-
-        <aside class="page-aside">
-          <div class="on-page-card">
-            <h2>On this page</h2>
-            {build_on_page_nav(page)}
-          </div>
-        </aside>
+        <nav class="toc" aria-label="On this page"><h2>On this page</h2>{toc_html}</nav>
       </div>
     </main>
   </div>
+  <script>
+const root=document.documentElement;
+const themeToggle=document.querySelector('[data-theme-toggle]');
+const themeMedia=window.matchMedia('(prefers-color-scheme: light)');
+function storedTheme(){{try{{const theme=localStorage.getItem('agentgraph-docs-theme');return theme==='light'||theme==='dark'?theme:null}}catch{{return null}}}}
+function systemTheme(){{return themeMedia.matches?'light':'dark';}}
+function applyTheme(theme){{root.dataset.theme=theme;themeToggle?.setAttribute('aria-pressed',theme==='dark'?'true':'false');}}
+applyTheme(root.dataset.theme||storedTheme()||systemTheme());
+themeToggle?.addEventListener('click',()=>{{const next=root.dataset.theme==='dark'?'light':'dark';try{{localStorage.setItem('agentgraph-docs-theme',next)}}catch{{}}applyTheme(next);}});
+const syncSystemTheme=()=>{{if(!storedTheme())applyTheme(systemTheme());}};
+if(themeMedia.addEventListener)themeMedia.addEventListener('change',syncSystemTheme);else themeMedia.addListener?.(syncSystemTheme);
+const sidebar=document.querySelector('.sidebar');
+const toggle=document.querySelector('.nav-toggle');
+const mobileNav=window.matchMedia('(max-width: 900px)');
+const sidebarFocusable='a[href],button,input,select,textarea,[tabindex]';
+function setSidebarFocusable(enabled){{sidebar?.querySelectorAll(sidebarFocusable).forEach((el)=>{{if(enabled){{if(el.dataset.sidebarTabindex!==undefined){{if(el.dataset.sidebarTabindex)el.setAttribute('tabindex',el.dataset.sidebarTabindex);else el.removeAttribute('tabindex');delete el.dataset.sidebarTabindex;}}}}else if(el.dataset.sidebarTabindex===undefined){{el.dataset.sidebarTabindex=el.getAttribute('tabindex')??'';el.setAttribute('tabindex','-1');}}}});}}
+function setSidebarOpen(open){{if(!sidebar||!toggle)return;sidebar.classList.toggle('open',open);toggle.setAttribute('aria-expanded',open?'true':'false');if(mobileNav.matches){{sidebar.inert=!open;if(open)sidebar.removeAttribute('aria-hidden');else sidebar.setAttribute('aria-hidden','true');setSidebarFocusable(open);}}else{{sidebar.inert=false;sidebar.removeAttribute('aria-hidden');setSidebarFocusable(true);}}}}
+setSidebarOpen(false);
+toggle?.addEventListener('click',()=>setSidebarOpen(!sidebar?.classList.contains('open')));
+document.addEventListener('click',(e)=>{{if(!sidebar?.classList.contains('open'))return;if(sidebar.contains(e.target)||toggle?.contains(e.target))return;setSidebarOpen(false);}});
+document.addEventListener('keydown',(e)=>{{if(e.key==='Escape')setSidebarOpen(false);}});
+const syncSidebarForViewport=()=>setSidebarOpen(sidebar?.classList.contains('open')??false);
+if(mobileNav.addEventListener)mobileNav.addEventListener('change',syncSidebarForViewport);else mobileNav.addListener?.(syncSidebarForViewport);
+const input=document.getElementById('doc-search');
+input?.addEventListener('input',()=>{{const q=input.value.trim().toLowerCase();document.querySelectorAll('nav section').forEach(sec=>{{let any=false;sec.querySelectorAll('.nav-link').forEach(a=>{{const m=!q||a.textContent.toLowerCase().includes(q);a.style.display=m?'block':'none';if(m)any=true;}});sec.style.display=any?'block':'none';}});}});
+function attachCopy(target,getText){{const btn=document.createElement('button');btn.type='button';btn.className='copy';btn.textContent='Copy';btn.addEventListener('click',async()=>{{try{{await navigator.clipboard.writeText(getText());btn.textContent='Copied';btn.classList.add('copied');setTimeout(()=>{{btn.textContent='Copy';btn.classList.remove('copied');}},1400);}}catch{{btn.textContent='Failed';setTimeout(()=>{{btn.textContent='Copy';}},1400);}}}});target.appendChild(btn);}}
+document.querySelectorAll('.doc pre').forEach(pre=>attachCopy(pre,()=>pre.querySelector('code')?.textContent??''));
+const tocLinks=document.querySelectorAll('.toc a');
+if(tocLinks.length){{const map=new Map();tocLinks.forEach(a=>{{const id=a.getAttribute('href')?.slice(1);const el=id?document.getElementById(id):null;if(el)map.set(el,a);}});const setActive=l=>{{tocLinks.forEach(x=>x.classList.remove('active'));l.classList.add('active');}};const obs=new IntersectionObserver(entries=>{{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);if(visible.length){{const link=map.get(visible[0].target);if(link)setActive(link);}}}},{{rootMargin:'-15% 0px -65% 0px',threshold:0}});map.forEach((_,el)=>obs.observe(el));}}
+  </script>
 </body>
 </html>
 """

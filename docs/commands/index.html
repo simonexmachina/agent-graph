@@ -3,40 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07080a" />
+  <meta name="color-scheme" content="light dark" />
   <title>Command docs index - AgentGraph</title>
   <meta name="description" content="Command reference for the AgentGraph CLI and MCP workflows." />
+  <script>try{const t=localStorage.getItem('agentgraph-docs-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}catch{document.documentElement.dataset.theme='dark'}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/docs.css" />
 </head>
-<body>
-  <div class="site-shell">
-    <aside class="site-sidebar">
-      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
-      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
-      <nav class="sidebar-nav" aria-label="Documentation">
-<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
-<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/" aria-current="page">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
-      </nav>
-      <div class="sidebar-footer">
-        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-        <a href="/privacy.html">Privacy</a>
+<body class="">
+  <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+    <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+  </button>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <a class="brand" href="/" aria-label="AgentGraph home">
+          <span class="mark" aria-hidden="true"></span>
+          <span><strong>AgentGraph</strong><small>local graph docs</small></span>
+        </a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+          <span class="theme-toggle__icon" aria-hidden="true"></span>
+        </button>
       </div>
+      <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
+      <nav aria-label="Documentation">
+<section><h2>Start</h2><a class="nav-link" href="/">Overview</a><a class="nav-link" href="/install.html">Install</a><a class="nav-link" href="/quickstart.html">Quickstart</a><a class="nav-link" href="/configuration.html">Configuration</a></section>
+<section><h2>Reference</h2><a class="nav-link active" href="/commands/">Command docs</a><a class="nav-link" href="/connectors.html">Connectors</a><a class="nav-link" href="/privacy.html">Privacy</a></section>
+      </nav>
     </aside>
-
     <main class="page-shell">
-      <header class="page-header">
-        <div class="utility-links">
-          <a href="/">Home</a>
-          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/commands/index.md">Edit page</a>
+      <header class="hero">
+        <div class="hero-text">
+          <p class="eyebrow">Reference</p>
+          <h1>Command docs index</h1>
         </div>
-        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+        <div class="hero-meta">
+          <a class="repo" href="/">Home</a>
+          <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
+          <a class="edit" href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/commands/index.md">Edit page</a>
+        </div>
       </header>
-
-      <div class="page-grid">
-        <article class="page-content">
+      <div class="doc-grid">
+        <article class="doc">
           <h1>Command docs index</h1>
           <p class="page-summary">The CLI and MCP server expose the same graph operations. Use the terminal directly for local work, or connect an MCP client to run the same actions from an assistant.</p>
-<h2 id="query">Query</h2>
+<h2 id="query"><a class="anchor" href="#query" aria-label="Anchor link">#</a>Query</h2>
 
 <ul><li><code>agentgraph search</code> - hybrid semantic and lexical search across the local graph.</li><li><code>agentgraph query</code> - filter entities by type, ownership, time window, and attachment presence.</li><li><code>agentgraph get</code> - return one entity by UUID, UUID prefix, or platform reference.</li><li><code>agentgraph edges</code> - list connected edges for one entity, filtered by direction and edge type.</li><li><code>agentgraph traverse</code> - walk outward from an entity across graph edges.</li></ul>
 
@@ -45,7 +59,7 @@ agentgraph query --type Message --filter platform=slack --since 24h --mine --lim
 agentgraph get abc123ef --json
 agentgraph traverse abc123ef --depth 2 --resolve --json</code></pre>
 
-<h2 id="fetch">Fetch</h2>
+<h2 id="fetch"><a class="anchor" href="#fetch" aria-label="Anchor link">#</a>Fetch</h2>
 
 <ul><li><code>agentgraph fetch</code> - trigger a connector fetch by source and platform-specific identifier.</li><li><code>agentgraph fetch-entity</code> - re-fetch a known entity by internal UUID.</li></ul>
 
@@ -53,7 +67,7 @@ agentgraph traverse abc123ef --depth 2 --resolve --json</code></pre>
 agentgraph fetch gdocs 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
 agentgraph fetch-entity abc123ef-9d6b-4bbe-b5ab-200faecb70e9 --json</code></pre>
 
-<h2 id="sync">Sync</h2>
+<h2 id="sync"><a class="anchor" href="#sync" aria-label="Anchor link">#</a>Sync</h2>
 
 <ul><li><code>agentgraph poll</code> - run background polling immediately for one connector or all installed connectors.</li><li><code>agentgraph ingest</code> - run a one-shot historical ingest where the connector supports it.</li></ul>
 
@@ -61,14 +75,14 @@ agentgraph fetch-entity abc123ef-9d6b-4bbe-b5ab-200faecb70e9 --json</code></pre>
 agentgraph poll slack
 agentgraph ingest gmail</code></pre>
 
-<h2 id="connector-status">Connector status</h2>
+<h2 id="connector-status"><a class="anchor" href="#connector-status" aria-label="Anchor link">#</a>Connector status</h2>
 
 <ul><li><code>agentgraph connectors</code> - list installed connectors, auth status, URL patterns, and whether they poll.</li></ul>
 
 <pre><code class="language-bash">agentgraph connectors
 agentgraph connectors --json</code></pre>
 
-<h2 id="authentication">Authentication</h2>
+<h2 id="authentication"><a class="anchor" href="#authentication" aria-label="Anchor link">#</a>Authentication</h2>
 
 <ul><li><code>agentgraph onboard</code> - walk through auth setup for every installed connector.</li><li><code>agentgraph auth</code> - authenticate a specific connector directly.</li></ul>
 
@@ -77,7 +91,7 @@ agentgraph auth google
 agentgraph auth slack
 agentgraph auth discord</code></pre>
 
-<h2 id="server-and-mcp">Server and MCP</h2>
+<h2 id="server-and-mcp"><a class="anchor" href="#server-and-mcp" aria-label="Anchor link">#</a>Server and MCP</h2>
 
 <ul><li><code>agentgraph serve</code> - start the local HTTP server, connector pollers, and viewer.</li><li><code>agentgraph mcp-config</code> - print the client config snippet for local and remote MCP clients.</li><li><code>agentgraph mcp-serve</code> - run the MCP server over stdio, SSE, or streaming HTTP.</li></ul>
 
@@ -85,17 +99,41 @@ agentgraph auth discord</code></pre>
 agentgraph mcp-config
 agentgraph mcp-serve --transport sse --port 8808
 agentgraph mcp-serve --transport streamable-http --port 8808</code></pre>
-<nav class="page-pager"><a class="pager-link" href="/configuration.html"><span>Previous</span><strong>Configuration</strong></a><a class="pager-link" href="/connectors.html"><span>Next</span><strong>Connectors</strong></a></nav>
+<nav class="page-nav" aria-label="Pager"><a class="page-nav-prev" href="/configuration.html"><small>Previous</small><span>Configuration</span></a><a class="page-nav-next" href="/connectors.html"><small>Next</small><span>Connectors</span></a></nav>
         </article>
-
-        <aside class="page-aside">
-          <div class="on-page-card">
-            <h2>On this page</h2>
-            <ul><li><a href="#query">Query</a></li><li><a href="#fetch">Fetch</a></li><li><a href="#sync">Sync</a></li><li><a href="#connector-status">Connector status</a></li><li><a href="#authentication">Authentication</a></li><li><a href="#server-and-mcp">Server and MCP</a></li></ul>
-          </div>
-        </aside>
+        <nav class="toc" aria-label="On this page"><h2>On this page</h2><a class="toc-l2" href="#query">Query</a><a class="toc-l2" href="#fetch">Fetch</a><a class="toc-l2" href="#sync">Sync</a><a class="toc-l2" href="#connector-status">Connector status</a><a class="toc-l2" href="#authentication">Authentication</a><a class="toc-l2" href="#server-and-mcp">Server and MCP</a></nav>
       </div>
     </main>
   </div>
+  <script>
+const root=document.documentElement;
+const themeToggle=document.querySelector('[data-theme-toggle]');
+const themeMedia=window.matchMedia('(prefers-color-scheme: light)');
+function storedTheme(){try{const theme=localStorage.getItem('agentgraph-docs-theme');return theme==='light'||theme==='dark'?theme:null}catch{return null}}
+function systemTheme(){return themeMedia.matches?'light':'dark';}
+function applyTheme(theme){root.dataset.theme=theme;themeToggle?.setAttribute('aria-pressed',theme==='dark'?'true':'false');}
+applyTheme(root.dataset.theme||storedTheme()||systemTheme());
+themeToggle?.addEventListener('click',()=>{const next=root.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('agentgraph-docs-theme',next)}catch{}applyTheme(next);});
+const syncSystemTheme=()=>{if(!storedTheme())applyTheme(systemTheme());};
+if(themeMedia.addEventListener)themeMedia.addEventListener('change',syncSystemTheme);else themeMedia.addListener?.(syncSystemTheme);
+const sidebar=document.querySelector('.sidebar');
+const toggle=document.querySelector('.nav-toggle');
+const mobileNav=window.matchMedia('(max-width: 900px)');
+const sidebarFocusable='a[href],button,input,select,textarea,[tabindex]';
+function setSidebarFocusable(enabled){sidebar?.querySelectorAll(sidebarFocusable).forEach((el)=>{if(enabled){if(el.dataset.sidebarTabindex!==undefined){if(el.dataset.sidebarTabindex)el.setAttribute('tabindex',el.dataset.sidebarTabindex);else el.removeAttribute('tabindex');delete el.dataset.sidebarTabindex;}}else if(el.dataset.sidebarTabindex===undefined){el.dataset.sidebarTabindex=el.getAttribute('tabindex')??'';el.setAttribute('tabindex','-1');}});}
+function setSidebarOpen(open){if(!sidebar||!toggle)return;sidebar.classList.toggle('open',open);toggle.setAttribute('aria-expanded',open?'true':'false');if(mobileNav.matches){sidebar.inert=!open;if(open)sidebar.removeAttribute('aria-hidden');else sidebar.setAttribute('aria-hidden','true');setSidebarFocusable(open);}else{sidebar.inert=false;sidebar.removeAttribute('aria-hidden');setSidebarFocusable(true);}}
+setSidebarOpen(false);
+toggle?.addEventListener('click',()=>setSidebarOpen(!sidebar?.classList.contains('open')));
+document.addEventListener('click',(e)=>{if(!sidebar?.classList.contains('open'))return;if(sidebar.contains(e.target)||toggle?.contains(e.target))return;setSidebarOpen(false);});
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape')setSidebarOpen(false);});
+const syncSidebarForViewport=()=>setSidebarOpen(sidebar?.classList.contains('open')??false);
+if(mobileNav.addEventListener)mobileNav.addEventListener('change',syncSidebarForViewport);else mobileNav.addListener?.(syncSidebarForViewport);
+const input=document.getElementById('doc-search');
+input?.addEventListener('input',()=>{const q=input.value.trim().toLowerCase();document.querySelectorAll('nav section').forEach(sec=>{let any=false;sec.querySelectorAll('.nav-link').forEach(a=>{const m=!q||a.textContent.toLowerCase().includes(q);a.style.display=m?'block':'none';if(m)any=true;});sec.style.display=any?'block':'none';});});
+function attachCopy(target,getText){const btn=document.createElement('button');btn.type='button';btn.className='copy';btn.textContent='Copy';btn.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(getText());btn.textContent='Copied';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},1400);}catch{btn.textContent='Failed';setTimeout(()=>{btn.textContent='Copy';},1400);}});target.appendChild(btn);}
+document.querySelectorAll('.doc pre').forEach(pre=>attachCopy(pre,()=>pre.querySelector('code')?.textContent??''));
+const tocLinks=document.querySelectorAll('.toc a');
+if(tocLinks.length){const map=new Map();tocLinks.forEach(a=>{const id=a.getAttribute('href')?.slice(1);const el=id?document.getElementById(id):null;if(el)map.set(el,a);});const setActive=l=>{tocLinks.forEach(x=>x.classList.remove('active'));l.classList.add('active');};const obs=new IntersectionObserver(entries=>{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);if(visible.length){const link=map.get(visible[0].target);if(link)setActive(link);}},{rootMargin:'-15% 0px -65% 0px',threshold:0});map.forEach((_,el)=>obs.observe(el));}
+  </script>
 </body>
 </html>

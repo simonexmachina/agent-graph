@@ -3,40 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07080a" />
+  <meta name="color-scheme" content="light dark" />
   <title>Quickstart - AgentGraph</title>
   <meta name="description" content="Get AgentGraph indexing quickly with the shortest useful path." />
+  <script>try{const t=localStorage.getItem('agentgraph-docs-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}catch{document.documentElement.dataset.theme='dark'}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/docs.css" />
 </head>
-<body>
-  <div class="site-shell">
-    <aside class="site-sidebar">
-      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
-      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
-      <nav class="sidebar-nav" aria-label="Documentation">
-<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html" aria-current="page">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
-<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
-      </nav>
-      <div class="sidebar-footer">
-        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-        <a href="/privacy.html">Privacy</a>
+<body class="">
+  <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+    <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+  </button>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <a class="brand" href="/" aria-label="AgentGraph home">
+          <span class="mark" aria-hidden="true"></span>
+          <span><strong>AgentGraph</strong><small>local graph docs</small></span>
+        </a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+          <span class="theme-toggle__icon" aria-hidden="true"></span>
+        </button>
       </div>
+      <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
+      <nav aria-label="Documentation">
+<section><h2>Start</h2><a class="nav-link" href="/">Overview</a><a class="nav-link" href="/install.html">Install</a><a class="nav-link active" href="/quickstart.html">Quickstart</a><a class="nav-link" href="/configuration.html">Configuration</a></section>
+<section><h2>Reference</h2><a class="nav-link" href="/commands/">Command docs</a><a class="nav-link" href="/connectors.html">Connectors</a><a class="nav-link" href="/privacy.html">Privacy</a></section>
+      </nav>
     </aside>
-
     <main class="page-shell">
-      <header class="page-header">
-        <div class="utility-links">
-          <a href="/">Home</a>
-          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/quickstart.md">Edit page</a>
+      <header class="hero">
+        <div class="hero-text">
+          <p class="eyebrow">Start</p>
+          <h1>Quickstart</h1>
         </div>
-        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+        <div class="hero-meta">
+          <a class="repo" href="/">Home</a>
+          <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
+          <a class="edit" href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/quickstart.md">Edit page</a>
+        </div>
       </header>
-
-      <div class="page-grid">
-        <article class="page-content">
+      <div class="doc-grid">
+        <article class="doc">
           <h1>Quickstart</h1>
           <p class="page-summary">This page assumes the repo is already cloned and dependencies are installed. The goal is one working local graph, not a full production setup.</p>
-<h2 id="1-authenticate">1. Authenticate</h2>
+<h2 id="1-authenticate"><a class="anchor" href="#1-authenticate" aria-label="Anchor link">#</a>1. Authenticate</h2>
 
 <p>Run the guided onboarding flow:</p>
 
@@ -44,13 +58,13 @@
 
 <p>If you only want one source, authenticate it directly with <code>agentgraph auth &amp;lt;source&amp;gt;</code>.</p>
 
-<h2 id="2-start-agentgraph">2. Start AgentGraph</h2>
+<h2 id="2-start-agentgraph"><a class="anchor" href="#2-start-agentgraph" aria-label="Anchor link">#</a>2. Start AgentGraph</h2>
 
 <pre><code class="language-bash">agentgraph serve</code></pre>
 
 <p>The default server URL is <code>http://127.0.0.1:8765</code>.</p>
 
-<h2 id="3-install-the-browser-extension">3. Install the browser extension</h2>
+<h2 id="3-install-the-browser-extension"><a class="anchor" href="#3-install-the-browser-extension" aria-label="Anchor link">#</a>3. Install the browser extension</h2>
 
 <p>Build the extension and load <code>extension/dist/</code> as an unpacked Chrome extension.</p>
 
@@ -58,32 +72,56 @@
 npm install
 npm run build</code></pre>
 
-<h2 id="4-browse-something-supported">4. Browse something supported</h2>
+<h2 id="4-browse-something-supported"><a class="anchor" href="#4-browse-something-supported" aria-label="Anchor link">#</a>4. Browse something supported</h2>
 
 <p>Open a Slack channel, a Google Doc, a Google Sheet, a Gmail thread, or a Drive folder. Leave the tab focused long enough for the dwell threshold to trigger a fetch.</p>
 
-<h2 id="5-verify-entities-landed">5. Verify entities landed</h2>
+<h2 id="5-verify-entities-landed"><a class="anchor" href="#5-verify-entities-landed" aria-label="Anchor link">#</a>5. Verify entities landed</h2>
 
 <pre><code class="language-bash">agentgraph connectors --json
 agentgraph search &quot;slack&quot; --limit 5
 agentgraph query --type Document --limit 5</code></pre>
 
-<h2 id="6-connect-an-assistant">6. Connect an assistant</h2>
+<h2 id="6-connect-an-assistant"><a class="anchor" href="#6-connect-an-assistant" aria-label="Anchor link">#</a>6. Connect an assistant</h2>
 
 <pre><code class="language-bash">agentgraph mcp-config</code></pre>
 
 <p>Use the printed config in Claude Desktop or Claude Code, or expose SSE / streaming HTTP for ChatGPT developer mode.</p>
-<nav class="page-pager"><a class="pager-link" href="/install.html"><span>Previous</span><strong>Install</strong></a><a class="pager-link" href="/configuration.html"><span>Next</span><strong>Configuration</strong></a></nav>
+<nav class="page-nav" aria-label="Pager"><a class="page-nav-prev" href="/install.html"><small>Previous</small><span>Install</span></a><a class="page-nav-next" href="/configuration.html"><small>Next</small><span>Configuration</span></a></nav>
         </article>
-
-        <aside class="page-aside">
-          <div class="on-page-card">
-            <h2>On this page</h2>
-            <ul><li><a href="#1-authenticate">1. Authenticate</a></li><li><a href="#2-start-agentgraph">2. Start AgentGraph</a></li><li><a href="#3-install-the-browser-extension">3. Install the browser extension</a></li><li><a href="#4-browse-something-supported">4. Browse something supported</a></li><li><a href="#5-verify-entities-landed">5. Verify entities landed</a></li><li><a href="#6-connect-an-assistant">6. Connect an assistant</a></li></ul>
-          </div>
-        </aside>
+        <nav class="toc" aria-label="On this page"><h2>On this page</h2><a class="toc-l2" href="#1-authenticate">1. Authenticate</a><a class="toc-l2" href="#2-start-agentgraph">2. Start AgentGraph</a><a class="toc-l2" href="#3-install-the-browser-extension">3. Install the browser extension</a><a class="toc-l2" href="#4-browse-something-supported">4. Browse something supported</a><a class="toc-l2" href="#5-verify-entities-landed">5. Verify entities landed</a><a class="toc-l2" href="#6-connect-an-assistant">6. Connect an assistant</a></nav>
       </div>
     </main>
   </div>
+  <script>
+const root=document.documentElement;
+const themeToggle=document.querySelector('[data-theme-toggle]');
+const themeMedia=window.matchMedia('(prefers-color-scheme: light)');
+function storedTheme(){try{const theme=localStorage.getItem('agentgraph-docs-theme');return theme==='light'||theme==='dark'?theme:null}catch{return null}}
+function systemTheme(){return themeMedia.matches?'light':'dark';}
+function applyTheme(theme){root.dataset.theme=theme;themeToggle?.setAttribute('aria-pressed',theme==='dark'?'true':'false');}
+applyTheme(root.dataset.theme||storedTheme()||systemTheme());
+themeToggle?.addEventListener('click',()=>{const next=root.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('agentgraph-docs-theme',next)}catch{}applyTheme(next);});
+const syncSystemTheme=()=>{if(!storedTheme())applyTheme(systemTheme());};
+if(themeMedia.addEventListener)themeMedia.addEventListener('change',syncSystemTheme);else themeMedia.addListener?.(syncSystemTheme);
+const sidebar=document.querySelector('.sidebar');
+const toggle=document.querySelector('.nav-toggle');
+const mobileNav=window.matchMedia('(max-width: 900px)');
+const sidebarFocusable='a[href],button,input,select,textarea,[tabindex]';
+function setSidebarFocusable(enabled){sidebar?.querySelectorAll(sidebarFocusable).forEach((el)=>{if(enabled){if(el.dataset.sidebarTabindex!==undefined){if(el.dataset.sidebarTabindex)el.setAttribute('tabindex',el.dataset.sidebarTabindex);else el.removeAttribute('tabindex');delete el.dataset.sidebarTabindex;}}else if(el.dataset.sidebarTabindex===undefined){el.dataset.sidebarTabindex=el.getAttribute('tabindex')??'';el.setAttribute('tabindex','-1');}});}
+function setSidebarOpen(open){if(!sidebar||!toggle)return;sidebar.classList.toggle('open',open);toggle.setAttribute('aria-expanded',open?'true':'false');if(mobileNav.matches){sidebar.inert=!open;if(open)sidebar.removeAttribute('aria-hidden');else sidebar.setAttribute('aria-hidden','true');setSidebarFocusable(open);}else{sidebar.inert=false;sidebar.removeAttribute('aria-hidden');setSidebarFocusable(true);}}
+setSidebarOpen(false);
+toggle?.addEventListener('click',()=>setSidebarOpen(!sidebar?.classList.contains('open')));
+document.addEventListener('click',(e)=>{if(!sidebar?.classList.contains('open'))return;if(sidebar.contains(e.target)||toggle?.contains(e.target))return;setSidebarOpen(false);});
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape')setSidebarOpen(false);});
+const syncSidebarForViewport=()=>setSidebarOpen(sidebar?.classList.contains('open')??false);
+if(mobileNav.addEventListener)mobileNav.addEventListener('change',syncSidebarForViewport);else mobileNav.addListener?.(syncSidebarForViewport);
+const input=document.getElementById('doc-search');
+input?.addEventListener('input',()=>{const q=input.value.trim().toLowerCase();document.querySelectorAll('nav section').forEach(sec=>{let any=false;sec.querySelectorAll('.nav-link').forEach(a=>{const m=!q||a.textContent.toLowerCase().includes(q);a.style.display=m?'block':'none';if(m)any=true;});sec.style.display=any?'block':'none';});});
+function attachCopy(target,getText){const btn=document.createElement('button');btn.type='button';btn.className='copy';btn.textContent='Copy';btn.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(getText());btn.textContent='Copied';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},1400);}catch{btn.textContent='Failed';setTimeout(()=>{btn.textContent='Copy';},1400);}});target.appendChild(btn);}
+document.querySelectorAll('.doc pre').forEach(pre=>attachCopy(pre,()=>pre.querySelector('code')?.textContent??''));
+const tocLinks=document.querySelectorAll('.toc a');
+if(tocLinks.length){const map=new Map();tocLinks.forEach(a=>{const id=a.getAttribute('href')?.slice(1);const el=id?document.getElementById(id):null;if(el)map.set(el,a);});const setActive=l=>{tocLinks.forEach(x=>x.classList.remove('active'));l.classList.add('active');};const obs=new IntersectionObserver(entries=>{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);if(visible.length){const link=map.get(visible[0].target);if(link)setActive(link);}},{rootMargin:'-15% 0px -65% 0px',threshold:0});map.forEach((_,el)=>obs.observe(el));}
+  </script>
 </body>
 </html>

@@ -3,40 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07080a" />
+  <meta name="color-scheme" content="light dark" />
   <title>Connectors - AgentGraph</title>
   <meta name="description" content="Supported AgentGraph connectors, fetch behavior, and the connector authoring contract." />
+  <script>try{const t=localStorage.getItem('agentgraph-docs-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}catch{document.documentElement.dataset.theme='dark'}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/docs.css" />
 </head>
-<body>
-  <div class="site-shell">
-    <aside class="site-sidebar">
-      <a class="sidebar-brand" href="/">Agent<span>Graph</span></a>
-      <p class="sidebar-copy">Local graph tooling for AI agents: browser-driven capture, connector polling, CLI workflows, and MCP access over the same data.</p>
-      <nav class="sidebar-nav" aria-label="Documentation">
-<section class="sidebar-section"><h2>Start</h2><ul><li><a href="/">Overview</a></li><li><a href="/install.html">Install</a></li><li><a href="/quickstart.html">Quickstart</a></li><li><a href="/configuration.html">Configuration</a></li></ul></section>
-<section class="sidebar-section"><h2>Reference</h2><ul><li><a href="/commands/">Command docs</a></li><li><a href="/connectors.html" aria-current="page">Connectors</a></li><li><a href="/privacy.html">Privacy</a></li></ul></section>
-      </nav>
-      <div class="sidebar-footer">
-        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-        <a href="/privacy.html">Privacy</a>
+<body class="">
+  <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+    <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+  </button>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <a class="brand" href="/" aria-label="AgentGraph home">
+          <span class="mark" aria-hidden="true"></span>
+          <span><strong>AgentGraph</strong><small>local graph docs</small></span>
+        </a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
+          <span class="theme-toggle__icon" aria-hidden="true"></span>
+        </button>
       </div>
+      <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
+      <nav aria-label="Documentation">
+<section><h2>Start</h2><a class="nav-link" href="/">Overview</a><a class="nav-link" href="/install.html">Install</a><a class="nav-link" href="/quickstart.html">Quickstart</a><a class="nav-link" href="/configuration.html">Configuration</a></section>
+<section><h2>Reference</h2><a class="nav-link" href="/commands/">Command docs</a><a class="nav-link active" href="/connectors.html">Connectors</a><a class="nav-link" href="/privacy.html">Privacy</a></section>
+      </nav>
     </aside>
-
     <main class="page-shell">
-      <header class="page-header">
-        <div class="utility-links">
-          <a href="/">Home</a>
-          <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-          <a href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/connectors.md">Edit page</a>
+      <header class="hero">
+        <div class="hero-text">
+          <p class="eyebrow">Reference</p>
+          <h1>Connectors</h1>
         </div>
-        <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
+        <div class="hero-meta">
+          <a class="repo" href="/">Home</a>
+          <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
+          <a class="edit" href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/connectors.md">Edit page</a>
+        </div>
       </header>
-
-      <div class="page-grid">
-        <article class="page-content">
+      <div class="doc-grid">
+        <article class="doc">
           <h1>Connectors</h1>
           <p class="page-summary">Connectors turn external systems into graph entities, people, and edges. The first half of this page is operational reference; the second half is the author guide.</p>
-<h2 id="supported-connectors">Supported connectors</h2>
+<h2 id="supported-connectors"><a class="anchor" href="#supported-connectors" aria-label="Anchor link">#</a>Supported connectors</h2>
 
 <table>
   <thead>
@@ -88,15 +102,15 @@
 </table>
 
 
-<h2 id="connector-behavior">Connector behavior</h2>
+<h2 id="connector-behavior"><a class="anchor" href="#connector-behavior" aria-label="Anchor link">#</a>Connector behavior</h2>
 
 <ul><li><strong>Browser dwell:</strong> supported URLs trigger targeted fetches after the configured dwell threshold.</li><li><strong>Polling:</strong> connectors that support it store cursor state and fetch changes on a schedule.</li><li><strong>Ingest:</strong> some connectors expose a broader one-shot historical ingest beyond poll behavior.</li><li><strong>Download metadata:</strong> file-backed entities can expose <code>metadata.download_url</code> and <code>metadata.mime_type</code> when an agent needs source bytes.</li></ul>
 
-<h2 id="authoring-a-connector">Authoring a connector</h2>
+<h2 id="authoring-a-connector"><a class="anchor" href="#authoring-a-connector" aria-label="Anchor link">#</a>Authoring a connector</h2>
 
 <p>A connector is a Python package that subclasses <code>BaseConnector</code>, implements the required fetch path, and registers itself through the <code>agentgraph.connectors</code> entry point group.</p>
 
-<h3 id="base-contract">Base contract</h3>
+<h3 id="base-contract"><a class="anchor" href="#base-contract" aria-label="Anchor link">#</a>Base contract</h3>
 
 <p>The required shape is small: identify which URLs the connector owns, implement <code>fetch()</code>, and optionally implement polling, ingest, auth, and user identity hooks.</p>
 
@@ -117,27 +131,51 @@
     ) -&gt; EntityBatch:
         ...</code></pre>
 
-<h3 id="output-model">Output model</h3>
+<h3 id="output-model"><a class="anchor" href="#output-model" aria-label="Anchor link">#</a>Output model</h3>
 
 <ul><li><code>EntityRecord</code> for messages, documents, channels, folders, spreadsheets, and threads.</li><li><code>PersonRecord</code> for authors and participants.</li><li><code>EdgeRecord</code> for authored, posted-in, replied-to, mentions, references, and similar relationships.</li></ul>
 
-<h3 id="packaging">Packaging</h3>
+<h3 id="packaging"><a class="anchor" href="#packaging" aria-label="Anchor link">#</a>Packaging</h3>
 
 <p>Register the connector in <code>pyproject.toml</code>.</p>
 
 <pre><code class="language-toml">[project.entry-points.&quot;agentgraph.connectors&quot;]
 myplatform = &quot;agentgraph_connector_myplatform:MyConnector&quot;</code></pre>
-<nav class="page-pager"><a class="pager-link" href="/commands/"><span>Previous</span><strong>Command docs</strong></a><a class="pager-link" href="/privacy.html"><span>Next</span><strong>Privacy</strong></a></nav>
+<nav class="page-nav" aria-label="Pager"><a class="page-nav-prev" href="/commands/"><small>Previous</small><span>Command docs</span></a><a class="page-nav-next" href="/privacy.html"><small>Next</small><span>Privacy</span></a></nav>
         </article>
-
-        <aside class="page-aside">
-          <div class="on-page-card">
-            <h2>On this page</h2>
-            <ul><li><a href="#supported-connectors">Supported connectors</a></li><li><a href="#connector-behavior">Connector behavior</a></li><li><a href="#authoring-a-connector">Authoring a connector</a></li></ul>
-          </div>
-        </aside>
+        <nav class="toc" aria-label="On this page"><h2>On this page</h2><a class="toc-l2" href="#supported-connectors">Supported connectors</a><a class="toc-l2" href="#connector-behavior">Connector behavior</a><a class="toc-l2" href="#authoring-a-connector">Authoring a connector</a><a class="toc-l3" href="#base-contract">Base contract</a><a class="toc-l3" href="#output-model">Output model</a><a class="toc-l3" href="#packaging">Packaging</a></nav>
       </div>
     </main>
   </div>
+  <script>
+const root=document.documentElement;
+const themeToggle=document.querySelector('[data-theme-toggle]');
+const themeMedia=window.matchMedia('(prefers-color-scheme: light)');
+function storedTheme(){try{const theme=localStorage.getItem('agentgraph-docs-theme');return theme==='light'||theme==='dark'?theme:null}catch{return null}}
+function systemTheme(){return themeMedia.matches?'light':'dark';}
+function applyTheme(theme){root.dataset.theme=theme;themeToggle?.setAttribute('aria-pressed',theme==='dark'?'true':'false');}
+applyTheme(root.dataset.theme||storedTheme()||systemTheme());
+themeToggle?.addEventListener('click',()=>{const next=root.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('agentgraph-docs-theme',next)}catch{}applyTheme(next);});
+const syncSystemTheme=()=>{if(!storedTheme())applyTheme(systemTheme());};
+if(themeMedia.addEventListener)themeMedia.addEventListener('change',syncSystemTheme);else themeMedia.addListener?.(syncSystemTheme);
+const sidebar=document.querySelector('.sidebar');
+const toggle=document.querySelector('.nav-toggle');
+const mobileNav=window.matchMedia('(max-width: 900px)');
+const sidebarFocusable='a[href],button,input,select,textarea,[tabindex]';
+function setSidebarFocusable(enabled){sidebar?.querySelectorAll(sidebarFocusable).forEach((el)=>{if(enabled){if(el.dataset.sidebarTabindex!==undefined){if(el.dataset.sidebarTabindex)el.setAttribute('tabindex',el.dataset.sidebarTabindex);else el.removeAttribute('tabindex');delete el.dataset.sidebarTabindex;}}else if(el.dataset.sidebarTabindex===undefined){el.dataset.sidebarTabindex=el.getAttribute('tabindex')??'';el.setAttribute('tabindex','-1');}});}
+function setSidebarOpen(open){if(!sidebar||!toggle)return;sidebar.classList.toggle('open',open);toggle.setAttribute('aria-expanded',open?'true':'false');if(mobileNav.matches){sidebar.inert=!open;if(open)sidebar.removeAttribute('aria-hidden');else sidebar.setAttribute('aria-hidden','true');setSidebarFocusable(open);}else{sidebar.inert=false;sidebar.removeAttribute('aria-hidden');setSidebarFocusable(true);}}
+setSidebarOpen(false);
+toggle?.addEventListener('click',()=>setSidebarOpen(!sidebar?.classList.contains('open')));
+document.addEventListener('click',(e)=>{if(!sidebar?.classList.contains('open'))return;if(sidebar.contains(e.target)||toggle?.contains(e.target))return;setSidebarOpen(false);});
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape')setSidebarOpen(false);});
+const syncSidebarForViewport=()=>setSidebarOpen(sidebar?.classList.contains('open')??false);
+if(mobileNav.addEventListener)mobileNav.addEventListener('change',syncSidebarForViewport);else mobileNav.addListener?.(syncSidebarForViewport);
+const input=document.getElementById('doc-search');
+input?.addEventListener('input',()=>{const q=input.value.trim().toLowerCase();document.querySelectorAll('nav section').forEach(sec=>{let any=false;sec.querySelectorAll('.nav-link').forEach(a=>{const m=!q||a.textContent.toLowerCase().includes(q);a.style.display=m?'block':'none';if(m)any=true;});sec.style.display=any?'block':'none';});});
+function attachCopy(target,getText){const btn=document.createElement('button');btn.type='button';btn.className='copy';btn.textContent='Copy';btn.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(getText());btn.textContent='Copied';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},1400);}catch{btn.textContent='Failed';setTimeout(()=>{btn.textContent='Copy';},1400);}});target.appendChild(btn);}
+document.querySelectorAll('.doc pre').forEach(pre=>attachCopy(pre,()=>pre.querySelector('code')?.textContent??''));
+const tocLinks=document.querySelectorAll('.toc a');
+if(tocLinks.length){const map=new Map();tocLinks.forEach(a=>{const id=a.getAttribute('href')?.slice(1);const el=id?document.getElementById(id):null;if(el)map.set(el,a);});const setActive=l=>{tocLinks.forEach(x=>x.classList.remove('active'));l.classList.add('active');};const obs=new IntersectionObserver(entries=>{const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);if(visible.length){const link=map.get(visible[0].target);if(link)setActive(link);}},{rootMargin:'-15% 0px -65% 0px',threshold:0});map.forEach((_,el)=>obs.observe(el));}
+  </script>
 </body>
 </html>
