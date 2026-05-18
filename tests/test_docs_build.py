@@ -42,5 +42,6 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'class="toc"' in index_html
     assert "Command docs index" in commands_html
     assert "agentgraph search" in search_html
+    assert "<code>agentgraph search</code>" in search_html
     assert "MCP tools" in mcp_html
     assert 'content="0; url=/commands/"' in redirect_html

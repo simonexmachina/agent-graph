@@ -323,7 +323,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
       <div class="doc-grid">
         <article class="doc">
 {article_title}\
-          <p class="page-summary">{html.escape(page.meta.summary)}</p>
+          <p class="page-summary">{render_inline(page.meta.summary)}</p>
 {page.body}
 {build_prev_next(pages, index)}
         </article>
