@@ -1,6 +1,6 @@
 ## Committing
 
-Commit incrementally as you complete each logical unit of work — don't batch everything into one commit at the end. Include related bean files in the same commit as the code changes they track.
+Commit incrementally as you complete each logical unit of work — don't batch everything into one commit at the end.
 
 ## CLI / MCP / Skill Parity
 

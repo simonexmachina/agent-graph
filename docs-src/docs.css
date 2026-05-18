@@ -101,6 +101,11 @@ a:hover{opacity:.85;text-decoration:underline;text-underline-offset:.2em}
 .sidebar{position:sticky;top:0;height:100vh;overflow:auto;padding:24px 22px;background:var(--chrome-bg);backdrop-filter:saturate(140%) blur(8px);border-right:1px solid var(--line);scrollbar-width:thin;scrollbar-color:var(--line) transparent}
 .sidebar::-webkit-scrollbar{width:6px}
 .sidebar::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
+.sidebar-head{margin:0 0 22px}
+.brand{display:block;color:var(--ink);text-decoration:none}
+.brand:hover{text-decoration:none;opacity:1}
+.brand strong{display:block;font-family:var(--serif);font-size:2rem;line-height:1.02;font-weight:600;letter-spacing:0;color:var(--ink)}
+.brand small{display:block;margin-top:6px;color:var(--muted);font-size:.88rem;font-weight:400}
 .search{display:block;margin:0 0 22px}
 .search span{display:block;color:var(--muted);font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
 .search input{width:100%;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:9px 12px;font:inherit;font-size:.9rem;color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s}

@@ -326,6 +326,11 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   </button>
   <div class="shell">
     <aside class="sidebar">
+      <div class="sidebar-head">
+        <a class="brand" href="{home_href}" aria-label="Agent Graph home">
+          <span><strong>Agent Graph</strong><small>local knowledge graph</small></span>
+        </a>
+      </div>
       <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
       <nav aria-label="Documentation">
 {nav_html}
