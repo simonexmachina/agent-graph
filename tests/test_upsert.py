@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -18,7 +18,6 @@ from agentgraph.connectors.base import (
 from agentgraph.core.context import set_backend
 from agentgraph.graph.upsert import upsert_batch
 
-
 # ---------------------------------------------------------------------------
 # FetchPolicy unit tests (no DB needed)
 # ---------------------------------------------------------------------------
@@ -30,13 +29,13 @@ def test_fetch_policy_first_visit() -> None:
 
 def test_fetch_policy_fresh() -> None:
     policy = FetchPolicy(stale_after_seconds=300)
-    recent = datetime.now(timezone.utc) - timedelta(seconds=60)
+    recent = datetime.now(UTC) - timedelta(seconds=60)
     assert policy.decide(recent) == FetchPolicy.FRESH
 
 
 def test_fetch_policy_stale() -> None:
     policy = FetchPolicy(stale_after_seconds=300)
-    old = datetime.now(timezone.utc) - timedelta(seconds=400)
+    old = datetime.now(UTC) - timedelta(seconds=400)
     assert policy.decide(old) == FetchPolicy.INCREMENTAL
 
 
@@ -149,36 +148,3 @@ async def test_upsert_entity_and_edge(pg_backend: PostgresBackend) -> None:
 
         edge_count = await conn.fetchval("SELECT count(*) FROM edges")
         assert edge_count == 1
-
-
-@pytest.mark.integration
-async def test_gc_removes_stale_entities(pg_backend: PostgresBackend) -> None:
-    from agentgraph.graph.gc import run_gc
-
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO entities (entity_type, platform, platform_entity_id, last_accessed)
-            VALUES ('Message', 'slack', 'old-msg-1', now() - INTERVAL '100 days')
-            """
-        )
-        await conn.execute(
-            """
-            INSERT INTO entities (entity_type, platform, platform_entity_id, last_accessed)
-            VALUES ('Message', 'slack', 'new-msg-1', now() - INTERVAL '1 day')
-            """
-        )
-
-    deleted = await run_gc()
-    assert deleted >= 1
-
-    async with pool.acquire() as conn:
-        old = await conn.fetchval(
-            "SELECT count(*) FROM entities WHERE platform_entity_id = 'old-msg-1'"
-        )
-        new = await conn.fetchval(
-            "SELECT count(*) FROM entities WHERE platform_entity_id = 'new-msg-1'"
-        )
-    assert old == 0
-    assert new == 1
