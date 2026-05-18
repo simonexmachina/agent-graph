@@ -20,7 +20,9 @@ echo hello
 
     rendered, headings = build_docs.render_markdown(markdown)
 
-    assert "<pre><code class=\"language-bash\">echo hello</code></pre>" in rendered
+    assert 'class="codehilite"' in rendered
+    assert 'class="language-bash"' in rendered
+    assert "tok-" in rendered
     assert "<h2 id=\"second\"><a class=\"anchor\" href=\"#second\" aria-label=\"Anchor link\">#</a>Second</h2>" in rendered
     assert [heading.text for heading in headings] == ["First", "Second"]
 
@@ -32,6 +34,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     build_docs.build()
 
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+    connectors_html = (output_dir / "connectors.html").read_text(encoding="utf-8")
     postgres_html = (output_dir / "postgresql.html").read_text(encoding="utf-8")
     commands_html = (output_dir / "commands" / "index.html").read_text(encoding="utf-8")
     search_html = (output_dir / "commands" / "search.html").read_text(encoding="utf-8")
@@ -41,8 +44,11 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'class="shell"' in index_html
     assert 'id="doc-search"' in index_html
     assert 'class="toc"' in index_html
+    assert ".doc .codehilite .tok-" in index_html
     assert ">Commands</a>" in index_html
     assert 'href="postgresql.html"' in index_html
+    assert 'class="codehilite"' in connectors_html
+    assert "current_user_id" in connectors_html
     assert "<h1>Commands</h1>" in commands_html
     assert "<h1>PostgreSQL</h1>" in postgres_html
     assert "default SQLite backend" in postgres_html

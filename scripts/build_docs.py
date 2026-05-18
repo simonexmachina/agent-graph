@@ -8,11 +8,41 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    from pygments import highlight
+    from pygments.formatters import HtmlFormatter
+    from pygments.lexers import TextLexer, get_lexer_by_name
+    from pygments.util import ClassNotFound
+except ImportError:  # pragma: no cover - highlighting gracefully falls back to plain blocks
+    highlight = None
+    HtmlFormatter = None
+    TextLexer = None
+    get_lexer_by_name = None
+    ClassNotFound = Exception
+
 ROOT = Path(__file__).resolve().parent.parent
 DOCS_SRC = ROOT / "docs-src"
 DOCS_OUT = ROOT / "docs"
 GITHUB_ROOT = "https://github.com/simonexmachina/agent-graph/blob/main"
 SECTION_ORDER = {"Start": 10, "Reference": 20, "MCP": 30}
+
+_FORMATTER = HtmlFormatter(nowrap=True, classprefix="tok-") if HtmlFormatter else None
+
+
+def build_syntax_highlight_styles() -> str:
+    if _FORMATTER is None:
+        return ""
+
+    styles = _FORMATTER.get_style_defs(".doc .codehilite")
+    # Let the existing docs <pre> styling control the code block frame/background.
+    styles = styles.replace(
+        ".doc .codehilite { background: #f8f8f8; }",
+        ".doc .codehilite { background: transparent; color: inherit; }",
+    )
+    return styles
+
+
+SYNTAX_HIGHLIGHT_STYLES = build_syntax_highlight_styles()
 
 
 @dataclass(frozen=True)
@@ -83,6 +113,25 @@ def render_inline(text: str) -> str:
     return escaped
 
 
+def render_code_block(code: str, language: str) -> str:
+    code_class = f' class="language-{html.escape(language, quote=True)}"' if language else ""
+    if (
+        _FORMATTER is None
+        or highlight is None
+        or TextLexer is None
+        or get_lexer_by_name is None
+    ):
+        return f"<pre><code{code_class}>{html.escape(code)}</code></pre>"
+
+    try:
+        lexer = get_lexer_by_name(language, stripall=False) if language else TextLexer(stripall=False)
+    except ClassNotFound:
+        lexer = TextLexer(stripall=False)
+
+    highlighted = highlight(code, lexer, _FORMATTER)
+    return f'<div class="codehilite"><pre><code{code_class}>{highlighted}</code></pre></div>'
+
+
 def render_markdown(body: str) -> tuple[str, tuple[Heading, ...]]:
     lines = body.splitlines()
     parts: list[str] = []
@@ -105,11 +154,7 @@ def render_markdown(body: str) -> tuple[str, tuple[Heading, ...]]:
             while i < len(lines) and lines[i].strip() != fence:
                 code_lines.append(lines[i])
                 i += 1
-            parts.append(
-                "<pre><code"
-                + (f' class="language-{html.escape(language, quote=True)}"' if language else "")
-                + f">{html.escape('\n'.join(code_lines))}</code></pre>"
-            )
+            parts.append(render_code_block("\n".join(code_lines), language))
             i += 1
             continue
 
@@ -319,6 +364,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{stylesheet_href}" />
+  <style>{SYNTAX_HIGHLIGHT_STYLES}</style>
 </head>
 <body class="{body_class}">
   <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
