@@ -34,62 +34,59 @@ The CLI, viewer, and MCP server work the same way regardless of which backend yo
 
 ## Core settings
 
-<table>
-  <thead>
-    <tr>
-      <th>Variable</th>
-      <th>Default</th>
-      <th>Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>AGENTGRAPH_CONFIG_DIR</code></td>
-      <td><code>~/.agentgraph</code></td>
-      <td>Directory for AgentGraph config, credentials, and the default SQLite database.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_BACKEND</code></td>
-      <td><code>sqlite</code></td>
-      <td>Persistence backend: <code>sqlite</code> or <code>postgres</code>.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_BACKEND_SQLITE_PATH</code></td>
-      <td><code>$AGENTGRAPH_CONFIG_DIR/agentgraph.db</code></td>
-      <td>SQLite database path.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_DATABASE_URL</code></td>
-      <td><code>postgresql://agentgraph:agentgraph@localhost:5432/agentgraph</code></td>
-      <td>PostgreSQL connection URL when backend is <code>postgres</code>.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_SERVER_HOST</code></td>
-      <td><code>127.0.0.1</code></td>
-      <td>Server bind address.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_SERVER_PORT</code></td>
-      <td><code>8765</code></td>
-      <td>Server port.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_DWELL_THRESHOLD_SECONDS</code></td>
-      <td><code>3</code></td>
-      <td>Seconds of focus before a fetch is triggered.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_RETENTION_DAYS</code></td>
-      <td><code>90</code></td>
-      <td>Days before an unvisited entity is garbage collected.</td>
-    </tr>
-    <tr>
-      <td><code>AGENTGRAPH_EMBEDDING_MODEL</code></td>
-      <td><code>all-MiniLM-L6-v2</code></td>
-      <td>Sentence-transformers model used for embeddings.</td>
-    </tr>
-  </tbody>
-</table>
+### `AGENTGRAPH_CONFIG_DIR`
+
+Default: `~/.agentgraph`
+
+Directory for AgentGraph config, credentials, and the default SQLite database.
+
+### `AGENTGRAPH_BACKEND`
+
+Default: `sqlite`
+
+Persistence backend: `sqlite` or `postgres`.
+
+### `AGENTGRAPH_BACKEND_SQLITE_PATH`
+
+Default: `$AGENTGRAPH_CONFIG_DIR/agentgraph.db`
+
+SQLite database path.
+
+### `AGENTGRAPH_DATABASE_URL`
+
+Default: `postgresql://agentgraph:agentgraph@localhost:5432/agentgraph`
+
+PostgreSQL connection URL when backend is `postgres`.
+
+### `AGENTGRAPH_SERVER_HOST`
+
+Default: `127.0.0.1`
+
+Server bind address.
+
+### `AGENTGRAPH_SERVER_PORT`
+
+Default: `8765`
+
+Server port.
+
+### `AGENTGRAPH_DWELL_THRESHOLD_SECONDS`
+
+Default: `3`
+
+Seconds of focus before a fetch is triggered.
+
+### `AGENTGRAPH_RETENTION_DAYS`
+
+Default: `90`
+
+Days before an unvisited entity is garbage collected.
+
+### `AGENTGRAPH_EMBEDDING_MODEL`
+
+Default: `all-MiniLM-L6-v2`
+
+Sentence-transformers model used for embeddings.
 
 ## PostgreSQL
 
