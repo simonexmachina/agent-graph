@@ -327,8 +327,8 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <div class="shell">
     <aside class="sidebar">
       <div class="sidebar-head">
-        <a class="brand" href="{home_href}" aria-label="Agent Graph home">
-          <span><strong>Agent Graph</strong><small>local knowledge graph</small></span>
+        <a class="brand" href="{home_href}" aria-label="AgentGraph home">
+          <span><strong>AgentGraph</strong><small>local knowledge graph</small></span>
         </a>
       </div>
       <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
@@ -403,12 +403,9 @@ def write_redirect(alias: Path, target: str) -> None:
 
 
 def copy_static_assets() -> None:
+    if DOCS_OUT.exists():
+        shutil.rmtree(DOCS_OUT)
     DOCS_OUT.mkdir(parents=True, exist_ok=True)
-    for path in DOCS_OUT.iterdir():
-        if path.is_dir():
-            shutil.rmtree(path)
-        else:
-            path.unlink()
     shutil.copy2(ROOT / "docs-src" / "docs.css", DOCS_OUT / "docs.css")
 
 
