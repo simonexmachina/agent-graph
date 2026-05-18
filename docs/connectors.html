@@ -3,591 +3,156 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Connector Author Guide — AgentGraph</title>
-  <meta name="description" content="Build a custom AgentGraph connector: BaseConnector interface, data models, entry points packaging, and optional hooks." />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:       #0f172a;
-      --surface:  #1e293b;
-      --border:   #334155;
-      --text:     #e2e8f0;
-      --muted:    #94a3b8;
-      --accent:   #38bdf8;
-      --accent2:  #818cf8;
-      --green:    #4ade80;
-      --radius:   8px;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-    }
-
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    header, main, footer { max-width: 860px; margin: 0 auto; padding: 0 24px; }
-
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-top: 28px;
-      padding-bottom: 28px;
-      border-bottom: 1px solid var(--border);
-    }
-    .logo { font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
-    .logo span { color: var(--accent); }
-    nav a {
-      font-size: 14px;
-      color: var(--muted);
-      margin-left: 24px;
-    }
-    nav a:hover { color: var(--text); text-decoration: none; }
-
-    /* ── Page header ── */
-    .page-header {
-      padding: 56px 0 40px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 48px;
-    }
-    .page-header .section-label {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 12px;
-    }
-    .page-header h1 {
-      font-size: clamp(28px, 4vw, 40px);
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      margin-bottom: 12px;
-    }
-    .page-header p {
-      font-size: 17px;
-      color: var(--muted);
-      max-width: 600px;
-    }
-
-    /* ── TOC ── */
-    .toc {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px 24px;
-      margin-bottom: 48px;
-    }
-    .toc p {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 12px;
-    }
-    .toc ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 20px; }
-    .toc li a { font-size: 13px; color: var(--accent); }
-
-    /* ── Sections ── */
-    .section { margin-bottom: 64px; }
-    .section-title {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-      margin-bottom: 24px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    p { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
-    p + p { margin-top: 0; }
-
-    h3 { font-size: 16px; font-weight: 600; margin: 24px 0 8px; color: var(--text); }
-    h4 { font-size: 14px; font-weight: 600; margin: 20px 0 6px; color: var(--text); }
-
-    pre {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 18px;
-      font-family: "SF Mono", "Fira Code", monospace;
-      font-size: 13px;
-      color: var(--text);
-      overflow-x: auto;
-      line-height: 1.7;
-      margin-bottom: 16px;
-    }
-    pre .comment { color: var(--muted); }
-    pre .kw { color: var(--accent2); }
-    pre .str { color: var(--green); }
-
-    code {
-      font-family: "SF Mono", "Fira Code", monospace;
-      font-size: 13px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1px 6px;
-    }
-
-    /* ── API table ── */
-    .api-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-      margin-bottom: 20px;
-    }
-    .api-table th {
-      text-align: left;
-      padding: 10px 14px;
-      background: var(--surface);
-      color: var(--muted);
-      font-weight: 600;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      border-bottom: 1px solid var(--border);
-    }
-    .api-table td {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: top;
-    }
-    .api-table tr:last-child td { border-bottom: none; }
-    .api-table td:first-child {
-      font-family: "SF Mono", "Fira Code", monospace;
-      color: var(--accent2);
-      white-space: nowrap;
-    }
-    .api-table td:last-child { color: var(--muted); }
-
-    /* ── Callout ── */
-    .callout {
-      background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      font-size: 14px;
-      margin-bottom: 16px;
-      color: var(--muted);
-    }
-    .callout strong { color: var(--accent); }
-    .callout p { color: var(--muted); margin: 0; }
-    .callout p + p { margin-top: 6px; }
-
-    /* ── Badge ── */
-    .badge {
-      display: inline-block;
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 99px;
-      font-weight: 600;
-      margin-left: 8px;
-      vertical-align: middle;
-    }
-    .badge-optional { background: #1c3a4a; color: #7dd3fc; }
-    .badge-required { background: #14532d; color: #86efac; }
-
-    /* ── Footer ── */
-    footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 24px 24px;
-      border-top: 1px solid var(--border);
-      margin-top: 64px;
-      font-size: 13px;
-      color: var(--muted);
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    @media (max-width: 600px) {
-      header { flex-direction: column; align-items: flex-start; gap: 12px; }
-      nav { display: flex; flex-wrap: wrap; gap: 4px; }
-      nav a { margin-left: 0; margin-right: 16px; }
-      .api-table th:nth-child(2), .api-table td:nth-child(2) { display: none; }
-    }
-  </style>
+  <title>Connectors - AgentGraph documentation</title>
+  <meta name="description" content="Supported AgentGraph connectors, how they behave, and how to build a custom connector package." />
+  <link rel="stylesheet" href="docs.css" />
 </head>
 <body>
 
-<header>
-  <a class="logo" href="index.html">Agent<span>Graph</span></a>
-  <nav>
-    <a href="index.html">Home</a>
-    <a href="install.html">Install</a>
-    <a href="commands.html">Commands</a>
-    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
-    <a href="privacy.html">Privacy</a>
-  </nav>
+<header class="site-header">
+  <div class="brand-group">
+    <div class="brand-row">
+      <a class="logo" href="index.html">Agent<span>Graph</span></a>
+      <nav class="header-nav" aria-label="Primary">
+        <a href="index.html">Home</a>
+        <a href="install.html">Install</a>
+        <a href="commands.html">Commands</a>
+        <a href="connectors.html" aria-current="page">Connectors</a>
+        <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+        <a href="privacy.html">Privacy</a>
+      </nav>
+    </div>
+    <p class="tagline">Supported data sources on top, authoring model below.</p>
+  </div>
+  <div class="logo-slot" aria-label="Logo placeholder">Logo</div>
 </header>
 
-<main>
+<main class="doc-grid">
+  <div class="doc-main">
+    <span class="eyebrow">Connectors</span>
+    <h1 class="page-title">Data sources and connector model</h1>
+    <p class="page-copy">AgentGraph connectors are responsible for turning one external surface into graph entities, people, and edges. The first half of this page is operational reference; the second half is the author guide for custom connectors.</p>
 
-  <div class="page-header">
-    <div class="section-label">Developer Guide</div>
-    <h1>Connector Author Guide</h1>
-    <p>Build a connector to index any data source into AgentGraph. Connectors are plain Python packages that implement a single interface and register via an entry point.</p>
+    <section class="content-section" id="supported">
+      <h2>Supported connectors</h2>
+      <table class="surface-table">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Entities</th>
+            <th>Auth</th>
+            <th>Refresh model</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Slack</td>
+            <td>Channel, Message</td>
+            <td>Browser-derived cookie credentials</td>
+            <td>Browser dwell plus 5 minute polling</td>
+          </tr>
+          <tr>
+            <td>Discord</td>
+            <td>Channel, Message</td>
+            <td>Bot token</td>
+            <td>Browser dwell plus 5 minute polling</td>
+          </tr>
+          <tr>
+            <td>Google Docs</td>
+            <td>Document</td>
+            <td>Google OAuth</td>
+            <td>Browser dwell plus Drive-backed refresh</td>
+          </tr>
+          <tr>
+            <td>Google Sheets</td>
+            <td>Spreadsheet</td>
+            <td>Google OAuth</td>
+            <td>Browser dwell plus Drive-backed refresh</td>
+          </tr>
+          <tr>
+            <td>Google Drive</td>
+            <td>Folder, Document</td>
+            <td>Google OAuth</td>
+            <td>Browser dwell for folders and files, plus Drive changes polling</td>
+          </tr>
+          <tr>
+            <td>Gmail</td>
+            <td>Thread</td>
+            <td>Google OAuth</td>
+            <td>Browser dwell plus background poll and ingest</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="content-section" id="behavior">
+      <h2>Connector behavior</h2>
+      <ul class="simple-list">
+        <li><strong>Browser dwell:</strong> supported URLs trigger targeted fetches after the configured dwell threshold.</li>
+        <li><strong>Polling:</strong> connectors that support it store cursor state and fetch changes on a schedule.</li>
+        <li><strong>Ingest:</strong> some connectors expose a broader one-shot historical ingest beyond poll behavior.</li>
+        <li><strong>Download metadata:</strong> file-backed entities can expose <code>metadata.download_url</code> and <code>metadata.mime_type</code> when the caller may need the source bytes.</li>
+      </ul>
+    </section>
+
+    <section class="content-section" id="authoring">
+      <h2>Authoring a connector</h2>
+      <p>A connector is a Python package that subclasses <code>BaseConnector</code>, implements the required fetch path, and registers itself through the <code>agentgraph.connectors</code> entry point group.</p>
+
+      <h3>Base contract</h3>
+      <p>The required shape is small: identify which URLs the connector owns, implement <code>fetch()</code>, and optionally implement polling, ingest, auth, and user identity hooks.</p>
+
+      <pre>class MyConnector(BaseConnector):
+    source = "myplatform"
+    url_patterns = ["https://app.example.com/*"]
+    auth_label = "myplatform"
+    auth_description = "Example platform"
+
+    def can_handle(self, url: str) -> bool:
+        return "app.example.com" in url
+
+    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -&gt; EntityBatch:
+        ...
+</pre>
+
+      <h3>What a connector returns</h3>
+      <p>Connectors emit three record types:</p>
+      <ul>
+        <li><strong>EntityRecord</strong> for messages, documents, channels, folders, spreadsheets, and threads.</li>
+        <li><strong>PersonRecord</strong> for authors and participants.</li>
+        <li><strong>EdgeRecord</strong> for authored, posted-in, replied-to, mentions, references, and similar relationships.</li>
+      </ul>
+
+      <h3>Packaging</h3>
+      <p>Register the connector in <code>pyproject.toml</code>.</p>
+      <pre>[project.entry-points."agentgraph.connectors"]
+myplatform = "agentgraph_connector_myplatform:MyConnector"</pre>
+    </section>
   </div>
 
-  <nav class="toc" aria-label="Page contents">
-    <p>On this page</p>
-    <ul>
-      <li><a href="#overview">Overview</a></li>
-      <li><a href="#base-connector">BaseConnector</a></li>
-      <li><a href="#data-models">Data models</a></li>
-      <li><a href="#fetch-policy">Fetch policy</a></li>
-      <li><a href="#hooks">Optional hooks</a></li>
-      <li><a href="#auth">Auth integration</a></li>
-      <li><a href="#packaging">Packaging</a></li>
-      <li><a href="#example">Minimal example</a></li>
-    </ul>
-  </nav>
-
-  <!-- ── Overview ── -->
-  <section class="section" id="overview">
-    <div class="section-title">Overview</div>
-    <p>A connector is a Python class that subclasses <code>BaseConnector</code> and implements <code>fetch()</code>. AgentGraph discovers connectors at runtime via Python <a href="https://packaging.python.org/en/latest/specifications/entry-points/">entry points</a> — no changes to the core package are needed.</p>
-    <p>Each connector is responsible for:</p>
-    <ul style="font-size:14px; color:var(--muted); padding-left:20px; margin-bottom:12px; line-height:2;">
-      <li>Fetching one resource (a channel, document, thread, etc.) from the source platform</li>
-      <li>Returning an <code>EntityBatch</code> with entities, people, and edges</li>
-      <li>Persisting a cursor so incremental sync works across polls</li>
-    </ul>
-    <div class="callout">
-      <strong>Boundary rule.</strong>
-      <p>Connector-specific logic (auth, entity normalisation, mention parsing, user identity) must live in the connector package, not in the core <code>agentgraph</code> package. The core package provides the framework; connectors supply the platform knowledge.</p>
+  <aside class="doc-aside">
+    <div class="aside-card">
+      <h2>On this page</h2>
+      <ul>
+        <li><a href="#supported">Supported connectors</a></li>
+        <li><a href="#behavior">Connector behavior</a></li>
+        <li><a href="#authoring">Authoring</a></li>
+      </ul>
     </div>
-  </section>
 
-  <!-- ── BaseConnector ── -->
-  <section class="section" id="base-connector">
-    <div class="section-title">BaseConnector interface</div>
-
-    <h3>Required class attributes</h3>
-    <table class="api-table">
-      <thead><tr><th>Attribute</th><th>Type</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td>source</td><td>str</td><td>Unique identifier used as the platform key (e.g. <code>"slack"</code>, <code>"gdocs"</code>)</td></tr>
-        <tr><td>entity_type</td><td>str</td><td>Primary entity type this connector produces (e.g. <code>"Message"</code>, <code>"Document"</code>)</td></tr>
-        <tr><td>poll_interval_seconds</td><td>int</td><td>How often the background poller calls <code>poll()</code></td></tr>
-      </tbody>
-    </table>
-
-    <h3>Required methods</h3>
-    <table class="api-table">
-      <thead><tr><th>Method</th><th>Signature</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>fetch</td>
-          <td>async (resource_type, resource_id, meta?) → EntityBatch</td>
-          <td>Fetch a single resource. Called for browser-dwell events and explicit <code>agentgraph fetch</code> commands. Must call <code>upsert_batch()</code> internally before returning.</td>
-        </tr>
-        <tr>
-          <td>poll</td>
-          <td>async () → EntityBatch | None</td>
-          <td>Incremental sync — fetch everything since the last cursor. Called on a timer by the background poller.</td>
-        </tr>
-        <tr>
-          <td>ingest</td>
-          <td>async () → EntityBatch</td>
-          <td>Bulk ingest — fetch all data within the retention window. Called once by <code>agentgraph ingest &lt;source&gt;</code>.</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h3>Skeleton</h3>
-    <pre><span class="kw">from</span> agentgraph.connectors.base <span class="kw">import</span> BaseConnector, EntityBatch, ResourceType
-<span class="kw">from</span> agentgraph.graph.upsert <span class="kw">import</span> upsert_batch
-
-
-<span class="kw">class</span> MyConnector(BaseConnector):
-    source = <span class="str">"myplatform"</span>
-    entity_type = <span class="str">"Document"</span>
-    poll_interval_seconds = 600  <span class="comment"># 10 minutes</span>
-
-    <span class="kw">async def</span> fetch(
-        self,
-        resource_type: ResourceType,
-        resource_id: str,
-        meta: dict | None = None,
-    ) -> EntityBatch:
-        batch = EntityBatch()
-        <span class="comment"># ... populate batch ...</span>
-        <span class="kw">await</span> upsert_batch(batch)
-        <span class="kw">return</span> batch
-
-    <span class="kw">async def</span> poll(self) -> EntityBatch | None:
-        <span class="comment"># Load cursor, fetch new items, save cursor</span>
-        ...
-
-    <span class="kw">async def</span> ingest(self) -> EntityBatch:
-        <span class="comment"># Fetch everything within the retention window</span>
-        ...</pre>
-  </section>
-
-  <!-- ── Data models ── -->
-  <section class="section" id="data-models">
-    <div class="section-title">Data models</div>
-    <p>All models live in <code>agentgraph.connectors.base</code>.</p>
-
-    <h3>EntityBatch</h3>
-    <p>The container you build in <code>fetch()</code> / <code>poll()</code> / <code>ingest()</code>.</p>
-    <table class="api-table">
-      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td>entities</td><td>list[EntityRecord]</td><td>The primary entities in this batch</td></tr>
-        <tr><td>people</td><td>list[PersonRecord]</td><td>People referenced in this batch</td></tr>
-        <tr><td>edges</td><td>list[EdgeRecord]</td><td>Relationships between entities or people</td></tr>
-      </tbody>
-    </table>
-    <p><code>EntityBatch</code> also provides a helper:</p>
-    <pre><span class="comment"># Scan entity content for URLs and add stub entities + "references" edges</span>
-batch.add_stubs_from(entity)</pre>
-
-    <h3>EntityRecord</h3>
-    <table class="api-table">
-      <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td>entity_type</td><td>yes</td><td>e.g. <code>"Message"</code>, <code>"Document"</code>, <code>"Channel"</code>, <code>"Thread"</code>, <code>"Folder"</code>, <code>"Spreadsheet"</code></td></tr>
-        <tr><td>platform</td><td>yes</td><td>Matches <code>connector.source</code></td></tr>
-        <tr><td>platform_entity_id</td><td>yes</td><td>Stable, unique ID within this platform</td></tr>
-        <tr><td>title</td><td>no</td><td>Short human-readable label</td></tr>
-        <tr><td>content</td><td>no</td><td>Full text — this is what gets embedded and indexed</td></tr>
-        <tr><td>metadata</td><td>no</td><td>dict[str, Any] — arbitrary key/value pairs stored alongside the entity</td></tr>
-        <tr><td>created_at</td><td>no</td><td>datetime (UTC)</td></tr>
-        <tr><td>updated_at</td><td>no</td><td>datetime (UTC)</td></tr>
-      </tbody>
-    </table>
-
-    <h3>PersonRecord</h3>
-    <table class="api-table">
-      <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td>platform</td><td>yes</td><td>Source platform</td></tr>
-        <tr><td>platform_entity_id</td><td>yes</td><td>Unique user/person ID on the platform</td></tr>
-        <tr><td>display_name</td><td>no</td><td>Human-readable name</td></tr>
-        <tr><td>email</td><td>no</td><td>Email address if available</td></tr>
-        <tr><td>metadata</td><td>no</td><td>Any additional fields</td></tr>
-      </tbody>
-    </table>
-
-    <h3>EdgeRecord</h3>
-    <table class="api-table">
-      <thead><tr><th>Field</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td>from_platform / from_entity_id</td><td>Source vertex (platform + platform_entity_id)</td></tr>
-        <tr><td>to_platform / to_entity_id</td><td>Target vertex</td></tr>
-        <tr><td>edge_type</td><td>Relationship label — common values: <code>authored</code>, <code>posted_in</code>, <code>replied_to</code>, <code>mentions</code>, <code>references</code></td></tr>
-        <tr><td>metadata</td><td>Optional dict for edge properties</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <!-- ── Fetch policy ── -->
-  <section class="section" id="fetch-policy">
-    <div class="section-title">Fetch policy</div>
-    <p>Use <code>FetchPolicy</code> to decide how much work to do for a given resource.</p>
-    <pre><span class="kw">from</span> agentgraph.connectors.base <span class="kw">import</span> FetchPolicy
-
-<span class="comment"># Load the existing entity's last_synced_at timestamp</span>
-policy = <span class="kw">await</span> FetchPolicy.for_entity(platform=self.source, platform_entity_id=resource_id)
-
-<span class="kw">if</span> policy == FetchPolicy.FIRST_VISIT:
-    <span class="comment"># Entity is new — full fetch</span>
-    ...
-<span class="kw">elif</span> policy == FetchPolicy.INCREMENTAL:
-    <span class="comment"># Entity exists but is stale — fetch only new items</span>
-    ...
-<span class="kw">elif</span> policy == FetchPolicy.FRESH:
-    <span class="comment"># Entity was synced recently — skip or return cached</span>
-    <span class="kw">return</span> EntityBatch()</pre>
-    <table class="api-table" style="margin-top:16px;">
-      <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
-      <tbody>
-        <tr><td>FIRST_VISIT</td><td>No prior sync record — do a full fetch</td></tr>
-        <tr><td>INCREMENTAL</td><td>Synced before but stale — fetch only what's changed since the cursor</td></tr>
-        <tr><td>FRESH</td><td>Synced recently — no fetch needed; return an empty batch</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <!-- ── Hooks ── -->
-  <section class="section" id="hooks">
-    <div class="section-title">Optional hooks</div>
-    <p>Override these classmethods / instance methods on your connector to integrate with AgentGraph features.</p>
-
-    <h3>current_user_id <span class="badge badge-optional">optional</span></h3>
-    <p>Return a canonical identifier for the authenticated user. Used by <code>agentgraph query --mine</code> to filter entities to those authored by the current user.</p>
-    <pre><span class="comment"># Example — Google connectors return the OAuth email</span>
-@classmethod
-<span class="kw">def</span> current_user_id(cls) -> str | None:
-    <span class="kw">return</span> get_user_email()  <span class="comment"># returns None if not authenticated</span>
-
-<span class="comment"># Example — Slack connector returns "slack:{user_id}"</span>
-@classmethod
-<span class="kw">def</span> current_user_id(cls) -> str | None:
-    creds = load_credentials()
-    <span class="kw">return</span> f<span class="str">"slack:{creds.user_id}"</span> <span class="kw">if</span> creds <span class="kw">else</span> None</pre>
-
-    <h3>normalise_fetch_id <span class="badge badge-optional">optional</span></h3>
-    <p>Map a stored <code>(resource_id, entity_type)</code> pair to the fetchable <code>(resource_id, ResourceType)</code> that <code>fetch()</code> expects. Override when your stored IDs differ from fetch IDs (e.g. Discord stores <code>channel_id:message_id</code> but fetches by <code>channel_id</code>).</p>
-    <pre><span class="comment"># Default implementation (works for most connectors)</span>
-<span class="kw">def</span> normalise_fetch_id(
-    self, resource_id: str, entity_type: str
-) -> tuple[str, ResourceType]:
-    type_map = {
-        <span class="str">"Document"</span>: <span class="str">"document"</span>, <span class="str">"Folder"</span>: <span class="str">"folder"</span>,
-        <span class="str">"Channel"</span>: <span class="str">"channel"</span>, <span class="str">"Message"</span>: <span class="str">"message"</span>,
-    }
-    <span class="kw">return</span> resource_id, type_map.get(entity_type, <span class="str">"document"</span>)</pre>
-
-    <h3>run_auth_flow <span class="badge badge-optional">optional</span></h3>
-    <p>Classmethod that opens an auth flow when called by <code>agentgraph auth &lt;source&gt;</code> and <code>agentgraph onboard</code>. If omitted, those commands will skip your connector.</p>
-    <pre>@classmethod
-<span class="kw">def</span> run_auth_flow(cls) -> None:
-    <span class="comment"># Open browser, prompt for token, write to ~/.agentgraph/</span>
-    ...</pre>
-
-    <h3>onboard_prompt / auth_description / auth_label <span class="badge badge-optional">optional</span></h3>
-    <p>Class attributes that customise the <code>agentgraph onboard</code> wizard UI. If <code>auth_label</code> is set, connectors sharing the same label appear as a single onboarding step (useful for multi-connector platforms like Google).</p>
-    <pre>auth_label = <span class="str">"google"</span>          <span class="comment"># groups gdocs, gsheets, gdrive, gmail together</span>
-auth_description = <span class="str">"Google (Docs, Sheets, Drive, Gmail)"</span>
-onboard_prompt = <span class="str">"Set up Google integration?"</span></pre>
-  </section>
-
-  <!-- ── Auth ── -->
-  <section class="section" id="auth">
-    <div class="section-title">Auth integration</div>
-    <p>AgentGraph does not prescribe an auth mechanism. Connectors store credentials wherever makes sense — all built-in connectors use <code>~/.agentgraph/</code>:</p>
-    <pre><span class="kw">from</span> agentgraph.config <span class="kw">import</span> CONFIG_DIR
-
-<span class="comment"># Write a token</span>
-token_file = CONFIG_DIR / <span class="str">"myplatform_token.json"</span>
-token_file.write_text(json.dumps(token_data))
-
-<span class="comment"># Read it back</span>
-<span class="kw">if</span> token_file.exists():
-    data = json.loads(token_file.read_text())</pre>
-    <p><code>CONFIG_DIR</code> is <code>~/.agentgraph/</code> by default and is always local to the user's machine — never synced externally.</p>
-  </section>
-
-  <!-- ── Packaging ── -->
-  <section class="section" id="packaging">
-    <div class="section-title">Packaging &amp; distribution</div>
-    <p>Connectors are discovered via a named entry point group. Any installed package that declares a connector in this group will be loaded automatically when AgentGraph starts.</p>
-
-    <h3>pyproject.toml</h3>
-    <pre><span class="comment"># In your connector package's pyproject.toml</span>
-[project]
-name = <span class="str">"agentgraph-connector-myplatform"</span>
-<span class="comment"># ...</span>
-
-[project.entry-points.<span class="str">"agentgraph.connectors"</span>]
-myplatform = <span class="str">"agentgraph_connector_myplatform:MyConnector"</span></pre>
-
-    <p>Multiple connectors from the same package are supported — just add more entries:</p>
-    <pre>[project.entry-points.<span class="str">"agentgraph.connectors"</span>]
-myplatform-docs  = <span class="str">"agentgraph_connector_myplatform:DocsConnector"</span>
-myplatform-tasks = <span class="str">"agentgraph_connector_myplatform:TasksConnector"</span></pre>
-
-    <h3>Development install</h3>
-    <pre><span class="comment"># Install your connector package in editable mode alongside agentgraph</span>
-uv pip install -e packages/agentgraph-connector-myplatform</pre>
-
-    <p>After install, run <code>agentgraph onboard</code> to authenticate, then <code>agentgraph serve</code> — your connector will be polled automatically.</p>
-  </section>
-
-  <!-- ── Example ── -->
-  <section class="section" id="example">
-    <div class="section-title">Minimal example</div>
-    <p>A complete, working connector that indexes a fictional REST API:</p>
-
-    <pre><span class="comment"># agentgraph_connector_myplatform/__init__.py</span>
-<span class="kw">from</span> __future__ <span class="kw">import</span> annotations
-
-<span class="kw">import</span> httpx
-<span class="kw">from</span> agentgraph.config <span class="kw">import</span> CONFIG_DIR
-<span class="kw">from</span> agentgraph.connectors.base <span class="kw">import</span> (
-    BaseConnector, EntityBatch, EntityRecord, FetchPolicy, ResourceType
-)
-<span class="kw">from</span> agentgraph.graph.upsert <span class="kw">import</span> upsert_batch
-
-_TOKEN_FILE = CONFIG_DIR / <span class="str">"myplatform_token.txt"</span>
-
-
-<span class="kw">class</span> MyConnector(BaseConnector):
-    source = <span class="str">"myplatform"</span>
-    entity_type = <span class="str">"Document"</span>
-    poll_interval_seconds = 600
-    auth_description = <span class="str">"My Platform"</span>
-    onboard_prompt = <span class="str">"Set up My Platform integration?"</span>
-
-    @classmethod
-    <span class="kw">def</span> run_auth_flow(cls) -> None:
-        token = input(<span class="str">"Paste your API token: "</span>).strip()
-        _TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _TOKEN_FILE.write_text(token)
-        print(<span class="str">"Token saved."</span>)
-
-    <span class="kw">def</span> _token(self) -> str | None:
-        <span class="kw">return</span> _TOKEN_FILE.read_text().strip() <span class="kw">if</span> _TOKEN_FILE.exists() <span class="kw">else</span> None
-
-    <span class="kw">async def</span> fetch(
-        self, resource_type: ResourceType, resource_id: str, meta: dict | None = None
-    ) -> EntityBatch:
-        policy = <span class="kw">await</span> FetchPolicy.for_entity(<span class="str">"myplatform"</span>, resource_id)
-        <span class="kw">if</span> policy == FetchPolicy.FRESH:
-            <span class="kw">return</span> EntityBatch()
-
-        async with httpx.AsyncClient() <span class="kw">as</span> client:
-            resp = <span class="kw">await</span> client.get(
-                f<span class="str">"https://api.myplatform.example/docs/{resource_id}"</span>,
-                headers={<span class="str">"Authorization"</span>: f<span class="str">"Bearer {self._token()}"</span>},
-            )
-        doc = resp.json()
-
-        batch = EntityBatch()
-        batch.entities.append(EntityRecord(
-            entity_type=<span class="str">"Document"</span>,
-            platform=<span class="str">"myplatform"</span>,
-            platform_entity_id=resource_id,
-            title=doc[<span class="str">"title"</span>],
-            content=doc[<span class="str">"body"</span>],
-            metadata={<span class="str">"author"</span>: doc.get(<span class="str">"author"</span>)},
-        ))
-        <span class="kw">await</span> upsert_batch(batch)
-        <span class="kw">return</span> batch
-
-    <span class="kw">async def</span> poll(self) -> EntityBatch | None:
-        <span class="comment"># Minimal: return None to skip polling until you implement cursors</span>
-        <span class="kw">return</span> None
-
-    <span class="kw">async def</span> ingest(self) -> EntityBatch:
-        <span class="comment"># Bulk ingest — implement when you need it</span>
-        <span class="kw">return</span> EntityBatch()</pre>
-
-    <div class="callout">
-      <strong>Looking for a real example?</strong>
-      <p>The built-in connectors in <code>packages/agentgraph-connector-*/</code> cover OAuth (Google), cookie auth (Slack), bot token auth (Discord), and cursor-based incremental sync.</p>
+    <div class="aside-card">
+      <h2>Related</h2>
+      <ul>
+        <li><a href="install.html#auth">Connector authentication</a></li>
+        <li><a href="commands.html#connectors">Connector status command</a></li>
+      </ul>
     </div>
-  </section>
-
+  </aside>
 </main>
 
-<footer>
-  <span>AgentGraph — open source, MIT license</span>
-  <span>
-    <a href="https://github.com/simonexmachina/agent-graph">GitHub</a> ·
-    <a href="privacy.html">Privacy Policy</a>
-  </span>
+<footer class="site-footer">
+  <span>AgentGraph documentation</span>
+  <span><a href="index.html">Home</a> · <a href="commands.html">Commands</a> · <a href="privacy.html">Privacy</a></span>
 </footer>
 
 </body>
