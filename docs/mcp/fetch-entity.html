@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#07080a" />
   <meta name="color-scheme" content="light dark" />
-  <title>Command docs index - AgentGraph</title>
-  <meta name="description" content="Command reference for the AgentGraph CLI and MCP workflows." />
+  <title>fetch_entity_tool - AgentGraph</title>
+  <meta name="description" content="MCP reference for fetch_entity_tool." />
   <script>try{const t=localStorage.getItem('agentgraph-docs-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}catch{document.documentElement.dataset.theme='dark'}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,52 +31,32 @@
       <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
       <nav aria-label="Documentation">
 <section><h2>Start</h2><a class="nav-link" href="/">Overview</a><a class="nav-link" href="/install.html">Install</a><a class="nav-link" href="/quickstart.html">Quickstart</a><a class="nav-link" href="/configuration.html">Configuration</a></section>
-<section><h2>Reference</h2><a class="nav-link active" href="/commands/">Command docs</a><a class="nav-link" href="/commands/search.html">search</a><a class="nav-link" href="/commands/query.html">query</a><a class="nav-link" href="/commands/get.html">get</a><a class="nav-link" href="/commands/edges.html">edges</a><a class="nav-link" href="/commands/traverse.html">traverse</a><a class="nav-link" href="/commands/fetch.html">fetch</a><a class="nav-link" href="/commands/fetch-entity.html">fetch-entity</a><a class="nav-link" href="/commands/download.html">download</a><a class="nav-link" href="/commands/connectors.html">connectors</a><a class="nav-link" href="/commands/poll.html">poll</a><a class="nav-link" href="/connectors.html">Connectors</a><a class="nav-link" href="/commands/ingest.html">ingest</a><a class="nav-link" href="/commands/onboard.html">onboard</a><a class="nav-link" href="/commands/auth.html">auth</a><a class="nav-link" href="/commands/serve.html">serve</a><a class="nav-link" href="/commands/mcp-config.html">mcp-config</a><a class="nav-link" href="/commands/mcp-serve.html">mcp-serve</a><a class="nav-link" href="/commands/migrate.html">migrate</a><a class="nav-link" href="/commands/use-postgres.html">use-postgres</a><a class="nav-link" href="/privacy.html">Privacy</a></section>
-<section><h2>MCP</h2><a class="nav-link" href="/mcp/">MCP tools</a><a class="nav-link" href="/mcp/list-connectors.html">list_connectors_tool</a><a class="nav-link" href="/mcp/search-entities.html">search_entities_tool</a><a class="nav-link" href="/mcp/get-entity.html">get_entity_tool</a><a class="nav-link" href="/mcp/get-edges.html">get_edges_tool</a><a class="nav-link" href="/mcp/traverse-graph.html">traverse_graph_tool</a><a class="nav-link" href="/mcp/query-by-filter.html">query_by_filter_tool</a><a class="nav-link" href="/mcp/fetch-entity.html">fetch_entity_tool</a><a class="nav-link" href="/mcp/fetch-entity-by-id.html">fetch_entity_by_id_tool</a><a class="nav-link" href="/mcp/download-entity.html">download_entity_tool</a></section>
+<section><h2>Reference</h2><a class="nav-link" href="/commands/">Command docs</a><a class="nav-link" href="/commands/search.html">search</a><a class="nav-link" href="/commands/query.html">query</a><a class="nav-link" href="/commands/get.html">get</a><a class="nav-link" href="/commands/edges.html">edges</a><a class="nav-link" href="/commands/traverse.html">traverse</a><a class="nav-link" href="/commands/fetch.html">fetch</a><a class="nav-link" href="/commands/fetch-entity.html">fetch-entity</a><a class="nav-link" href="/commands/download.html">download</a><a class="nav-link" href="/commands/connectors.html">connectors</a><a class="nav-link" href="/commands/poll.html">poll</a><a class="nav-link" href="/connectors.html">Connectors</a><a class="nav-link" href="/commands/ingest.html">ingest</a><a class="nav-link" href="/commands/onboard.html">onboard</a><a class="nav-link" href="/commands/auth.html">auth</a><a class="nav-link" href="/commands/serve.html">serve</a><a class="nav-link" href="/commands/mcp-config.html">mcp-config</a><a class="nav-link" href="/commands/mcp-serve.html">mcp-serve</a><a class="nav-link" href="/commands/migrate.html">migrate</a><a class="nav-link" href="/commands/use-postgres.html">use-postgres</a><a class="nav-link" href="/privacy.html">Privacy</a></section>
+<section><h2>MCP</h2><a class="nav-link" href="/mcp/">MCP tools</a><a class="nav-link" href="/mcp/list-connectors.html">list_connectors_tool</a><a class="nav-link" href="/mcp/search-entities.html">search_entities_tool</a><a class="nav-link" href="/mcp/get-entity.html">get_entity_tool</a><a class="nav-link" href="/mcp/get-edges.html">get_edges_tool</a><a class="nav-link" href="/mcp/traverse-graph.html">traverse_graph_tool</a><a class="nav-link" href="/mcp/query-by-filter.html">query_by_filter_tool</a><a class="nav-link active" href="/mcp/fetch-entity.html">fetch_entity_tool</a><a class="nav-link" href="/mcp/fetch-entity-by-id.html">fetch_entity_by_id_tool</a><a class="nav-link" href="/mcp/download-entity.html">download_entity_tool</a></section>
       </nav>
     </aside>
     <main class="page-shell">
       <header class="hero">
         <div class="hero-text">
-          <p class="eyebrow">Reference</p>
-          <h1>Command docs index</h1>
+          <p class="eyebrow">MCP</p>
+          <h1>fetch_entity_tool</h1>
         </div>
         <div class="hero-meta">
           <a class="repo" href="/">Home</a>
           <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
-          <a class="edit" href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/commands/index.md">Edit page</a>
+          <a class="edit" href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/mcp/fetch-entity.md">Edit page</a>
         </div>
       </header>
       <div class="doc-grid">
         <article class="doc">
-          <h1>Command docs index</h1>
-          <p class="page-summary">The CLI is the operator-facing surface for the local graph. Each command now has its own page so flags, examples, and adjacent workflows stay readable.</p>
-<h2 id="query"><a class="anchor" href="#query" aria-label="Anchor link">#</a>Query</h2>
+          <h1>fetch_entity_tool</h1>
+          <p class="page-summary">Use `fetch_entity_tool` to force connector re-ingestion by platform name and platform-specific resource ID.</p>
+<h2 id="signature"><a class="anchor" href="#signature" aria-label="Anchor link">#</a>Signature</h2>
 
-<ul><li><a href="/commands/search.html"><code>search</code></a> - hybrid semantic and lexical search.</li><li><a href="/commands/query.html"><code>query</code></a> - structured filtering by entity type, metadata, time, and attachments.</li><li><a href="/commands/get.html"><code>get</code></a> - fetch one entity by UUID, prefix, or platform ref.</li><li><a href="/commands/edges.html"><code>edges</code></a> - list connected graph edges for one entity.</li><li><a href="/commands/traverse.html"><code>traverse</code></a> - walk the neighborhood around one entity.</li></ul>
-
-<h2 id="fetch-and-files"><a class="anchor" href="#fetch-and-files" aria-label="Anchor link">#</a>Fetch and files</h2>
-
-<ul><li><a href="/commands/fetch.html"><code>fetch</code></a> - trigger connector fetch by platform and platform ID.</li><li><a href="/commands/fetch-entity.html"><code>fetch-entity</code></a> - re-fetch by internal entity UUID.</li><li><a href="/commands/download.html"><code>download</code></a> - download the source file for a graph entity.</li></ul>
-
-<h2 id="sync-and-connectors"><a class="anchor" href="#sync-and-connectors" aria-label="Anchor link">#</a>Sync and connectors</h2>
-
-<ul><li><a href="/commands/connectors.html"><code>connectors</code></a> - inspect installed connectors and auth state.</li><li><a href="/commands/poll.html"><code>poll</code></a> - run background polling now.</li><li><a href="/commands/ingest.html"><code>ingest</code></a> - run a one-shot historical ingest where supported.</li></ul>
-
-<h2 id="auth-and-setup"><a class="anchor" href="#auth-and-setup" aria-label="Anchor link">#</a>Auth and setup</h2>
-
-<ul><li><a href="/commands/onboard.html"><code>onboard</code></a> - walk connector auth interactively.</li><li><a href="/commands/auth.html"><code>auth</code></a> - authenticate a specific platform connector.</li></ul>
-
-<h2 id="server-and-transport"><a class="anchor" href="#server-and-transport" aria-label="Anchor link">#</a>Server and transport</h2>
-
-<ul><li><a href="/commands/serve.html"><code>serve</code></a> - run the local AgentGraph HTTP server and pollers.</li><li><a href="/commands/mcp-config.html"><code>mcp-config</code></a> - print MCP client configuration.</li><li><a href="/commands/mcp-serve.html"><code>mcp-serve</code></a> - run the MCP server over stdio, SSE, or streaming HTTP.</li><li><a href="/commands/migrate.html"><code>migrate</code></a> - migrate graph data between backends.</li><li><a href="/commands/use-postgres.html"><code>use-postgres</code></a> - switch to PostgreSQL and emit compose scaffolding.</li></ul>
-
-<h2 id="related"><a class="anchor" href="#related" aria-label="Anchor link">#</a>Related</h2>
-
-<ul><li><a href="/mcp/">MCP tools</a> for the tool pages exposed to agent clients.</li></ul>
-<nav class="page-nav" aria-label="Pager"><a class="page-nav-prev" href="/configuration.html"><small>Previous</small><span>Configuration</span></a><a class="page-nav-next" href="/commands/search.html"><small>Next</small><span>search</span></a></nav>
+<pre><code class="language-text">fetch_entity_tool(platform, resource_id) -&gt; JSON string</code></pre>
+<nav class="page-nav" aria-label="Pager"><a class="page-nav-prev" href="/mcp/query-by-filter.html"><small>Previous</small><span>query_by_filter_tool</span></a><a class="page-nav-next" href="/mcp/fetch-entity-by-id.html"><small>Next</small><span>fetch_entity_by_id_tool</span></a></nav>
         </article>
-        <nav class="toc" aria-label="On this page"><h2>On this page</h2><a class="toc-l2" href="#query">Query</a><a class="toc-l2" href="#fetch-and-files">Fetch and files</a><a class="toc-l2" href="#sync-and-connectors">Sync and connectors</a><a class="toc-l2" href="#auth-and-setup">Auth and setup</a><a class="toc-l2" href="#server-and-transport">Server and transport</a><a class="toc-l2" href="#related">Related</a></nav>
+        <nav class="toc" aria-label="On this page"><h2>On this page</h2><a class="toc-l2" href="#signature">Signature</a></nav>
       </div>
     </main>
   </div>

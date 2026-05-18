@@ -30,6 +30,10 @@ source_path = "docs-src/index.md"
     <h3><a href="/commands/">Command docs</a></h3>
     <p>Search, query, fetch, poll, auth, serve, and MCP. One reference surface for both terminal users and agent clients.</p>
   </section>
+  <section class="doc-card">
+    <h3><a href="/mcp/">MCP tools</a></h3>
+    <p>One page per MCP tool for search, traversal, fetch, download, and connector inspection from agent clients.</p>
+  </section>
 </div>
 
 ## What AgentGraph does
@@ -43,6 +47,7 @@ source_path = "docs-src/index.md"
 
 - [Connectors](/connectors.html) for supported sources, auth behavior, and connector authoring.
 - [Command docs](/commands/) for the CLI and MCP surface.
+- [MCP tools](/mcp/) for the tool-by-tool agent interface reference.
 - [Privacy](/privacy.html) for the local storage and browser observation model.
 
 ## Surfaces

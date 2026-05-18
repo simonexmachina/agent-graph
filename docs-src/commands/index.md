@@ -4,7 +4,7 @@ description = "Command reference for the AgentGraph CLI and MCP workflows."
 nav_title = "Command docs"
 section = "Reference"
 order = 10
-summary = "The CLI and MCP server expose the same graph operations. Use the terminal directly for local work, or connect an MCP client to run the same actions from an assistant."
+summary = "The CLI is the operator-facing surface for the local graph. Each command now has its own page so flags, examples, and adjacent workflows stay readable."
 output = "commands/index.html"
 source_path = "docs-src/commands/index.md"
 aliases = ["commands.html"]
@@ -12,71 +12,37 @@ aliases = ["commands.html"]
 
 ## Query
 
-- `agentgraph search` - hybrid semantic and lexical search across the local graph.
-- `agentgraph query` - filter entities by type, ownership, time window, and attachment presence.
-- `agentgraph get` - return one entity by UUID, UUID prefix, or platform reference.
-- `agentgraph edges` - list connected edges for one entity, filtered by direction and edge type.
-- `agentgraph traverse` - walk outward from an entity across graph edges.
+- [`search`](/commands/search.html) - hybrid semantic and lexical search.
+- [`query`](/commands/query.html) - structured filtering by entity type, metadata, time, and attachments.
+- [`get`](/commands/get.html) - fetch one entity by UUID, prefix, or platform ref.
+- [`edges`](/commands/edges.html) - list connected graph edges for one entity.
+- [`traverse`](/commands/traverse.html) - walk the neighborhood around one entity.
 
-```bash
-agentgraph search "project kickoff notes" --type Document --limit 10 --json
-agentgraph query --type Message --filter platform=slack --since 24h --mine --limit 20
-agentgraph get abc123ef --json
-agentgraph traverse abc123ef --depth 2 --resolve --json
-```
+## Fetch and files
 
-## Fetch
+- [`fetch`](/commands/fetch.html) - trigger connector fetch by platform and platform ID.
+- [`fetch-entity`](/commands/fetch-entity.html) - re-fetch by internal entity UUID.
+- [`download`](/commands/download.html) - download the source file for a graph entity.
 
-- `agentgraph fetch` - trigger a connector fetch by source and platform-specific identifier.
-- `agentgraph fetch-entity` - re-fetch a known entity by internal UUID.
+## Sync and connectors
 
-```bash
-agentgraph fetch slack C0J2L41FT
-agentgraph fetch gdocs 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
-agentgraph fetch-entity abc123ef-9d6b-4bbe-b5ab-200faecb70e9 --json
-```
+- [`connectors`](/commands/connectors.html) - inspect installed connectors and auth state.
+- [`poll`](/commands/poll.html) - run background polling now.
+- [`ingest`](/commands/ingest.html) - run a one-shot historical ingest where supported.
 
-## Sync
+## Auth and setup
 
-- `agentgraph poll` - run background polling immediately for one connector or all installed connectors.
-- `agentgraph ingest` - run a one-shot historical ingest where the connector supports it.
+- [`onboard`](/commands/onboard.html) - walk connector auth interactively.
+- [`auth`](/commands/auth.html) - authenticate a specific platform connector.
 
-```bash
-agentgraph poll
-agentgraph poll slack
-agentgraph ingest gmail
-```
+## Server and transport
 
-## Connector status
+- [`serve`](/commands/serve.html) - run the local AgentGraph HTTP server and pollers.
+- [`mcp-config`](/commands/mcp-config.html) - print MCP client configuration.
+- [`mcp-serve`](/commands/mcp-serve.html) - run the MCP server over stdio, SSE, or streaming HTTP.
+- [`migrate`](/commands/migrate.html) - migrate graph data between backends.
+- [`use-postgres`](/commands/use-postgres.html) - switch to PostgreSQL and emit compose scaffolding.
 
-- `agentgraph connectors` - list installed connectors, auth status, URL patterns, and whether they poll.
+## Related
 
-```bash
-agentgraph connectors
-agentgraph connectors --json
-```
-
-## Authentication
-
-- `agentgraph onboard` - walk through auth setup for every installed connector.
-- `agentgraph auth` - authenticate a specific connector directly.
-
-```bash
-agentgraph onboard
-agentgraph auth google
-agentgraph auth slack
-agentgraph auth discord
-```
-
-## Server and MCP
-
-- `agentgraph serve` - start the local HTTP server, connector pollers, and viewer.
-- `agentgraph mcp-config` - print the client config snippet for local and remote MCP clients.
-- `agentgraph mcp-serve` - run the MCP server over stdio, SSE, or streaming HTTP.
-
-```bash
-agentgraph serve
-agentgraph mcp-config
-agentgraph mcp-serve --transport sse --port 8808
-agentgraph mcp-serve --transport streamable-http --port 8808
-```
+- [MCP tools](/mcp/) for the tool pages exposed to agent clients.

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#07080a" />
   <meta name="color-scheme" content="light dark" />
-  <title>Connectors - AgentGraph</title>
-  <meta name="description" content="Supported AgentGraph connectors, fetch behavior, and the connector authoring contract." />
+  <title>auth - AgentGraph</title>
+  <meta name="description" content="CLI reference for agentgraph auth." />
   <script>try{const t=localStorage.getItem('agentgraph-docs-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}catch{document.documentElement.dataset.theme='dark'}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,7 +31,7 @@
       <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
       <nav aria-label="Documentation">
 <section><h2>Start</h2><a class="nav-link" href="/">Overview</a><a class="nav-link" href="/install.html">Install</a><a class="nav-link" href="/quickstart.html">Quickstart</a><a class="nav-link" href="/configuration.html">Configuration</a></section>
-<section><h2>Reference</h2><a class="nav-link" href="/commands/">Command docs</a><a class="nav-link" href="/commands/search.html">search</a><a class="nav-link" href="/commands/query.html">query</a><a class="nav-link" href="/commands/get.html">get</a><a class="nav-link" href="/commands/edges.html">edges</a><a class="nav-link" href="/commands/traverse.html">traverse</a><a class="nav-link" href="/commands/fetch.html">fetch</a><a class="nav-link" href="/commands/fetch-entity.html">fetch-entity</a><a class="nav-link" href="/commands/download.html">download</a><a class="nav-link" href="/commands/connectors.html">connectors</a><a class="nav-link" href="/commands/poll.html">poll</a><a class="nav-link active" href="/connectors.html">Connectors</a><a class="nav-link" href="/commands/ingest.html">ingest</a><a class="nav-link" href="/commands/onboard.html">onboard</a><a class="nav-link" href="/commands/auth.html">auth</a><a class="nav-link" href="/commands/serve.html">serve</a><a class="nav-link" href="/commands/mcp-config.html">mcp-config</a><a class="nav-link" href="/commands/mcp-serve.html">mcp-serve</a><a class="nav-link" href="/commands/migrate.html">migrate</a><a class="nav-link" href="/commands/use-postgres.html">use-postgres</a><a class="nav-link" href="/privacy.html">Privacy</a></section>
+<section><h2>Reference</h2><a class="nav-link" href="/commands/">Command docs</a><a class="nav-link" href="/commands/search.html">search</a><a class="nav-link" href="/commands/query.html">query</a><a class="nav-link" href="/commands/get.html">get</a><a class="nav-link" href="/commands/edges.html">edges</a><a class="nav-link" href="/commands/traverse.html">traverse</a><a class="nav-link" href="/commands/fetch.html">fetch</a><a class="nav-link" href="/commands/fetch-entity.html">fetch-entity</a><a class="nav-link" href="/commands/download.html">download</a><a class="nav-link" href="/commands/connectors.html">connectors</a><a class="nav-link" href="/commands/poll.html">poll</a><a class="nav-link" href="/connectors.html">Connectors</a><a class="nav-link" href="/commands/ingest.html">ingest</a><a class="nav-link" href="/commands/onboard.html">onboard</a><a class="nav-link active" href="/commands/auth.html">auth</a><a class="nav-link" href="/commands/serve.html">serve</a><a class="nav-link" href="/commands/mcp-config.html">mcp-config</a><a class="nav-link" href="/commands/mcp-serve.html">mcp-serve</a><a class="nav-link" href="/commands/migrate.html">migrate</a><a class="nav-link" href="/commands/use-postgres.html">use-postgres</a><a class="nav-link" href="/privacy.html">Privacy</a></section>
 <section><h2>MCP</h2><a class="nav-link" href="/mcp/">MCP tools</a><a class="nav-link" href="/mcp/list-connectors.html">list_connectors_tool</a><a class="nav-link" href="/mcp/search-entities.html">search_entities_tool</a><a class="nav-link" href="/mcp/get-entity.html">get_entity_tool</a><a class="nav-link" href="/mcp/get-edges.html">get_edges_tool</a><a class="nav-link" href="/mcp/traverse-graph.html">traverse_graph_tool</a><a class="nav-link" href="/mcp/query-by-filter.html">query_by_filter_tool</a><a class="nav-link" href="/mcp/fetch-entity.html">fetch_entity_tool</a><a class="nav-link" href="/mcp/fetch-entity-by-id.html">fetch_entity_by_id_tool</a><a class="nav-link" href="/mcp/download-entity.html">download_entity_tool</a></section>
       </nav>
     </aside>
@@ -39,112 +39,33 @@
       <header class="hero">
         <div class="hero-text">
           <p class="eyebrow">Reference</p>
-          <h1>Connectors</h1>
+          <h1>auth</h1>
         </div>
         <div class="hero-meta">
           <a class="repo" href="/">Home</a>
           <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
-          <a class="edit" href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/connectors.md">Edit page</a>
+          <a class="edit" href="https://github.com/simonexmachina/agent-graph/blob/main/docs-src/commands/auth.md">Edit page</a>
         </div>
       </header>
       <div class="doc-grid">
         <article class="doc">
-          <h1>Connectors</h1>
-          <p class="page-summary">Connectors turn external systems into graph entities, people, and edges. The first half of this page is operational reference; the second half is the author guide.</p>
-<h2 id="supported-connectors"><a class="anchor" href="#supported-connectors" aria-label="Anchor link">#</a>Supported connectors</h2>
+          <h1>auth</h1>
+          <p class="page-summary">`agentgraph auth` authenticates one connector platform directly, including non-interactive Slack token/cookie input when needed.</p>
+<h2 id="synopsis"><a class="anchor" href="#synopsis" aria-label="Anchor link">#</a>Synopsis</h2>
 
-<table>
-  <thead>
-    <tr>
-      <th>Source</th>
-      <th>Entities</th>
-      <th>Auth</th>
-      <th>Refresh model</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Slack</td>
-      <td>Channel, Message</td>
-      <td>Browser-derived cookie credentials</td>
-      <td>Browser dwell plus 5 minute polling</td>
-    </tr>
-    <tr>
-      <td>Discord</td>
-      <td>Channel, Message</td>
-      <td>Bot token</td>
-      <td>Browser dwell plus 5 minute polling</td>
-    </tr>
-    <tr>
-      <td>Google Docs</td>
-      <td>Document</td>
-      <td>Google OAuth</td>
-      <td>Browser dwell plus Drive-backed refresh</td>
-    </tr>
-    <tr>
-      <td>Google Sheets</td>
-      <td>Spreadsheet</td>
-      <td>Google OAuth</td>
-      <td>Browser dwell plus Drive-backed refresh</td>
-    </tr>
-    <tr>
-      <td>Google Drive</td>
-      <td>Folder, Document</td>
-      <td>Google OAuth</td>
-      <td>Browser dwell for folders and files, plus Drive changes polling</td>
-    </tr>
-    <tr>
-      <td>Gmail</td>
-      <td>Thread</td>
-      <td>Google OAuth</td>
-      <td>Browser dwell plus background poll and ingest</td>
-    </tr>
-  </tbody>
-</table>
+<pre><code class="language-bash">agentgraph auth PLATFORM [--xoxc-token TOKEN] [--d-cookie VALUE]</code></pre>
 
+<h2 id="notes"><a class="anchor" href="#notes" aria-label="Anchor link">#</a>Notes</h2>
 
-<h2 id="connector-behavior"><a class="anchor" href="#connector-behavior" aria-label="Anchor link">#</a>Connector behavior</h2>
+<ul><li><code>PLATFORM</code> is the auth label, such as <code>google</code>, <code>slack</code>, or <code>discord</code></li><li>for Slack, <code>--xoxc-token</code> and <code>--d-cookie</code> skip the interactive prompt</li></ul>
 
-<ul><li><strong>Browser dwell:</strong> supported URLs trigger targeted fetches after the configured dwell threshold.</li><li><strong>Polling:</strong> connectors that support it store cursor state and fetch changes on a schedule.</li><li><strong>Ingest:</strong> some connectors expose a broader one-shot historical ingest beyond poll behavior.</li><li><strong>Download metadata:</strong> file-backed entities can expose <code>metadata.download_url</code> and <code>metadata.mime_type</code> when an agent needs source bytes.</li></ul>
+<h2 id="examples"><a class="anchor" href="#examples" aria-label="Anchor link">#</a>Examples</h2>
 
-<h2 id="authoring-a-connector"><a class="anchor" href="#authoring-a-connector" aria-label="Anchor link">#</a>Authoring a connector</h2>
-
-<p>A connector is a Python package that subclasses <code>BaseConnector</code>, implements the required fetch path, and registers itself through the <code>agentgraph.connectors</code> entry point group.</p>
-
-<h3 id="base-contract"><a class="anchor" href="#base-contract" aria-label="Anchor link">#</a>Base contract</h3>
-
-<p>The required shape is small: identify which URLs the connector owns, implement <code>fetch()</code>, and optionally implement polling, ingest, auth, and user identity hooks.</p>
-
-<pre><code class="language-python">class MyConnector(BaseConnector):
-    source = &quot;myplatform&quot;
-    url_patterns = [&quot;https://app.example.com/*&quot;]
-    auth_label = &quot;myplatform&quot;
-    auth_description = &quot;Example platform&quot;
-
-    def can_handle(self, url: str) -&gt; bool:
-        return &quot;app.example.com&quot; in url
-
-    async def fetch(
-        self,
-        resource_type: ResourceType,
-        resource_id: str,
-        meta: dict[str, str] | None = None,
-    ) -&gt; EntityBatch:
-        ...</code></pre>
-
-<h3 id="output-model"><a class="anchor" href="#output-model" aria-label="Anchor link">#</a>Output model</h3>
-
-<ul><li><code>EntityRecord</code> for messages, documents, channels, folders, spreadsheets, and threads.</li><li><code>PersonRecord</code> for authors and participants.</li><li><code>EdgeRecord</code> for authored, posted-in, replied-to, mentions, references, and similar relationships.</li></ul>
-
-<h3 id="packaging"><a class="anchor" href="#packaging" aria-label="Anchor link">#</a>Packaging</h3>
-
-<p>Register the connector in <code>pyproject.toml</code>.</p>
-
-<pre><code class="language-toml">[project.entry-points.&quot;agentgraph.connectors&quot;]
-myplatform = &quot;agentgraph_connector_myplatform:MyConnector&quot;</code></pre>
-<nav class="page-nav" aria-label="Pager"><a class="page-nav-prev" href="/commands/poll.html"><small>Previous</small><span>poll</span></a><a class="page-nav-next" href="/commands/ingest.html"><small>Next</small><span>ingest</span></a></nav>
+<pre><code class="language-bash">agentgraph auth google
+agentgraph auth slack --xoxc-token &quot;$XOXC&quot; --d-cookie &quot;$D_COOKIE&quot;</code></pre>
+<nav class="page-nav" aria-label="Pager"><a class="page-nav-prev" href="/commands/onboard.html"><small>Previous</small><span>onboard</span></a><a class="page-nav-next" href="/commands/serve.html"><small>Next</small><span>serve</span></a></nav>
         </article>
-        <nav class="toc" aria-label="On this page"><h2>On this page</h2><a class="toc-l2" href="#supported-connectors">Supported connectors</a><a class="toc-l2" href="#connector-behavior">Connector behavior</a><a class="toc-l2" href="#authoring-a-connector">Authoring a connector</a><a class="toc-l3" href="#base-contract">Base contract</a><a class="toc-l3" href="#output-model">Output model</a><a class="toc-l3" href="#packaging">Packaging</a></nav>
+        <nav class="toc" aria-label="On this page"><h2>On this page</h2><a class="toc-l2" href="#synopsis">Synopsis</a><a class="toc-l2" href="#notes">Notes</a><a class="toc-l2" href="#examples">Examples</a></nav>
       </div>
     </main>
   </div>

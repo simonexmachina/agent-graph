@@ -32,6 +32,8 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
     commands_html = (output_dir / "commands" / "index.html").read_text(encoding="utf-8")
+    search_html = (output_dir / "commands" / "search.html").read_text(encoding="utf-8")
+    mcp_html = (output_dir / "mcp" / "index.html").read_text(encoding="utf-8")
     redirect_html = (output_dir / "commands.html").read_text(encoding="utf-8")
 
     assert 'class="shell"' in index_html
@@ -39,4 +41,6 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'id="doc-search"' in index_html
     assert 'class="toc"' in index_html
     assert "Command docs index" in commands_html
+    assert "agentgraph search" in search_html
+    assert "MCP tools" in mcp_html
     assert 'content="0; url=/commands/"' in redirect_html
