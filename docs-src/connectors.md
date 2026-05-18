@@ -2,8 +2,8 @@
 title = "Connectors"
 description = "Supported AgentGraph connectors, fetch behavior, and the connector authoring contract."
 nav_title = "Connectors"
-section = "Reference"
-order = 20
+section = "Configuration"
+order = 30
 summary = "Connectors turn external systems into graph entities, people, and edges. The first half of this page is operational reference; the second half is the author guide."
 output = "connectors.html"
 source_path = "docs-src/connectors.md"

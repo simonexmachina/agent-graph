@@ -2,8 +2,8 @@
 title = "PostgreSQL"
 description = "Run AgentGraph with PostgreSQL instead of the default SQLite backend."
 nav_title = "PostgreSQL"
-section = "Start"
-order = 45
+section = "Configuration"
+order = 20
 summary = "AgentGraph uses SQLite by default, but the backend is pluggable. This page covers when to switch to PostgreSQL and how to configure it."
 output = "postgresql.html"
 source_path = "docs-src/postgresql.md"

@@ -47,6 +47,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert ".doc .codehilite .tok-" in index_html
     assert ">Commands</a>" in index_html
     assert 'href="postgresql.html"' in index_html
+    assert "<section><h2>Configuration</h2><a class=\"nav-link\" href=\"configuration.html\">Configuration</a><a class=\"nav-link\" href=\"postgresql.html\">PostgreSQL</a><a class=\"nav-link\" href=\"connectors.html\">Connectors</a></section>" in index_html
     assert 'class="codehilite"' in connectors_html
     assert "current_user_id" in connectors_html
     assert "<h1>Commands</h1>" in commands_html

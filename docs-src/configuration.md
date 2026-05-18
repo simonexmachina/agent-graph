@@ -2,8 +2,8 @@
 title = "Configuration"
 description = "Configuration directory, database settings, dwell threshold, retention, and server settings."
 nav_title = "Configuration"
-section = "Start"
-order = 40
+section = "Configuration"
+order = 10
 summary = "AgentGraph reads settings from environment variables and from a `.env` file in the config directory. The default setup is local-first SQLite, but the backend is pluggable."
 output = "configuration.html"
 source_path = "docs-src/configuration.md"
