@@ -24,6 +24,13 @@
   --code-bg:#06080d;
   --code-fg:#e6edf3;
   --code-border:rgba(255,255,255,0.08);
+  --code-comment:var(--muted);
+  --code-keyword:var(--ecto);
+  --code-type:var(--accent-strong);
+  --code-string:var(--moon);
+  --code-number:#ffb86c;
+  --code-name:#8fd3ff;
+  --code-operator:#9fb0c4;
   --shadow-card:0 18px 40px rgba(0,0,0,0.55);
   --glow-primary:rgba(0,245,160,0.10);
   --glow-secondary:rgba(255,210,74,0.07);
@@ -62,9 +69,16 @@ html[data-theme="light"]{
   --accent-soft:rgba(0,127,97,0.12);
   --accent-strong:#00684f;
   --paper:rgba(8,24,20,0.035);
-  --code-bg:#10151d;
-  --code-fg:#eef6f2;
+  --code-bg:#f3f7f5;
+  --code-fg:#102118;
   --code-border:rgba(8,24,20,0.12);
+  --code-comment:#5f6f68;
+  --code-keyword:#007f61;
+  --code-type:#0f766e;
+  --code-string:#9a5d00;
+  --code-number:#b45309;
+  --code-name:#005f99;
+  --code-operator:#4b5563;
   --shadow-card:0 18px 40px rgba(8,24,20,0.14);
   --glow-primary:rgba(0,127,97,0.13);
   --glow-secondary:rgba(182,120,0,0.10);
@@ -148,7 +162,16 @@ body:not(.home) .doc>h1:first-child{display:none}
 .doc pre{position:relative;overflow:auto;background:var(--code-bg);color:var(--code-fg);border-radius:10px;padding:14px 18px;margin:1.3em 0;font-size:.85em;line-height:1.6;scrollbar-width:thin;scrollbar-color:var(--pre-scrollbar) transparent;border:1px solid var(--code-border)}
 .doc pre::-webkit-scrollbar{height:8px;width:8px}
 .doc pre::-webkit-scrollbar-thumb{background:var(--pre-scrollbar);border-radius:8px}
+.doc .codehilite{background:transparent;color:var(--code-fg)}
 .doc pre code{display:block;background:transparent;border:0;color:inherit;padding:0;font-size:1em;white-space:pre}
+.doc .codehilite .tok-c,.doc .codehilite .tok-c1,.doc .codehilite .tok-cm,.doc .codehilite .tok-cp,.doc .codehilite .tok-cpf,.doc .codehilite .tok-ch,.doc .codehilite .tok-cs{color:var(--code-comment);font-style:italic}
+.doc .codehilite .tok-err,.doc .codehilite .tok-gr{color:var(--hot)}
+.doc .codehilite .tok-k,.doc .codehilite .tok-kc,.doc .codehilite .tok-kd,.doc .codehilite .tok-kn,.doc .codehilite .tok-kp,.doc .codehilite .tok-kr,.doc .codehilite .tok-ow{color:var(--code-keyword);font-weight:600}
+.doc .codehilite .tok-kt,.doc .codehilite .tok-nc,.doc .codehilite .tok-ne,.doc .codehilite .tok-nf,.doc .codehilite .tok-nn{color:var(--code-type)}
+.doc .codehilite .tok-s,.doc .codehilite .tok-sa,.doc .codehilite .tok-sb,.doc .codehilite .tok-sc,.doc .codehilite .tok-sd,.doc .codehilite .tok-s1,.doc .codehilite .tok-s2,.doc .codehilite .tok-se,.doc .codehilite .tok-sh,.doc .codehilite .tok-si,.doc .codehilite .tok-sr,.doc .codehilite .tok-ss,.doc .codehilite .tok-sx,.doc .codehilite .tok-dl{color:var(--code-string)}
+.doc .codehilite .tok-m,.doc .codehilite .tok-mb,.doc .codehilite .tok-mf,.doc .codehilite .tok-mh,.doc .codehilite .tok-mi,.doc .codehilite .tok-mo,.doc .codehilite .tok-il{color:var(--code-number)}
+.doc .codehilite .tok-n,.doc .codehilite .tok-na,.doc .codehilite .tok-nb,.doc .codehilite .tok-bp,.doc .codehilite .tok-no,.doc .codehilite .tok-nd,.doc .codehilite .tok-ni,.doc .codehilite .tok-nl,.doc .codehilite .tok-nr,.doc .codehilite .tok-nt,.doc .codehilite .tok-nv,.doc .codehilite .tok-vc,.doc .codehilite .tok-vg,.doc .codehilite .tok-vi,.doc .codehilite .tok-vm{color:var(--code-name)}
+.doc .codehilite .tok-o,.doc .codehilite .tok-p,.doc .codehilite .tok-w{color:var(--code-operator)}
 .doc pre .copy{position:absolute;top:8px;right:8px;background:var(--copy-bg);color:var(--code-fg);border:1px solid var(--copy-border);border-radius:6px;padding:3px 9px;font:500 .7rem/1 var(--sans);cursor:pointer;opacity:0;transition:opacity .15s,background .15s,border-color .15s}
 .doc pre:hover .copy,.doc pre .copy:focus{opacity:1}
 .doc pre .copy:hover{background:rgba(255,255,255,.12)}
