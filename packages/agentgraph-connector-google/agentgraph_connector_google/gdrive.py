@@ -55,6 +55,7 @@ class DriveChangesConnector(BaseConnector):
     source = "gdrive"
     fetch_policy = FetchPolicy(stale_after_seconds=15 * 60)
     poll_interval: timedelta | None = timedelta(minutes=10)  # type: ignore[assignment]
+    poll_delegates = ["gdocs", "gsheets"]
     url_patterns = ["https://drive.google.com/*", "https://docs.google.com/file/*"]
     auth_label = "google"
     auth_description = "Google Drive: Document entities for non-native files (PDFs, etc.) and Folder entities listing their contents; polls the Drive Changes API to keep gdocs and gsheets current."

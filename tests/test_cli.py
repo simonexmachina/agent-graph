@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from datetime import timedelta
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType
@@ -56,6 +57,9 @@ class _FakeConnector:
     auth_label = "slack"
     auth_description = "Slack"
     onboard_prompt = "Set up Slack?"
+    poll_interval = None
+    poll_delegates: list[str] = []
+    url_patterns: list[str] = []
     auth_called = False
 
     @classmethod
@@ -72,12 +76,32 @@ class _FakeGoogleConnector:
     auth_label = "google"
     auth_description = "Google"
     onboard_prompt = "Set up Google?"
+    poll_interval = None
+    poll_delegates: list[str] = []
+    url_patterns: list[str] = []
 
     @classmethod
     def run_auth_flow(cls) -> None:
         google_auth = cast(Any, import_module("agentgraph_connector_google.auth"))
         run_oauth_flow = cast(Callable[[], None], google_auth.run_oauth_flow)
         run_oauth_flow()
+
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        return ("ok", "user@example.com")
+
+
+class _FakeDriveConnector:
+    source = "gdrive"
+    auth_label = "google"
+    auth_description = "Google Drive"
+    poll_interval = timedelta(minutes=10)
+    poll_delegates = ["gdocs"]
+    url_patterns = ["https://drive.google.com/*"]
+
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        return ("ok", "user@example.com")
 
 
 class _FakeGoogleToken:
@@ -149,6 +173,34 @@ def test_auth_dispatches_to_connector() -> None:
         result = runner.invoke(app, ["auth", "slack"])
     assert result.exit_code == 0
     assert _FakeConnector.auth_called
+
+
+def test_connectors_reports_delegated_polling() -> None:
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch(
+             "agentgraph.connectors.registry.get_all_connectors",
+             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
+         ):
+        result = runner.invoke(app, ["connectors"])
+
+    assert result.exit_code == 0
+    assert "gdocs" in result.output
+    assert "sync: via gdrive poll" in result.output
+    assert "sync: polling every 10m for gdocs" in result.output
+
+
+def test_connectors_json_reports_delegated_polling() -> None:
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch(
+             "agentgraph.connectors.registry.get_all_connectors",
+             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
+         ):
+        result = runner.invoke(app, ["connectors", "--json"])
+
+    assert result.exit_code == 0
+    assert '"polled_by": [' in result.output
+    assert '"gdrive"' in result.output
+    assert '"poll_delegates": [' in result.output
 
 
 def test_auth_google_invalid_existing_credentials_reuses_client_config(

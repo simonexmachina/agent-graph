@@ -148,6 +148,9 @@ class BaseConnector(ABC):
     poll_interval: ClassVar[timedelta | None] = None
     """Interval between background poll() calls. None disables polling for this connector."""
 
+    poll_delegates: ClassVar[list[str]] = []
+    """Connector sources refreshed indirectly by this connector's poll() implementation."""
+
     url_patterns: ClassVar[list[str]] = []
     """Chrome match-pattern strings (e.g. "https://mail.google.com/*") that identify URLs
     this connector can handle. Used by the browser extension to decide which tabs to watch."""

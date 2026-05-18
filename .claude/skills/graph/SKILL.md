@@ -35,8 +35,8 @@ agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive —
 # Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
 agentgraph ingest <source> [--json]   # e.g. gmail — fetches all labels, not just inbox
 
-# List installed connectors and their auth status
-agentgraph connectors [--json] # auth_status/auth_detail, url_patterns, polls; run first to check auth
+# List installed connectors and their auth/sync status
+agentgraph connectors [--json] # auth_status/auth_detail, url_patterns, polls, poll_delegates, polled_by, sync
 
 # Authenticate connectors
 agentgraph auth google        # Google OAuth2; use when Google auth_status is missing/invalid
@@ -67,6 +67,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 - Use `--json` when you need to parse results programmatically
 - Entity IDs accept: full UUID, UUID prefix, or platform ref (`slack/C123`, `gdocs/doc-id`, `discord/dm/456`)
 - Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs or exported Google Docs/Sheets
+- `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
 - Server logs: `/tmp/agentgraph.log`
 
 ## Stub Entities

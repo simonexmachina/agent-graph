@@ -52,6 +52,7 @@ def connectors(
     import json as _json
 
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import connector_status_items
 
     bootstrap()
     all_connectors = get_all_connectors()
@@ -61,16 +62,7 @@ def connectors(
 
     statuses = asyncio.run(_gather())
 
-    items: list[dict[str, object]] = []
-    for c, (status, detail) in zip(all_connectors, statuses, strict=True):
-        items.append({
-            "source": c.source,
-            "description": type(c).auth_description,
-            "auth_status": status,
-            "auth_detail": detail,
-            "url_patterns": type(c).url_patterns,
-            "polls": c.poll_interval is not None,
-        })
+    items = connector_status_items(all_connectors, statuses)
 
     if json:
         typer.echo(_json.dumps(items, indent=2))
@@ -78,7 +70,7 @@ def connectors(
 
     status_label = {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}
     for item in items:
-        sync = "polling" if item["polls"] else "on-demand"
+        sync = str(item["sync"])
         desc = item["description"] or item["source"]
         status = str(item["auth_status"])
         detail = item["auth_detail"]

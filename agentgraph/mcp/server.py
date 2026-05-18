@@ -50,24 +50,20 @@ async def list_connectors_tool() -> str:
           - auth_status: "ok" | "missing" | "invalid"
           - auth_detail: authenticated user or error message; null if missing
           - url_patterns: URL patterns this connector recognises
-          - polls: true if background sync is enabled
+          - polls: true if this connector has its own background poll
+          - poll_interval_seconds: direct poll interval, or null
+          - poll_delegates: connector sources refreshed by this connector's poll
+          - polled_by: connector sources whose poll refreshes this connector
+          - sync: human-readable sync summary
     """
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import connector_status_items
 
     bootstrap()
     all_connectors = get_all_connectors()
     statuses = await asyncio.gather(*(type(c).verify_auth() for c in all_connectors))
 
-    result = []
-    for c, (status, detail) in zip(all_connectors, statuses, strict=True):
-        result.append({
-            "source": c.source,
-            "description": type(c).auth_description,
-            "auth_status": status,
-            "auth_detail": detail,
-            "url_patterns": type(c).url_patterns,
-            "polls": c.poll_interval is not None,
-        })
+    result = connector_status_items(all_connectors, statuses)
     return json.dumps(result)
 
 
