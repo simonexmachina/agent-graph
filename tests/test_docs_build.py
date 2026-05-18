@@ -43,5 +43,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "<h1>Commands</h1>" in commands_html
     assert "agentgraph search" in search_html
     assert "<code>agentgraph search</code>" in search_html
+    assert 'href="../docs.css"' in search_html
+    assert 'href="../index.html"' in search_html
     assert "MCP tools" in mcp_html
-    assert 'content="0; url=/commands/"' in redirect_html
+    assert 'content="0; url=commands/index.html"' in redirect_html

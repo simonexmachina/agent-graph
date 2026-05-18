@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import posixpath
 import re
 import shutil
 import tomllib
@@ -251,6 +252,33 @@ def page_permalink(meta: PageMeta) -> str:
     return "/" + output
 
 
+def output_relpath(path: Path) -> Path:
+    return path.relative_to(DOCS_OUT) if path.is_absolute() else path
+
+
+def relative_url(current_output: Path, target: str) -> str:
+    if target.startswith(("http://", "https://", "mailto:", "#")):
+        return target
+    if not target.startswith("/"):
+        return target
+
+    current_dir = output_relpath(current_output).parent.as_posix() or "."
+    if target == "/":
+        target_path = "index.html"
+    else:
+        trimmed = target.lstrip("/")
+        target_path = f"{trimmed}index.html" if target.endswith("/") else trimmed
+    return posixpath.relpath(target_path, start=current_dir)
+
+
+def normalize_internal_links(fragment: str, current_output: Path) -> str:
+    return re.sub(
+        r'href="(/[^"]*)"',
+        lambda m: f'href="{html.escape(relative_url(current_output, m.group(1)), quote=True)}"',
+        fragment,
+    )
+
+
 def build_prev_next(pages: list[Page], index: int) -> str:
     links: list[str] = []
     if index > 0:
@@ -273,6 +301,11 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
     body_class = "home" if page.meta.output_path == Path("index.html") else ""
     toc_html = build_on_page_nav(page)
     article_title = "" if body_class == "home" else f"          <h1>{title}</h1>\n"
+    stylesheet_href = relative_url(page.meta.output_path, "/docs.css")
+    home_href = relative_url(page.meta.output_path, "/")
+    body_html = normalize_internal_links(page.body, page.meta.output_path)
+    nav_html = normalize_internal_links(nav_html, page.meta.output_path)
+    toc_html = normalize_internal_links(toc_html, page.meta.output_path)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -285,7 +318,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/docs.css" />
+  <link rel="stylesheet" href="{stylesheet_href}" />
 </head>
 <body class="{body_class}">
   <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
@@ -305,7 +338,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
           <h1>{title}</h1>
         </div>
         <div class="hero-meta">
-          <a class="repo" href="/">Home</a>
+          <a class="repo" href="{home_href}">Home</a>
           <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
           <a class="edit" href="{source_href}">Edit page</a>
         </div>
@@ -314,7 +347,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
         <article class="doc">
 {article_title}\
           <p class="page-summary">{render_inline(page.meta.summary)}</p>
-{page.body}
+{body_html}
 {build_prev_next(pages, index)}
         </article>
         <nav class="toc" aria-label="On this page"><h2>On this page</h2>{toc_html}</nav>
@@ -347,14 +380,15 @@ if(tocLinks.length){{const map=new Map();tocLinks.forEach(a=>{{const id=a.getAtt
 
 
 def write_redirect(alias: Path, target: str) -> None:
+    target_href = relative_url(alias, target)
     alias.parent.mkdir(parents=True, exist_ok=True)
     alias.write_text(
         f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url={html.escape(target, quote=True)}" />
-  <link rel="canonical" href="{html.escape(target, quote=True)}" />
+  <meta http-equiv="refresh" content="0; url={html.escape(target_href, quote=True)}" />
+  <link rel="canonical" href="{html.escape(target_href, quote=True)}" />
 </head>
 <body></body>
 </html>
