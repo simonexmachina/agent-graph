@@ -9,6 +9,8 @@ output = "install.html"
 source_path = "docs-src/install.md"
 +++
 
+The install flow below assumes the default SQLite backend. If you want to run AgentGraph against PostgreSQL instead, follow the normal install steps and then see [PostgreSQL](/postgresql.html).
+
 ## Prerequisites
 
 AgentGraph expects Python 3.12 or later and [uv](https://docs.astral.sh/uv/).
@@ -85,6 +87,8 @@ Print the client config:
 ```bash
 agentgraph mcp-config
 ```
+
+See [`mcp-config`](/commands/mcp-config.html) for the command details and transport examples.
 
 For ChatGPT, enable Developer mode and point a remote MCP connector at an AgentGraph SSE or streaming HTTP endpoint.
 

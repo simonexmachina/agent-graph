@@ -9,6 +9,8 @@ output = "quickstart.html"
 source_path = "docs-src/quickstart.md"
 +++
 
+This quickstart assumes the default SQLite backend so you can get to a working graph with the fewest moving parts. If you prefer PostgreSQL, switch after the first run with the steps in [PostgreSQL](/postgresql.html).
+
 ## 1. Authenticate
 
 Run the guided onboarding flow:

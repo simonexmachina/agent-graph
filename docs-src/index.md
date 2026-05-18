@@ -11,6 +11,8 @@ source_path = "docs-src/index.md"
 
 > TL;DR: `uv sync --extra all`, `agentgraph onboard`, `agentgraph serve`, then connect your assistant with `agentgraph mcp-config`.
 
+By default, the docs assume the built-in SQLite backend. AgentGraph's storage layer is pluggable, so you can switch to PostgreSQL later without changing the CLI, viewer, or MCP surface.
+
 ## Where to start
 
 <div class="doc-card-grid">
@@ -27,6 +29,10 @@ source_path = "docs-src/index.md"
     <p>Choose the config directory, database path, retention window, dwell threshold, and transport settings.</p>
   </section>
   <section class="doc-card">
+    <h3><a href="/postgresql.html">PostgreSQL</a></h3>
+    <p>Move from the default SQLite setup to PostgreSQL when you want a separate database service.</p>
+  </section>
+  <section class="doc-card">
     <h3><a href="/commands/">Commands</a></h3>
     <p>Search, query, fetch, poll, auth, serve, and MCP. One reference surface for both terminal users and agent clients.</p>
   </section>
@@ -38,14 +44,16 @@ source_path = "docs-src/index.md"
 
 ## What AgentGraph does
 
-- **Connector fetches:** turns messages, documents, spreadsheets, folders, and email threads into graph entities, people, and edges.
+- **Connector:** turns messages, documents, spreadsheets, folders, and email threads into graph entities, people, and edges.
 - **Browser-driven capture:** watches supported URLs and triggers targeted fetches once you stay on a page long enough for it to matter.
 - **Background refresh:** pollers keep already-known resources current after the first visit.
 - **Shared interfaces:** the CLI, web viewer, and MCP server all operate on the same local graph.
+- **Pluggable storage:** SQLite is the default local backend, and PostgreSQL is available when you want AgentGraph to use an external database service.
 
 ## Reference
 
 - [Connectors](/connectors.html) for supported sources, auth behavior, and connector authoring.
+- [PostgreSQL](/postgresql.html) for running AgentGraph against PostgreSQL instead of the default SQLite backend.
 - [Commands](/commands/) for the CLI and MCP surface.
 - [MCP tools](/mcp/) for the tool-by-tool agent interface reference.
 - [Privacy](/privacy.html) for the local storage and browser observation model.

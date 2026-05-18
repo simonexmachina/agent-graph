@@ -4,7 +4,7 @@ description = "Configuration directory, database settings, dwell threshold, rete
 nav_title = "Configuration"
 section = "Start"
 order = 40
-summary = "AgentGraph reads settings from environment variables and from a `.env` file in the config directory. The defaults are local-first, but the storage location and backend are configurable."
+summary = "AgentGraph reads settings from environment variables and from a `.env` file in the config directory. The default setup is local-first SQLite, but the backend is pluggable."
 output = "configuration.html"
 source_path = "docs-src/configuration.md"
 +++
@@ -22,6 +22,15 @@ That directory controls:
 - `credentials.json`
 - the config `.env`
 - the default SQLite database path
+
+## Storage backend
+
+AgentGraph uses a pluggable backend for graph storage.
+
+- `sqlite` is the default and is assumed throughout the install and quickstart docs.
+- `postgres` is available when you want AgentGraph to use a separate PostgreSQL service.
+
+The CLI, viewer, and MCP server work the same way regardless of which backend you choose.
 
 ## Core settings
 
@@ -84,13 +93,7 @@ That directory controls:
 
 ## PostgreSQL
 
-SQLite is the default backend. To switch to PostgreSQL:
-
-```bash
-agentgraph use-postgres
-```
-
-This writes `docker-compose.yml` to the current directory, saves backend config to the AgentGraph config directory, and prints next steps.
+SQLite is the default backend. For PostgreSQL setup, environment variables, and switching guidance, see [PostgreSQL](/postgresql.html).
 
 ## Slack workspace filter
 
