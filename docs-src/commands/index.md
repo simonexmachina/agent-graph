@@ -1,7 +1,7 @@
 +++
-title = "Command docs index"
+title = "Commands"
 description = "Command reference for the AgentGraph CLI and MCP workflows."
-nav_title = "Command docs"
+nav_title = "Commands"
 section = "Reference"
 order = 10
 summary = "The CLI is the operator-facing surface for the local graph. Each command now has its own page so flags, examples, and adjacent workflows stay readable."

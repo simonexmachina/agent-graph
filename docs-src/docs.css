@@ -101,18 +101,6 @@ a:hover{opacity:.85;text-decoration:underline;text-underline-offset:.2em}
 .sidebar{position:sticky;top:0;height:100vh;overflow:auto;padding:24px 22px;background:var(--chrome-bg);backdrop-filter:saturate(140%) blur(8px);border-right:1px solid var(--line);scrollbar-width:thin;scrollbar-color:var(--line) transparent}
 .sidebar::-webkit-scrollbar{width:6px}
 .sidebar::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
-.sidebar-head{display:flex;align-items:center;gap:10px;margin-bottom:24px}
-.brand{display:flex;align-items:center;gap:11px;color:var(--ink);text-decoration:none;flex:1;min-width:0}
-.brand:hover{text-decoration:none;opacity:1}
-.brand .mark{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:radial-gradient(circle at 35% 25%,#00f5a0,#00c08f 60%,#04130c 100%);box-shadow:0 0 0 1px rgba(0,245,160,0.4),0 8px 18px rgba(0,245,160,0.25)}
-.brand .mark::after{content:"";display:block;width:10px;height:10px;border-radius:50%;background:var(--mark-core);box-shadow:0 0 0 2px var(--mark-glint)}
-.brand strong{display:block;font-family:var(--serif);font-size:1.15rem;line-height:1;font-weight:600;letter-spacing:0.01em;color:var(--ink)}
-.brand small{display:block;color:var(--muted);font-size:.74rem;margin-top:4px;font-weight:400}
-.theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;padding:0;transition:border-color .15s,color .15s,background .15s}
-.theme-toggle:hover{border-color:var(--ecto);color:var(--ink);background:var(--panel2)}
-.theme-toggle:focus-visible{outline:0;box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--ecto)}
-.theme-toggle__icon{width:14px;height:14px;border-radius:50%;border:2px solid var(--moon);box-shadow:inset -4px -3px 0 var(--moon);transition:background .15s,box-shadow .15s,border-color .15s}
-html[data-theme="light"] .theme-toggle__icon{background:var(--moon);box-shadow:0 0 0 3px rgba(182,120,0,.14);border-color:var(--moon)}
 .search{display:block;margin:0 0 22px}
 .search span{display:block;color:var(--muted);font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px}
 .search input{width:100%;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:9px 12px;font:inherit;font-size:.9rem;color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s}

@@ -37,10 +37,10 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     redirect_html = (output_dir / "commands.html").read_text(encoding="utf-8")
 
     assert 'class="shell"' in index_html
-    assert 'class="theme-toggle"' in index_html
     assert 'id="doc-search"' in index_html
     assert 'class="toc"' in index_html
-    assert "Command docs index" in commands_html
+    assert ">Commands</a>" in index_html
+    assert "<h1>Commands</h1>" in commands_html
     assert "agentgraph search" in search_html
     assert "<code>agentgraph search</code>" in search_html
     assert "MCP tools" in mcp_html

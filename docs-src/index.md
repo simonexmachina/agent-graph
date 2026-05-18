@@ -27,7 +27,7 @@ source_path = "docs-src/index.md"
     <p>Choose the config directory, database path, retention window, dwell threshold, and transport settings.</p>
   </section>
   <section class="doc-card">
-    <h3><a href="/commands/">Command docs</a></h3>
+    <h3><a href="/commands/">Commands</a></h3>
     <p>Search, query, fetch, poll, auth, serve, and MCP. One reference surface for both terminal users and agent clients.</p>
   </section>
   <section class="doc-card">
@@ -46,7 +46,7 @@ source_path = "docs-src/index.md"
 ## Reference
 
 - [Connectors](/connectors.html) for supported sources, auth behavior, and connector authoring.
-- [Command docs](/commands/) for the CLI and MCP surface.
+- [Commands](/commands/) for the CLI and MCP surface.
 - [MCP tools](/mcp/) for the tool-by-tool agent interface reference.
 - [Privacy](/privacy.html) for the local storage and browser observation model.
 

@@ -282,7 +282,6 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <meta name="color-scheme" content="light dark" />
   <title>{title} - AgentGraph</title>
   <meta name="description" content="{description}" />
-  <script>try{{const t=localStorage.getItem('agentgraph-docs-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}}catch{{document.documentElement.dataset.theme='dark'}}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
@@ -294,15 +293,6 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   </button>
   <div class="shell">
     <aside class="sidebar">
-      <div class="sidebar-head">
-        <a class="brand" href="/" aria-label="AgentGraph home">
-          <span class="mark" aria-hidden="true"></span>
-          <span><strong>AgentGraph</strong><small>local graph docs</small></span>
-        </a>
-        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch color theme" aria-pressed="false">
-          <span class="theme-toggle__icon" aria-hidden="true"></span>
-        </button>
-      </div>
       <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
       <nav aria-label="Documentation">
 {nav_html}
@@ -332,16 +322,6 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
     </main>
   </div>
   <script>
-const root=document.documentElement;
-const themeToggle=document.querySelector('[data-theme-toggle]');
-const themeMedia=window.matchMedia('(prefers-color-scheme: light)');
-function storedTheme(){{try{{const theme=localStorage.getItem('agentgraph-docs-theme');return theme==='light'||theme==='dark'?theme:null}}catch{{return null}}}}
-function systemTheme(){{return themeMedia.matches?'light':'dark';}}
-function applyTheme(theme){{root.dataset.theme=theme;themeToggle?.setAttribute('aria-pressed',theme==='dark'?'true':'false');}}
-applyTheme(root.dataset.theme||storedTheme()||systemTheme());
-themeToggle?.addEventListener('click',()=>{{const next=root.dataset.theme==='dark'?'light':'dark';try{{localStorage.setItem('agentgraph-docs-theme',next)}}catch{{}}applyTheme(next);}});
-const syncSystemTheme=()=>{{if(!storedTheme())applyTheme(systemTheme());}};
-if(themeMedia.addEventListener)themeMedia.addEventListener('change',syncSystemTheme);else themeMedia.addListener?.(syncSystemTheme);
 const sidebar=document.querySelector('.sidebar');
 const toggle=document.querySelector('.nav-toggle');
 const mobileNav=window.matchMedia('(max-width: 900px)');
