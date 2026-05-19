@@ -12,6 +12,8 @@ source_path = "docs-src/index.md"
 AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, and Drive, so your AI agents can search, fetch, and reason over the same connected context you work from.
 
 ```bash
+git clone https://github.com/simonexmachina/agent-graph.git
+cd agent-graph
 uv sync --extra all
 agentgraph onboard
 agentgraph serve
