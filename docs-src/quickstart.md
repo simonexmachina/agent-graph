@@ -39,6 +39,8 @@ npm install
 npm run build
 ```
 
+If you want to test a prebuilt bundle instead, follow [Tester Extension Install](/tester-extension-install.html).
+
 ## 4. Browse something supported
 
 Open a Slack channel, a Google Doc, a Google Sheet, a Gmail thread, or a Drive folder. Leave the tab focused long enough for the dwell threshold to trigger a fetch.

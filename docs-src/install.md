@@ -80,6 +80,8 @@ npm run build
 
 Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, and select `extension/dist/`.
 
+If you do not want to build the extension locally, use the prebuilt [Tester Extension Install](/tester-extension-install.html) flow instead.
+
 ## Connect MCP clients
 
 Print the client config:
