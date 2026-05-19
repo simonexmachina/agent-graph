@@ -13,12 +13,12 @@ try:
     from pygments.formatters import HtmlFormatter
     from pygments.lexers import TextLexer, get_lexer_by_name
     from pygments.util import ClassNotFound
-except ImportError:  # pragma: no cover - highlighting gracefully falls back to plain blocks
+except ImportError:  # pragma: no cover - handled explicitly during docs build
     highlight = None
-    HtmlFormatter = None
     TextLexer = None
     get_lexer_by_name = None
     ClassNotFound = Exception
+    HtmlFormatter = None
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS_SRC = ROOT / "docs-src"
@@ -29,20 +29,18 @@ SECTION_ORDER = {"Start": 10, "Configuration": 15, "Reference": 20, "MCP": 30}
 _FORMATTER = HtmlFormatter(nowrap=True, classprefix="tok-") if HtmlFormatter else None
 
 
-def build_syntax_highlight_styles() -> str:
-    if _FORMATTER is None:
-        return ""
-
-    styles = _FORMATTER.get_style_defs(".doc .codehilite")
-    # Let the existing docs <pre> styling control the code block frame/background.
-    styles = styles.replace(
-        ".doc .codehilite { background: #f8f8f8; }",
-        ".doc .codehilite { background: transparent; color: inherit; }",
-    )
-    return styles
-
-
-SYNTAX_HIGHLIGHT_STYLES = build_syntax_highlight_styles()
+def ensure_syntax_highlighter() -> None:
+    if (
+        highlight is None
+        or HtmlFormatter is None
+        or TextLexer is None
+        or get_lexer_by_name is None
+        or _FORMATTER is None
+    ):
+        raise RuntimeError(
+            "Docs build requires Pygments. Run it from the project environment "
+            "(for example `.venv/bin/python scripts/build_docs.py`)."
+        )
 
 
 @dataclass(frozen=True)
@@ -102,6 +100,14 @@ def parse_frontmatter(text: str) -> tuple[PageMeta, str]:
 
 
 def render_inline(text: str) -> str:
+    code_placeholders: dict[str, str] = {}
+
+    def replace_code(match: re.Match[str]) -> str:
+        key = f"@@CODE{len(code_placeholders)}@@"
+        code_placeholders[key] = f"<code>{html.escape(match.group(1))}</code>"
+        return key
+
+    text = re.sub(r"`([^`]+)`", replace_code, text)
     escaped = html.escape(text)
     escaped = re.sub(r"`([^`]+)`", lambda m: f"<code>{html.escape(m.group(1))}</code>", escaped)
     escaped = re.sub(
@@ -110,18 +116,14 @@ def render_inline(text: str) -> str:
         escaped,
     )
     escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
+    for key, value in code_placeholders.items():
+        escaped = escaped.replace(html.escape(key), value)
     return escaped
 
 
 def render_code_block(code: str, language: str) -> str:
     code_class = f' class="language-{html.escape(language, quote=True)}"' if language else ""
-    if (
-        _FORMATTER is None
-        or highlight is None
-        or TextLexer is None
-        or get_lexer_by_name is None
-    ):
-        return f"<pre><code{code_class}>{html.escape(code)}</code></pre>"
+    ensure_syntax_highlighter()
 
     try:
         lexer = get_lexer_by_name(language, stripall=False) if language else TextLexer(stripall=False)
@@ -364,7 +366,6 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{stylesheet_href}" />
-  <style>{SYNTAX_HIGHLIGHT_STYLES}</style>
 </head>
 <body class="{body_class}">
   <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
@@ -456,6 +457,7 @@ def copy_static_assets() -> None:
 
 
 def build() -> None:
+    ensure_syntax_highlighter()
     pages = load_pages()
     copy_static_assets()
 

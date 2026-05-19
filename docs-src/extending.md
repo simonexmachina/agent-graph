@@ -1,13 +1,22 @@
 +++
-title = "Connectors"
-description = "Supported AgentGraph connectors, fetch behavior, and the connector authoring contract."
-nav_title = "Connectors"
+title = "Extending"
+description = "Extend AgentGraph with custom connectors, plus the `BaseConnector` interface and example implementation."
+nav_title = "Extending"
 section = "Configuration"
 order = 30
-summary = "Connectors turn external systems into graph entities, people, and edges. The first half of this page is operational reference; the second half is the author guide."
-output = "connectors.html"
-source_path = "docs-src/connectors.md"
+summary = "AgentGraph can be extended with custom connectors for your own tools and integrations. This page includes the `BaseConnector` interface, hook signatures, and an example implementation."
+output = "extending.html"
+source_path = "docs-src/extending.md"
+aliases = ["connectors.html"]
 +++
+
+## Why extend AgentGraph
+
+AgentGraph is designed to be extended with new connectors.
+
+- Build connectors for internal tools, private APIs, or niche SaaS products that are specific to your team.
+- Keep your own integration logic outside the core package by shipping it as a separate connector package.
+- Reuse the same fetch, poll, auth, and graph-upsert model that the built-in Slack, Discord, Google Docs, Drive, Sheets, and Gmail connectors use.
 
 ## Supported connectors
 
@@ -67,13 +76,30 @@ source_path = "docs-src/connectors.md"
 - **Ingest:** some connectors expose a broader one-shot historical ingest beyond poll behavior.
 - **Download metadata:** file-backed entities can expose `metadata.download_url` and `metadata.mime_type` when an agent needs source bytes.
 
+## Connector interface
+
+This is the author-facing reference for implementing a connector against `BaseConnector`.
+
 ## Authoring a connector
 
-A connector is a Python package that subclasses `BaseConnector`, implements the required fetch path, and registers itself through the `agentgraph.connectors` entry point group.
+A connector is a Python package that subclasses `BaseConnector`, implements the required fetch path, and registers itself through the `agentgraph.connectors` entry point group. This is the extension point you use to teach AgentGraph about your own systems.
 
 ### Base contract
 
 The required shape is small: identify which URLs the connector owns, implement `fetch()`, and optionally implement polling, ingest, auth, and user identity hooks. The signatures below match `agentgraph.connectors.base.BaseConnector`.
+
+- `source` is the stable connector identifier used by the CLI, MCP server, and registry.
+- `url_patterns` declares which browser URLs the connector should claim for dwell-based fetches.
+- `fetch_policy` controls when a targeted fetch should be skipped because a resource is still fresh.
+- `fetch(self, resource_type, resource_id, meta=None) -> EntityBatch` is the only required runtime method.
+- `poll_interval`, `poll()`, and `ingest()` are optional background and backfill hooks.
+- `run_auth_flow()`, `get_authenticated_user()`, `verify_auth()`, and `current_user_id()` are the auth and operator-facing hooks.
+
+The contract is intentionally generic: core AgentGraph code calls these hooks without knowing platform-specific field names or APIs.
+
+### Example implementation
+
+This example shows one connector implementing the full contract, including auth, targeted fetch, polling, and historical ingest.
 
 ```python
 from __future__ import annotations

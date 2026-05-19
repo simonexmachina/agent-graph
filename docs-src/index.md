@@ -4,14 +4,16 @@ description = "AgentGraph docs home: install, quickstart, configuration, connect
 nav_title = "Overview"
 section = "Start"
 order = 10
-summary = "AgentGraph indexes the work you already do in Slack, Discord, Google Docs, Sheets, Drive, and Gmail into a local graph that humans and AI clients can query through the CLI, the viewer, or MCP."
+summary = "AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, and Drive so your AI agents can search, fetch, and reason over the same connected context you work from."
 output = "index.html"
 source_path = "docs-src/index.md"
 +++
 
 > TL;DR: `uv sync --extra all`, `agentgraph onboard`, `agentgraph serve`, then connect your assistant with `agentgraph mcp-config`.
 
-By default, the docs assume the built-in SQLite backend. AgentGraph's storage layer is pluggable, so you can switch to PostgreSQL later without changing the CLI, viewer, or MCP surface.
+AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, and Drive, so your AI agents can search, fetch, and reason over the same connected context you work from.
+
+You can also teach AgentGraph about new tools quickly: connectors live in their own packages, follow a small interface, and are straightforward to build with a coding agent. That makes it practical to extend the graph to internal tools, niche SaaS products, or one-off data sources without forking the core system.
 
 ## Where to start
 
@@ -33,6 +35,10 @@ By default, the docs assume the built-in SQLite backend. AgentGraph's storage la
     <p>Move from the default SQLite setup to PostgreSQL when you want a separate database service.</p>
   </section>
   <section class="doc-card">
+    <h3><a href="/extending.html">Extending</a></h3>
+    <p>Learn how to extend AgentGraph with custom connectors for your own integrations, including the `BaseConnector` contract and example implementation.</p>
+  </section>
+  <section class="doc-card">
     <h3><a href="/commands/">Commands</a></h3>
     <p>Search, query, fetch, poll, auth, serve, and MCP. One reference surface for both terminal users and agent clients.</p>
   </section>
@@ -44,15 +50,15 @@ By default, the docs assume the built-in SQLite backend. AgentGraph's storage la
 
 ## What AgentGraph does
 
-- **Connector:** turns messages, documents, spreadsheets, folders, and email threads into graph entities, people, and edges.
+- **Connectors:** turn messages, documents, spreadsheets, folders, and email threads into graph entities, people, and edges, and you can add your own.
 - **Browser-driven capture:** watches supported URLs and triggers targeted fetches once you stay on a page long enough for it to matter.
-- **Background refresh:** pollers keep already-known resources current after the first visit.
+- **Background refresh:** polls to keep already-known resources current after the first visit.
 - **Shared interfaces:** the CLI, web viewer, and MCP server all operate on the same local graph.
 - **Pluggable storage:** SQLite is the default local backend, and PostgreSQL is available when you want AgentGraph to use an external database service.
 
 ## Reference
 
-- [Connectors](/connectors.html) for supported sources, auth behavior, and connector authoring.
+- [Extending](/extending.html) for supported sources, custom connector development, and the `BaseConnector` interface reference.
 - [PostgreSQL](/postgresql.html) for running AgentGraph against PostgreSQL instead of the default SQLite backend.
 - [Commands](/commands/) for the CLI and MCP surface.
 - [MCP tools](/mcp/) for the tool-by-tool agent interface reference.

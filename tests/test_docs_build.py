@@ -62,6 +62,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "<section><h2>Configuration</h2><a class=\"nav-link\" href=\"configuration.html\">Configuration</a><a class=\"nav-link\" href=\"postgresql.html\">PostgreSQL</a><a class=\"nav-link\" href=\"extending.html\">Extending</a></section>" in index_html
     assert 'href="extending.html"' in index_html
     assert 'class="codehilite"' in extending_html
+    assert 'class="tok-k"' in extending_html
     assert "current_user_id" in extending_html
     assert "Why extend AgentGraph" in extending_html
     assert "custom connectors" in extending_html
@@ -75,6 +76,15 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'href="../index.html"' in search_html
     assert "MCP tools" in mcp_html
     assert 'content="0; url=commands/index.html"' in redirect_html
+
+
+def test_build_requires_pygments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    output_dir = tmp_path / "docs"
+    monkeypatch.setattr(build_docs, "DOCS_OUT", output_dir)
+    monkeypatch.setattr(build_docs, "highlight", None)
+
+    with pytest.raises(RuntimeError, match="Docs build requires Pygments"):
+        build_docs.build()
 
 
 def test_watch_snapshot_tracks_docs_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
