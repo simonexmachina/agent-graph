@@ -1,0 +1,55 @@
+name: Extension
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Build extension
+        working-directory: extension
+        run: npm run build
+
+      - name: Stage extension bundle
+        run: |
+          mkdir -p release/agentgraph-extension
+          cp -R extension/dist/. release/agentgraph-extension/
+
+      - name: Archive extension bundle
+        run: |
+          cd release
+          zip -r agentgraph-extension.zip agentgraph-extension
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentgraph-extension
+          path: release/agentgraph-extension.zip
+          if-no-files-found: error
+
+      - name: Attach extension bundle to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/agentgraph-extension.zip
