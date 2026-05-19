@@ -55,8 +55,14 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'class="shell"' in index_html
     assert 'id="doc-search"' in index_html
     assert 'class="toc"' in index_html
+    assert 'class="page-summary"' not in index_html
+    assert 'class="language-bash"' in index_html
+    assert 'agentgraph<span class="tok-w"> </span>mcp-config' in index_html
+    assert "TL;DR" not in index_html
+    assert 'Copy code to clipboard' in index_html
     assert ".doc .codehilite .tok-n" in docs_css
     assert "var(--code-name)" in docs_css
+    assert ".doc pre .copy svg" in docs_css
     assert ">Commands</a>" in index_html
     assert 'href="postgresql.html"' in index_html
     assert "<section><h2>Configuration</h2><a class=\"nav-link\" href=\"configuration.html\">Configuration</a><a class=\"nav-link\" href=\"postgresql.html\">PostgreSQL</a><a class=\"nav-link\" href=\"extending.html\">Extending</a></section>" in index_html

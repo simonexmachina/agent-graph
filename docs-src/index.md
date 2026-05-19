@@ -4,14 +4,19 @@ description = "AgentGraph docs home: install, quickstart, configuration, connect
 nav_title = "Overview"
 section = "Start"
 order = 10
-summary = "AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, and Drive so your AI agents can search, fetch, and reason over the same connected context you work from."
+summary = ""
 output = "index.html"
 source_path = "docs-src/index.md"
 +++
 
-> TL;DR: `uv sync --extra all`, `agentgraph onboard`, `agentgraph serve`, then connect your assistant with `agentgraph mcp-config`.
-
 AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, and Drive, so your AI agents can search, fetch, and reason over the same connected context you work from.
+
+```bash
+uv sync --extra all
+agentgraph onboard
+agentgraph serve
+agentgraph mcp-config
+```
 
 You can also teach AgentGraph about new tools quickly: connectors live in their own packages, follow a small interface, and are straightforward to build with a coding agent. That makes it practical to extend the graph to internal tools, niche SaaS products, or one-off data sources without forking the core system.
 
