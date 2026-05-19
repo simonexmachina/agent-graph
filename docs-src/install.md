@@ -70,7 +70,7 @@ Logs are written to `/tmp/agentgraph.log`.
 
 ## Install the browser extension
 
-Build the extension:
+Build the extension from the repo root:
 
 ```bash
 cd extension
@@ -78,7 +78,7 @@ npm install
 npm run build
 ```
 
-Then load `extension/dist/` from `chrome://extensions` with Developer Mode enabled.
+Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, and select `extension/dist/`.
 
 ## Connect MCP clients
 

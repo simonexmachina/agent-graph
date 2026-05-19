@@ -82,14 +82,15 @@ The server listens on `http://127.0.0.1:8765` by default.
 ### 4. Install the browser extension
 
 ```bash
-cd extension/agentgraph-extension
-npm install && npm run build
+cd extension
+npm install
+npm run build
 ```
 
 Load the unpacked extension in Chrome:
 1. Go to `chrome://extensions`
 2. Enable **Developer mode**
-3. Click **Load unpacked** and select `extension/agentgraph-extension/dist`
+3. Click **Load unpacked** and select `extension/dist`
 
 Once installed, browse Slack, Discord, Google Docs, or Gmail normally. AgentGraph will detect your dwell activity and begin indexing.
 

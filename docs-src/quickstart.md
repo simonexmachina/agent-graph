@@ -31,7 +31,7 @@ The default server URL is `http://127.0.0.1:8765`.
 
 ## 3. Install the browser extension
 
-Build the extension and load `extension/dist/` as an unpacked Chrome extension.
+Build the extension from `extension/`, then load `extension/dist/` as an unpacked Chrome extension in `chrome://extensions`.
 
 ```bash
 cd extension
