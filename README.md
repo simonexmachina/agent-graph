@@ -77,25 +77,34 @@ agentgraph serve
 agentgraph serve --reload      # auto-reload on code changes
 ```
 
-The server listens on `http://127.0.0.1:8765` by default.
+`agentgraph serve` accepts browser dwell events, runs connector pollers, serves the web viewer, and exposes the local HTTP backend at `http://127.0.0.1:8765` by default.
 
 ### 4. Install the browser extension
 
 ```bash
-cd extension/agentgraph-extension
+cd extension
 npm install && npm run build
 ```
 
 Load the unpacked extension in Chrome:
 1. Go to `chrome://extensions`
 2. Enable **Developer mode**
-3. Click **Load unpacked** and select `extension/agentgraph-extension/dist`
+3. Click **Load unpacked** and select `extension/dist`
 
 Once installed, browse Slack, Discord, Google Docs, or Gmail normally. AgentGraph will detect your dwell activity and begin indexing.
 
 ## Web viewer
 
-Open [http://127.0.0.1:8765/viewer](http://127.0.0.1:8765/viewer) to explore the graph visually. Search across entities, filter by type or platform, jump to a specific node, and traverse relationships interactively.
+Open [http://127.0.0.1:8765/viewer](http://127.0.0.1:8765/viewer) to explore the graph visually. The viewer runs as part of `agentgraph serve` and gives you a manual inspection surface alongside the CLI, MCP server, and browser extension.
+
+## Surfaces
+
+| Surface | Use it for | Entry point |
+|---|---|---|
+| CLI | Ad hoc search, fetch, ingest, debugging, and operations | `agentgraph search`, `agentgraph fetch`, `agentgraph serve` |
+| MCP | Claude Desktop, Claude Code, ChatGPT developer mode, and other MCP clients | `agentgraph mcp-config`, `agentgraph mcp-serve` |
+| Browser extension | Passive indexing from supported browser tabs | `extension/dist/` in Chrome Developer Mode |
+| Viewer | Visual graph inspection and manual exploration | `http://127.0.0.1:8765/viewer` |
 
 ## CLI
 
