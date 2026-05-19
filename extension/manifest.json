@@ -12,6 +12,7 @@
     "default_popup": "popup.html",
     "default_title": "AgentGraph"
   },
+  "options_page": "options.html",
   "content_scripts": [
     {
       "matches": ["https://mail.google.com/*"],
@@ -20,7 +21,8 @@
     }
   ],
   "host_permissions": [
-    "http://localhost:8765/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "https://mail.google.com/*"
   ]
 }

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc && node scripts/bundle.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.300",

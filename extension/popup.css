@@ -101,6 +101,7 @@ button {
   font-size: 13px;
   cursor: pointer;
   color: #374151;
+  margin-top: 8px;
 }
 
 button:hover {
@@ -110,4 +111,8 @@ button:hover {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.button-secondary {
+  background: #fff;
 }

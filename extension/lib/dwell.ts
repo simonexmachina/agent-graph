@@ -6,9 +6,7 @@
  * in chrome.storage.local so they survive service-worker restarts.
  */
 
-const SERVER_BASE = "http://localhost:8765";
-const META_URL = `${SERVER_BASE}/api/cli/meta`;
-const FETCH_URL = `${SERVER_BASE}/fetch-url`;
+import { getFetchUrl, getMetaUrl, getServerBaseUrl } from "./config.js";
 
 const CACHE_KEY = "agentgraph_meta_cache";
 const DEFAULT_THRESHOLD_MS = 3000;
@@ -83,7 +81,8 @@ async function loadCachedMeta(): Promise<void> {
 
 export async function refreshMeta(): Promise<DwellMeta> {
   try {
-    const resp = await fetch(META_URL, { signal: AbortSignal.timeout(5000) });
+    const serverBaseUrl = await getServerBaseUrl();
+    const resp = await fetch(getMetaUrl(serverBaseUrl), { signal: AbortSignal.timeout(5000) });
     if (!resp.ok) return { url_patterns: patterns, dwell_threshold_ms: thresholdMs };
     const data = await resp.json() as { url_patterns?: string[]; dwell_threshold_ms?: number };
     patterns = data.url_patterns ?? [];
@@ -202,7 +201,8 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
 // ---------------------------------------------------------------------------
 
 async function sendFetch(url: string, meta: Record<string, string>): Promise<number> {
-  const response = await fetch(FETCH_URL, {
+  const serverBaseUrl = await getServerBaseUrl();
+  const response = await fetch(getFetchUrl(serverBaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, meta: Object.keys(meta).length ? meta : undefined }),
