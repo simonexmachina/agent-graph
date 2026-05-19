@@ -45,6 +45,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     docs_css = (output_dir / "docs.css").read_text(encoding="utf-8")
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
     extending_html = (output_dir / "extending.html").read_text(encoding="utf-8")
+    extension_distribution_html = (output_dir / "extension-distribution.html").read_text(encoding="utf-8")
     postgres_html = (output_dir / "postgresql.html").read_text(encoding="utf-8")
     commands_html = (output_dir / "commands" / "index.html").read_text(encoding="utf-8")
     search_html = (output_dir / "commands" / "search.html").read_text(encoding="utf-8")
@@ -72,6 +73,8 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "current_user_id" in extending_html
     assert "Why extend AgentGraph" in extending_html
     assert "custom connectors" in extending_html
+    assert "Chrome Web Store listing draft" in extension_distribution_html
+    assert "http://localhost/*" in extension_distribution_html
     assert 'content="0; url=extending.html"' in connectors_redirect_html
     assert "<h1>Commands</h1>" in commands_html
     assert "<h1>PostgreSQL</h1>" in postgres_html

@@ -4,7 +4,7 @@
  */
 
 import * as esbuild from "esbuild";
-import { copyFileSync, mkdirSync } from "fs";
+import { copyFileSync, cpSync, mkdirSync } from "fs";
 
 mkdirSync("dist", { recursive: true });
 mkdirSync("dist/lib", { recursive: true });
@@ -22,5 +22,7 @@ await esbuild.build({
 for (const file of ["manifest.json", "popup.html", "popup.css", "options.html", "options.css"]) {
   copyFileSync(file, `dist/${file}`);
 }
+
+cpSync("assets", "dist/assets", { recursive: true });
 
 console.log("Build complete → dist/");
