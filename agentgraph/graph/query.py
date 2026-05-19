@@ -65,7 +65,7 @@ async def get_entity(entity_id: str) -> EntityResult | None:
     elif "/" in entity_id:
         parts = entity_id.split("/")
         platform = parts[0]
-        pid = parts[-1]
+        pid = "/".join(parts[2:]) if len(parts) >= 3 else "/".join(parts[1:])
         entity = await backend.get_entity_by_platform(platform, pid)
     else:
         # UUID prefix — must be unambiguous
@@ -105,7 +105,7 @@ async def query_by_filter(
     has_attachments: bool = False,
 ) -> list[EntityResult]:
     since_dt = _parse_since(since) if since else None
-    authored_by: str | None = _resolve_me() if authored_by_me else None
+    authored_by: list[str] | None = _resolve_me() if authored_by_me else None
     results = await get_backend().query_by_filter(
         entity_type, filters, limit, order_by, since_dt, authored_by,
         has_attachments=has_attachments,
@@ -136,14 +136,15 @@ async def get_entities_by_ids(entity_ids: list[str]) -> list[EntityResult]:
     return results
 
 
-def _resolve_me() -> str | None:
-    """Return the current user's canonical identifier by polling registered connectors."""
+def _resolve_me() -> list[str] | None:
+    """Return the current user's canonical identifiers by polling registered connectors."""
     from agentgraph.connectors.registry import get_all_connectors
+    user_ids: list[str] = []
     for connector in get_all_connectors():
-        uid = type(connector).current_user_id()
-        if uid:
-            return uid
-    return None
+        for user_id in type(connector).current_user_ids():
+            if user_id not in user_ids:
+                user_ids.append(user_id)
+    return user_ids or None
 
 
 def _parse_since(since: str) -> datetime:

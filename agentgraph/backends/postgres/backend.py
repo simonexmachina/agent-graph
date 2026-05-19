@@ -376,7 +376,7 @@ class PostgresBackend(StorageBackend):
         limit: int,
         order_by: str,
         since: datetime | None,
-        authored_by: str | None,
+        authored_by: list[str] | None,
         has_attachments: bool = False,
     ) -> list[EntityResult]:
         if order_by not in _VALID_ORDER_BY:
@@ -403,13 +403,16 @@ class PostgresBackend(StorageBackend):
 
             authored_join = ""
             if authored_by:
-                params.append(authored_by)
+                placeholders: list[str] = []
+                for user_id in authored_by:
+                    params.append(user_id)
+                    placeholders.append(f"${len(params)}")
                 authored_join = f"""
                 JOIN edges _auth ON _auth.edge_type = 'authored'
                     AND _auth.target_entity_id = e.id
                 JOIN entities _p ON _p.id = _auth.source_entity_id
                     AND _p.entity_type = 'Person'
-                    AND _p.platform_entity_id = ${len(params)}
+                    AND _p.platform_entity_id IN ({", ".join(placeholders)})
                 """
 
             where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""

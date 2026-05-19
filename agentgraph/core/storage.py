@@ -91,7 +91,7 @@ class StorageBackend(ABC):
         limit: int,
         order_by: str,
         since: datetime | None,
-        authored_by: str | None,
+        authored_by: list[str] | None,
         has_attachments: bool = False,
     ) -> list[EntityResult]: ...
 

@@ -14,9 +14,15 @@ from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
-from agentgraph.auth.google_provider import get_credentials as google_credentials
+from agentgraph.auth.google_provider import (
+    get_credentials as google_credentials,
+    get_user_email,
+    list_google_accounts,
+    verify_google_auth,
+)
 from agentgraph.connectors.base import (
     BaseConnector,
+    ConnectorAccount,
     EdgeRecord,
     EntityBatch,
     EntityRecord,
@@ -37,8 +43,12 @@ _SUBJECT_PREFIX_RE = re.compile(r"^(Re|Fwd|FW|RE|FWD):\s*", re.IGNORECASE)
 _GMAIL_THREAD_ID_RE = re.compile(r"[0-9a-f]{16,}")
 
 
-def _build_service() -> Any:
-    return build("gmail", "v1", credentials=google_credentials())
+def _build_service(account_id: str | None = None) -> Any:
+    return build("gmail", "v1", credentials=google_credentials(account_id))
+
+
+def _build_service_for(account_id: str | None) -> Any:
+    return _build_service(account_id) if account_id is not None else _build_service()
 
 
 def _get_header(headers: list[dict[str, str]], name: str) -> str:
@@ -112,26 +122,36 @@ class GmailConnector(BaseConnector):
     auth_label = "google"
 
     @classmethod
-    def run_auth_flow(cls) -> None:
+    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         from agentgraph_connector_google.auth import run_oauth_flow
-        run_oauth_flow()
+        run_oauth_flow(account_id=account_id, add=add)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:
-        from agentgraph.auth.google_provider import get_user_email
         return get_user_email()
 
     @classmethod
-    async def verify_auth(cls) -> tuple[str, str | None]:
+    def list_accounts(cls) -> list[ConnectorAccount]:
+        return [
+            ConnectorAccount(
+                account_id=str(account["account_id"]),
+                label=str(account["label"]),
+                auth_group=cls.auth_label or cls.source,
+                source=cls.source,
+                user_id=account.get("email"),
+                email=account.get("email"),
+            )
+            for account in list_google_accounts()
+        ]
+
+    @classmethod
+    async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         import asyncio
-
-        from agentgraph.auth.google_provider import verify_google_auth
-        return await asyncio.to_thread(verify_google_auth)
+        return await asyncio.to_thread(verify_google_auth, account_id)
 
     @classmethod
-    def current_user_id(cls) -> str | None:
-        from agentgraph.auth.google_provider import get_user_email
-        return get_user_email()
+    def current_user_ids(cls) -> list[str]:
+        return [str(account["email"]) for account in list_google_accounts() if account.get("email")]
 
     def can_handle(self, url: str) -> bool:
         return "mail.google.com" in url
@@ -139,19 +159,26 @@ class GmailConnector(BaseConnector):
     def entity_url(self, platform_entity_id: str) -> str | None:
         return f"https://mail.google.com/mail/u/0/#all/{platform_entity_id}"
 
-    async def ingest(self) -> EntityBatch:
+    async def ingest(self, account_id: str | None = None) -> EntityBatch:
         import asyncio
 
         loop = asyncio.get_event_loop()
-        service = await loop.run_in_executor(None, _build_service)
+        service = await loop.run_in_executor(None, _build_service_for, account_id)
         after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime("%Y/%m/%d")
         q = f"after:{after_date} -in:spam -in:trash"
         logger.info("gmail ingest: fetching all threads (query: %s)", q)
-        batch = await _list_threads(service, loop, q)
+        batch = await _list_threads(service, loop, q, account_id=account_id)
         logger.info("gmail ingest: fetched %d thread(s)", len(batch.entities))
         return batch
 
-    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+    async def fetch(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        meta: dict[str, str] | None = None,
+        account_id: str | None = None,
+    ) -> EntityBatch:
+        selected_account_id = account_id or ((meta or {}).get("account_id") if meta else None)
         if resource_type != "thread":
             logger.debug("gmail connector: unsupported resource_type %r — skipping", resource_type)
             return EntityBatch()
@@ -161,25 +188,29 @@ class GmailConnector(BaseConnector):
             # Content script extracted the hex message ID from the DOM — use it
             # to fetch the exact thread via the API.
             logger.info("gmail: fetching specific thread via message ID %s", gmail_message_id)
-            batch = await _fetch_thread_by_message_id(gmail_message_id)
+            batch = await _fetch_thread_by_message_id(gmail_message_id, account_id=selected_account_id)
             await upsert_batch(batch)
             return batch
 
         if resource_id and _GMAIL_THREAD_ID_RE.fullmatch(resource_id):
             # Caller supplied a Gmail API thread ID (hex) — fetch directly.
             logger.info("gmail: fetching specific thread by thread ID %s", resource_id)
-            batch = await _fetch_thread_by_thread_id(resource_id)
+            batch = await _fetch_thread_by_thread_id(resource_id, account_id=selected_account_id)
             await upsert_batch(batch)
             return batch
 
         logger.debug("gmail: no usable thread ID in resource_id=%r meta=%r — skipping", resource_id, meta)
         return EntityBatch()
 
-    async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
+    async def poll(
+        self,
+        cursor: dict[str, Any],
+        account_id: str | None = None,
+    ) -> tuple[EntityBatch, dict[str, Any]]:
         import asyncio
 
         loop = asyncio.get_event_loop()
-        service = await loop.run_in_executor(None, _build_service)
+        service = await loop.run_in_executor(None, _build_service_for, account_id)
 
         if not cursor:
             # First run: capture current historyId *before* bulk fetch so we don't miss
@@ -192,7 +223,7 @@ class GmailConnector(BaseConnector):
             logger.info("gmail poll: initialised cursor at historyId %s; starting bulk ingest", history_id)
 
             after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime("%Y/%m/%d")
-            bulk_batch = await _list_threads(service, loop, f"in:inbox after:{after_date}")
+            bulk_batch = await _list_threads(service, loop, f"in:inbox after:{after_date}", account_id=account_id)
             logger.info("gmail poll: bulk ingest fetched %d thread(s)", len(bulk_batch.entities))
             return bulk_batch, {"history_id": history_id}
 
@@ -254,7 +285,7 @@ class GmailConnector(BaseConnector):
         combined = EntityBatch()
         for tid in thread_ids:
             try:
-                batch = await _fetch_thread_by_thread_id(tid)
+                batch = await _fetch_thread_by_thread_id(tid, account_id=account_id)
                 combined.entities.extend(batch.entities)
                 combined.persons.extend(batch.persons)
                 combined.edges.extend(batch.edges)
@@ -264,12 +295,12 @@ class GmailConnector(BaseConnector):
         return combined, {"history_id": latest_history_id}
 
 
-async def _fetch_thread_by_thread_id(thread_id: str) -> EntityBatch:
+async def _fetch_thread_by_thread_id(thread_id: str, account_id: str | None = None) -> EntityBatch:
     """Fetch a thread directly by its Gmail thread ID."""
     import asyncio
 
     loop = asyncio.get_event_loop()
-    service = await loop.run_in_executor(None, _build_service)
+    service = await loop.run_in_executor(None, _build_service_for, account_id)
 
     thread: dict[str, Any] = await loop.run_in_executor(
         None,
@@ -277,7 +308,7 @@ async def _fetch_thread_by_thread_id(thread_id: str) -> EntityBatch:
             userId="me", id=thread_id, format="full"
         ).execute(),
     )
-    entity, persons, edges = _thread_to_items(thread)
+    entity, persons, edges = _thread_to_items(thread, account_id=account_id)
     if not entity:
         return EntityBatch()
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
@@ -285,12 +316,12 @@ async def _fetch_thread_by_thread_id(thread_id: str) -> EntityBatch:
     return batch
 
 
-async def _fetch_thread_by_message_id(message_id: str) -> EntityBatch:
+async def _fetch_thread_by_message_id(message_id: str, account_id: str | None = None) -> EntityBatch:
     """Fetch the thread containing a specific message, identified by its hex API message ID."""
     import asyncio
 
     loop = asyncio.get_event_loop()
-    service = await loop.run_in_executor(None, _build_service)
+    service = await loop.run_in_executor(None, _build_service_for, account_id)
 
     # Resolve message → thread ID
     msg: dict[str, Any] = await loop.run_in_executor(
@@ -300,11 +331,12 @@ async def _fetch_thread_by_message_id(message_id: str) -> EntityBatch:
         ).execute(),
     )
     thread_id: str = msg["threadId"]
-    return await _fetch_thread_by_thread_id(thread_id)
+    return await _fetch_thread_by_thread_id(thread_id, account_id=account_id)
 
 
 def _thread_to_items(
     thread: dict[str, Any],
+    account_id: str | None = None,
 ) -> tuple[EntityRecord | None, list[PersonRecord], list[EdgeRecord]]:
     """Convert a Gmail thread (full format) into graph items."""
     messages: list[dict[str, Any]] = thread.get("messages", [])
@@ -385,12 +417,18 @@ def _thread_to_items(
             "message_count": len(messages),
             "snippet": thread.get("snippet", ""),
             "label_ids": ",".join(label_ids),
+            **({"account_id": account_id} if account_id else {}),
         },
     )
     return entity, persons, edges
 
 
-async def _list_threads(service: Any, loop: Any, q: str) -> EntityBatch:
+async def _list_threads(
+    service: Any,
+    loop: Any,
+    q: str,
+    account_id: str | None = None,
+) -> EntityBatch:
     """Page through threads matching query q and return a combined EntityBatch."""
     combined = EntityBatch()
     page_token: str | None = None
@@ -410,7 +448,7 @@ async def _list_threads(service: Any, loop: Any, q: str) -> EntityBatch:
         total_estimate = response.get("resultSizeEstimate", "?")
         for thread_stub in stubs:
             try:
-                batch = await _fetch_thread_by_thread_id(thread_stub["id"])
+                batch = await _fetch_thread_by_thread_id(thread_stub["id"], account_id=account_id)
                 combined.entities.extend(batch.entities)
                 combined.persons.extend(batch.persons)
                 combined.edges.extend(batch.edges)

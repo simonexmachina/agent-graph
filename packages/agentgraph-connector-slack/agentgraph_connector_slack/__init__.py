@@ -10,6 +10,7 @@ import httpx
 
 from agentgraph.connectors.base import (
     BaseConnector,
+    ConnectorAccount,
     EdgeRecord,
     EntityBatch,
     EntityRecord,
@@ -18,7 +19,7 @@ from agentgraph.connectors.base import (
     ResourceType,
 )
 from agentgraph.graph.upsert import upsert_batch
-from agentgraph_connector_slack.auth import load_slack_creds
+from agentgraph_connector_slack.auth import account_id_for_team, list_slack_accounts, load_slack_creds
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,8 @@ _STALE_AFTER = 5 * 60  # 5 minutes
 _PADDING_MESSAGES = 20  # messages to fetch on first visit as immediate context
 
 
-def _get_headers() -> dict[str, str]:
-    creds = load_slack_creds()
+def _get_headers(account_id: str | None = None) -> dict[str, str]:
+    creds = load_slack_creds(account_id)
     return {
         "Authorization": f"Bearer {creds.xoxc_token}",
         "Cookie": f"d={creds.d_cookie}",
@@ -36,20 +37,50 @@ def _get_headers() -> dict[str, str]:
     }
 
 
-def _team_id_from_token() -> str | None:
-    """Extract the Slack team ID from the stored xoxc token (format: xoxc-TEAMID-...)."""
+def _team_id_from_token(account_id: str | None = None) -> str | None:
+    """Extract the Slack team ID from the stored credentials."""
     try:
-        creds = load_slack_creds()
+        creds = load_slack_creds(account_id)
     except RuntimeError:
         return None
+    if creds.team_id:
+        return creds.team_id
     parts = creds.xoxc_token.split("-")
     return parts[1] if len(parts) >= 2 else None
 
 
-async def _api_get(client: httpx.AsyncClient, method: str, **params: Any) -> dict[str, Any]:
+def _channel_ref(team_id: str, channel_id: str) -> str:
+    return f"{team_id}/{channel_id}"
+
+
+def _message_ref(team_id: str, channel_id: str, ts: str) -> str:
+    return f"{team_id}/{channel_id}:{ts}"
+
+
+def _user_ref(team_id: str, user_id: str) -> str:
+    return f"{team_id}/{user_id}"
+
+
+def _split_channel_ref(resource_id: str) -> tuple[str, str]:
+    team_id, _, channel_id = resource_id.partition("/")
+    if not team_id or not channel_id:
+        raise ValueError(f"Slack resource must be workspace-qualified: {resource_id}")
+    return team_id, channel_id
+
+
+def _normalise_channel_ref(resource_id: str, account_id: str | None = None) -> str:
+    if "/" in resource_id:
+        return resource_id
+    team_id = _team_id_from_token(account_id)
+    if not team_id:
+        raise ValueError(f"Slack resource must be workspace-qualified: {resource_id}")
+    return _channel_ref(team_id, resource_id)
+
+
+async def _api_get(client: httpx.AsyncClient, method: str, account_id: str | None = None, **params: Any) -> dict[str, Any]:
     resp = await client.get(
         f"{SLACK_API}/{method}",
-        headers=_get_headers(),
+        headers=_get_headers(account_id),
         params=params,
     )
     resp.raise_for_status()
@@ -59,13 +90,13 @@ async def _api_get(client: httpx.AsyncClient, method: str, **params: Any) -> dic
     return data
 
 
-async def _fetch_channel_info(client: httpx.AsyncClient, channel_id: str) -> dict[str, Any]:
-    data = await _api_get(client, "conversations.info", channel=channel_id)
+async def _fetch_channel_info(client: httpx.AsyncClient, channel_id: str, account_id: str | None = None) -> dict[str, Any]:
+    data = await _api_get(client, "conversations.info", account_id=account_id, channel=channel_id)
     return data.get("channel", {})  # type: ignore[return-value]
 
 
-async def _fetch_user(client: httpx.AsyncClient, user_id: str) -> dict[str, Any]:
-    data = await _api_get(client, "users.info", user=user_id)
+async def _fetch_user(client: httpx.AsyncClient, user_id: str, account_id: str | None = None) -> dict[str, Any]:
+    data = await _api_get(client, "users.info", account_id=account_id, user=user_id)
     return data.get("user", {})  # type: ignore[return-value]
 
 
@@ -95,28 +126,54 @@ class SlackConnector(BaseConnector):
     onboard_prompt = "Set up Slack?"
 
     @classmethod
-    def run_auth_flow(cls) -> None:
+    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         from agentgraph_connector_slack.auth import run_cookie_flow
-        run_cookie_flow()
+        run_cookie_flow(account_id=account_id, add=add)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:
         try:
-            return load_slack_creds().user_id
+            creds = load_slack_creds()
+            if creds.team_name and creds.user_id:
+                return f"{creds.team_name} / {creds.user_id}"
+            return creds.user_id
         except Exception:
             return None
 
     @classmethod
-    def current_user_id(cls) -> str | None:
-        try:
-            return f"slack:{load_slack_creds().user_id}"
-        except Exception:
-            return None
+    def list_accounts(cls) -> list[ConnectorAccount]:
+        return [
+            ConnectorAccount(
+                account_id=str(account["account_id"]),
+                label=str(account["label"]),
+                auth_group=cls.auth_label or cls.source,
+                source=cls.source,
+                user_id=account.get("user_id"),
+                workspace_id=account.get("team_id"),
+            )
+            for account in list_slack_accounts()
+        ]
+
+    @classmethod
+    def current_user_ids(cls) -> list[str]:
+        ids: list[str] = []
+        for account in list_slack_accounts():
+            team_id = account.get("team_id")
+            user_id = account.get("user_id")
+            if team_id and user_id:
+                ids.append(f"slack:{team_id}/{user_id}")
+        return ids
 
     def can_handle(self, url: str) -> bool:
         return "app.slack.com" in url
 
-    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+    async def fetch(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        meta: dict[str, str] | None = None,
+        account_id: str | None = None,
+    ) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)
 
@@ -129,18 +186,25 @@ class SlackConnector(BaseConnector):
         if decision == FetchPolicy.INCREMENTAL and last_sync:
             oldest = str(last_sync.timestamp())
 
+        resource_id = _normalise_channel_ref(resource_id, account_id)
+        team_id, _ = _split_channel_ref(resource_id)
+        selected_account_id = account_id or account_id_for_team(team_id)
         logger.info("Fetching Slack channel %s (policy=%s)", resource_id, decision)
-        batch = await _fetch_channel(resource_id, oldest=oldest)
+        batch = await _fetch_channel(resource_id, oldest=oldest, account_id=selected_account_id)
         await upsert_batch(batch)
         return batch
 
-    async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
-        channel_rows = await _get_known_channels("slack")
+    async def poll(
+        self,
+        cursor: dict[str, Any],
+        account_id: str | None = None,
+    ) -> tuple[EntityBatch, dict[str, Any]]:
+        channel_rows = await _get_known_channels("slack", account_id=account_id)
         combined = EntityBatch()
         for channel_id, synced_at in channel_rows:
             oldest = str(synced_at.timestamp()) if synced_at else None
             try:
-                batch = await _fetch_channel(channel_id, oldest=oldest)
+                batch = await _fetch_channel(channel_id, oldest=oldest, account_id=account_id)
                 combined.entities.extend(batch.entities)
                 combined.persons.extend(batch.persons)
                 combined.edges.extend(batch.edges)
@@ -162,18 +226,22 @@ async def _touch_last_accessed(channel_id: str) -> None:
 
 async def _fetch_thread_replies(
     client: httpx.AsyncClient,
-    channel_id: str,
+    channel_ref: str,
     thread_ts: str,
     entities: list[EntityRecord],
     persons: list[PersonRecord],
     edges: list[EdgeRecord],
     seen_users: set[str],
     team_id: str | None = None,
+    account_id: str | None = None,
 ) -> None:
     """Fetch replies to a threaded message and add them to the batch in-place."""
+    if team_id is None:
+        return
+    _, channel_id = _split_channel_ref(channel_ref)
     try:
         data = await _api_get(
-            client, "conversations.replies", channel=channel_id, ts=thread_ts
+            client, "conversations.replies", account_id=account_id, channel=channel_id, ts=thread_ts
         )
     except Exception as exc:
         logger.warning("Could not fetch replies for %s:%s: %s", channel_id, thread_ts, exc)
@@ -189,14 +257,16 @@ async def _fetch_thread_replies(
         user_id: str = reply.get("user", "")
         text: str = reply.get("text", "")
 
-        reply_meta: dict[str, Any] = {"channel_id": channel_id, "ts": ts, "thread_ts": thread_ts}
+        reply_meta: dict[str, Any] = {"team_id": team_id, "channel_id": channel_id, "ts": ts, "thread_ts": thread_ts}
         if team_id:
             ts_compact = ts.replace(".", "")
             reply_meta["web_url"] = f"https://app.slack.com/client/{team_id}/{channel_id}/p{ts_compact}"
+        if account_id:
+            reply_meta["account_id"] = account_id
         entities.append(EntityRecord(
             entity_type="Message",
             platform="slack",
-            platform_entity_id=f"{channel_id}:{ts}",
+            platform_entity_id=_message_ref(team_id, channel_id, ts),
             content=text,
             created_at=_ts_to_dt(ts),
             updated_at=_ts_to_dt(ts),
@@ -205,25 +275,25 @@ async def _fetch_thread_replies(
 
         edges.append(EdgeRecord(
             edge_type="replied_to",
-            source_platform_entity_id=f"{channel_id}:{ts}",
-            target_platform_entity_id=f"{channel_id}:{thread_ts}",
+            source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+            target_platform_entity_id=_message_ref(team_id, channel_id, thread_ts),
             platform="slack",
         ))
         edges.append(EdgeRecord(
             edge_type="posted_in",
-            source_platform_entity_id=f"{channel_id}:{ts}",
-            target_platform_entity_id=channel_id,
+            source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+            target_platform_entity_id=channel_ref,
             platform="slack",
         ))
 
         if user_id and user_id not in seen_users:
             seen_users.add(user_id)
             try:
-                user_info = await _fetch_user(client, user_id)
+                user_info = await _fetch_user(client, user_id, account_id=account_id)
                 profile = user_info.get("profile", {})
                 persons.append(PersonRecord(
                     platform="slack",
-                    platform_user_id=user_id,
+                    platform_user_id=_user_ref(team_id, user_id),
                     platform_username=user_info.get("name"),
                     canonical_email=profile.get("email") or None,
                     display_name=profile.get("real_name") or None,
@@ -234,8 +304,8 @@ async def _fetch_thread_replies(
         if user_id:
             edges.append(EdgeRecord(
                 edge_type="authored",
-                source_platform_user_id=user_id,
-                target_platform_entity_id=f"{channel_id}:{ts}",
+                source_platform_user_id=_user_ref(team_id, user_id),
+                target_platform_entity_id=_message_ref(team_id, channel_id, ts),
                 platform="slack",
             ))
 
@@ -243,11 +313,11 @@ async def _fetch_thread_replies(
             if mentioned_id not in seen_users:
                 seen_users.add(mentioned_id)
                 try:
-                    user_info = await _fetch_user(client, mentioned_id)
+                    user_info = await _fetch_user(client, mentioned_id, account_id=account_id)
                     profile = user_info.get("profile", {})
                     persons.append(PersonRecord(
                         platform="slack",
-                        platform_user_id=mentioned_id,
+                        platform_user_id=_user_ref(team_id, mentioned_id),
                         platform_username=user_info.get("name"),
                         canonical_email=profile.get("email") or None,
                         display_name=profile.get("real_name") or None,
@@ -256,40 +326,42 @@ async def _fetch_thread_replies(
                     logger.debug("Could not fetch user %s", mentioned_id)
             edges.append(EdgeRecord(
                 edge_type="mentions",
-                source_platform_entity_id=f"{channel_id}:{ts}",
-                target_platform_user_id=mentioned_id,
+                source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+                target_platform_user_id=_user_ref(team_id, mentioned_id),
                 platform="slack",
             ))
 
         for mentioned_channel_id in _parse_channel_mentions(text):
             edges.append(EdgeRecord(
                 edge_type="mentions",
-                source_platform_entity_id=f"{channel_id}:{ts}",
-                target_platform_entity_id=mentioned_channel_id,
+                source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+                target_platform_entity_id=_channel_ref(team_id, mentioned_channel_id),
                 platform="slack",
             ))
 
 
-async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBatch:
+async def _fetch_channel(channel_ref: str, oldest: str | None = None, account_id: str | None = None) -> EntityBatch:
     entities: list[EntityRecord] = []
     persons: list[PersonRecord] = []
     edges: list[EdgeRecord] = []
     seen_users: set[str] = set()
 
-    team_id = _team_id_from_token()
+    team_id, channel_id = _split_channel_ref(channel_ref)
 
     async with httpx.AsyncClient(timeout=30) as client:
         # Channel entity
-        channel_info = await _fetch_channel_info(client, channel_id)
+        channel_info = await _fetch_channel_info(client, channel_id, account_id=account_id)
         channel_name = channel_info.get("name", channel_id)
 
-        channel_meta: dict[str, Any] = {}
+        channel_meta: dict[str, Any] = {"team_id": team_id, "channel_id": channel_id}
         if team_id:
             channel_meta["web_url"] = f"https://app.slack.com/client/{team_id}/{channel_id}"
+        if account_id:
+            channel_meta["account_id"] = account_id
         channel_entity = EntityRecord(
             entity_type="Channel",
             platform="slack",
-            platform_entity_id=channel_id,
+            platform_entity_id=channel_ref,
             title=f"#{channel_name}",
             updated_at=datetime.now(UTC),
             metadata=channel_meta,
@@ -301,7 +373,7 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
         if oldest:
             params["oldest"] = oldest
 
-        data = await _api_get(client, "conversations.history", **params)
+        data = await _api_get(client, "conversations.history", account_id=account_id, **params)
         messages: list[dict[str, Any]] = data.get("messages", [])
 
         for msg in messages:
@@ -314,14 +386,16 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
             if not ts:
                 continue
 
-            msg_meta: dict[str, Any] = {"channel_id": channel_id, "ts": ts}
+            msg_meta: dict[str, Any] = {"team_id": team_id, "channel_id": channel_id, "ts": ts}
             if team_id:
                 ts_compact = ts.replace(".", "")
                 msg_meta["web_url"] = f"https://app.slack.com/client/{team_id}/{channel_id}/p{ts_compact}"
+            if account_id:
+                msg_meta["account_id"] = account_id
             msg_entity = EntityRecord(
                 entity_type="Message",
                 platform="slack",
-                platform_entity_id=f"{channel_id}:{ts}",
+                platform_entity_id=_message_ref(team_id, channel_id, ts),
                 content=text,
                 created_at=_ts_to_dt(ts),
                 updated_at=_ts_to_dt(ts),
@@ -332,8 +406,8 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
             # posted_in edge: message → channel
             edges.append(EdgeRecord(
                 edge_type="posted_in",
-                source_platform_entity_id=f"{channel_id}:{ts}",
-                target_platform_entity_id=channel_id,
+                source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+                target_platform_entity_id=channel_ref,
                 platform="slack",
             ))
 
@@ -341,19 +415,19 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
             if thread_ts and thread_ts != ts:
                 edges.append(EdgeRecord(
                     edge_type="replied_to",
-                    source_platform_entity_id=f"{channel_id}:{ts}",
-                    target_platform_entity_id=f"{channel_id}:{thread_ts}",
+                    source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+                    target_platform_entity_id=_message_ref(team_id, channel_id, thread_ts),
                     platform="slack",
                 ))
 
             # Author
             if user_id and user_id not in seen_users:
                 seen_users.add(user_id)
-                user_info = await _fetch_user(client, user_id)
+                user_info = await _fetch_user(client, user_id, account_id=account_id)
                 profile = user_info.get("profile", {})
                 persons.append(PersonRecord(
                     platform="slack",
-                    platform_user_id=user_id,
+                    platform_user_id=_user_ref(team_id, user_id),
                     platform_username=user_info.get("name"),
                     canonical_email=profile.get("email") or None,
                     display_name=profile.get("real_name") or None,
@@ -361,9 +435,9 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
 
             if user_id:
                 edges.append(EdgeRecord(
-                    edge_type="authored",
-                    source_platform_user_id=user_id,
-                    target_platform_entity_id=f"{channel_id}:{ts}",
+                edge_type="authored",
+                source_platform_user_id=_user_ref(team_id, user_id),
+                target_platform_entity_id=_message_ref(team_id, channel_id, ts),
                     platform="slack",
                 ))
 
@@ -372,11 +446,11 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
                 if mentioned_id not in seen_users:
                     seen_users.add(mentioned_id)
                     try:
-                        user_info = await _fetch_user(client, mentioned_id)
+                        user_info = await _fetch_user(client, mentioned_id, account_id=account_id)
                         profile = user_info.get("profile", {})
                         persons.append(PersonRecord(
                             platform="slack",
-                            platform_user_id=mentioned_id,
+                            platform_user_id=_user_ref(team_id, mentioned_id),
                             platform_username=user_info.get("name"),
                             canonical_email=profile.get("email") or None,
                             display_name=profile.get("real_name") or None,
@@ -385,8 +459,8 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
                         logger.debug("Could not fetch user %s", mentioned_id)
                 edges.append(EdgeRecord(
                     edge_type="mentions",
-                    source_platform_entity_id=f"{channel_id}:{ts}",
-                    target_platform_user_id=mentioned_id,
+                    source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+                    target_platform_user_id=_user_ref(team_id, mentioned_id),
                     platform="slack",
                 ))
 
@@ -394,15 +468,15 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
             for mentioned_channel_id in _parse_channel_mentions(text):
                 edges.append(EdgeRecord(
                     edge_type="mentions",
-                    source_platform_entity_id=f"{channel_id}:{ts}",
-                    target_platform_entity_id=mentioned_channel_id,
+                    source_platform_entity_id=_message_ref(team_id, channel_id, ts),
+                    target_platform_entity_id=_channel_ref(team_id, mentioned_channel_id),
                     platform="slack",
                 ))
 
             # Fetch thread replies for messages that have them
             if reply_count > 0 and not (thread_ts and thread_ts != ts):
                 await _fetch_thread_replies(
-                    client, channel_id, ts, entities, persons, edges, seen_users, team_id=team_id
+                    client, channel_ref, ts, entities, persons, edges, seen_users, team_id=team_id, account_id=account_id
                 )
 
     batch = EntityBatch(entities=entities, persons=persons, edges=edges)
@@ -411,7 +485,7 @@ async def _fetch_channel(channel_id: str, oldest: str | None = None) -> EntityBa
     return batch
 
 
-async def _get_known_channels(platform: str) -> list[tuple[str, datetime | None]]:
+async def _get_known_channels(platform: str, account_id: str | None = None) -> list[tuple[str, datetime | None]]:
     """Return (platform_entity_id, synced_at) for all known Channel entities on the given platform."""
     from agentgraph.core.context import get_backend
 
@@ -420,6 +494,9 @@ async def _get_known_channels(platform: str) -> list[tuple[str, datetime | None]
     )
     result: list[tuple[str, datetime | None]] = []
     for e in entities:
+        metadata = e.get("metadata")
+        if account_id and isinstance(metadata, dict) and metadata.get("account_id") not in (None, account_id):
+            continue
         synced_at_str: str | None = e.get("synced_at")  # type: ignore[assignment]
         synced_at = datetime.fromisoformat(synced_at_str) if synced_at_str else None
         result.append((e["platform_entity_id"], synced_at))

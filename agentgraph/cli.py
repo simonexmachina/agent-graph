@@ -13,10 +13,36 @@ app = typer.Typer(
 )
 
 
+def _run_auth_flow(connector_cls: type[BaseConnector], account_id: str | None, add: bool) -> None:
+    try:
+        connector_cls.run_auth_flow(account_id=account_id, add=add)
+    except TypeError:
+        connector_cls.run_auth_flow()
+
+
+def _list_accounts(connector: BaseConnector) -> list[object]:
+    list_accounts = getattr(type(connector), "list_accounts", None)
+    if callable(list_accounts):
+        return list_accounts()
+    return []
+
+
+async def _verify_auth(
+    connector_cls: type[BaseConnector],
+    account_id: str | None = None,
+) -> tuple[str, str | None]:
+    try:
+        return await connector_cls.verify_auth(account_id)
+    except TypeError:
+        return await connector_cls.verify_auth()
+
+
 
 @app.command()
 def auth(
     platform: str = typer.Argument(..., help="Platform to authenticate (e.g. google, slack, discord)"),
+    add: bool = typer.Option(False, "--add", help="Add another authenticated account for this platform"),
+    account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
     xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
     d_cookie: str | None = typer.Option(None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"),
 ) -> None:
@@ -37,10 +63,10 @@ def auth(
 
     if platform == "slack" and (xoxc_token is not None or d_cookie is not None):
         from agentgraph_connector_slack.auth import run_cookie_flow
-        run_cookie_flow(xoxc_token=xoxc_token, d_cookie=d_cookie)
+        run_cookie_flow(account_id=account, add=add, xoxc_token=xoxc_token, d_cookie=d_cookie)
         return
 
-    type(seen[platform]).run_auth_flow()
+    _run_auth_flow(type(seen[platform]), account, add)
 
 
 @app.command()
@@ -57,12 +83,42 @@ def connectors(
     bootstrap()
     all_connectors = get_all_connectors()
 
-    async def _gather() -> list[tuple[str, str | None]]:
-        return await asyncio.gather(*(type(c).verify_auth() for c in all_connectors))
+    async def _gather() -> tuple[list[list[dict[str, object]]], list[tuple[str, str | None]]]:
+        account_rows: list[list[dict[str, object]]] = []
+        connector_statuses: list[tuple[str, str | None]] = []
+        for connector in all_connectors:
+            accounts = _list_accounts(connector)
+            rows: list[dict[str, object]] = []
+            statuses: list[tuple[str, str | None]] = []
+            for account in accounts:
+                account_id = getattr(account, "account_id", None)
+                status, detail = await _verify_auth(type(connector), account_id)
+                rows.append({
+                    "account_id": getattr(account, "account_id", None),
+                    "label": getattr(account, "label", None),
+                    "user_id": getattr(account, "user_id", None),
+                    "workspace_id": getattr(account, "workspace_id", None),
+                    "email": getattr(account, "email", None),
+                    "auth_status": status,
+                    "auth_detail": detail,
+                })
+                statuses.append((status, detail))
+            if statuses:
+                if any(status == "invalid" for status, _ in statuses):
+                    connector_status = next((item for item in statuses if item[0] == "invalid"), statuses[0])
+                elif any(status == "ok" for status, _ in statuses):
+                    connector_status = ("ok", f"{len(statuses)} account(s)")
+                else:
+                    connector_status = ("missing", None)
+            else:
+                connector_status = await _verify_auth(type(connector))
+            account_rows.append(rows)
+            connector_statuses.append(connector_status)
+        return account_rows, connector_statuses
 
-    statuses = asyncio.run(_gather())
+    account_rows, statuses = asyncio.run(_gather())
 
-    items = connector_status_items(all_connectors, statuses)
+    items = connector_status_items(all_connectors, account_rows, statuses)
 
     if json:
         typer.echo(_json.dumps(items, indent=2))
@@ -79,6 +135,18 @@ def connectors(
             auth = f"{auth} ({detail})" if status != "ok" else f"{auth} as {detail}"
         typer.echo(f"  {item['source']:<12}  {desc}")
         typer.echo(f"  {'':<12}  auth: {auth}  |  sync: {sync}")
+        accounts = item.get("accounts") or []
+        for account in accounts:
+            account_status = str(account["auth_status"])
+            account_auth = status_label.get(account_status, account_status)
+            account_detail = account.get("auth_detail")
+            if account_detail:
+                account_auth = (
+                    f"{account_auth} ({account_detail})"
+                    if account_status != "ok"
+                    else f"{account_auth} as {account_detail}"
+                )
+            typer.echo(f"  {'':<12}  account: {account['label']} [{account['account_id']}]  |  {account_auth}")
 
 
 @app.command()

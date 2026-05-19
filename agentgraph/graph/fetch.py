@@ -21,13 +21,16 @@ async def fetch_entity(platform: str, resource_id: str) -> dict[str, Any]:
         raise ValueError(f"No connector registered for platform '{platform}'")
 
     backend = get_backend()
-    entity_type = await backend.get_entity_type(platform, resource_id) or "Document"
+    entity = await backend.get_entity_by_platform(platform, resource_id)
+    entity_type = (entity or {}).get("entity_type") or "Document"
+    entity_meta = (entity or {}).get("metadata")
+    meta = entity_meta if isinstance(entity_meta, dict) else None
 
     resource_id, resource_type = connector.normalise_fetch_id(resource_id, entity_type)
 
     await backend.reset_synced_at(platform, resource_id)
 
-    batch = await connector.fetch(resource_type=resource_type, resource_id=resource_id)
+    batch = await connector.fetch(resource_type=resource_type, resource_id=resource_id, meta=meta)
     return {
         "entities": len(batch.entities),
         "persons": len(batch.persons),

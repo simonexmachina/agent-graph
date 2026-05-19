@@ -9,6 +9,7 @@ from agentgraph.connectors.base import BaseConnector
 
 def connector_status_items(
     connectors: list[BaseConnector],
+    account_rows: list[list[dict[str, object]]],
     statuses: list[tuple[str, str | None]],
 ) -> list[dict[str, object]]:
     """Build JSON-serialisable connector status rows."""
@@ -18,7 +19,7 @@ def connector_status_items(
             poll_delegators.setdefault(delegated_source, []).append(connector.source)
 
     items: list[dict[str, object]] = []
-    for connector, (status, detail) in zip(connectors, statuses, strict=True):
+    for connector, accounts, (status, detail) in zip(connectors, account_rows, statuses, strict=True):
         interval = connector.poll_interval
         polls = interval is not None
         polled_by = sorted(poll_delegators.get(connector.source, []))
@@ -28,6 +29,7 @@ def connector_status_items(
             "description": type(connector).auth_description,
             "auth_status": status,
             "auth_detail": detail,
+            "accounts": accounts,
             "url_patterns": type(connector).url_patterns,
             "polls": polls,
             "poll_interval_seconds": int(interval.total_seconds()) if interval is not None else None,

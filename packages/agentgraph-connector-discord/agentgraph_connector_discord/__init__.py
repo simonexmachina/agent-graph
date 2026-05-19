@@ -11,6 +11,7 @@ import httpx
 
 from agentgraph.connectors.base import (
     BaseConnector,
+    ConnectorAccount,
     EdgeRecord,
     EntityBatch,
     EntityRecord,
@@ -19,7 +20,7 @@ from agentgraph.connectors.base import (
     ResourceType,
 )
 from agentgraph.graph.upsert import upsert_batch
-from agentgraph_connector_discord.auth import load_discord_creds
+from agentgraph_connector_discord.auth import load_discord_creds, list_discord_accounts
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +32,16 @@ _MAX_RETRIES = 3
 _user_cache: dict[str, PersonRecord] = {}
 
 
-def _get_headers() -> dict[str, str]:
-    creds = load_discord_creds()
+def _get_headers(account_id: str | None = None) -> dict[str, str]:
+    creds = load_discord_creds(account_id)
     return {"Authorization": f"Bot {creds.bot_token}"}
 
 
-async def _api_get(client: httpx.AsyncClient, path: str, **params: Any) -> Any:
+async def _api_get(client: httpx.AsyncClient, path: str, account_id: str | None = None, **params: Any) -> Any:
     for _attempt in range(_MAX_RETRIES):
         resp = await client.get(
             f"{DISCORD_API}{path}",
-            headers=_get_headers(),
+            headers=_get_headers(account_id),
             params=params,
             timeout=30,
         )
@@ -164,9 +165,9 @@ class DiscordConnector(BaseConnector):
     onboard_prompt = "Set up Discord?"
 
     @classmethod
-    def run_auth_flow(cls) -> None:
+    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         from agentgraph_connector_discord.auth import run_token_flow
-        run_token_flow()
+        run_token_flow(account_id=account_id, add=add)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:
@@ -176,9 +177,22 @@ class DiscordConnector(BaseConnector):
             return None
 
     @classmethod
-    async def verify_auth(cls) -> tuple[str, str | None]:
+    def list_accounts(cls) -> list[ConnectorAccount]:
+        return [
+            ConnectorAccount(
+                account_id=str(account["account_id"]),
+                label=str(account["label"]),
+                auth_group=cls.auth_label or cls.source,
+                source=cls.source,
+                user_id=account.get("bot_user_id"),
+            )
+            for account in list_discord_accounts()
+        ]
+
+    @classmethod
+    async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         try:
-            creds = load_discord_creds()
+            creds = load_discord_creds(account_id)
         except Exception:
             return ("missing", None)
         try:
@@ -207,7 +221,13 @@ class DiscordConnector(BaseConnector):
             return resource_id.split(":")[0], "channel"
         return super().normalise_fetch_id(resource_id, entity_type)
 
-    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+    async def fetch(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        meta: dict[str, str] | None = None,
+        account_id: str | None = None,
+    ) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)
 
@@ -220,21 +240,35 @@ class DiscordConnector(BaseConnector):
         if decision == FetchPolicy.INCREMENTAL and last_sync:
             after_snowflake = _snowflake_after(last_sync)
 
+        selected_account_id = account_id or ((meta or {}).get("account_id") if meta else None)
         is_dm = resource_type == "dm"
         logger.info("Fetching Discord %s %s (policy=%s)", resource_type, resource_id, decision)
-        batch = await _fetch_channel(resource_id, after_snowflake=after_snowflake, is_dm=is_dm)
+        batch = await _fetch_channel(
+            resource_id,
+            after_snowflake=after_snowflake,
+            is_dm=is_dm,
+            account_id=selected_account_id,
+        )
         await upsert_batch(batch)
         return batch
 
-    async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
+    async def poll(
+        self,
+        cursor: dict[str, Any],
+        account_id: str | None = None,
+    ) -> tuple[EntityBatch, dict[str, Any]]:
         from agentgraph_connector_slack import _get_known_channels
 
-        channel_rows = await _get_known_channels("discord")
+        channel_rows = await _get_known_channels("discord", account_id=account_id)
         combined = EntityBatch()
         for channel_id, synced_at in channel_rows:
             after_snowflake = _snowflake_after(synced_at) if synced_at else None
             try:
-                batch = await _fetch_channel(channel_id, after_snowflake=after_snowflake)
+                batch = await _fetch_channel(
+                    channel_id,
+                    after_snowflake=after_snowflake,
+                    account_id=account_id,
+                )
                 combined.entities.extend(batch.entities)
                 combined.persons.extend(batch.persons)
                 combined.edges.extend(batch.edges)
@@ -253,6 +287,7 @@ async def _fetch_user(
     client: httpx.AsyncClient,
     user_id: str,
     seen_users: dict[str, PersonRecord],
+    account_id: str | None = None,
 ) -> PersonRecord | None:
     if user_id in seen_users:
         return seen_users[user_id]
@@ -260,7 +295,7 @@ async def _fetch_user(
         seen_users[user_id] = _user_cache[user_id]
         return _user_cache[user_id]
     try:
-        data = await _api_get(client, f"/users/{user_id}")
+        data = await _api_get(client, f"/users/{user_id}", account_id=account_id)
         username = data.get("username", "")
         global_name = data.get("global_name") or username
         person = PersonRecord(
@@ -289,6 +324,7 @@ async def _fetch_thread_messages(
     persons: list[PersonRecord],
     after_snowflake: str | None,
     guild_id: str = "",
+    account_id: str | None = None,
 ) -> None:
     """Fetch messages in a Discord thread (threads are channels in Discord API)."""
     try:
@@ -296,7 +332,7 @@ async def _fetch_thread_messages(
         if after_snowflake:
             params["after"] = after_snowflake
 
-        messages = await _api_get(client, f"/channels/{thread_id}/messages", **params)
+        messages = await _api_get(client, f"/channels/{thread_id}/messages", account_id=account_id, **params)
     except Exception as exc:
         logger.warning("Could not fetch thread %s: %s", thread_id, exc)
         return
@@ -316,6 +352,8 @@ async def _fetch_thread_messages(
             meta["web_url"] = f"https://discord.com/channels/{guild_id}/{parent_channel_id}/{msg_id}"
         if attachments_json:
             meta["attachments"] = attachments_json
+        if account_id:
+            meta["account_id"] = account_id
 
         entities.append(EntityRecord(
             entity_type="Message",
@@ -341,7 +379,7 @@ async def _fetch_thread_messages(
         ))
 
         if user_id:
-            person = await _fetch_user(client, user_id, seen_users)
+            person = await _fetch_user(client, user_id, seen_users, account_id=account_id)
             if person and person not in persons:
                 persons.append(person)
             edges.append(EdgeRecord(
@@ -352,7 +390,7 @@ async def _fetch_thread_messages(
             ))
 
         for mentioned_id in _parse_mentions(content):
-            person = await _fetch_user(client, mentioned_id, seen_users)
+            person = await _fetch_user(client, mentioned_id, seen_users, account_id=account_id)
             if person and person not in persons:
                 persons.append(person)
             edges.append(EdgeRecord(
@@ -367,6 +405,7 @@ async def _fetch_channel(
     channel_id: str,
     after_snowflake: str | None = None,
     is_dm: bool = False,
+    account_id: str | None = None,
 ) -> EntityBatch:
     entities: list[EntityRecord] = []
     persons: list[PersonRecord] = []
@@ -376,7 +415,7 @@ async def _fetch_channel(
     async with httpx.AsyncClient(timeout=30) as client:
         # Channel entity
         try:
-            channel_info = await _api_get(client, f"/channels/{channel_id}")
+            channel_info = await _api_get(client, f"/channels/{channel_id}", account_id=account_id)
         except Exception as exc:
             logger.error("Could not fetch Discord channel %s: %s", channel_id, exc)
             return EntityBatch()
@@ -421,6 +460,8 @@ async def _fetch_channel(
         if guild_id:
             channel_meta["guild_id"] = guild_id
             channel_meta["web_url"] = f"https://discord.com/channels/{guild_id}/{channel_id}"
+        if account_id:
+            channel_meta["account_id"] = account_id
         entities.append(EntityRecord(
             entity_type="Channel",
             platform="discord",
@@ -436,7 +477,7 @@ async def _fetch_channel(
             params["after"] = after_snowflake
 
         try:
-            messages = await _api_get(client, f"/channels/{channel_id}/messages", **params)
+            messages = await _api_get(client, f"/channels/{channel_id}/messages", account_id=account_id, **params)
         except Exception as exc:
             logger.error("Could not fetch messages for Discord channel %s: %s", channel_id, exc)
             return EntityBatch(entities=entities)
@@ -457,6 +498,8 @@ async def _fetch_channel(
                 meta["web_url"] = f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
             if attachments_json:
                 meta["attachments"] = attachments_json
+            if account_id:
+                meta["account_id"] = account_id
 
             entities.append(EntityRecord(
                 entity_type="Message",
@@ -476,7 +519,7 @@ async def _fetch_channel(
             ))
 
             if user_id:
-                person = await _fetch_user(client, user_id, seen_users)
+                person = await _fetch_user(client, user_id, seen_users, account_id=account_id)
                 if person and person not in persons:
                     persons.append(person)
                 edges.append(EdgeRecord(
@@ -487,7 +530,7 @@ async def _fetch_channel(
                 ))
 
             for mentioned_id in _parse_mentions(content):
-                person = await _fetch_user(client, mentioned_id, seen_users)
+                person = await _fetch_user(client, mentioned_id, seen_users, account_id=account_id)
                 if person and person not in persons:
                     persons.append(person)
                 edges.append(EdgeRecord(
@@ -504,7 +547,7 @@ async def _fetch_channel(
                     await _fetch_thread_messages(
                         client, thread_id, channel_id, msg_id,
                         entities, edges, seen_users, persons, after_snowflake,
-                        guild_id=guild_id,
+                        guild_id=guild_id, account_id=account_id,
                     )
 
     batch = EntityBatch(entities=entities, persons=persons, edges=edges)

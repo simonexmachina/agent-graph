@@ -9,7 +9,14 @@ import pytest
 from agentgraph_connector_discord.auth import DiscordCredentials, load_discord_creds
 from agentgraph_connector_slack.auth import SlackCredentials, load_slack_creds
 
-from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
+from agentgraph.auth.credentials import (
+    GoogleCredentials,
+    load_platform,
+    load_platform_account,
+    load_platform_accounts,
+    save_platform,
+    upsert_platform_account,
+)
 from agentgraph.auth.google_provider import verify_google_auth
 
 
@@ -46,6 +53,29 @@ def test_save_merges_platforms(tmp_creds: Path) -> None:
     save_platform("discord", {"bot_token": "bot"})
     assert load_platform("slack") == {"xoxc_token": "tok"}
     assert load_platform("discord") == {"bot_token": "bot"}
+
+
+def test_upsert_platform_account_preserves_multiple_accounts(tmp_creds: Path) -> None:
+    upsert_platform_account("google", "user-one@example.com", {"user_email": "user-one@example.com"})
+    upsert_platform_account("google", "user-two@example.com", {"user_email": "user-two@example.com"})
+
+    accounts = load_platform_accounts("google")
+
+    assert [account["account_id"] for account in accounts] == [
+        "user-one@example.com",
+        "user-two@example.com",
+    ]
+    assert load_platform_account("google", "user-two@example.com") == {
+        "account_id": "user-two@example.com",
+        "user_email": "user-two@example.com",
+    }
+
+
+def test_load_platform_account_reads_legacy_single_account(tmp_creds: Path) -> None:
+    save_platform("slack", {"xoxc_token": "tok", "d_cookie": "cookie"})
+
+    assert load_platform_account("slack") == {"xoxc_token": "tok", "d_cookie": "cookie"}
+    assert load_platform_accounts("slack") == [{"xoxc_token": "tok", "d_cookie": "cookie"}]
 
 
 def test_google_credentials_model() -> None:

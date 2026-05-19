@@ -11,9 +11,15 @@ from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
-from agentgraph.auth.google_provider import get_credentials as google_credentials
+from agentgraph.auth.google_provider import (
+    get_credentials as google_credentials,
+    get_user_email,
+    list_google_accounts,
+    verify_google_auth,
+)
 from agentgraph.connectors.base import (
     BaseConnector,
+    ConnectorAccount,
     EdgeRecord,
     EntityBatch,
     EntityRecord,
@@ -28,12 +34,20 @@ logger = logging.getLogger(__name__)
 _STALE_AFTER = 15 * 60
 
 
-def _build_sheets_service() -> Any:
-    return build("sheets", "v4", credentials=google_credentials())
+def _build_sheets_service(account_id: str | None = None) -> Any:
+    return build("sheets", "v4", credentials=google_credentials(account_id))
 
 
-def _build_drive_service() -> Any:
-    return build("drive", "v3", credentials=google_credentials())
+def _build_drive_service(account_id: str | None = None) -> Any:
+    return build("drive", "v3", credentials=google_credentials(account_id))
+
+
+def _build_sheets_service_for(account_id: str | None) -> Any:
+    return _build_sheets_service(account_id) if account_id is not None else _build_sheets_service()
+
+
+def _build_drive_service_for(account_id: str | None) -> Any:
+    return _build_drive_service(account_id) if account_id is not None else _build_drive_service()
 
 
 def _web_url(spreadsheet_id: str) -> str:
@@ -47,12 +61,15 @@ def _download_url(spreadsheet_id: str) -> str:
     )
 
 
-def _metadata(spreadsheet_id: str) -> dict[str, str | int | float | bool | None]:
-    return {
+def _metadata(spreadsheet_id: str, account_id: str | None = None) -> dict[str, str | int | float | bool | None]:
+    meta: dict[str, str | int | float | bool | None] = {
         "web_url": _web_url(spreadsheet_id),
         "download_url": _download_url(spreadsheet_id),
         "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
+    if account_id:
+        meta["account_id"] = account_id
+    return meta
 
 
 def _extract_plain_text(spreadsheet: dict[str, Any], values_by_range: dict[str, list[list[str]]]) -> str:
@@ -82,26 +99,36 @@ class GoogleSheetsConnector(BaseConnector):
     auth_description = "Google Sheets and uploaded .xlsx files: Spreadsheet entities with all tabs rendered as tab-separated cell text, plus owner authorship."
 
     @classmethod
-    def run_auth_flow(cls) -> None:
+    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         from agentgraph_connector_google.auth import run_oauth_flow
-        run_oauth_flow()
+        run_oauth_flow(account_id=account_id, add=add)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:
-        from agentgraph.auth.google_provider import get_user_email
         return get_user_email()
 
     @classmethod
-    async def verify_auth(cls) -> tuple[str, str | None]:
+    def list_accounts(cls) -> list[ConnectorAccount]:
+        return [
+            ConnectorAccount(
+                account_id=str(account["account_id"]),
+                label=str(account["label"]),
+                auth_group=cls.auth_label or cls.source,
+                source=cls.source,
+                user_id=account.get("email"),
+                email=account.get("email"),
+            )
+            for account in list_google_accounts()
+        ]
+
+    @classmethod
+    async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         import asyncio
-
-        from agentgraph.auth.google_provider import verify_google_auth
-        return await asyncio.to_thread(verify_google_auth)
+        return await asyncio.to_thread(verify_google_auth, account_id)
 
     @classmethod
-    def current_user_id(cls) -> str | None:
-        from agentgraph.auth.google_provider import get_user_email
-        return get_user_email()
+    def current_user_ids(cls) -> list[str]:
+        return [str(account["email"]) for account in list_google_accounts() if account.get("email")]
 
     def can_handle(self, url: str) -> bool:
         return "docs.google.com/spreadsheets" in url
@@ -109,7 +136,13 @@ class GoogleSheetsConnector(BaseConnector):
     def entity_url(self, platform_entity_id: str) -> str | None:
         return f"https://docs.google.com/spreadsheets/d/{platform_entity_id}"
 
-    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch:
+    async def fetch(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        meta: dict[str, str] | None = None,
+        account_id: str | None = None,
+    ) -> EntityBatch:
         last_sync = await self.last_synced_at(resource_id)
         decision = self.fetch_policy.decide(last_sync)
 
@@ -119,7 +152,8 @@ class GoogleSheetsConnector(BaseConnector):
             return EntityBatch()
 
         logger.info("Fetching Google Sheet %s (policy=%s)", resource_id, decision)
-        batch = await _fetch_sheet(resource_id)
+        selected_account_id = account_id or ((meta or {}).get("account_id") if meta else None)
+        batch = await _fetch_sheet(resource_id, account_id=selected_account_id)
         await upsert_batch(batch)
         return batch
 
@@ -163,13 +197,17 @@ def _extract_xlsx(data: bytes) -> tuple[str, str]:
     return title, "\n\n".join(sections).strip()
 
 
-async def _fetch_excel_via_drive(spreadsheet_id: str, loop: Any) -> EntityBatch:
+async def _fetch_excel_via_drive(
+    spreadsheet_id: str,
+    loop: Any,
+    account_id: str | None = None,
+) -> EntityBatch:
     """Download an Office-format file from Drive and parse as Excel."""
     import io
 
     from googleapiclient.http import MediaIoBaseDownload  # type: ignore[import-untyped]
 
-    drive_service = await loop.run_in_executor(None, _build_drive_service)
+    drive_service = await loop.run_in_executor(None, _build_drive_service_for, account_id)
 
     file_meta: dict[str, Any] = await loop.run_in_executor(
         None,
@@ -217,7 +255,7 @@ async def _fetch_excel_via_drive(spreadsheet_id: str, loop: Any) -> EntityBatch:
         platform_entity_id=spreadsheet_id,
         title=title,
         content=content,
-        metadata=_metadata(spreadsheet_id),
+        metadata=_metadata(spreadsheet_id, account_id),
         updated_at=datetime.now(UTC),
     )
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
@@ -225,13 +263,13 @@ async def _fetch_excel_via_drive(spreadsheet_id: str, loop: Any) -> EntityBatch:
     return batch
 
 
-async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
+async def _fetch_sheet(spreadsheet_id: str, account_id: str | None = None) -> EntityBatch:
     import asyncio
 
     from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
     loop = asyncio.get_event_loop()
-    sheets_service = await loop.run_in_executor(None, _build_sheets_service)
+    sheets_service = await loop.run_in_executor(None, _build_sheets_service_for, account_id)
     file_meta: dict[str, Any] = {}
 
     try:
@@ -242,7 +280,7 @@ async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
     except HttpError as exc:
         if exc.status_code == 400 and "Office file" in str(exc):
             logger.info("gsheets/%s is an Office file — falling back to Drive download", spreadsheet_id)
-            return await _fetch_excel_via_drive(spreadsheet_id, loop)
+            return await _fetch_excel_via_drive(spreadsheet_id, loop, account_id)
         raise
 
     title: str = spreadsheet.get("properties", {}).get("title", "")
@@ -273,7 +311,7 @@ async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
 
     # Fetch owner via Drive API
     try:
-        drive_service = await loop.run_in_executor(None, _build_drive_service)
+        drive_service = await loop.run_in_executor(None, _build_drive_service_for, account_id)
         file_meta = await loop.run_in_executor(
             None,
             lambda: drive_service.files().get(
@@ -305,6 +343,8 @@ async def _fetch_sheet(spreadsheet_id: str) -> EntityBatch:
         "download_url": file_meta.get("webContentLink") or _download_url(spreadsheet_id),
         "mime_type": file_meta.get("mimeType") or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
+    if account_id:
+        metadata["account_id"] = account_id
 
     entity = EntityRecord(
         entity_type="Spreadsheet",

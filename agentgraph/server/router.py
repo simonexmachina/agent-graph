@@ -121,7 +121,7 @@ def classify_url(url: str) -> SourceReference | None:
         return SourceReference(
             source="slack",
             resource_type="channel",
-            resource_id=m.group("channel_id"),
+            resource_id=f"{m.group('workspace_id')}/{m.group('channel_id')}",
         )
 
     m = _DISCORD_DM_RE.match(url)

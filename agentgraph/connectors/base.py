@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # All resource_type values understood by the connector layer.
 # Each value maps to a distinct fetch strategy within a connector.
@@ -116,6 +116,18 @@ class EntityBatch(BaseModel):
             ))
 
 
+class ConnectorAccount(BaseModel):
+    account_id: str
+    label: str
+    auth_group: str
+    source: str
+    user_id: str | None = None
+    workspace_id: str | None = None
+    email: str | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+
 class FetchPolicy:
     """Encapsulates refresh policy decisions for a resource."""
 
@@ -162,7 +174,7 @@ class BaseConnector(ABC):
     onboard_prompt: ClassVar[str | None] = None
 
     @classmethod
-    def run_auth_flow(cls) -> None:
+    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         """Run the interactive authentication flow for this connector."""
         raise NotImplementedError(f"{cls.__name__} does not have an auth flow")
 
@@ -172,7 +184,22 @@ class BaseConnector(ABC):
         return None
 
     @classmethod
-    async def verify_auth(cls) -> tuple[str, str | None]:
+    def list_accounts(cls) -> list[ConnectorAccount]:
+        """Return the authenticated accounts known to this connector."""
+        user = cls.get_authenticated_user()
+        if user is None:
+            return []
+        return [ConnectorAccount(
+            account_id=cls.source,
+            label=user,
+            auth_group=cls.auth_label or cls.source,
+            source=cls.source,
+            user_id=user,
+            email=user if "@" in user else None,
+        )]
+
+    @classmethod
+    async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         """Check whether stored credentials are valid.
 
         Returns a (status, detail) tuple where status is one of:
@@ -218,13 +245,30 @@ class BaseConnector(ABC):
         """
         return None
 
+    @classmethod
+    def current_user_ids(cls) -> list[str]:
+        """Return all canonical identifiers for authenticated users on this platform."""
+        user_id = cls.current_user_id()
+        return [user_id] if user_id else []
+
+    def poll_account_ids(self) -> list[str | None]:
+        """Return the account IDs that should receive background polling."""
+        accounts = type(self).list_accounts()
+        return [account.account_id for account in accounts] or [None]
+
     @abstractmethod
     def can_handle(self, url: str) -> bool: ...
 
     @abstractmethod
-    async def fetch(self, resource_type: ResourceType, resource_id: str, meta: dict[str, str] | None = None) -> EntityBatch: ...
+    async def fetch(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        meta: dict[str, str] | None = None,
+        account_id: str | None = None,
+    ) -> EntityBatch: ...
 
-    async def ingest(self) -> EntityBatch:
+    async def ingest(self, account_id: str | None = None) -> EntityBatch:
         """Run a one-shot bulk ingest of all available historical data for this connector.
 
         Override in connectors that support a full-history sweep beyond what poll() covers
@@ -233,7 +277,11 @@ class BaseConnector(ABC):
         """
         return EntityBatch()
 
-    async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
+    async def poll(
+        self,
+        cursor: dict[str, Any],
+        account_id: str | None = None,
+    ) -> tuple[EntityBatch, dict[str, Any]]:
         """Fetch all changes since cursor for background sync.
 
         cursor is {} on first call. Return (batch, updated_cursor).

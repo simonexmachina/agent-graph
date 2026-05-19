@@ -12,13 +12,32 @@ class DiscordCredentials(BaseModel):
     bot_user_id: str | None = None
 
 
-def load_discord_creds() -> DiscordCredentials:
-    from agentgraph.auth.credentials import load_platform
+def load_discord_creds(account_id: str | None = None) -> DiscordCredentials:
+    from agentgraph.auth.credentials import load_platform_account
 
-    data = load_platform("discord")
+    data = load_platform_account("discord", account_id)
     if data is None:
         raise RuntimeError("Discord credentials not configured. Run: agentgraph auth discord")
     return DiscordCredentials(**data)
+
+
+def list_discord_accounts() -> list[dict[str, str | None]]:
+    from agentgraph.auth.credentials import load_platform_accounts
+
+    results: list[dict[str, str | None]] = []
+    for raw in load_platform_accounts("discord"):
+        try:
+            creds = DiscordCredentials(**raw)
+        except Exception:
+            continue
+        bot_user_id = creds.bot_user_id
+        account_id = str(raw.get("account_id") or (f"discord:{bot_user_id}" if bot_user_id else "discord"))
+        results.append({
+            "account_id": account_id,
+            "bot_user_id": bot_user_id,
+            "label": bot_user_id or account_id,
+        })
+    return results
 
 
 def _verify_token(token: str) -> tuple[str | None, str | None]:
@@ -68,18 +87,23 @@ To get a fresh bot token:
 
 def _save_token(token: str) -> str | None:
     """Verify the token and save it. Return the bot username (or None if unverified)."""
-    from agentgraph.auth.credentials import save_platform
+    from agentgraph.auth.credentials import save_platform, upsert_platform_account
 
     bot_user_id, bot_username = _verify_token(token)
-    save_platform("discord", DiscordCredentials(bot_token=token, bot_user_id=bot_user_id))
+    creds = DiscordCredentials(bot_token=token, bot_user_id=bot_user_id)
+    account_id = f"discord:{bot_user_id}" if bot_user_id else "discord"
+    if not list_discord_accounts():
+        save_platform("discord", {**creds.model_dump(mode="json"), "account_id": account_id})
+    else:
+        upsert_platform_account("discord", account_id, creds, make_default=True)
     return bot_username
 
 
-def run_token_flow() -> None:
+def run_token_flow(account_id: str | None = None, add: bool = False) -> None:
     """Guide the user through obtaining (or refreshing) a Discord bot token."""
     import typer
 
-    from agentgraph.auth.credentials import load_platform
+    from agentgraph.auth.credentials import load_platform_account
 
     # 1. Non-interactive override via env var (useful for scripted re-auth)
     env_token = os.environ.get("AGENTGRAPH_DISCORD_BOT_TOKEN")
@@ -91,7 +115,7 @@ def run_token_flow() -> None:
         return
 
     # 2. Detect existing creds → re-auth path with terse instructions
-    existing_raw = load_platform("discord")
+    existing_raw = None if add else load_platform_account("discord", account_id)
     existing: DiscordCredentials | None = None
     if existing_raw is not None:
         try:

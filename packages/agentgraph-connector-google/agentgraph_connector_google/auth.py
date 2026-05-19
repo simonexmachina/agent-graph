@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 import typer
 
-from agentgraph.auth.credentials import GoogleCredentials, save_platform
+from agentgraph.auth.credentials import GoogleCredentials, load_platform_accounts, save_platform, upsert_platform_account
 from agentgraph.auth.google_provider import GOOGLE_SCOPES
 
 
@@ -22,18 +22,28 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
-def run_oauth_flow() -> None:
+def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
     """Interactive OAuth2 browser flow. Stores credentials on completion."""
-    from agentgraph.auth.credentials import load_platform
     from agentgraph.auth.google_provider import verify_google_auth
 
-    existing_data = load_platform("google")
+    existing_accounts = load_platform_accounts("google")
+    existing_data = None
+    if account_id is not None:
+        existing_data = next((item for item in existing_accounts if item.get("account_id") == account_id), None)
+    elif existing_accounts and not add:
+        existing_data = existing_accounts[0]
     existing = GoogleCredentials(**existing_data) if existing_data else None
 
     if existing:
         # Probe the saved refresh token before forcing the user back through
         # the browser. If it still works, offer to skip.
-        status, detail = verify_google_auth()
+        raw_account_id = existing_data.get("account_id") if existing_data else None
+        verify_account_id = str(raw_account_id) if raw_account_id is not None else None
+        status, detail = (
+            verify_google_auth(verify_account_id)
+            if verify_account_id is not None
+            else verify_google_auth()
+        )
         if status == "ok":
             typer.echo(f"\nGoogle is already authenticated as {detail}.")
             if not typer.confirm(
@@ -121,7 +131,11 @@ def run_oauth_flow() -> None:
         user_email=user_email,
         display_name=display_name,
     )
-    save_platform("google", creds)
+    resolved_account_id = account_id or (user_email.lower() if user_email else f"google:{len(existing_accounts) + 1}")
+    if not add and len(existing_accounts) <= 1 and account_id is None:
+        save_platform("google", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
+    else:
+        upsert_platform_account("google", resolved_account_id, creds, make_default=True)
     from agentgraph.config import CREDENTIALS_FILE
 
     msg = f"Google credentials saved to {CREDENTIALS_FILE}"

@@ -253,10 +253,10 @@ async def test_slack_fetch_fresh_returns_empty_batch(slack_connector: SlackConne
         patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
         patch("agentgraph_connector_slack._touch_last_accessed", new=AsyncMock()) as mock_touch,
     ):
-        batch = await slack_connector.fetch("channel", "C12345")
+        batch = await slack_connector.fetch("channel", "T123/C12345")
 
     assert batch == EntityBatch()
-    mock_touch.assert_awaited_once_with("C12345")
+    mock_touch.assert_awaited_once_with("T123/C12345")
 
 
 @pytest.mark.asyncio
@@ -269,10 +269,10 @@ async def test_slack_fetch_stale_calls_fetch_channel(slack_connector: SlackConne
         patch("agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
         patch("agentgraph_connector_slack.upsert_batch", new=AsyncMock()),
     ):
-        batch = await slack_connector.fetch("channel", "C12345")
+        batch = await slack_connector.fetch("channel", "T123/C12345")
 
     assert batch is fake_batch
-    mock_fetch.assert_awaited_once_with("C12345", oldest=str(stale_time.timestamp()))
+    mock_fetch.assert_awaited_once_with("T123/C12345", oldest=str(stale_time.timestamp()), account_id=None)
 
 
 @pytest.mark.asyncio
@@ -284,9 +284,9 @@ async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(slack_conne
         patch("agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
         patch("agentgraph_connector_slack.upsert_batch", new=AsyncMock()),
     ):
-        await slack_connector.fetch("channel", "C99999")
+        await slack_connector.fetch("channel", "T123/C99999")
 
-    mock_fetch.assert_awaited_once_with("C99999", oldest=None)
+    mock_fetch.assert_awaited_once_with("T123/C99999", oldest=None, account_id=None)
 
 
 # ---------------------------------------------------------------------------

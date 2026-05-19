@@ -16,32 +16,42 @@ from agentgraph.graph.upsert import upsert_batch
 logger = logging.getLogger(__name__)
 
 
+def _sync_scope(source: str, account_id: str | None) -> str:
+    return source if account_id is None else f"{source}:{account_id}"
+
+
 async def _poll_connector(connector: BaseConnector) -> None:
     source = connector.source
     try:
         backend = get_backend()
-        cursor = await backend.load_cursor(source)
-        is_first_run = not cursor
-        logger.info("poll %s — starting%s", source, " (first run / bulk ingest)" if is_first_run else "")
-
-        batch, new_cursor = await connector.poll(cursor)
-
-        n_entities = len(batch.entities)
-        n_persons = len(batch.persons)
-        n_edges = len(batch.edges)
-
-        if batch.entities or batch.persons or batch.edges:
+        for account_id in connector.poll_account_ids():
+            scope = _sync_scope(source, account_id)
+            cursor = await backend.load_cursor(scope)
+            is_first_run = not cursor
             logger.info(
-                "poll %s — upserting %d entities, %d persons, %d edges",
-                source, n_entities, n_persons, n_edges,
+                "poll %s — starting%s",
+                scope,
+                " (first run / bulk ingest)" if is_first_run else "",
             )
-            await upsert_batch(batch)
-            logger.info("poll %s — upsert complete", source)
-        else:
-            logger.info("poll %s — no new data", source)
 
-        await backend.save_cursor(source, new_cursor)
-        logger.info("poll %s — completed", source)
+            batch, new_cursor = await connector.poll(cursor, account_id=account_id)
+
+            n_entities = len(batch.entities)
+            n_persons = len(batch.persons)
+            n_edges = len(batch.edges)
+
+            if batch.entities or batch.persons or batch.edges:
+                logger.info(
+                    "poll %s — upserting %d entities, %d persons, %d edges",
+                    scope, n_entities, n_persons, n_edges,
+                )
+                await upsert_batch(batch)
+                logger.info("poll %s — upsert complete", scope)
+            else:
+                logger.info("poll %s — no new data", scope)
+
+            await backend.save_cursor(scope, new_cursor)
+            logger.info("poll %s — completed", scope)
     except Exception:
         logger.exception("poll failed for connector %s", source)
 
@@ -49,17 +59,19 @@ async def _poll_connector(connector: BaseConnector) -> None:
 async def _run_ingest(connector: BaseConnector) -> None:
     source = connector.source
     try:
-        logger.info("ingest %s — starting", source)
-        batch = await connector.ingest()
-        if batch.entities or batch.persons or batch.edges:
-            logger.info(
-                "ingest %s — upserting %d entities, %d persons, %d edges",
-                source, len(batch.entities), len(batch.persons), len(batch.edges),
-            )
-            await upsert_batch(batch)
-            logger.info("ingest %s — complete", source)
-        else:
-            logger.info("ingest %s — no data returned", source)
+        for account_id in connector.poll_account_ids():
+            scope = _sync_scope(source, account_id)
+            logger.info("ingest %s — starting", scope)
+            batch = await connector.ingest(account_id=account_id)
+            if batch.entities or batch.persons or batch.edges:
+                logger.info(
+                    "ingest %s — upserting %d entities, %d persons, %d edges",
+                    scope, len(batch.entities), len(batch.persons), len(batch.edges),
+                )
+                await upsert_batch(batch)
+                logger.info("ingest %s — complete", scope)
+            else:
+                logger.info("ingest %s — no data returned", scope)
     except Exception:
         logger.exception("ingest failed for connector %s", source)
 

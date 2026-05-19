@@ -468,7 +468,7 @@ class SQLiteBackend(StorageBackend):
         limit: int,
         order_by: str,
         since: datetime | None,
-        authored_by: str | None,
+        authored_by: list[str] | None,
         has_attachments: bool = False,
     ) -> list[EntityResult]:
         if order_by not in _VALID_ORDER_BY:
@@ -493,12 +493,13 @@ class SQLiteBackend(StorageBackend):
 
         authored_join = ""
         if authored_by:
-            authored_join = """
+            placeholders = ", ".join("?" for _ in authored_by)
+            authored_join = f"""
             JOIN edges _auth ON _auth.edge_type = 'authored' AND _auth.target_entity_id = e.id
             JOIN entities _p ON _p.id = _auth.source_entity_id AND _p.entity_type = 'Person'
-                AND _p.platform_entity_id = ?
+                AND _p.platform_entity_id IN ({placeholders})
             """
-            params.append(authored_by)
+            params.extend(authored_by)
 
         where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
         params.append(limit)

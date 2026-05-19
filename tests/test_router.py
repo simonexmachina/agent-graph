@@ -24,11 +24,11 @@ from agentgraph.server.router import SourceReference, classify_url
         ),
         (
             "https://app.slack.com/client/T012AB3CD/C01234567",
-            SourceReference(source="slack", resource_type="channel", resource_id="C01234567"),
+            SourceReference(source="slack", resource_type="channel", resource_id="T012AB3CD/C01234567"),
         ),
         (
             "https://app.slack.com/client/TXXXXXXXX/CYYYYYYY",
-            SourceReference(source="slack", resource_type="channel", resource_id="CYYYYYYY"),
+            SourceReference(source="slack", resource_type="channel", resource_id="TXXXXXXXX/CYYYYYYY"),
         ),
         ("https://github.com/org/repo", None),
         ("https://example.com", None),

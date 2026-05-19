@@ -9,25 +9,61 @@ class SlackCredentials(BaseModel):
     xoxc_token: str
     d_cookie: str
     user_id: str | None = None
+    team_id: str | None = None
+    team_name: str | None = None
 
 
-def load_slack_creds() -> SlackCredentials:
-    from agentgraph.auth.credentials import load_platform
+def load_slack_creds(account_id: str | None = None) -> SlackCredentials:
+    from agentgraph.auth.credentials import load_platform_account
 
-    data = load_platform("slack")
+    data = load_platform_account("slack", account_id)
     if data is None:
         raise RuntimeError("Slack credentials not configured. Run: agentgraph auth slack")
     return SlackCredentials(**data)
 
 
-def run_cookie_flow(xoxc_token: str | None = None, d_cookie: str | None = None) -> None:
+def list_slack_accounts() -> list[dict[str, str | None]]:
+    from agentgraph.auth.credentials import load_platform_accounts
+
+    results: list[dict[str, str | None]] = []
+    for raw in load_platform_accounts("slack"):
+        try:
+            creds = SlackCredentials(**raw)
+        except Exception:
+            continue
+        team_id = creds.team_id
+        user_id = creds.user_id
+        account_id = str(raw.get("account_id") or (f"slack:{team_id}:{user_id}" if team_id and user_id else "slack"))
+        label = creds.team_name or team_id or account_id
+        results.append({
+            "account_id": account_id,
+            "team_id": team_id,
+            "user_id": user_id,
+            "label": label,
+        })
+    return results
+
+
+def account_id_for_team(team_id: str) -> str | None:
+    for account in list_slack_accounts():
+        if account.get("team_id") == team_id:
+            return str(account["account_id"])
+    return None
+
+
+def run_cookie_flow(
+    account_id: str | None = None,
+    add: bool = False,
+    xoxc_token: str | None = None,
+    d_cookie: str | None = None,
+) -> None:
     """Guide the user through extracting Slack cookie credentials from DevTools.
 
     Pass xoxc_token and d_cookie to skip interactive prompts (e.g. from a browser-tool skill).
     """
     import typer
 
-    from agentgraph.auth.credentials import save_platform
+    from agentgraph.auth.credentials import save_platform, upsert_platform_account
 
     if xoxc_token is None:
         typer.echo(
@@ -61,6 +97,8 @@ def run_cookie_flow(xoxc_token: str | None = None, d_cookie: str | None = None) 
     d_cookie_val: str = typer.prompt("d cookie value").strip() if d_cookie is None else d_cookie
 
     user_id: str | None = None
+    team_id: str | None = None
+    team_name: str | None = None
     try:
         import httpx
 
@@ -75,14 +113,29 @@ def run_cookie_flow(xoxc_token: str | None = None, d_cookie: str | None = None) 
         data = resp.json()
         if data.get("ok"):
             user_id = data.get("user_id")
+            team_id = data.get("team_id")
+            team_name = data.get("team")
     except Exception:
         pass
 
-    creds = SlackCredentials(xoxc_token=xoxc_token_val, d_cookie=d_cookie_val, user_id=user_id)
-    save_platform("slack", creds)
+    creds = SlackCredentials(
+        xoxc_token=xoxc_token_val,
+        d_cookie=d_cookie_val,
+        user_id=user_id,
+        team_id=team_id,
+        team_name=team_name,
+    )
+    resolved_account_id = account_id or (
+        f"slack:{team_id}:{user_id}" if team_id and user_id else "slack"
+    )
+    if not add and account_id is None and not list_slack_accounts():
+        save_platform("slack", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
+    else:
+        upsert_platform_account("slack", resolved_account_id, creds, make_default=True)
     from agentgraph.config import CREDENTIALS_FILE
 
     msg = f"\nSlack credentials saved to {CREDENTIALS_FILE}"
     if user_id:
-        msg += f" (authenticated as {user_id})"
+        label = f"{team_name} / {user_id}" if team_name else user_id
+        msg += f" (authenticated as {label})"
     typer.echo(msg)
