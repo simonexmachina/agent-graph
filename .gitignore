@@ -25,10 +25,10 @@ wheels/
 
 # Generated docs output
 docs/
+release/
 
 # macOS
 .DS_Store
 
 # Node (extension)
-extension/agentgraph-extension/node_modules/
-extension/agentgraph-extension/dist/
+extension/node_modules/
