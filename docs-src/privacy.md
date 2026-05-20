@@ -19,6 +19,13 @@ AgentGraph is an open-source application that you install and run locally on you
 - Credentials are stored in `credentials.json` inside the AgentGraph config directory.
 - AgentGraph does not operate a hosted service and does not send indexed content to a server controlled by the project.
 
+## Browser extension data flow
+
+- The browser extension stores its configured local server URL and a cached copy of supported URL patterns in Chrome local storage.
+- When you dwell on a supported page, the extension sends the page URL to your local AgentGraph server so the matching connector can fetch that resource.
+- On Gmail, the extension also extracts the currently open Gmail thread identifier from the page so the local AgentGraph server can fetch the correct thread through the Gmail API.
+- The extension talks only to `localhost` or `127.0.0.1` for AgentGraph server requests; it does not call a project-operated remote extension backend.
+
 ## Google API usage
 
 AgentGraph uses Google APIs to read Google Docs, Google Sheets, Google Drive, and Gmail content on your behalf. AgentGraph's use of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.

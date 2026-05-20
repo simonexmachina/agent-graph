@@ -45,10 +45,12 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     docs_css = (output_dir / "docs.css").read_text(encoding="utf-8")
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
     extending_html = (output_dir / "extending.html").read_text(encoding="utf-8")
+    extension_distribution_html = (output_dir / "extension-distribution.html").read_text(encoding="utf-8")
     postgres_html = (output_dir / "postgresql.html").read_text(encoding="utf-8")
     commands_html = (output_dir / "commands" / "index.html").read_text(encoding="utf-8")
     search_html = (output_dir / "commands" / "search.html").read_text(encoding="utf-8")
     mcp_html = (output_dir / "mcp" / "index.html").read_text(encoding="utf-8")
+    tester_install_html = (output_dir / "tester-extension-install.html").read_text(encoding="utf-8")
     connectors_redirect_html = (output_dir / "connectors.html").read_text(encoding="utf-8")
     redirect_html = (output_dir / "commands.html").read_text(encoding="utf-8")
 
@@ -67,11 +69,16 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'href="postgresql.html"' in index_html
     assert "<section><h2>Configuration</h2><a class=\"nav-link\" href=\"configuration.html\">Configuration</a><a class=\"nav-link\" href=\"postgresql.html\">PostgreSQL</a><a class=\"nav-link\" href=\"extending.html\">Extending</a></section>" in index_html
     assert 'href="extending.html"' in index_html
+    assert 'href="tester-extension-install.html"' in index_html
     assert 'class="codehilite"' in extending_html
     assert 'class="tok-k"' in extending_html
     assert "current_user_id" in extending_html
     assert "Why extend AgentGraph" in extending_html
     assert "custom connectors" in extending_html
+    assert "Chrome Web Store listing draft" in extension_distribution_html
+    assert "http://localhost/*" in extension_distribution_html
+    assert "agentgraph-extension.zip" in tester_install_html
+    assert "Server settings" in tester_install_html
     assert 'content="0; url=extending.html"' in connectors_redirect_html
     assert "<h1>Commands</h1>" in commands_html
     assert "<h1>PostgreSQL</h1>" in postgres_html

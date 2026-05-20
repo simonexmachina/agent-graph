@@ -2,8 +2,9 @@
  * Popup UI — shows server health and the active tab URL being observed.
  */
 
-const SERVER_HEALTH = "http://localhost:8765/health";
 const CACHE_KEY = "agentgraph_meta_cache";
+
+import { getHealthUrl, getServerBaseUrl } from "./lib/config.js";
 
 interface DwellMeta {
   url_patterns: string[];
@@ -36,7 +37,8 @@ interface ObservationStatusResponse {
 
 async function checkHealth(): Promise<boolean> {
   try {
-    const res = await fetch(SERVER_HEALTH, { signal: AbortSignal.timeout(2000) });
+    const serverBaseUrl = await getServerBaseUrl();
+    const res = await fetch(getHealthUrl(serverBaseUrl), { signal: AbortSignal.timeout(2000) });
     return res.ok;
   } catch {
     return false;
@@ -114,7 +116,8 @@ function setObservationStatus(status: ObservationStatus | null): void {
 }
 
 async function render(): Promise<void> {
-  const [healthy, activeUrl, meta, observationStatus] = await Promise.all([
+  const [serverBaseUrl, healthy, activeUrl, meta, observationStatus] = await Promise.all([
+    getServerBaseUrl(),
     checkHealth(),
     getActiveUrl(),
     getCachedMeta(),
@@ -122,6 +125,9 @@ async function render(): Promise<void> {
   ]);
 
   setDot(healthy);
+
+  const serverUrlEl = document.getElementById("server-url");
+  if (serverUrlEl) serverUrlEl.textContent = serverBaseUrl;
 
   const urlEl = document.getElementById("current-url");
   if (urlEl) urlEl.textContent = activeUrl ?? "None";
@@ -152,6 +158,12 @@ async function reloadPatterns(): Promise<void> {
 
 document.getElementById("reload-patterns")?.addEventListener("click", () => {
   reloadPatterns().catch(console.error);
+});
+
+document.getElementById("open-options")?.addEventListener("click", () => {
+  chrome.runtime.openOptionsPage().catch(async () => {
+    await chrome.tabs.create({ url: chrome.runtime.getURL("options.html") });
+  });
 });
 
 render().catch(console.error);

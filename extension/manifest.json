@@ -3,14 +3,28 @@
   "name": "AgentGraph Extension",
   "version": "0.1.0",
   "description": "Watches browser activity and triggers AgentGraph to fetch content when you dwell on a supported URL.",
+  "icons": {
+    "16": "assets/icon-16.png",
+    "32": "assets/icon-32.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
   "permissions": ["tabs", "storage"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png"
+    },
     "default_popup": "popup.html",
     "default_title": "AgentGraph"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {
@@ -20,7 +34,8 @@
     }
   ],
   "host_permissions": [
-    "http://localhost:8765/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "https://mail.google.com/*"
   ]
 }

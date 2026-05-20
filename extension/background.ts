@@ -110,6 +110,25 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "server_url_updated") return false;
+
+  chrome.storage.local.remove("agentgraph_meta_cache")
+    .then(async () => {
+      const meta = await refreshMeta();
+      if (activeTabId !== null) {
+        activeUrl = "";
+        await onFocus(activeTabId);
+      }
+      sendResponse({ ok: true, meta });
+    })
+    .catch((error: unknown) => {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+    });
+
+  return true;
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "reload_url_patterns") return false;
 
   refreshMeta()

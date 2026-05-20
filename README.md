@@ -94,6 +94,7 @@ Load the unpacked extension in Chrome:
 1. Go to `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select the extracted `dist` folder, or `extension/dist` if you built it locally
+3. Click **Load unpacked** and select the extracted `dist` folder, or `extension/dist` if you built it locally
 
 Once installed, browse Slack, Discord, Google Docs, or Gmail normally. AgentGraph will detect your dwell activity and begin indexing.
 
