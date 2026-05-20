@@ -20,7 +20,7 @@ jobs:
         run: uv sync --extra all
 
       - name: Build docs
-        run: python3 scripts/build_docs.py
+        run: uv run python scripts/build_docs.py
 
       - name: Run tests
         run: uv run pytest tests/ -m "not integration" -q

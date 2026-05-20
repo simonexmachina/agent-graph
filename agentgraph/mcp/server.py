@@ -38,7 +38,7 @@ def _list_accounts(connector: object) -> list[object]:
 
 
 async def _verify_auth(connector: object, account_id: str | None = None) -> tuple[str, str | None]:
-    verify_auth = getattr(type(connector), "verify_auth")
+    verify_auth = type(connector).verify_auth
     try:
         return await verify_auth(account_id)
     except TypeError:

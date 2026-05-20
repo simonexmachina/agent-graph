@@ -8,7 +8,10 @@ and stored in the AgentGraph config directory under the 'google' key.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agentgraph.auth.credentials import GoogleCredentials
 
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/documents.readonly",
@@ -27,7 +30,7 @@ def _invalid_auth_detail(reason: str) -> str:
     return f"{reason} - {GOOGLE_REAUTH_HINT} to re-authorize Google"
 
 
-def load_google_creds(account_id: str | None = None) -> tuple["GoogleCredentials", str]:
+def load_google_creds(account_id: str | None = None) -> tuple[GoogleCredentials, str]:
     from agentgraph.auth.credentials import GoogleCredentials, load_platform_account
 
     data = load_platform_account("google", account_id)
