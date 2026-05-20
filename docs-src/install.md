@@ -1,10 +1,10 @@
 +++
 title = "Install"
-description = "Install AgentGraph, authenticate connectors, run the server, connect the extension, and expose MCP."
+description = "Install AgentGraph, run the server, connect the extension, and expose MCP."
 nav_title = "Install"
 section = "Start"
 order = 20
-summary = "Set up AgentGraph once, authenticate the sources you care about, then run it as a local service for your browser and AI clients."
+summary = "Set up AgentGraph locally, connect the extension, and hand off to Quickstart for authentication and first indexing."
 output = "install.html"
 source_path = "docs-src/install.md"
 +++
@@ -37,22 +37,6 @@ uv sync --extra slack
 uv sync --extra discord
 ```
 
-## Authenticate connectors
-
-The fastest path is the setup wizard:
-
-```bash
-agentgraph onboard
-```
-
-You can also authenticate one connector at a time:
-
-```bash
-agentgraph auth google
-agentgraph auth slack
-agentgraph auth discord
-```
-
 <div class="callout">
   <p><strong>Credential storage:</strong> credentials live in <code>~/.agentgraph/</code> by default, or under <code>AGENTGRAPH_CONFIG_DIR</code> if you set a custom config directory.</p>
 </div>
@@ -83,7 +67,7 @@ npm run build
 
 Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, and select `extension/dist/`.
 
-If you do not want to build the extension locally, use the prebuilt [Tester Extension Install](/tester-extension-install.html) flow instead.
+After the extension is installed, continue with [Quickstart](/quickstart.html) to authenticate connectors, start the server, and verify that your first entities land in the graph.
 
 ## Connect MCP clients
 

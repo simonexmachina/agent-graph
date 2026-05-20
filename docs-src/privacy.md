@@ -2,6 +2,7 @@
 title = "Privacy"
 description = "AgentGraph privacy policy."
 nav_title = "Privacy"
+nav_hidden = true
 section = "Reference"
 order = 30
 summary = "AgentGraph is a local tool. Indexed content, credentials, and query traffic stay on your machine unless another client you choose reads from your local graph."

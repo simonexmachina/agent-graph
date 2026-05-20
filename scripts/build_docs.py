@@ -50,6 +50,7 @@ class PageMeta:
     title: str
     description: str
     nav_title: str
+    nav_hidden: bool
     section: str
     order: int
     summary: str
@@ -90,6 +91,7 @@ def parse_frontmatter(text: str) -> tuple[PageMeta, str]:
             title=str(data["title"]),
             description=str(data["description"]),
             nav_title=str(data["nav_title"]),
+            nav_hidden=bool(data.get("nav_hidden", False)),
             section=str(data["section"]),
             order=int(data["order"]),
             summary=str(data["summary"]),
@@ -272,11 +274,14 @@ def build_global_nav(pages: list[Page], current_page: Page) -> str:
     for section in section_order:
         links = ""
         for page in grouped[section]:
+            if page.meta.nav_hidden:
+                continue
             current_class = "nav-link active" if page.meta.output_path == current_page.meta.output_path else "nav-link"
             links += (
                 f'<a class="{current_class}" href="{page_permalink(page.meta)}">{page.meta.nav_title}</a>'
             )
-        section_blocks.append(f"<section><h2>{html.escape(section)}</h2>{links}</section>")
+        if links:
+            section_blocks.append(f"<section><h2>{html.escape(section)}</h2>{links}</section>")
     return "\n".join(section_blocks)
 
 
