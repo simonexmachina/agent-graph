@@ -81,6 +81,10 @@ agentgraph serve --reload      # auto-reload on code changes
 
 ### 4. Install the browser extension
 
+Download the latest `agentgraph-extension.zip` asset from GitHub Releases, unzip it, and keep the extracted `dist/` folder on disk.
+
+If you prefer to build it yourself:
+
 ```bash
 cd extension
 npm install && npm run build
@@ -89,7 +93,7 @@ npm install && npm run build
 Load the unpacked extension in Chrome:
 1. Go to `chrome://extensions`
 2. Enable **Developer mode**
-3. Click **Load unpacked** and select `extension/dist`
+3. Click **Load unpacked** and select the extracted `dist` folder, or `extension/dist` if you built it locally
 
 Once installed, browse Slack, Discord, Google Docs, or Gmail normally. AgentGraph will detect your dwell activity and begin indexing.
 

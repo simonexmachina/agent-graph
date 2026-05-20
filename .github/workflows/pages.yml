@@ -28,7 +28,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Install docs build dependencies
-        run: uv sync --no-extra --group dev
+        run: uv sync --group dev
 
       - name: Build docs
         run: uv run python scripts/build_docs.py

@@ -69,7 +69,11 @@ Logs are written to `/tmp/agentgraph.log`.
 
 ## Install the browser extension
 
-Build the extension:
+Download the latest `agentgraph-extension.zip` asset from the GitHub Releases page, unzip it, and keep the extracted `dist/` folder somewhere stable on disk.
+
+Then load that extracted `dist/` folder from `chrome://extensions` with Developer Mode enabled.
+
+If you want to build the extension yourself instead, use:
 
 ```bash
 cd extension
