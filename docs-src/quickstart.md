@@ -31,7 +31,7 @@ The default server URL is `http://127.0.0.1:8765`.
 
 ## 3. Install the browser extension
 
-Download the latest `agentgraph-extension.zip` release asset, unzip it, and load the extracted `dist/` folder as an unpacked Chrome extension.
+Download [`agentgraph-extension.zip`](https://github.com/simonexmachina/agent-graph/releases/download/v0.1.0/agentgraph-extension.zip), unzip it, and load the extracted `dist/` folder as an unpacked Chrome extension.
 
 If you prefer to build it locally instead:
 

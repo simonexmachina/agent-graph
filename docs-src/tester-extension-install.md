@@ -2,6 +2,7 @@
 title = "Tester Extension Install"
 description = "Install a prebuilt AgentGraph extension bundle from GitHub artifacts or releases."
 nav_title = "Tester Extension Install"
+nav_hidden = true
 section = "Start"
 order = 40
 summary = "Use this flow if you want to test the extension without building it locally."
@@ -25,7 +26,7 @@ The default server URL is `http://127.0.0.1:8765`. The extension defaults to `ht
 
 Choose one of these sources:
 
-- A tagged GitHub Release asset named `agentgraph-extension.zip`
+- The published release asset [`agentgraph-extension.zip`](https://github.com/simonexmachina/agent-graph/releases/download/v0.1.0/agentgraph-extension.zip)
 - A pull request or branch workflow artifact named `agentgraph-extension`
 
 If you are downloading a workflow artifact, GitHub may wrap the extension zip inside an outer artifact download. Extract the downloaded archive until you have `agentgraph-extension.zip`.

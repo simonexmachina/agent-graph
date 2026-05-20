@@ -81,7 +81,7 @@ agentgraph serve --reload      # auto-reload on code changes
 
 ### 4. Install the browser extension
 
-Download the latest `agentgraph-extension.zip` asset from GitHub Releases, unzip it, and keep the extracted `dist/` folder on disk.
+Download [`agentgraph-extension.zip`](https://github.com/simonexmachina/agent-graph/releases/download/v0.1.0/agentgraph-extension.zip), unzip it, and keep the extracted `dist/` folder on disk.
 
 If you prefer to build it yourself:
 

@@ -58,10 +58,8 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'id="doc-search"' in index_html
     assert 'class="toc"' in index_html
     assert 'class="page-summary"' not in index_html
-    assert 'class="language-bash"' in index_html
-    assert 'agentgraph<span class="tok-w"> </span>mcp-config' in index_html
-    assert "TL;DR" not in index_html
-    assert 'Copy code to clipboard' in index_html
+    assert 'class="language-bash"' not in index_html
+    assert 'agentgraph<span class="tok-w"> </span>mcp-config' not in index_html
     assert ".doc .codehilite .tok-n" in docs_css
     assert "var(--code-name)" in docs_css
     assert ".doc pre .copy svg" in docs_css
@@ -69,7 +67,10 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'href="postgresql.html"' in index_html
     assert "<section><h2>Configuration</h2><a class=\"nav-link\" href=\"configuration.html\">Configuration</a><a class=\"nav-link\" href=\"postgresql.html\">PostgreSQL</a><a class=\"nav-link\" href=\"extending.html\">Extending</a></section>" in index_html
     assert 'href="extending.html"' in index_html
-    assert 'href="tester-extension-install.html"' in index_html
+    nav_html = index_html.split('<nav aria-label="Documentation">', 1)[1].split("</nav>", 1)[0]
+    assert 'href="tester-extension-install.html"' not in nav_html
+    assert 'href="privacy.html"' not in nav_html
+    assert 'href="extension-distribution.html"' not in nav_html
     assert 'class="codehilite"' in extending_html
     assert 'class="tok-k"' in extending_html
     assert "current_user_id" in extending_html
