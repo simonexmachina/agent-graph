@@ -358,6 +358,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
     body_html = normalize_internal_links(page.body, page.meta.output_path)
     nav_html = normalize_internal_links(nav_html, page.meta.output_path)
     toc_html = normalize_internal_links(toc_html, page.meta.output_path)
+    pager_html = normalize_internal_links(build_prev_next(pages, index), page.meta.output_path)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -405,7 +406,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
 {article_title}\
 {f'          <p class="page-summary">{render_inline(page.meta.summary)}</p>\n' if page.meta.summary.strip() else ''}\
 {body_html}
-{build_prev_next(pages, index)}
+{pager_html}
         </article>
         <nav class="toc" aria-label="On this page"><h2>On this page</h2>{toc_html}</nav>
       </div>
