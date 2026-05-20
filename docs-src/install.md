@@ -63,7 +63,6 @@ agentgraph auth discord
 
 ```bash
 agentgraph serve
-agentgraph serve --reload
 ```
 
 Logs are written to `/tmp/agentgraph.log`.
