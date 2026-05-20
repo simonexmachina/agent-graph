@@ -1,0 +1,45 @@
+name: Extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extension/**"
+      - ".github/workflows/extension.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "extension/**"
+      - ".github/workflows/extension.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install extension dependencies
+        run: npm ci
+
+      - name: Typecheck extension
+        run: npm run typecheck
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Upload extension artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentgraph-extension-dist
+          path: extension/dist

@@ -24,6 +24,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
       - name: Install docs build dependencies
         run: uv sync --no-extra --group dev
 
