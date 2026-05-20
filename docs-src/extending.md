@@ -78,7 +78,7 @@ AgentGraph is designed to be extended with new connectors.
 
 ## Connector interface
 
-This is the author-facing reference for implementing a connector against `BaseConnector`.
+`BaseConnector` is the author-facing contract for custom integrations. A connector subclass declares its identity and URL ownership, returns graph-shaped batches from `fetch()`, and can optionally participate in auth, background polling, and historical ingest.
 
 ## Authoring a connector
 
@@ -91,11 +91,37 @@ The required shape is small: identify which URLs the connector owns, implement `
 - `source` is the stable connector identifier used by the CLI, MCP server, and registry.
 - `url_patterns` declares which browser URLs the connector should claim for dwell-based fetches.
 - `fetch_policy` controls when a targeted fetch should be skipped because a resource is still fresh.
-- `fetch(self, resource_type, resource_id, meta=None) -> EntityBatch` is the only required runtime method.
-- `poll_interval`, `poll()`, and `ingest()` are optional background and backfill hooks.
-- `run_auth_flow()`, `get_authenticated_user()`, `verify_auth()`, and `current_user_id()` are the auth and operator-facing hooks.
+- `can_handle(self, url) -> bool` is required and should confirm whether a specific URL belongs to the connector.
+- `fetch(self, resource_type, resource_id, meta=None, account_id=None) -> EntityBatch` is the required runtime fetch hook.
+- `normalise_fetch_id(self, resource_id, entity_type) -> tuple[str, ResourceType]` lets a connector translate stored IDs into fetchable IDs when they differ.
+- `poll_interval`, `poll_delegates`, `poll_account_ids()`, `poll()`, and `ingest()` are the optional background refresh hooks.
+- `run_auth_flow()`, `list_accounts()`, `get_authenticated_user()`, `verify_auth()`, `current_user_id()`, and `current_user_ids()` are the auth and operator-facing hooks.
 
 The contract is intentionally generic: core AgentGraph code calls these hooks without knowing platform-specific field names or APIs.
+
+### Interface reference
+
+| Member | Required | Purpose |
+| --- | --- | --- |
+| `source: ClassVar[str]` | Yes | Stable connector key used everywhere the platform is identified. |
+| `fetch_policy: ClassVar[FetchPolicy]` | Yes | Declares how long fetched resources stay fresh before an incremental refresh is needed. |
+| `url_patterns: ClassVar[list[str]]` | No | Chrome match patterns used by the browser extension to decide which tabs this connector can observe. |
+| `can_handle(self, url: str) -> bool` | Yes | Fine-grained URL matcher used after `url_patterns` to decide whether the connector owns a specific URL. |
+| `fetch(...) -> EntityBatch` | Yes | Fetch one resource and return the entities, people, and edges needed to represent it in the graph. |
+| `normalise_fetch_id(...) -> tuple[str, ResourceType]` | No | Override when stored entity IDs differ from the IDs required by the upstream fetch path. |
+| `poll_interval: ClassVar[timedelta | None]` | No | Enables scheduled background polling when set to a duration. |
+| `poll(self, cursor, account_id=None) -> tuple[EntityBatch, dict[str, Any]]` | No | Incremental background refresh hook; return both the batch and the next cursor. |
+| `ingest(self, account_id=None) -> EntityBatch` | No | One-shot historical backfill hook for loading data beyond normal polling. |
+| `run_auth_flow(cls, account_id=None, add=False) -> None` | No | Interactive auth entry point used by `agentgraph auth` and onboarding flows. |
+| `list_accounts(cls) -> list[ConnectorAccount]` | No | Enumerates authenticated accounts when a connector supports multiple identities. |
+| `verify_auth(cls, account_id=None) -> tuple[str, str | None]` | No | Reports whether stored credentials are `ok`, `missing`, or `invalid`. |
+| `current_user_id(cls) -> str | None` | No | Returns the canonical `Person` identifier for `--mine` filtering. |
+
+`FetchPolicy.decide(last_synced_at)` returns one of three states:
+
+- `FIRST_VISIT`: the resource has never been synced, so do a full fetch.
+- `INCREMENTAL`: the resource was synced before but is now stale, so fetch changes since the last sync.
+- `FRESH`: the resource was synced recently enough that external fetch work can be skipped.
 
 ### Example implementation
 
@@ -130,7 +156,7 @@ class ExampleConnector(BaseConnector):
     onboard_prompt = "Set up Example?"
 
     @classmethod
-    def run_auth_flow(cls) -> None:
+    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         # Launch the interactive auth flow for `agentgraph auth example`
         # and `agentgraph onboard`.
         from agentgraph_connector_example.auth import run_oauth_flow
@@ -191,6 +217,7 @@ class ExampleConnector(BaseConnector):
         resource_type: ResourceType,
         resource_id: str,
         meta: dict[str, str] | None = None,
+        account_id: str | None = None,
     ) -> EntityBatch:
         # `fetch()` is the required connector path. It should return the
         # entities, people, and edges needed to represent one resource.
@@ -206,14 +233,18 @@ class ExampleConnector(BaseConnector):
         await upsert_batch(batch)
         return batch
 
-    async def ingest(self) -> EntityBatch:
+    async def ingest(self, account_id: str | None = None) -> EntityBatch:
         # `ingest()` is a one-shot historical backfill. Use it when the
         # connector can fetch more than normal polling covers.
         batch = await _fetch_full_history()
         await upsert_batch(batch)
         return batch
 
-    async def poll(self, cursor: dict[str, Any]) -> tuple[EntityBatch, dict[str, Any]]:
+    async def poll(
+        self,
+        cursor: dict[str, Any],
+        account_id: str | None = None,
+    ) -> tuple[EntityBatch, dict[str, Any]]:
         # `poll()` runs in the background from `agentgraph serve` or
         # `agentgraph poll`. `cursor` is {} on first run; return the next cursor.
         start_cursor = cursor.get("cursor")
@@ -248,12 +279,13 @@ async def _fetch_changes_since(cursor: str | None) -> tuple[EntityBatch, str]:
 
 ### Hook guide
 
-- `fetch(self, resource_type, resource_id, meta=None) -> EntityBatch` is required. This is the targeted fetch path used by browser dwell, `agentgraph fetch`, `fetch_entity`, and stub resolution.
-- `poll(self, cursor) -> tuple[EntityBatch, dict[str, Any]]` is optional. Implement it when the upstream system has a changes API, cursor, timestamp, or incremental listing endpoint.
-- `ingest(self) -> EntityBatch` is optional. Implement it when you need a one-shot backfill beyond what `poll()` covers, such as "all mail" instead of only new inbox threads.
-- `run_auth_flow(cls) -> None` is the interactive setup hook used by `agentgraph auth <source>` and `agentgraph onboard`.
+- `fetch(self, resource_type, resource_id, meta=None, account_id=None) -> EntityBatch` is required. This is the targeted fetch path used by browser dwell, `agentgraph fetch`, `fetch_entity`, and stub resolution.
+- `poll(self, cursor, account_id=None) -> tuple[EntityBatch, dict[str, Any]]` is optional. Implement it when the upstream system has a changes API, cursor, timestamp, or incremental listing endpoint.
+- `ingest(self, account_id=None) -> EntityBatch` is optional. Implement it when you need a one-shot backfill beyond what `poll()` covers, such as "all mail" instead of only new inbox threads.
+- `run_auth_flow(cls, account_id=None, add=False) -> None` is the interactive setup hook used by `agentgraph auth <source>` and `agentgraph onboard`.
+- `list_accounts(cls) -> list[ConnectorAccount]` should be overridden when one connector can manage multiple authenticated accounts.
 - `get_authenticated_user(cls) -> str | None` returns the short display string shown in `agentgraph connectors`.
-- `verify_auth(cls) -> tuple[str, str | None]` is where you should make a live API check if the platform supports a cheap "who am I" endpoint.
+- `verify_auth(cls, account_id=None) -> tuple[str, str | None]` is where you should make a live API check if the platform supports a cheap "who am I" endpoint.
 - `current_user_id(cls) -> str | None` returns the canonical identifier stored on the user's `Person` entity so `--mine` can work across connectors.
 
 ### Output model
