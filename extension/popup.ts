@@ -161,7 +161,9 @@ document.getElementById("reload-patterns")?.addEventListener("click", () => {
 });
 
 document.getElementById("open-options")?.addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
+  chrome.runtime.openOptionsPage().catch(async () => {
+    await chrome.tabs.create({ url: chrome.runtime.getURL("options.html") });
+  });
 });
 
 render().catch(console.error);
