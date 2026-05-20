@@ -1,3 +1,8 @@
+---
+name: graph
+description: Use the AgentGraph CLI to query the local knowledge graph, inspect connectors, fetch entities, traverse relationships, and configure MCP access.
+---
+
 # /graph — AgentGraph CLI skill
 
 Use the `agentgraph` CLI to query the local knowledge graph. Always prefer the CLI over direct Python/DB access.
@@ -36,12 +41,12 @@ agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive —
 agentgraph ingest <source> [--json]   # e.g. gmail — fetches all labels, not just inbox
 
 # List installed connectors and their auth/sync status
-agentgraph connectors [--json] # auth_status/auth_detail, url_patterns, polls, poll_delegates, polled_by, sync
+agentgraph connectors [--json] # auth_status/auth_detail, accounts[], url_patterns, polls, poll_delegates, polled_by, sync
 
 # Authenticate connectors
-agentgraph auth google        # Google OAuth2; use when Google auth_status is missing/invalid
-agentgraph auth slack         # Slack cookie credentials
-agentgraph auth discord       # Discord bot token
+agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
+agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
+agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
 
 # Server
 agentgraph serve [--reload]
@@ -65,7 +70,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 
 - The CLI automatically falls back to local DB if the server isn't running (prints a dim warning)
 - Use `--json` when you need to parse results programmatically
-- Entity IDs accept: full UUID, UUID prefix, or platform ref (`slack/C123`, `gdocs/doc-id`, `discord/dm/456`)
+- Entity IDs accept: full UUID, UUID prefix, or platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`)
 - Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs or exported Google Docs/Sheets
 - `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
 - Server logs: `/tmp/agentgraph.log`

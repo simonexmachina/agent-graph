@@ -1,3 +1,8 @@
+---
+name: slack-auth
+description: Use agent-browser to extract Slack browser credentials and save them through the AgentGraph CLI for non-interactive Slack authentication.
+---
+
 # /slack-auth — Slack Browser Auth Skill
 
 Use `agent-browser` to extract Slack credentials from an open browser session and save them non-interactively.
