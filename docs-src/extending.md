@@ -18,7 +18,7 @@ AgentGraph is designed to be extended with new connectors.
 - Keep your own integration logic outside the core package by shipping it as a separate connector package.
 - Reuse the same fetch, poll, auth, and graph-upsert model that the built-in Slack, Discord, Google Docs, Drive, Sheets, and Gmail connectors use.
 
-## Supported connectors
+## Included connectors
 
 <table>
   <thead>
