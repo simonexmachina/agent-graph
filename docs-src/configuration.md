@@ -92,10 +92,3 @@ Sentence-transformers model used for embeddings.
 
 SQLite is the default backend. For PostgreSQL setup, environment variables, and switching guidance, see [PostgreSQL](/postgresql.html).
 
-## Slack workspace filter
-
-If you only want Slack data from one workspace, set `AGENTGRAPH_SLACK_WORKSPACE_ID`.
-
-```bash
-AGENTGRAPH_SLACK_WORKSPACE_ID=T04T4TH8W agentgraph serve
-```
