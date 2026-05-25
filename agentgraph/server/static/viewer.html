@@ -626,7 +626,7 @@
 
   // ── Cytoscape formatting ───────────────────────────────────────────────────
   function entityToNode(entity) {
-    const label = entity.display_name || entity.title || entity.platform_entity_id || entity.id || '';
+    const label = entity.viewer_label || entity.display_name || entity.title || entity.platform_entity_id || entity.id || '';
     return {
       data: {
         id: entity.id,
@@ -873,6 +873,16 @@
     return d;
   }
 
+  async function readErrorDetail(res) {
+    try {
+      const data = await res.json();
+      if (data && typeof data.detail === 'string' && data.detail) return data.detail;
+    } catch (_) {
+      // Ignore non-JSON error bodies.
+    }
+    return `HTTP ${res.status}`;
+  }
+
   async function showEntityDetail(entityId) {
     showSpinner();
     try {
@@ -938,25 +948,39 @@
       const fetchRow = document.createElement('div');
       fetchRow.className = 'control-group';
       const fetchBtn = document.createElement('button');
+      const fetchError = document.createElement('div');
       fetchBtn.textContent = 'Fetch content';
       fetchBtn.style.marginTop = '4px';
+      fetchError.style.color = '#fca5a5';
+      fetchError.style.fontSize = '11px';
+      fetchError.style.lineHeight = '1.4';
+      fetchError.style.display = 'none';
       fetchBtn.addEventListener('click', async () => {
         fetchBtn.textContent = 'Fetching…';
         fetchBtn.disabled = true;
+        fetchError.textContent = '';
+        fetchError.style.display = 'none';
         try {
           const res = await fetch(
-            `/api/cli/fetch?platform=${encodeURIComponent(entity.platform)}&resource_id=${encodeURIComponent(entity.platform_entity_id)}`,
+            `/api/cli/fetch-entity?entity_id=${encodeURIComponent(entity.id)}`,
             { method: 'POST' }
           );
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) throw new Error(await readErrorDetail(res));
           await showEntityDetail(entity.id);
           refreshGraph();
         } catch (err) {
-          fetchBtn.textContent = 'Fetch failed';
+          fetchBtn.textContent = 'Fetch content';
+          fetchBtn.disabled = false;
+          fetchError.textContent = err instanceof Error ? err.message : 'Fetch failed';
+          fetchError.style.display = 'block';
           console.error('fetch error:', err);
+          return;
         }
+        fetchBtn.textContent = 'Fetch content';
+        fetchBtn.disabled = false;
       });
       fetchRow.appendChild(fetchBtn);
+      fetchRow.appendChild(fetchError);
       detailBody.appendChild(fetchRow);
     }
 
