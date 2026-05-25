@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
+from agentgraph_connector_google.gmail import GmailConnector
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
@@ -246,6 +247,11 @@ def slack_connector() -> SlackConnector:
     return SlackConnector()
 
 
+@pytest.fixture
+def gmail_connector() -> GmailConnector:
+    return GmailConnector()
+
+
 @pytest.mark.asyncio
 async def test_slack_fetch_fresh_returns_empty_batch(slack_connector: SlackConnector) -> None:
     """When channel data is fresh, connector returns empty batch."""
@@ -296,6 +302,13 @@ async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(slack_conne
 def test_gdocs_can_handle(gdocs_connector: GoogleDocsConnector) -> None:
     assert gdocs_connector.can_handle("https://docs.google.com/document/d/abc123/edit")
     assert not gdocs_connector.can_handle("https://slack.com")
+
+
+def test_gmail_entity_url_uses_popout_view(gmail_connector: GmailConnector) -> None:
+    assert (
+        gmail_connector.entity_url("18f0c1d2e3a4b5c6")
+        == "https://mail.google.com/mail/u/0/popout?th=%23thread-f:18f0c1d2e3a4b5c6"
+    )
 
 
 def test_slack_can_handle(slack_connector: SlackConnector) -> None:

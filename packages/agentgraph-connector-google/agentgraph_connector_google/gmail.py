@@ -157,7 +157,7 @@ class GmailConnector(BaseConnector):
         return "mail.google.com" in url
 
     def entity_url(self, platform_entity_id: str) -> str | None:
-        return f"https://mail.google.com/mail/u/0/#all/{platform_entity_id}"
+        return f"https://mail.google.com/mail/u/0/popout?th=%23thread-f:{platform_entity_id}"
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         import asyncio
