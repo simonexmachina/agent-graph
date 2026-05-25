@@ -307,7 +307,7 @@ def test_gdocs_can_handle(gdocs_connector: GoogleDocsConnector) -> None:
 def test_gmail_entity_url_uses_popout_view(gmail_connector: GmailConnector) -> None:
     assert (
         gmail_connector.entity_url("18f0c1d2e3a4b5c6")
-        == "https://mail.google.com/mail/u/0/popout?th=%23thread-f:18f0c1d2e3a4b5c6"
+        == "https://mail.google.com/mail/u/0/popout?th=%23thread-a:r-1797149362827343302&cvid=1"
     )
 
 

@@ -112,6 +112,14 @@ def _format_date(date_str: str) -> str:
         return date_str
 
 
+def _thread_popout_ref(thread_id: str) -> str:
+    """Return the Gmail web thread reference expected by popout links."""
+    try:
+        return f"thread-a:r-{int(thread_id, 16)}"
+    except ValueError:
+        return thread_id
+
+
 class GmailConnector(BaseConnector):
     source = "gmail"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
@@ -157,7 +165,8 @@ class GmailConnector(BaseConnector):
         return "mail.google.com" in url
 
     def entity_url(self, platform_entity_id: str) -> str | None:
-        return f"https://mail.google.com/mail/u/0/popout?th=%23thread-f:{platform_entity_id}"
+        thread_ref = _thread_popout_ref(platform_entity_id)
+        return f"https://mail.google.com/mail/u/0/popout?th=%23{thread_ref}&cvid=1"
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         import asyncio
