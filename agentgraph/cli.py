@@ -36,11 +36,33 @@ def _status_label(status: str) -> str:
 
 @auth_app.callback()
 def auth(
-    ctx: typer.Context,
+    target: str | None = typer.Argument(None, help="Use 'status' or an auth provider such as google, slack, or discord"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
+    add: bool = typer.Option(False, "--add", help="Add another authenticated account for this provider"),
+    account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
+    xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
+    d_cookie: str | None = typer.Option(None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"),
 ) -> None:
-    """Show authentication state for each auth provider."""
-    if ctx.invoked_subcommand is not None:
+    """Show auth status or authenticate a provider."""
+    if target not in (None, "status"):
+        from agentgraph.connectors.registry import bootstrap, get_all_connectors
+        from agentgraph.connectors.status import auth_provider_connectors
+
+        bootstrap()
+        grouped = auth_provider_connectors(get_all_connectors())
+        seen = {label: connectors[0] for label, connectors in grouped.items()}
+
+        if target not in seen:
+            available = ", ".join(["status", *sorted(seen)])
+            typer.echo(f"Unknown auth target '{target}'. Available: {available}", err=True)
+            raise typer.Exit(code=1)
+
+        if target == "slack" and (xoxc_token is not None or d_cookie is not None):
+            from agentgraph_connector_slack.auth import run_cookie_flow  # type: ignore[import-not-found]
+            run_cookie_flow(account_id=account, add=add, xoxc_token=xoxc_token, d_cookie=d_cookie)
+            return
+
+        _run_auth_flow(type(seen[target]), account, add)
         return
 
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
@@ -80,35 +102,6 @@ def auth(
                     else f"{account_auth} as {account_detail}"
                 )
             typer.echo(f"  {'':<12}  account: {account['label']} [{account['account_id']}]  |  {account_auth}")
-
-
-@auth_app.command("connect")
-def auth_connect(
-    provider: str = typer.Argument(..., help="Auth provider to authenticate (e.g. google, slack, discord)"),
-    add: bool = typer.Option(False, "--add", help="Add another authenticated account for this provider"),
-    account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
-    xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
-    d_cookie: str | None = typer.Option(None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"),
-) -> None:
-    """Authenticate or re-authenticate an auth provider."""
-    from agentgraph.connectors.registry import bootstrap, get_all_connectors
-    from agentgraph.connectors.status import auth_provider_connectors
-
-    bootstrap()
-    grouped = auth_provider_connectors(get_all_connectors())
-    seen = {label: connectors[0] for label, connectors in grouped.items()}
-
-    if provider not in seen:
-        available = ", ".join(sorted(seen))
-        typer.echo(f"Unknown auth provider '{provider}'. Available: {available}", err=True)
-        raise typer.Exit(code=1)
-
-    if provider == "slack" and (xoxc_token is not None or d_cookie is not None):
-        from agentgraph_connector_slack.auth import run_cookie_flow  # type: ignore[import-not-found]
-        run_cookie_flow(account_id=account, add=add, xoxc_token=xoxc_token, d_cookie=d_cookie)
-        return
-
-    _run_auth_flow(type(seen[provider]), account, add)
 
 
 @app.command()

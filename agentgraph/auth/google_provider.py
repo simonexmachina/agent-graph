@@ -2,7 +2,7 @@
 # pyright: reportUnknownArgumentType=false
 """Google OAuth2 authentication provider.
 
-Credentials are obtained via the OAuth2 browser flow (agentgraph auth connect google)
+Credentials are obtained via the OAuth2 browser flow (agentgraph auth google)
 and stored in the AgentGraph config directory under the 'google' key.
 """
 
@@ -23,7 +23,7 @@ GOOGLE_SCOPES = [
     "openid",
 ]
 
-GOOGLE_REAUTH_HINT = "run: agentgraph auth connect google"
+GOOGLE_REAUTH_HINT = "run: agentgraph auth google"
 
 
 def _invalid_auth_detail(reason: str) -> str:
@@ -36,7 +36,7 @@ def load_google_creds(account_id: str | None = None) -> tuple[GoogleCredentials,
     data = load_platform_account("google", account_id)
     if data is None:
         raise RuntimeError(
-            "Google credentials not configured. Run: agentgraph auth connect google"
+            "Google credentials not configured. Run: agentgraph auth google"
         )
     creds = GoogleCredentials(**data)
     resolved_account_id = str(data.get("account_id") or creds.user_email or "google")

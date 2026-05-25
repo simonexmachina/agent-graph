@@ -44,12 +44,12 @@ agentgraph ingest <source> [--json]   # e.g. gmail — fetches all labels, not j
 agentgraph connectors [--json] # auth_provider, auth_status/auth_detail, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
 
 # Show auth provider state (dedupes shared providers like Google)
-agentgraph auth [--json] # provider, connectors[], auth_status/auth_detail, accounts[]
+agentgraph auth status [--json] # provider, connectors[], auth_status/auth_detail, accounts[]
 
 # Authenticate connectors/providers
-agentgraph auth connect google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
-agentgraph auth connect slack [--add] [--account <account-id>]    # Slack cookie credentials
-agentgraph auth connect discord [--add] [--account <account-id>]  # Discord bot token
+agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
+agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
+agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
 
 # Server
 agentgraph serve [--reload]
@@ -86,7 +86,7 @@ An entity is a **stub** when it has no title and no content — it was reference
 
 When the user asks about graph data:
 1. Run `agentgraph connectors --json` to verify the relevant connector is installed and to inspect its last sync state
-2. Run `agentgraph auth --json` to inspect provider-level authentication, especially for shared auth like Google
-3. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth connect google`
+2. Run `agentgraph auth status --json` to inspect provider-level authentication, especially for shared auth like Google
+3. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
 4. Run the appropriate `agentgraph` command with `--json` to get structured output
 5. Use `edges` or `traverse` to follow relationships when needed

@@ -207,7 +207,7 @@ class DiscordConnector(BaseConnector):
                 username: str | None = data.get("username")
                 return ("ok", username or data.get("id"))
             if resp.status_code == 401:
-                return ("invalid", "token rejected (401) — run: agentgraph auth connect discord")
+                return ("invalid", "token rejected (401) — run: agentgraph auth discord")
             return ("invalid", f"HTTP {resp.status_code}")
         except Exception as exc:
             return ("invalid", f"network error: {type(exc).__name__}")

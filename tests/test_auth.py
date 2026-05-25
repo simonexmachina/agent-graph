@@ -133,7 +133,7 @@ def test_verify_google_auth_missing_refresh_token_returns_invalid(tmp_creds: Pat
     assert status == "invalid"
     assert detail is not None
     assert "missing Google refresh token" in detail
-    assert "agentgraph auth connect google" in detail
+    assert "agentgraph auth google" in detail
 
 
 def test_verify_google_auth_refresh_failure_returns_invalid(
@@ -161,7 +161,7 @@ def test_verify_google_auth_refresh_failure_returns_invalid(
     assert status == "invalid"
     assert detail is not None
     assert "Google refresh token was rejected (RuntimeError)" in detail
-    assert "agentgraph auth connect google" in detail
+    assert "agentgraph auth google" in detail
 
 
 def test_verify_google_auth_valid_returns_email(
@@ -191,7 +191,7 @@ def test_verify_google_auth_valid_returns_email(
 # ---------------------------------------------------------------------------
 
 def test_load_slack_creds_raises_when_missing(tmp_creds: Path) -> None:
-    with pytest.raises(RuntimeError, match="agentgraph auth connect slack"):
+    with pytest.raises(RuntimeError, match="agentgraph auth slack"):
         load_slack_creds()
 
 
@@ -205,7 +205,7 @@ def test_load_slack_creds_returns_model(tmp_creds: Path) -> None:
 
 
 def test_load_discord_creds_raises_when_missing(tmp_creds: Path) -> None:
-    with pytest.raises(RuntimeError, match="agentgraph auth connect discord"):
+    with pytest.raises(RuntimeError, match="agentgraph auth discord"):
         load_discord_creds()
 
 

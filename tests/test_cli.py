@@ -44,7 +44,7 @@ def test_help() -> None:
 def test_auth_help() -> None:
     result = runner.invoke(app, ["auth", "--help"])
     assert result.exit_code == 0
-    assert "connect" in result.output.lower()
+    assert "status" in result.output.lower()
 
 
 def test_mcp_config_includes_chatgpt() -> None:
@@ -193,19 +193,19 @@ async def _fake_backend_context() -> AsyncIterator[Any]:
     yield backend
 
 
-def test_auth_connect_unknown_provider_exits_nonzero() -> None:
+def test_auth_unknown_target_exits_nonzero() -> None:
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]):
-        result = runner.invoke(app, ["auth", "connect", "notaplatform"])
+        result = runner.invoke(app, ["auth", "notaplatform"])
     assert result.exit_code != 0
     assert "notaplatform" in result.output
 
 
-def test_auth_connect_dispatches_to_connector() -> None:
+def test_auth_provider_dispatches_to_connector() -> None:
     _FakeConnector.auth_called = False
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]):
-        result = runner.invoke(app, ["auth", "connect", "slack"])
+        result = runner.invoke(app, ["auth", "slack"])
     assert result.exit_code == 0
     assert _FakeConnector.auth_called
 
@@ -250,7 +250,7 @@ def test_auth_status_dedupes_shared_google_provider() -> None:
              "agentgraph.connectors.registry.get_all_connectors",
              return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
          ):
-        result = runner.invoke(app, ["auth"])
+        result = runner.invoke(app, ["auth", "status"])
 
     assert result.exit_code == 0
     assert result.output.count("account: User Example [acct-google]") == 1
@@ -285,7 +285,7 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
 
     monkeypatch.setattr(
         "agentgraph.auth.google_provider.verify_google_auth",
-        lambda: ("invalid", "Google refresh token was rejected (RefreshError) - run: agentgraph auth connect google"),
+        lambda: ("invalid", "Google refresh token was rejected (RefreshError) - run: agentgraph auth google"),
     )
     monkeypatch.setattr("agentgraph_connector_google.auth._find_free_port", lambda: 9999)
     monkeypatch.setattr("agentgraph_connector_google.auth._wait_for_callback", _fake_wait_for_callback)
@@ -293,7 +293,7 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
-        result = runner.invoke(app, ["auth", "connect", "google"])
+        result = runner.invoke(app, ["auth", "google"])
 
     assert result.exit_code == 0
     assert "Google credentials need re-authentication" in result.output
@@ -331,7 +331,7 @@ def test_auth_google_valid_credentials_can_skip_reauth(
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
-        result = runner.invoke(app, ["auth", "connect", "google"], input="n\n")
+        result = runner.invoke(app, ["auth", "google"], input="n\n")
 
     assert result.exit_code == 0
     assert "Google is already authenticated as user@example.com" in result.output

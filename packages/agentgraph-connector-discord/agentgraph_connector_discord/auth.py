@@ -17,7 +17,7 @@ def load_discord_creds(account_id: str | None = None) -> DiscordCredentials:
 
     data = load_platform_account("discord", account_id)
     if data is None:
-        raise RuntimeError("Discord credentials not configured. Run: agentgraph auth connect discord")
+        raise RuntimeError("Discord credentials not configured. Run: agentgraph auth discord")
     return DiscordCredentials(**data)
 
 
