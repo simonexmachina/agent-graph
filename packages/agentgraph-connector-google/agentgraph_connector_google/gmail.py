@@ -41,6 +41,7 @@ _SUBJECT_PREFIX_RE = re.compile(r"^(Re|Fwd|FW|RE|FWD):\s*", re.IGNORECASE)
 # Gmail API thread/message IDs are lowercase hex strings (16 chars).
 # URL hash fragments (legacy Gmail links) are base64-like and are NOT valid API IDs.
 _GMAIL_THREAD_ID_RE = re.compile(r"[0-9a-f]{16,}")
+_GMAIL_MESSAGE_ID_RE = re.compile(r"[0-9a-f]{16,}")
 
 
 def _build_service(account_id: str | None = None) -> Any:
@@ -112,12 +113,11 @@ def _format_date(date_str: str) -> str:
         return date_str
 
 
-def _thread_popout_ref(thread_id: str) -> str:
-    """Return the Gmail web thread reference expected by popout links."""
-    try:
-        return f"thread-a:r-{int(thread_id, 16)}"
-    except ValueError:
-        return thread_id
+def _gmail_web_url_from_meta(meta: dict[str, str] | None) -> str | None:
+    """Return the exact Gmail UI URL captured by the browser, when available."""
+    if not meta:
+        return None
+    return meta.get("gmail_popout_url")
 
 
 class GmailConnector(BaseConnector):
@@ -165,8 +165,7 @@ class GmailConnector(BaseConnector):
         return "mail.google.com" in url
 
     def entity_url(self, platform_entity_id: str) -> str | None:
-        thread_ref = _thread_popout_ref(platform_entity_id)
-        return f"https://mail.google.com/mail/u/0/popout?th=%23{thread_ref}&cvid=1"
+        return f"https://mail.google.com/mail/u/0/#all/{platform_entity_id}"
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         import asyncio
@@ -193,18 +192,26 @@ class GmailConnector(BaseConnector):
             return EntityBatch()
 
         gmail_message_id = (meta or {}).get("gmail_message_id")
-        if gmail_message_id:
+        if gmail_message_id and _GMAIL_MESSAGE_ID_RE.fullmatch(gmail_message_id):
             # Content script extracted the hex message ID from the DOM — use it
             # to fetch the exact thread via the API.
             logger.info("gmail: fetching specific thread via message ID %s", gmail_message_id)
-            batch = await _fetch_thread_by_message_id(gmail_message_id, account_id=selected_account_id)
+            batch = await _fetch_thread_by_message_id(
+                gmail_message_id,
+                account_id=selected_account_id,
+                fetch_meta=meta,
+            )
             await upsert_batch(batch)
             return batch
 
         if resource_id and _GMAIL_THREAD_ID_RE.fullmatch(resource_id):
             # Caller supplied a Gmail API thread ID (hex) — fetch directly.
             logger.info("gmail: fetching specific thread by thread ID %s", resource_id)
-            batch = await _fetch_thread_by_thread_id(resource_id, account_id=selected_account_id)
+            batch = await _fetch_thread_by_thread_id(
+                resource_id,
+                account_id=selected_account_id,
+                fetch_meta=meta,
+            )
             await upsert_batch(batch)
             return batch
 
@@ -304,7 +311,11 @@ class GmailConnector(BaseConnector):
         return combined, {"history_id": latest_history_id}
 
 
-async def _fetch_thread_by_thread_id(thread_id: str, account_id: str | None = None) -> EntityBatch:
+async def _fetch_thread_by_thread_id(
+    thread_id: str,
+    account_id: str | None = None,
+    fetch_meta: dict[str, str] | None = None,
+) -> EntityBatch:
     """Fetch a thread directly by its Gmail thread ID."""
     import asyncio
 
@@ -317,7 +328,7 @@ async def _fetch_thread_by_thread_id(thread_id: str, account_id: str | None = No
             userId="me", id=thread_id, format="full"
         ).execute(),
     )
-    entity, persons, edges = _thread_to_items(thread, account_id=account_id)
+    entity, persons, edges = _thread_to_items(thread, account_id=account_id, fetch_meta=fetch_meta)
     if not entity:
         return EntityBatch()
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
@@ -325,7 +336,11 @@ async def _fetch_thread_by_thread_id(thread_id: str, account_id: str | None = No
     return batch
 
 
-async def _fetch_thread_by_message_id(message_id: str, account_id: str | None = None) -> EntityBatch:
+async def _fetch_thread_by_message_id(
+    message_id: str,
+    account_id: str | None = None,
+    fetch_meta: dict[str, str] | None = None,
+) -> EntityBatch:
     """Fetch the thread containing a specific message, identified by its hex API message ID."""
     import asyncio
 
@@ -340,12 +355,13 @@ async def _fetch_thread_by_message_id(message_id: str, account_id: str | None = 
         ).execute(),
     )
     thread_id: str = msg["threadId"]
-    return await _fetch_thread_by_thread_id(thread_id, account_id=account_id)
+    return await _fetch_thread_by_thread_id(thread_id, account_id=account_id, fetch_meta=fetch_meta)
 
 
 def _thread_to_items(
     thread: dict[str, Any],
     account_id: str | None = None,
+    fetch_meta: dict[str, str] | None = None,
 ) -> tuple[EntityRecord | None, list[PersonRecord], list[EdgeRecord]]:
     """Convert a Gmail thread (full format) into graph items."""
     messages: list[dict[str, Any]] = thread.get("messages", [])
@@ -414,6 +430,16 @@ def _thread_to_items(
         ))
 
     label_ids: list[str] = messages[0].get("labelIds", [])
+    metadata: dict[str, str | int | float | bool | None] = {
+        "message_count": len(messages),
+        "snippet": thread.get("snippet", ""),
+        "label_ids": ",".join(label_ids),
+        **({"account_id": account_id} if account_id else {}),
+    }
+    web_url = _gmail_web_url_from_meta(fetch_meta)
+    if web_url:
+        metadata["web_url"] = web_url
+
     entity = EntityRecord(
         entity_type="Thread",
         platform="gmail",
@@ -422,12 +448,7 @@ def _thread_to_items(
         content=content,
         created_at=thread_created_at,
         updated_at=datetime.now(UTC),
-        metadata={
-            "message_count": len(messages),
-            "snippet": thread.get("snippet", ""),
-            "label_ids": ",".join(label_ids),
-            **({"account_id": account_id} if account_id else {}),
-        },
+        metadata=metadata,
     )
     return entity, persons, edges
 

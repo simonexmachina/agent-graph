@@ -15,8 +15,8 @@ import {
   updateMeta,
 } from "./lib/dwell.js";
 
-// Hex Gmail message IDs extracted by the content script, keyed by tab ID.
-const gmailMessageIdByTab = new Map<number, string>();
+// Gmail metadata extracted by the content script, keyed by tab ID.
+const gmailMetaByTab = new Map<number, Record<string, string>>();
 
 // ---------------------------------------------------------------------------
 // Tab tracking helpers
@@ -41,9 +41,7 @@ async function onFocus(tabId: number): Promise<void> {
     activeTabId = tabId;
     activeUrl = url;
 
-    const meta: Record<string, string> = {};
-    const gmailId = gmailMessageIdByTab.get(tabId);
-    if (gmailId) meta.gmail_message_id = gmailId;
+    const meta = { ...(gmailMetaByTab.get(tabId) ?? {}) };
 
     startDwell(tabId, url, meta);
   }
@@ -87,7 +85,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   cancelDwell(tabId);
-  gmailMessageIdByTab.delete(tabId);
+  gmailMetaByTab.delete(tabId);
   if (activeTabId === tabId) {
     activeTabId = null;
     activeUrl = "";
@@ -99,13 +97,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type === "gmail_message_id" && sender.tab?.id != null) {
+  if (message?.type === "gmail_meta" && sender.tab?.id != null) {
     const tabId = sender.tab.id;
-    const messageId = message.messageId as string;
-    gmailMessageIdByTab.set(tabId, messageId);
+    const meta = message.meta as Record<string, string>;
+    gmailMetaByTab.set(tabId, meta);
     // Inject into any pending dwell for this tab (content script fires ~300ms
     // after navigation, well within the 3s threshold).
-    updateMeta(tabId, { gmail_message_id: messageId });
+    updateMeta(tabId, meta);
   }
 });
 
@@ -167,7 +165,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.url && !changeInfo.url.includes("mail.google.com")) {
-    gmailMessageIdByTab.delete(tabId);
+    gmailMetaByTab.delete(tabId);
   }
 });
 

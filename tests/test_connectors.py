@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
-from agentgraph_connector_google.gmail import GmailConnector
+from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
@@ -307,10 +307,41 @@ def test_gdocs_can_handle(gdocs_connector: GoogleDocsConnector) -> None:
 def test_gmail_entity_url_uses_popout_view(gmail_connector: GmailConnector) -> None:
     assert (
         gmail_connector.entity_url("18f0c1d2e3a4b5c6")
-        == "https://mail.google.com/mail/u/0/popout?th=%23thread-a:r-1797149362827343302&cvid=1"
+        == "https://mail.google.com/mail/u/0/#all/18f0c1d2e3a4b5c6"
     )
 
 
 def test_slack_can_handle(slack_connector: SlackConnector) -> None:
     assert slack_connector.can_handle("https://app.slack.com/client/T123/C456")
     assert not slack_connector.can_handle("https://docs.google.com")
+
+
+def test_gmail_thread_to_items_preserves_browser_web_url() -> None:
+    thread = {
+        "id": "18f0c1d2e3a4b5c6",
+        "snippet": "hello",
+        "messages": [
+            {
+                "labelIds": ["INBOX"],
+                "payload": {
+                    "headers": [
+                        {"name": "Subject", "value": "Test subject"},
+                        {"name": "From", "value": "Alice <alice@example.com>"},
+                        {"name": "To", "value": "Bob <bob@example.com>"},
+                        {"name": "Date", "value": "Mon, 01 Jan 2024 10:00:00 +0000"},
+                    ],
+                    "body": {"data": ""},
+                },
+            }
+        ],
+    }
+
+    entity, persons, edges = _thread_to_items(
+        thread,
+        fetch_meta={"gmail_popout_url": "https://mail.google.com/mail/u/0/popout?search=inbox&th=%23thread-a:r-1&cvid=1"},
+    )
+
+    assert entity is not None
+    assert entity.metadata["web_url"] == "https://mail.google.com/mail/u/0/popout?search=inbox&th=%23thread-a:r-1&cvid=1"
+    assert persons
+    assert edges

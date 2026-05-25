@@ -60,7 +60,7 @@ _DISCORD_DM_RE = re.compile(
 # Thread IDs are always 16+ mixed-case/hex chars; Gmail tab labels
 # (promotions, social, updates, forums) are short lowercase words and excluded.
 _GMAIL_THREAD_RE = re.compile(
-    r"https://mail\.google\.com/mail/u/\d+/#[^/\s]+(?:/[^/\s]+)*/(?P<thread_id>[A-Za-z0-9_+=/-]{16,})"
+    r"https://mail\.google\.com/mail/u/\d+/#[^/\s]+(?:/[^/\s]+)*/(?P<thread_id>[A-Za-z0-9_+=:/|-]{16,})"
 )
 
 

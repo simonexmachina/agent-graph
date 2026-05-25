@@ -30,6 +30,18 @@ from agentgraph.server.router import SourceReference, classify_url
             "https://app.slack.com/client/TXXXXXXXX/CYYYYYYY",
             SourceReference(source="slack", resource_type="channel", resource_id="TXXXXXXXX/CYYYYYYY"),
         ),
+        (
+            "https://mail.google.com/mail/u/0/#inbox/18f0c1d2e3a4b5c6",
+            SourceReference(source="gmail", resource_type="thread", resource_id="18f0c1d2e3a4b5c6"),
+        ),
+        (
+            "https://mail.google.com/mail/u/0/#all/thread-a:r-2822072678036458979|msg-f:1829022956460283525",
+            SourceReference(
+                source="gmail",
+                resource_type="thread",
+                resource_id="thread-a:r-2822072678036458979|msg-f:1829022956460283525",
+            ),
+        ),
         ("https://github.com/org/repo", None),
         ("https://example.com", None),
         ("not-a-url", None),
