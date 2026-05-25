@@ -369,6 +369,40 @@ async def test_browse_nodes_fall_back_to_content_for_display_name() -> None:
         )
 
     assert result["nodes"][0]["display_name"] == "First line with extra spacing"
+    assert result["nodes"][0]["viewer_label"] == "First line with extra spacing"
+
+
+@pytest.mark.asyncio
+async def test_browse_message_nodes_include_truncated_viewer_label() -> None:
+    """Message nodes expose a shortened label for graph rendering."""
+    from agentgraph.server.cli_api import cli_browse
+
+    message = _entity(entity_type="Message", title="")
+    message["content"] = (
+        "This is a long message body that should be truncated in the viewer label "
+        "while keeping the full display name available in the detail view."
+    )
+
+    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
+         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[message])), \
+         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+        result = await cli_browse(
+            node_id=None,
+            entity_type=[],
+            search=None,
+            platform=None,
+            since=None,
+            depth=2,
+            limit=50,
+        )
+
+    node = result["nodes"][0]
+    assert node["display_name"].endswith("detail view.")
+    assert node["viewer_label"].endswith("…")
+    assert len(node["viewer_label"]) <= 80
 
 
 # ---------------------------------------------------------------------------

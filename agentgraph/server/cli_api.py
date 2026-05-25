@@ -52,9 +52,23 @@ def _entity_display_name(entity: dict[str, Any]) -> str:
     return "Untitled"
 
 
+def _truncate_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: max(limit - 1, 0)].rstrip() + "…"
+
+
+def _entity_viewer_label(entity: dict[str, Any]) -> str:
+    display_name = _entity_display_name(entity)
+    if entity.get("entity_type") == "Message":
+        return _truncate_text(display_name, 80)
+    return display_name
+
+
 def _with_display_name(entity: dict[str, Any]) -> dict[str, Any]:
     enriched = dict(entity)
     enriched["display_name"] = _entity_display_name(entity)
+    enriched["viewer_label"] = _entity_viewer_label(entity)
     return enriched
 
 
