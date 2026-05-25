@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import json as _json
+from typing import cast
+
 import typer
 
 from agentgraph.connectors.base import BaseConnector
@@ -11,6 +15,12 @@ app = typer.Typer(
     help="Local knowledge graph for AI agents.",
     no_args_is_help=True,
 )
+auth_app = typer.Typer(
+    help="Show auth provider state or manage connector authentication.",
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
+app.add_typer(auth_app, name="auth")
 
 
 def _run_auth_flow(connector_cls: type[BaseConnector], account_id: str | None, add: bool) -> None:
@@ -20,125 +30,48 @@ def _run_auth_flow(connector_cls: type[BaseConnector], account_id: str | None, a
         connector_cls.run_auth_flow()
 
 
-def _list_accounts(connector: BaseConnector) -> list[object]:
-    list_accounts = getattr(type(connector), "list_accounts", None)
-    if callable(list_accounts):
-        return list_accounts()
-    return []
+def _status_label(status: str) -> str:
+    return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(status, status)
 
 
-async def _verify_auth(
-    connector_cls: type[BaseConnector],
-    account_id: str | None = None,
-) -> tuple[str, str | None]:
-    try:
-        return await connector_cls.verify_auth(account_id)
-    except TypeError:
-        return await connector_cls.verify_auth()
-
-
-
-@app.command()
+@auth_app.callback()
 def auth(
-    platform: str = typer.Argument(..., help="Platform to authenticate (e.g. google, slack, discord)"),
-    add: bool = typer.Option(False, "--add", help="Add another authenticated account for this platform"),
-    account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
-    xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
-    d_cookie: str | None = typer.Option(None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"),
-) -> None:
-    """Authenticate with a platform connector."""
-    from agentgraph.connectors.registry import bootstrap, get_all_connectors
-
-    bootstrap()
-    seen: dict[str, BaseConnector] = {}
-    for connector in get_all_connectors():
-        label: str = getattr(connector, "auth_label", None) or connector.source
-        if label not in seen:
-            seen[label] = connector
-
-    if platform not in seen:
-        available = ", ".join(sorted(seen))
-        typer.echo(f"Unknown platform '{platform}'. Available: {available}", err=True)
-        raise typer.Exit(code=1)
-
-    if platform == "slack" and (xoxc_token is not None or d_cookie is not None):
-        from agentgraph_connector_slack.auth import run_cookie_flow
-        run_cookie_flow(account_id=account, add=add, xoxc_token=xoxc_token, d_cookie=d_cookie)
-        return
-
-    _run_auth_flow(type(seen[platform]), account, add)
-
-
-@app.command()
-def connectors(
+    ctx: typer.Context,
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """List installed connectors and their auth status."""
-    import asyncio
-    import json as _json
+    """Show authentication state for each auth provider."""
+    if ctx.invoked_subcommand is not None:
+        return
 
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
-    from agentgraph.connectors.status import connector_status_items
+    from agentgraph.connectors.status import auth_provider_status_items
 
     bootstrap()
-    all_connectors = get_all_connectors()
-
-    async def _gather() -> tuple[list[list[dict[str, object]]], list[tuple[str, str | None]]]:
-        account_rows: list[list[dict[str, object]]] = []
-        connector_statuses: list[tuple[str, str | None]] = []
-        for connector in all_connectors:
-            accounts = _list_accounts(connector)
-            rows: list[dict[str, object]] = []
-            statuses: list[tuple[str, str | None]] = []
-            for account in accounts:
-                account_id = getattr(account, "account_id", None)
-                status, detail = await _verify_auth(type(connector), account_id)
-                rows.append({
-                    "account_id": getattr(account, "account_id", None),
-                    "label": getattr(account, "label", None),
-                    "user_id": getattr(account, "user_id", None),
-                    "workspace_id": getattr(account, "workspace_id", None),
-                    "email": getattr(account, "email", None),
-                    "auth_status": status,
-                    "auth_detail": detail,
-                })
-                statuses.append((status, detail))
-            if statuses:
-                if any(status == "invalid" for status, _ in statuses):
-                    connector_status = next((item for item in statuses if item[0] == "invalid"), statuses[0])
-                elif any(status == "ok" for status, _ in statuses):
-                    connector_status = ("ok", f"{len(statuses)} account(s)")
-                else:
-                    connector_status = ("missing", None)
-            else:
-                connector_status = await _verify_auth(type(connector))
-            account_rows.append(rows)
-            connector_statuses.append(connector_status)
-        return account_rows, connector_statuses
-
-    account_rows, statuses = asyncio.run(_gather())
-
-    items = connector_status_items(all_connectors, account_rows, statuses)
+    items = asyncio.run(auth_provider_status_items(get_all_connectors()))
 
     if json:
         typer.echo(_json.dumps(items, indent=2))
         return
 
-    status_label = {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}
     for item in items:
-        sync = str(item["sync"])
-        desc = item["description"] or item["source"]
         status = str(item["auth_status"])
         detail = item["auth_detail"]
-        auth = status_label.get(status, status)
+        auth_state = _status_label(status)
         if detail:
-            auth = f"{auth} ({detail})" if status != "ok" else f"{auth} as {detail}"
-        typer.echo(f"  {item['source']:<12}  {desc}")
-        typer.echo(f"  {'':<12}  auth: {auth}  |  sync: {sync}")
-        accounts = item.get("accounts") or []
+            auth_state = (
+                f"{auth_state} ({detail})"
+                if status != "ok"
+                else f"{auth_state} as {detail}"
+            )
+        connectors = ", ".join(
+            str(source) for source in cast(list[object], item["connectors"])
+        )
+        typer.echo(f"  {item['provider']:<12}  {item['description']}")
+        typer.echo(f"  {'':<12}  auth: {auth_state}  |  connectors: {connectors}")
+        accounts = cast(list[dict[str, object]], item.get("accounts") or [])
         for account in accounts:
             account_status = str(account["auth_status"])
-            account_auth = status_label.get(account_status, account_status)
+            account_auth = _status_label(account_status)
             account_detail = account.get("auth_detail")
             if account_detail:
                 account_auth = (
@@ -147,6 +80,72 @@ def connectors(
                     else f"{account_auth} as {account_detail}"
                 )
             typer.echo(f"  {'':<12}  account: {account['label']} [{account['account_id']}]  |  {account_auth}")
+
+
+@auth_app.command("connect")
+def auth_connect(
+    provider: str = typer.Argument(..., help="Auth provider to authenticate (e.g. google, slack, discord)"),
+    add: bool = typer.Option(False, "--add", help="Add another authenticated account for this provider"),
+    account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
+    xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
+    d_cookie: str | None = typer.Option(None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"),
+) -> None:
+    """Authenticate or re-authenticate an auth provider."""
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import auth_provider_connectors
+
+    bootstrap()
+    grouped = auth_provider_connectors(get_all_connectors())
+    seen = {label: connectors[0] for label, connectors in grouped.items()}
+
+    if provider not in seen:
+        available = ", ".join(sorted(seen))
+        typer.echo(f"Unknown auth provider '{provider}'. Available: {available}", err=True)
+        raise typer.Exit(code=1)
+
+    if provider == "slack" and (xoxc_token is not None or d_cookie is not None):
+        from agentgraph_connector_slack.auth import run_cookie_flow  # type: ignore[import-not-found]
+        run_cookie_flow(account_id=account, add=add, xoxc_token=xoxc_token, d_cookie=d_cookie)
+        return
+
+    _run_auth_flow(type(seen[provider]), account, add)
+
+
+@app.command()
+def connectors(
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List installed connectors and their auth status."""
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import connector_status_items
+    from agentgraph.core.runtime import backend_context
+
+    bootstrap()
+    all_connectors = get_all_connectors()
+
+    async def _gather() -> list[dict[str, object]]:
+        async with backend_context() as backend:
+            return await connector_status_items(all_connectors, backend)
+
+    items = asyncio.run(_gather())
+
+    if json:
+        typer.echo(_json.dumps(items, indent=2))
+        return
+
+    for item in items:
+        sync = str(item["sync"])
+        last_sync = str(item["last_sync"])
+        desc = item["description"] or item["source"]
+        status = str(item["auth_status"])
+        detail = item["auth_detail"]
+        auth = _status_label(status)
+        if detail:
+            auth = f"{auth} ({detail})" if status != "ok" else f"{auth} as {detail}"
+        typer.echo(f"  {item['source']:<12}  {desc}")
+        typer.echo(
+            f"  {'':<12}  auth: {auth} via {item['auth_provider']}  |  sync: {sync}  |  last sync: {last_sync}"
+        )
 
 
 @app.command()

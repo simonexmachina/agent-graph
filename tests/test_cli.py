@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import Callable
-from datetime import timedelta
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
 from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
 from agentgraph.cli import app
+from agentgraph.connectors.base import ConnectorAccount
 
 runner = CliRunner()
 
@@ -40,7 +44,7 @@ def test_help() -> None:
 def test_auth_help() -> None:
     result = runner.invoke(app, ["auth", "--help"])
     assert result.exit_code == 0
-    assert "platform" in result.output.lower()
+    assert "connect" in result.output.lower()
 
 
 def test_mcp_config_includes_chatgpt() -> None:
@@ -90,6 +94,19 @@ class _FakeGoogleConnector:
     async def verify_auth(cls) -> tuple[str, str | None]:
         return ("ok", "user@example.com")
 
+    @classmethod
+    def list_accounts(cls) -> list[ConnectorAccount]:
+        return [
+            ConnectorAccount(
+                account_id="acct-google",
+                label="User Example",
+                auth_group="google",
+                source=cls.source,
+                user_id="user@example.com",
+                email="user@example.com",
+            )
+        ]
+
 
 class _FakeDriveConnector:
     source = "gdrive"
@@ -102,6 +119,10 @@ class _FakeDriveConnector:
     @classmethod
     async def verify_auth(cls) -> tuple[str, str | None]:
         return ("ok", "user@example.com")
+
+    @classmethod
+    def list_accounts(cls) -> list[ConnectorAccount]:
+        return _FakeGoogleConnector.list_accounts()
 
 
 class _FakeGoogleToken:
@@ -158,25 +179,40 @@ def _fake_webbrowser_open(url: str) -> bool:
     return True
 
 
-def test_auth_unknown_platform_exits_nonzero() -> None:
+@asynccontextmanager
+async def _fake_backend_context() -> AsyncIterator[Any]:
+    backend = MagicMock()
+    async def _get_platform_last_synced_at(platform: str) -> datetime | None:
+        values = {
+            "gdocs": datetime(2026, 5, 25, 1, 2, 3, tzinfo=UTC),
+            "gdrive": None,
+        }
+        return values.get(platform)
+
+    backend.get_platform_last_synced_at = AsyncMock(side_effect=_get_platform_last_synced_at)
+    yield backend
+
+
+def test_auth_connect_unknown_provider_exits_nonzero() -> None:
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]):
-        result = runner.invoke(app, ["auth", "notaplatform"])
+        result = runner.invoke(app, ["auth", "connect", "notaplatform"])
     assert result.exit_code != 0
     assert "notaplatform" in result.output
 
 
-def test_auth_dispatches_to_connector() -> None:
+def test_auth_connect_dispatches_to_connector() -> None:
     _FakeConnector.auth_called = False
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]):
-        result = runner.invoke(app, ["auth", "slack"])
+        result = runner.invoke(app, ["auth", "connect", "slack"])
     assert result.exit_code == 0
     assert _FakeConnector.auth_called
 
 
 def test_connectors_reports_delegated_polling() -> None:
     with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
          patch(
              "agentgraph.connectors.registry.get_all_connectors",
              return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
@@ -187,10 +223,13 @@ def test_connectors_reports_delegated_polling() -> None:
     assert "gdocs" in result.output
     assert "sync: via gdrive poll" in result.output
     assert "sync: polling every 10m for gdocs" in result.output
+    assert "last sync: 2026-05-25 01:02:03Z" in result.output
+    assert "account:" not in result.output
 
 
 def test_connectors_json_reports_delegated_polling() -> None:
     with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
          patch(
              "agentgraph.connectors.registry.get_all_connectors",
              return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
@@ -198,9 +237,24 @@ def test_connectors_json_reports_delegated_polling() -> None:
         result = runner.invoke(app, ["connectors", "--json"])
 
     assert result.exit_code == 0
-    assert '"polled_by": [' in result.output
-    assert '"gdrive"' in result.output
-    assert '"poll_delegates": [' in result.output
+    parsed = json.loads(result.output)
+    assert parsed[0]["auth_provider"] == "google"
+    assert parsed[0]["last_synced_at"] == "2026-05-25T01:02:03+00:00"
+    assert parsed[0]["polled_by"] == ["gdrive"]
+    assert parsed[1]["poll_delegates"] == ["gdocs"]
+
+
+def test_auth_status_dedupes_shared_google_provider() -> None:
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch(
+             "agentgraph.connectors.registry.get_all_connectors",
+             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
+         ):
+        result = runner.invoke(app, ["auth"])
+
+    assert result.exit_code == 0
+    assert result.output.count("account: User Example [acct-google]") == 1
+    assert "connectors: gdocs, gdrive" in result.output
 
 
 def test_auth_google_invalid_existing_credentials_reuses_client_config(
@@ -231,7 +285,7 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
 
     monkeypatch.setattr(
         "agentgraph.auth.google_provider.verify_google_auth",
-        lambda: ("invalid", "Google refresh token was rejected (RefreshError) - run: agentgraph auth google"),
+        lambda: ("invalid", "Google refresh token was rejected (RefreshError) - run: agentgraph auth connect google"),
     )
     monkeypatch.setattr("agentgraph_connector_google.auth._find_free_port", lambda: 9999)
     monkeypatch.setattr("agentgraph_connector_google.auth._wait_for_callback", _fake_wait_for_callback)
@@ -239,7 +293,7 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
-        result = runner.invoke(app, ["auth", "google"])
+        result = runner.invoke(app, ["auth", "connect", "google"])
 
     assert result.exit_code == 0
     assert "Google credentials need re-authentication" in result.output
@@ -277,7 +331,7 @@ def test_auth_google_valid_credentials_can_skip_reauth(
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
-        result = runner.invoke(app, ["auth", "google"], input="n\n")
+        result = runner.invoke(app, ["auth", "connect", "google"], input="n\n")
 
     assert result.exit_code == 0
     assert "Google is already authenticated as user@example.com" in result.output

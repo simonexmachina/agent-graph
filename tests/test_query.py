@@ -71,6 +71,7 @@ def _mock_backend(**method_overrides: Any) -> Any:
         "query_by_filter": AsyncMock(return_value=[]),
         "list_entities": AsyncMock(return_value=[]),
         "touch_last_accessed_by_ids": AsyncMock(return_value=None),
+        "get_platform_last_synced_at": AsyncMock(return_value=None),
     }
     for name, value in {**defaults, **method_overrides}.items():
         setattr(backend, name, value)
@@ -266,3 +267,61 @@ async def test_mcp_download_entity_tool() -> None:
         result = await download_entity_tool("abc123", "/tmp")
 
     assert json.loads(result) == fake_result
+
+
+@pytest.mark.asyncio
+async def test_mcp_list_auth_providers_tool_returns_json() -> None:
+    from agentgraph.mcp.server import list_auth_providers_tool
+
+    fake_items = [
+        {
+            "provider": "google",
+            "description": "Shared auth for gdocs, gdrive",
+            "connectors": ["gdocs", "gdrive"],
+            "shared": True,
+            "auth_status": "ok",
+            "auth_detail": "1 account(s)",
+            "accounts": [],
+        }
+    ]
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]), \
+         patch("agentgraph.connectors.status.auth_provider_status_items", new=AsyncMock(return_value=fake_items)):
+        result = await list_auth_providers_tool()
+
+    assert json.loads(result) == fake_items
+
+
+@pytest.mark.asyncio
+async def test_mcp_list_connectors_tool_returns_json() -> None:
+    from agentgraph.mcp.server import list_connectors_tool
+
+    fake_items = [
+        {
+            "source": "gdocs",
+            "description": "Google Docs",
+            "auth_provider": "google",
+            "shared_auth": True,
+            "auth_status": "ok",
+            "auth_detail": "1 account(s)",
+            "accounts": [],
+            "account_count": 1,
+            "url_patterns": [],
+            "polls": False,
+            "poll_interval_seconds": None,
+            "poll_delegates": [],
+            "polled_by": ["gdrive"],
+            "sync": "via gdrive poll",
+            "last_synced_at": None,
+            "last_sync": "never",
+        }
+    ]
+    set_backend(_mock_backend(get_platform_last_synced_at=AsyncMock(return_value=None)))
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]), \
+         patch("agentgraph.connectors.status.connector_status_items", new=AsyncMock(return_value=fake_items)):
+        result = await list_connectors_tool()
+
+    assert json.loads(result) == fake_items

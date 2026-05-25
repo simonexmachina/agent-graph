@@ -745,6 +745,16 @@ class SQLiteBackend(StorageBackend):
         )
         return datetime.fromisoformat(val) if val else None
 
+    async def get_platform_last_synced_at(self, platform: str) -> datetime | None:
+        val = await self._fetchval(
+            """
+            SELECT max(synced_at) FROM entities
+            WHERE platform = ?
+            """,
+            [platform],
+        )
+        return datetime.fromisoformat(val) if val else None
+
     async def reset_synced_at(self, platform: str, platform_entity_id: str) -> None:
         await self._execute(
             "UPDATE entities SET synced_at = NULL WHERE platform = ? AND platform_entity_id = ?",

@@ -674,6 +674,18 @@ class PostgresBackend(StorageBackend):
             )
         return result
 
+    async def get_platform_last_synced_at(self, platform: str) -> datetime | None:
+        pool = self._pool_or_raise()
+        async with pool.acquire() as conn:
+            result: datetime | None = await conn.fetchval(
+                """
+                SELECT max(synced_at) FROM entities
+                WHERE platform = $1
+                """,
+                platform,
+            )
+        return result
+
     async def reset_synced_at(
         self, platform: str, platform_entity_id: str
     ) -> None:

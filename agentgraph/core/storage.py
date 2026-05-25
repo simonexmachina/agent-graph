@@ -154,6 +154,9 @@ class StorageBackend(ABC):
     ) -> datetime | None: ...
 
     @abstractmethod
+    async def get_platform_last_synced_at(self, platform: str) -> datetime | None: ...
+
+    @abstractmethod
     async def reset_synced_at(
         self, platform: str, platform_entity_id: str
     ) -> None: ...

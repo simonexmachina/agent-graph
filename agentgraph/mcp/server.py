@@ -18,6 +18,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from agentgraph.core.context import get_backend
 from agentgraph.graph.query import (
     get_edges,
     get_entity,
@@ -28,22 +29,6 @@ from agentgraph.graph.query import (
 
 logger = logging.getLogger(__name__)
 mcp = FastMCP("AgentGraph")
-
-
-def _list_accounts(connector: object) -> list[object]:
-    list_accounts = getattr(type(connector), "list_accounts", None)
-    if callable(list_accounts):
-        return list_accounts()
-    return []
-
-
-async def _verify_auth(connector: object, account_id: str | None = None) -> tuple[str, str | None]:
-    verify_auth = type(connector).verify_auth
-    try:
-        return await verify_auth(account_id)
-    except TypeError:
-        return await verify_auth()
-
 
 # ---------------------------------------------------------------------------
 # list_connectors — connector discovery for agents
@@ -62,57 +47,50 @@ async def list_connectors_tool() -> str:
         JSON array of connector objects, each with:
           - source: platform name to pass as the platform= argument
           - description: what this connector ingests
+          - auth_provider: shared auth provider key (e.g. "google")
           - auth_status: "ok" | "missing" | "invalid"
           - auth_detail: aggregate auth summary or error message; null if missing
-          - accounts: authenticated account rows with account_id, label, workspace_id,
-            email, auth_status, and auth_detail
+          - shared_auth: true when multiple connectors share the same auth provider
+          - account_count: number of authenticated accounts for that provider
           - url_patterns: URL patterns this connector recognises
           - polls: true if this connector has its own background poll
           - poll_interval_seconds: direct poll interval, or null
           - poll_delegates: connector sources refreshed by this connector's poll
           - polled_by: connector sources whose poll refreshes this connector
           - sync: human-readable sync summary
+          - last_synced_at: latest entity sync timestamp for this connector source, or null
+          - last_sync: human-readable last-sync label
     """
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
     from agentgraph.connectors.status import connector_status_items
 
     bootstrap()
     all_connectors = get_all_connectors()
-    account_rows: list[list[dict[str, object]]] = []
-    statuses: list[tuple[str, str | None]] = []
-    for connector in all_connectors:
-        accounts = _list_accounts(connector)
-        rows: list[dict[str, object]] = []
-        account_statuses: list[tuple[str, str | None]] = []
-        for account in accounts:
-            account_id = getattr(account, "account_id", None)
-            status, detail = await _verify_auth(connector, account_id)
-            rows.append({
-                "account_id": getattr(account, "account_id", None),
-                "label": getattr(account, "label", None),
-                "user_id": getattr(account, "user_id", None),
-                "workspace_id": getattr(account, "workspace_id", None),
-                "email": getattr(account, "email", None),
-                "auth_status": status,
-                "auth_detail": detail,
-            })
-            account_statuses.append((status, detail))
-        if account_statuses:
-            if any(status == "invalid" for status, _ in account_statuses):
-                connector_status = next(
-                    (item for item in account_statuses if item[0] == "invalid"),
-                    account_statuses[0],
-                )
-            elif any(status == "ok" for status, _ in account_statuses):
-                connector_status = ("ok", f"{len(account_statuses)} account(s)")
-            else:
-                connector_status = ("missing", None)
-        else:
-            connector_status = await _verify_auth(connector)
-        account_rows.append(rows)
-        statuses.append(connector_status)
+    result = await connector_status_items(all_connectors, get_backend())
+    return json.dumps(result)
 
-    result = connector_status_items(all_connectors, account_rows, statuses)
+
+@mcp.tool()
+async def list_auth_providers_tool() -> str:
+    """
+    List authentication providers and their current account/auth state.
+
+    Returns:
+        JSON array of auth provider objects, each with:
+          - provider: auth provider key such as "google" or "slack"
+          - description: provider summary
+          - connectors: connector sources that use this provider
+          - shared: true when multiple connectors use the same provider
+          - auth_status: "ok" | "missing" | "invalid"
+          - auth_detail: aggregate auth summary or error message; null if missing
+          - accounts: authenticated account rows with account_id, label, workspace_id,
+            email, auth_status, and auth_detail
+    """
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import auth_provider_status_items
+
+    bootstrap()
+    result = await auth_provider_status_items(get_all_connectors())
     return json.dumps(result)
 
 

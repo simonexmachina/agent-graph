@@ -18,7 +18,7 @@ def load_slack_creds(account_id: str | None = None) -> SlackCredentials:
 
     data = load_platform_account("slack", account_id)
     if data is None:
-        raise RuntimeError("Slack credentials not configured. Run: agentgraph auth slack")
+        raise RuntimeError("Slack credentials not configured. Run: agentgraph auth connect slack")
     return SlackCredentials(**data)
 
 
