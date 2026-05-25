@@ -429,6 +429,11 @@
     return EDGE_COLORS[type] || '#64748b';
   }
 
+  function truncateLabel(label, maxLength) {
+    if (!label) return '';
+    return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label;
+  }
+
   // ── Cytoscape init ────────────────────────────────────────────────────────
   const cy = cytoscape({
     container: document.getElementById('cy'),
@@ -439,7 +444,7 @@
           'background-color': (ele) => nodeColor(ele.data('entity_type')),
           'label': (ele) => {
             const type = ele.data('entity_type') || '';
-            const lbl = (ele.data('label') || '').substring(0, 30);
+            const lbl = truncateLabel(ele.data('label') || '', 30);
             return `[${type}]\n${lbl}`;
           },
           'color': '#e2e8f0',
@@ -560,7 +565,7 @@
 
   // ── Cytoscape formatting ───────────────────────────────────────────────────
   function entityToNode(entity) {
-    const label = (entity.title || entity.platform_entity_id || entity.id || '').substring(0, 60);
+    const label = entity.display_name || entity.title || entity.platform_entity_id || entity.id || '';
     return {
       data: {
         id: entity.id,

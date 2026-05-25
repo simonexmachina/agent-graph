@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -22,6 +23,43 @@ from agentgraph.graph.query import (
 )
 
 router = APIRouter(prefix="/api/cli", tags=["cli"])
+
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _normalise_display_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = _WHITESPACE_RE.sub(" ", value).strip()
+    return text or None
+
+
+def _entity_display_name(entity: dict[str, Any]) -> str:
+    metadata = entity.get("metadata")
+    metadata_dict = metadata if isinstance(metadata, dict) else {}
+    candidates = (
+        entity.get("title"),
+        metadata_dict.get("display_name"),
+        metadata_dict.get("canonical_email"),
+        entity.get("content"),
+        entity.get("platform_entity_id"),
+        entity.get("id"),
+    )
+    for candidate in candidates:
+        text = _normalise_display_text(candidate)
+        if text:
+            return text
+    return "Untitled"
+
+
+def _with_display_name(entity: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(entity)
+    enriched["display_name"] = _entity_display_name(entity)
+    return enriched
+
+
+def _with_display_names(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_with_display_name(entity) for entity in entities]
 
 
 @router.get("/meta")
@@ -66,7 +104,7 @@ async def cli_get_entity(entity_id: str) -> dict[str, Any]:
     entity = await get_entity(entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
-    return entity
+    return _with_display_name(entity)
 
 
 @router.get("/edges/{entity_id:path}")
@@ -200,7 +238,7 @@ async def cli_browse(
                 visible_ids = {n["id"] for n in nodes}
                 edges = await get_edges_for_entities(list(visible_ids))
 
-    return {"nodes": nodes, "edges": edges}
+    return {"nodes": _with_display_names(nodes), "edges": edges}
 
 
 @router.get("/query")
