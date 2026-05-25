@@ -160,6 +160,56 @@
     height: 100%;
   }
 
+  #hover-card {
+    position: absolute;
+    min-width: 180px;
+    max-width: 320px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-bright);
+    border-radius: 8px;
+    background: rgba(20, 23, 32, 0.96);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    z-index: 6;
+    display: none;
+    backdrop-filter: blur(8px);
+  }
+
+  #hover-card.open {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  #hover-card-type {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  #hover-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  #hover-card-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  #hover-card-snippet {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
   /* ── spinner ────────────────────────────────────────────────────────────── */
   #spinner {
     position: absolute;
@@ -383,6 +433,12 @@
   <!-- ── Canvas ──────────────────────────────────────────────────────────── -->
   <div id="canvas-wrap">
     <div id="cy"></div>
+    <div id="hover-card">
+      <div id="hover-card-type"></div>
+      <div id="hover-card-title"></div>
+      <div id="hover-card-meta"></div>
+      <div id="hover-card-snippet"></div>
+    </div>
     <div id="spinner"><div class="spinner-ring"></div></div>
     <div id="empty-state" style="display:none">No entities to display</div>
   </div>
@@ -526,6 +582,11 @@
   let debounceTimer = null;
   const spinner = document.getElementById('spinner');
   const emptyState = document.getElementById('empty-state');
+  const hoverCard = document.getElementById('hover-card');
+  const hoverCardType = document.getElementById('hover-card-type');
+  const hoverCardTitle = document.getElementById('hover-card-title');
+  const hoverCardMeta = document.getElementById('hover-card-meta');
+  const hoverCardSnippet = document.getElementById('hover-card-snippet');
 
   // ── UI refs ───────────────────────────────────────────────────────────────
   const searchInput   = document.getElementById('search-input');
@@ -572,6 +633,7 @@
         label,
         entity_type: entity.entity_type,
         platform: entity.platform,
+        platform_entity_id: entity.platform_entity_id || '',
         content: (entity.content || '').substring(0, 200),
       }
     };
@@ -621,6 +683,7 @@
     applyZoomStyles();
 
     if (cy.nodes().length === 0) {
+      hideHoverCard();
       emptyState.style.display = 'flex';
     } else {
       emptyState.style.display = 'none';
@@ -957,9 +1020,77 @@
     return (entity.metadata && entity.metadata.web_url) || null;
   }
 
+  function positionHoverCard(node) {
+    if (!hoverCard.classList.contains('open')) return;
+
+    const rendered = node.renderedPosition();
+    const canvasRect = cy.container().getBoundingClientRect();
+    const cardRect = hoverCard.getBoundingClientRect();
+    const offset = 14;
+
+    let left = rendered.x + offset;
+    let top = rendered.y + offset;
+
+    if (left + cardRect.width > canvasRect.width - 12) {
+      left = rendered.x - cardRect.width - offset;
+    }
+    if (top + cardRect.height > canvasRect.height - 12) {
+      top = rendered.y - cardRect.height - offset;
+    }
+
+    left = Math.max(12, left);
+    top = Math.max(12, top);
+
+    hoverCard.style.left = `${left}px`;
+    hoverCard.style.top = `${top}px`;
+  }
+
+  function hideHoverCard() {
+    hoverCard.classList.remove('open');
+  }
+
+  function showHoverCard(node) {
+    const data = node.data();
+    hoverCardType.textContent = data.entity_type || 'Entity';
+    hoverCardTitle.textContent = data.label || data.id || 'Untitled';
+
+    const metaParts = [];
+    if (data.platform) metaParts.push(data.platform);
+    if (data.platform_entity_id) metaParts.push(truncateLabel(data.platform_entity_id, 40));
+    hoverCardMeta.textContent = metaParts.join(' • ');
+
+    if (data.content) {
+      hoverCardSnippet.textContent = truncateLabel(data.content, 180);
+      hoverCardSnippet.style.display = 'block';
+    } else {
+      hoverCardSnippet.textContent = '';
+      hoverCardSnippet.style.display = 'none';
+    }
+
+    hoverCard.classList.add('open');
+    positionHoverCard(node);
+  }
+
   // ── Cytoscape events ──────────────────────────────────────────────────────
+  cy.on('mouseover', 'node', (evt) => {
+    showHoverCard(evt.target);
+  });
+
+  cy.on('mouseout', 'node', () => {
+    hideHoverCard();
+  });
+
+  cy.on('mousemove', 'node', (evt) => {
+    positionHoverCard(evt.target);
+  });
+
+  cy.on('pan zoom resize', () => {
+    hideHoverCard();
+  });
+
   cy.on('tap', 'node', (evt) => {
     const node = evt.target;
+    hideHoverCard();
     showEntityDetail(node.data('id'));
   });
 
@@ -973,6 +1104,7 @@
 
   cy.on('tap', (evt) => {
     if (evt.target === cy) {
+      hideHoverCard();
       closeDetail();
       cy.nodes().unselect();
     }
