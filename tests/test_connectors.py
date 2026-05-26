@@ -345,3 +345,25 @@ def test_gmail_thread_to_items_preserves_browser_web_url() -> None:
     assert entity.metadata["web_url"] == "https://mail.google.com/mail/u/0/popout?search=inbox&th=%23thread-a:r-1&cvid=1"
     assert persons
     assert edges
+
+
+@pytest.mark.asyncio
+async def test_gmail_fetch_uses_meta_thread_id(gmail_connector: GmailConnector) -> None:
+    fake_batch = EntityBatch()
+    with (
+        patch("agentgraph_connector_google.gmail._fetch_thread_by_thread_id", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
+        patch("agentgraph_connector_google.gmail.upsert_batch", new=AsyncMock()) as mock_upsert,
+    ):
+        batch = await gmail_connector.fetch(
+            "thread",
+            "FMfcgzQgLXnVJSqVLPfFQTLVZqtCZDvb",
+            meta={"gmail_thread_id": "19e63ac7401ac0fe"},
+        )
+
+    assert batch is fake_batch
+    mock_fetch.assert_awaited_once_with(
+        "19e63ac7401ac0fe",
+        account_id=None,
+        fetch_meta={"gmail_thread_id": "19e63ac7401ac0fe"},
+    )
+    mock_upsert.assert_awaited_once_with(fake_batch)

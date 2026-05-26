@@ -204,6 +204,18 @@ class GmailConnector(BaseConnector):
             await upsert_batch(batch)
             return batch
 
+        gmail_thread_id = (meta or {}).get("gmail_thread_id")
+        if gmail_thread_id and _GMAIL_THREAD_ID_RE.fullmatch(gmail_thread_id):
+            # Content script extracted the legacy hex thread ID from the DOM.
+            logger.info("gmail: fetching specific thread via meta thread ID %s", gmail_thread_id)
+            batch = await _fetch_thread_by_thread_id(
+                gmail_thread_id,
+                account_id=selected_account_id,
+                fetch_meta=meta,
+            )
+            await upsert_batch(batch)
+            return batch
+
         if resource_id and _GMAIL_THREAD_ID_RE.fullmatch(resource_id):
             # Caller supplied a Gmail API thread ID (hex) — fetch directly.
             logger.info("gmail: fetching specific thread by thread ID %s", resource_id)
