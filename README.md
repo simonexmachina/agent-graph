@@ -58,9 +58,7 @@ agentgraph onboard
 Or authenticate a single source directly:
 
 ```bash
-agentgraph auth google
-agentgraph auth slack
-agentgraph auth discord
+agentgraph auth <source>
 ```
 
 ### 2. Start AgentGraph
