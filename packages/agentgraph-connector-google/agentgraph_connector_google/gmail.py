@@ -113,13 +113,6 @@ def _format_date(date_str: str) -> str:
         return date_str
 
 
-def _gmail_web_url_from_meta(meta: dict[str, str] | None) -> str | None:
-    """Return the exact Gmail UI URL captured by the browser, when available."""
-    if not meta:
-        return None
-    return meta.get("gmail_popout_url")
-
-
 class GmailConnector(BaseConnector):
     source = "gmail"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
@@ -199,7 +192,6 @@ class GmailConnector(BaseConnector):
             batch = await _fetch_thread_by_message_id(
                 gmail_message_id,
                 account_id=selected_account_id,
-                fetch_meta=meta,
             )
             await upsert_batch(batch)
             return batch
@@ -211,7 +203,6 @@ class GmailConnector(BaseConnector):
             batch = await _fetch_thread_by_thread_id(
                 gmail_thread_id,
                 account_id=selected_account_id,
-                fetch_meta=meta,
             )
             await upsert_batch(batch)
             return batch
@@ -222,7 +213,6 @@ class GmailConnector(BaseConnector):
             batch = await _fetch_thread_by_thread_id(
                 resource_id,
                 account_id=selected_account_id,
-                fetch_meta=meta,
             )
             await upsert_batch(batch)
             return batch
@@ -326,7 +316,6 @@ class GmailConnector(BaseConnector):
 async def _fetch_thread_by_thread_id(
     thread_id: str,
     account_id: str | None = None,
-    fetch_meta: dict[str, str] | None = None,
 ) -> EntityBatch:
     """Fetch a thread directly by its Gmail thread ID."""
     import asyncio
@@ -340,7 +329,7 @@ async def _fetch_thread_by_thread_id(
             userId="me", id=thread_id, format="full"
         ).execute(),
     )
-    entity, persons, edges = _thread_to_items(thread, account_id=account_id, fetch_meta=fetch_meta)
+    entity, persons, edges = _thread_to_items(thread, account_id=account_id)
     if not entity:
         return EntityBatch()
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
@@ -351,7 +340,6 @@ async def _fetch_thread_by_thread_id(
 async def _fetch_thread_by_message_id(
     message_id: str,
     account_id: str | None = None,
-    fetch_meta: dict[str, str] | None = None,
 ) -> EntityBatch:
     """Fetch the thread containing a specific message, identified by its hex API message ID."""
     import asyncio
@@ -367,13 +355,12 @@ async def _fetch_thread_by_message_id(
         ).execute(),
     )
     thread_id: str = msg["threadId"]
-    return await _fetch_thread_by_thread_id(thread_id, account_id=account_id, fetch_meta=fetch_meta)
+    return await _fetch_thread_by_thread_id(thread_id, account_id=account_id)
 
 
 def _thread_to_items(
     thread: dict[str, Any],
     account_id: str | None = None,
-    fetch_meta: dict[str, str] | None = None,
 ) -> tuple[EntityRecord | None, list[PersonRecord], list[EdgeRecord]]:
     """Convert a Gmail thread (full format) into graph items."""
     messages: list[dict[str, Any]] = thread.get("messages", [])
@@ -442,16 +429,6 @@ def _thread_to_items(
         ))
 
     label_ids: list[str] = messages[0].get("labelIds", [])
-    metadata: dict[str, str | int | float | bool | None] = {
-        "message_count": len(messages),
-        "snippet": thread.get("snippet", ""),
-        "label_ids": ",".join(label_ids),
-        **({"account_id": account_id} if account_id else {}),
-    }
-    web_url = _gmail_web_url_from_meta(fetch_meta)
-    if web_url:
-        metadata["web_url"] = web_url
-
     entity = EntityRecord(
         entity_type="Thread",
         platform="gmail",
@@ -460,7 +437,12 @@ def _thread_to_items(
         content=content,
         created_at=thread_created_at,
         updated_at=datetime.now(UTC),
-        metadata=metadata,
+        metadata={
+            "message_count": len(messages),
+            "snippet": thread.get("snippet", ""),
+            "label_ids": ",".join(label_ids),
+            **({"account_id": account_id} if account_id else {}),
+        },
     )
     return entity, persons, edges
 

@@ -24,6 +24,30 @@ const gmailMetaByTab = new Map<number, Record<string, string>>();
 
 let activeTabId: number | null = null;
 let activeUrl: string = "";
+const gmailMetaRetryByTab = new Map<number, ReturnType<typeof setTimeout>>();
+
+function clearGmailMetaRetry(tabId: number): void {
+  const timer = gmailMetaRetryByTab.get(tabId);
+  if (timer) {
+    clearTimeout(timer);
+    gmailMetaRetryByTab.delete(tabId);
+  }
+}
+
+function hasUsableGmailMeta(meta: Record<string, string>): boolean {
+  return Boolean(meta.gmail_message_id || meta.gmail_thread_id);
+}
+
+async function fetchGmailMetaFromTab(tabId: number): Promise<Record<string, string>> {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: "agentgraph_get_gmail_meta" }) as {
+      meta?: Record<string, string> | null;
+    };
+    return response?.meta ?? {};
+  } catch {
+    return {};
+  }
+}
 
 async function onFocus(tabId: number): Promise<void> {
   let tab: chrome.tabs.Tab;
@@ -37,11 +61,30 @@ async function onFocus(tabId: number): Promise<void> {
   if (!url.startsWith("http://") && !url.startsWith("https://")) return;
 
   if (tabId !== activeTabId || url !== activeUrl) {
+    clearGmailMetaRetry(tabId);
     if (activeTabId !== null) cancelDwell(activeTabId);
     activeTabId = tabId;
     activeUrl = url;
 
-    const meta = { ...(gmailMetaByTab.get(tabId) ?? {}) };
+    let meta = { ...(gmailMetaByTab.get(tabId) ?? {}) };
+    if (url.includes("mail.google.com")) {
+      const liveMeta = await fetchGmailMetaFromTab(tabId);
+      if (Object.keys(liveMeta).length > 0) {
+        meta = { ...meta, ...liveMeta };
+        gmailMetaByTab.set(tabId, meta);
+      }
+
+      const looksLikeGmailThread = /https:\/\/mail\.google\.com\/mail\/u\/\d+\/#.+\/[^/]+$/.test(url);
+      if (looksLikeGmailThread && !hasUsableGmailMeta(meta)) {
+        gmailMetaRetryByTab.set(tabId, setTimeout(() => {
+          if (activeTabId === tabId) {
+            activeUrl = "";
+            void onFocus(tabId);
+          }
+        }, 500));
+        return;
+      }
+    }
 
     startDwell(tabId, url, meta);
   }
@@ -86,6 +129,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   cancelDwell(tabId);
   gmailMetaByTab.delete(tabId);
+  clearGmailMetaRetry(tabId);
   if (activeTabId === tabId) {
     activeTabId = null;
     activeUrl = "";
@@ -100,10 +144,16 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === "gmail_meta" && sender.tab?.id != null) {
     const tabId = sender.tab.id;
     const meta = message.meta as Record<string, string>;
-    gmailMetaByTab.set(tabId, meta);
+    const mergedMeta = { ...(gmailMetaByTab.get(tabId) ?? {}), ...meta };
+    gmailMetaByTab.set(tabId, mergedMeta);
     // Inject into any pending dwell for this tab (content script fires ~300ms
     // after navigation, well within the 3s threshold).
-    updateMeta(tabId, meta);
+    updateMeta(tabId, mergedMeta);
+    if (activeTabId === tabId && sender.tab.url === activeUrl && hasUsableGmailMeta(mergedMeta)) {
+      clearGmailMetaRetry(tabId);
+      activeUrl = "";
+      void onFocus(tabId);
+    }
   }
 });
 
@@ -166,6 +216,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.url && !changeInfo.url.includes("mail.google.com")) {
     gmailMetaByTab.delete(tabId);
+    clearGmailMetaRetry(tabId);
   }
 });
 

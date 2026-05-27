@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
-from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
+from agentgraph_connector_google.gmail import GmailConnector
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
@@ -316,37 +316,6 @@ def test_slack_can_handle(slack_connector: SlackConnector) -> None:
     assert not slack_connector.can_handle("https://docs.google.com")
 
 
-def test_gmail_thread_to_items_preserves_browser_web_url() -> None:
-    thread = {
-        "id": "18f0c1d2e3a4b5c6",
-        "snippet": "hello",
-        "messages": [
-            {
-                "labelIds": ["INBOX"],
-                "payload": {
-                    "headers": [
-                        {"name": "Subject", "value": "Test subject"},
-                        {"name": "From", "value": "Alice <alice@example.com>"},
-                        {"name": "To", "value": "Bob <bob@example.com>"},
-                        {"name": "Date", "value": "Mon, 01 Jan 2024 10:00:00 +0000"},
-                    ],
-                    "body": {"data": ""},
-                },
-            }
-        ],
-    }
-
-    entity, persons, edges = _thread_to_items(
-        thread,
-        fetch_meta={"gmail_popout_url": "https://mail.google.com/mail/u/0/popout?search=inbox&th=%23thread-a:r-1&cvid=1"},
-    )
-
-    assert entity is not None
-    assert entity.metadata["web_url"] == "https://mail.google.com/mail/u/0/popout?search=inbox&th=%23thread-a:r-1&cvid=1"
-    assert persons
-    assert edges
-
-
 @pytest.mark.asyncio
 async def test_gmail_fetch_uses_meta_thread_id(gmail_connector: GmailConnector) -> None:
     fake_batch = EntityBatch()
@@ -364,6 +333,5 @@ async def test_gmail_fetch_uses_meta_thread_id(gmail_connector: GmailConnector) 
     mock_fetch.assert_awaited_once_with(
         "19e63ac7401ac0fe",
         account_id=None,
-        fetch_meta={"gmail_thread_id": "19e63ac7401ac0fe"},
     )
     mock_upsert.assert_awaited_once_with(fake_batch)
