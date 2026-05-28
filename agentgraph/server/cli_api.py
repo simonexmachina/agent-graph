@@ -296,6 +296,20 @@ async def cli_fetch(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/unify-persons")
+async def cli_unify_persons(
+    primary: str = Query(...),
+    duplicate: list[str] = Query(...),
+) -> dict[str, Any]:
+    """Merge duplicate Person entities into a chosen primary Person."""
+    from agentgraph.graph.person import unify_persons
+
+    try:
+        return await unify_persons(primary, duplicate)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/poll")
 async def cli_poll(
     source: str | None = Query(default=None),

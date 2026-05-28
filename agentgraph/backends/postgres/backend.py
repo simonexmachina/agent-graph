@@ -251,6 +251,125 @@ class PostgresBackend(StorageBackend):
                 json.dumps(dict(edge.properties)),
             )
 
+    async def merge_person_entities(
+        self,
+        primary_entity_id: str,
+        duplicate_entity_ids: list[str],
+    ) -> EntityResult:
+        primary_uuid = UUID(primary_entity_id)
+        duplicate_uuids = [
+            UUID(eid) for eid in duplicate_entity_ids if eid != primary_entity_id
+        ]
+        if not duplicate_uuids:
+            entity = await self.get_entity_by_id(primary_entity_id)
+            if entity is None:
+                raise ValueError(f"Entity {primary_entity_id!r} not found")
+            if entity["entity_type"] != "Person":
+                raise ValueError(f"Entity {primary_entity_id!r} is not a Person")
+            return entity
+
+        pool = self._pool_or_raise()
+        async with pool.acquire() as conn, conn.transaction():
+            rows = await conn.fetch(
+                """
+                SELECT id, entity_type, title, content, metadata, last_accessed
+                FROM entities
+                WHERE id = ANY($1::uuid[])
+                """,
+                [primary_uuid, *duplicate_uuids],
+            )
+            by_id = {row["id"]: row for row in rows}
+            missing = [
+                str(eid)
+                for eid in [primary_uuid, *duplicate_uuids]
+                if eid not in by_id
+            ]
+            if missing:
+                raise ValueError(f"Person entity not found: {missing[0]}")
+            for eid, row in by_id.items():
+                if row["entity_type"] != "Person":
+                    raise ValueError(f"Entity {eid!s} is not a Person")
+
+            primary = by_id[primary_uuid]
+            merged_metadata: dict[str, Any] = {}
+            for eid in duplicate_uuids:
+                merged_metadata.update(dict(by_id[eid]["metadata"] or {}))
+            merged_metadata.update(dict(primary["metadata"] or {}))
+
+            title = primary["title"] or next(
+                (by_id[eid]["title"] for eid in duplicate_uuids if by_id[eid]["title"]),
+                None,
+            )
+            content = primary["content"] or next(
+                (by_id[eid]["content"] for eid in duplicate_uuids if by_id[eid]["content"]),
+                None,
+            )
+
+            await conn.execute(
+                """
+                UPDATE entities
+                SET title = $2,
+                    content = $3,
+                    metadata = $4::jsonb,
+                    last_accessed = (
+                        SELECT max(last_accessed)
+                        FROM entities
+                        WHERE id = ANY($5::uuid[])
+                    )
+                WHERE id = $1
+                """,
+                primary_uuid,
+                title,
+                content,
+                json.dumps(merged_metadata),
+                [primary_uuid, *duplicate_uuids],
+            )
+            await conn.execute(
+                """
+                INSERT INTO edges
+                    (edge_type, source_entity_id, target_entity_id, platform, properties, created_at)
+                SELECT edge_type, $1, target_entity_id, platform, properties, created_at
+                FROM edges
+                WHERE source_entity_id = ANY($2::uuid[])
+                ON CONFLICT (edge_type, source_entity_id, target_entity_id) DO NOTHING
+                """,
+                primary_uuid,
+                duplicate_uuids,
+            )
+            await conn.execute(
+                "DELETE FROM edges WHERE source_entity_id = ANY($1::uuid[])",
+                duplicate_uuids,
+            )
+            await conn.execute(
+                """
+                INSERT INTO edges
+                    (edge_type, source_entity_id, target_entity_id, platform, properties, created_at)
+                SELECT edge_type, source_entity_id, $1, platform, properties, created_at
+                FROM edges
+                WHERE target_entity_id = ANY($2::uuid[])
+                ON CONFLICT (edge_type, source_entity_id, target_entity_id) DO NOTHING
+                """,
+                primary_uuid,
+                duplicate_uuids,
+            )
+            await conn.execute(
+                "DELETE FROM edges WHERE target_entity_id = ANY($1::uuid[])",
+                duplicate_uuids,
+            )
+            await conn.execute(
+                "DELETE FROM edges WHERE source_entity_id = $1 AND target_entity_id = $1",
+                primary_uuid,
+            )
+            await conn.execute(
+                "DELETE FROM entities WHERE id = ANY($1::uuid[])",
+                duplicate_uuids,
+            )
+
+        entity = await self.get_entity_by_id(primary_entity_id)
+        if entity is None:
+            raise RuntimeError("Merged primary person disappeared")
+        return entity
+
     # --- Read: entities ---
 
     async def search_entities(
@@ -455,12 +574,22 @@ class PostgresBackend(StorageBackend):
                 for user_id in authored_by:
                     params.append(user_id)
                     placeholders.append(f"${len(params)}")
+                metadata_placeholders: list[str] = []
+                for user_id in authored_by:
+                    params.append(user_id)
+                    metadata_placeholders.append(f"${len(params)}")
                 authored_join = f"""
                 JOIN edges _auth ON _auth.edge_type = 'authored'
                     AND _auth.target_entity_id = e.id
                 JOIN entities _p ON _p.id = _auth.source_entity_id
                     AND _p.entity_type = 'Person'
-                    AND _p.platform_entity_id IN ({", ".join(placeholders)})
+                    AND (
+                        _p.platform_entity_id IN ({", ".join(placeholders)})
+                        OR EXISTS (
+                            SELECT 1 FROM jsonb_each_text(_p.metadata) AS ident(key, value)
+                            WHERE ident.value IN ({", ".join(metadata_placeholders)})
+                        )
+                    )
                 """
 
             where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
@@ -39,6 +38,7 @@ def test_help() -> None:
     assert "search" in result.output
     assert "auth" in result.output
     assert "download" in result.output
+    assert "unify-persons" in result.output
 
 
 def test_auth_help() -> None:

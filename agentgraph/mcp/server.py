@@ -349,6 +349,41 @@ async def download_entity_tool(entity_id: str, output_path: str | None = None) -
 
 
 # ---------------------------------------------------------------------------
+# unify_persons — manually merge duplicate Person entities
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def unify_persons_tool(
+    primary_entity_id: str,
+    duplicate_entity_ids: list[str],
+) -> str:
+    """
+    Merge duplicate Person entities that refer to the same human.
+
+    Use this only when the user has confirmed that the Person entities are the
+    same person. The primary Person keeps its ID; edges from duplicate Persons
+    are rewired to the primary; duplicate metadata such as platform user IDs is
+    folded into the primary; duplicate Person entities are removed.
+
+    Args:
+        primary_entity_id: Person entity ID, UUID prefix, or platform ref to keep.
+        duplicate_entity_ids: Duplicate Person entity IDs, UUID prefixes, or
+            platform refs to merge into the primary.
+
+    Returns:
+        JSON object with the updated primary Person and merged duplicate IDs,
+        or an error message if any entity is missing or is not a Person.
+    """
+    from agentgraph.graph.person import unify_persons
+
+    try:
+        result = await unify_persons(primary_entity_id, duplicate_entity_ids)
+        return json.dumps(result, default=str)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
 # query_by_filter — type + metadata filters
 # ---------------------------------------------------------------------------
 

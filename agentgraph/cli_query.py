@@ -336,6 +336,44 @@ def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None
     )
 
 
+def cmd_unify_persons(
+    primary_entity_id: str,
+    duplicate_entity_ids: list[str],
+    as_json: bool,
+) -> None:
+    try:
+        result = _post(
+            "/unify-persons",
+            params={"primary": primary_entity_id, "duplicate": duplicate_entity_ids},
+        )
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        console.print(f"[red]{detail}[/red]")
+        return
+    if result is None:
+        _warn_local()
+        from agentgraph.graph.person import unify_persons
+
+        try:
+            result = _run(unify_persons(primary_entity_id, duplicate_entity_ids))
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            return
+
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+
+    primary = result["primary"]
+    console.print(
+        f"[green]Unified:[/green] {result['merged_count']} duplicate person(s) into "
+        f"{primary.get('title') or primary['platform_entity_id']} [{primary['id'][:8]}]"
+    )
+
+
 def cmd_query(
     entity_type: str,
     filters: dict[str, str],

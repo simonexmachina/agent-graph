@@ -34,6 +34,9 @@ agentgraph fetch-entity <entity-id> [--json]
 # Download an entity's source file using connector auth
 agentgraph download <entity-id|platform/ref> [--output <file-or-dir>] [--json]
 
+# Merge duplicate Person entities that refer to the same human
+agentgraph unify-persons <primary-person-id> <duplicate-person-id>... [--json]
+
 # Trigger a background poll for one or all connectors
 agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive — omit for all
 
@@ -75,6 +78,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 - Use `--json` when you need to parse results programmatically
 - Entity IDs accept: full UUID, UUID prefix, or platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`)
 - Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs or exported Google Docs/Sheets
+- Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep
 - `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
 - Server logs go to stdout unless the process manager redirects them elsewhere
 

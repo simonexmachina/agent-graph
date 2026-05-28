@@ -20,6 +20,7 @@ from agentgraph.connectors.base import (
 from agentgraph.core.context import set_backend
 from agentgraph.graph.upsert import upsert_batch
 
+
 @pytest.fixture()
 async def sqlite_backend() -> AsyncGenerator[SQLiteBackend, None]:
     backend = SQLiteBackend(":memory:")
@@ -197,6 +198,123 @@ async def test_upsert_edge_to_existing_person_sqlite(sqlite_backend: SQLiteBacke
 
     edge_count = await sqlite_backend._fetchval("SELECT count(*) FROM edges")
     assert edge_count == 1
+
+
+async def test_unify_persons_merges_edges_and_identity_metadata_sqlite(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    from agentgraph.graph.person import unify_persons
+
+    await upsert_batch(
+        EntityBatch(
+            persons=[
+                PersonRecord(
+                    platform="gmail",
+                    platform_user_id="simon.wade@gmail.com",
+                    canonical_email="simon.wade@gmail.com",
+                    display_name="Simon Wade",
+                ),
+                PersonRecord(
+                    platform="slack",
+                    platform_user_id="T1/U1",
+                    platform_username="simon.wade",
+                    display_name="Simon",
+                ),
+                PersonRecord(
+                    platform="discord",
+                    platform_user_id="D1",
+                    platform_username="simon",
+                    display_name="simon",
+                ),
+            ],
+            entities=[
+                EntityRecord(
+                    entity_type="Message",
+                    platform="gmail",
+                    platform_entity_id="gmail-msg-1",
+                    content="email hello",
+                ),
+                EntityRecord(
+                    entity_type="Message",
+                    platform="slack",
+                    platform_entity_id="slack-msg-1",
+                    content="slack hello",
+                ),
+                EntityRecord(
+                    entity_type="Message",
+                    platform="discord",
+                    platform_entity_id="discord-msg-1",
+                    content="discord hello",
+                ),
+            ],
+            edges=[
+                EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id="simon.wade@gmail.com",
+                    target_platform_entity_id="gmail-msg-1",
+                    platform="gmail",
+                ),
+                EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id="T1/U1",
+                    target_platform_entity_id="slack-msg-1",
+                    platform="slack",
+                ),
+                EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id="D1",
+                    target_platform_entity_id="discord-msg-1",
+                    platform="discord",
+                ),
+            ],
+        )
+    )
+
+    primary_id = await sqlite_backend._fetchval(
+        "SELECT id FROM entities WHERE platform_entity_id = ?",
+        ["simon.wade@gmail.com"],
+    )
+    slack_id = await sqlite_backend._fetchval(
+        "SELECT id FROM entities WHERE platform_entity_id = ?",
+        ["slack:T1/U1"],
+    )
+    discord_id = await sqlite_backend._fetchval(
+        "SELECT id FROM entities WHERE platform_entity_id = ?",
+        ["discord:D1"],
+    )
+
+    result = await unify_persons(primary_id, [slack_id, discord_id])
+
+    assert result["merged_count"] == 2
+    assert await sqlite_backend.get_entity_by_id(slack_id) is None
+    assert await sqlite_backend.get_entity_by_id(discord_id) is None
+    primary = await sqlite_backend.get_entity_by_id(primary_id)
+    assert primary is not None
+    assert primary["metadata"]["slack_user_id"] == "T1/U1"
+    assert primary["metadata"]["discord_user_id"] == "D1"
+
+    source_count = await sqlite_backend._fetchval(
+        """
+        SELECT count(DISTINCT source_entity_id)
+        FROM edges
+        WHERE edge_type = 'authored'
+        """
+    )
+    assert source_count == 1
+
+    slack_authored = await sqlite_backend.query_by_filter(
+        "Message",
+        filters={},
+        limit=10,
+        order_by="last_accessed",
+        since=None,
+        authored_by=["T1/U1"],
+    )
+    assert {entity["platform_entity_id"] for entity in slack_authored} == {
+        "discord-msg-1",
+        "gmail-msg-1",
+        "slack-msg-1",
+    }
 
 
 @pytest.mark.integration

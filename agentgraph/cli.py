@@ -58,7 +58,9 @@ def auth(
             raise typer.Exit(code=1)
 
         if target == "slack" and (xoxc_token is not None or d_cookie is not None):
-            from agentgraph_connector_slack.auth import run_cookie_flow  # type: ignore[import-not-found]
+            from agentgraph_connector_slack.auth import (
+                run_cookie_flow,  # type: ignore[import-not-found]
+            )
             run_cookie_flow(account_id=account, add=add, xoxc_token=xoxc_token, d_cookie=d_cookie)
             return
 
@@ -247,6 +249,22 @@ def download(
     from agentgraph.cli_query import cmd_download
 
     cmd_download(entity_id=entity_id, output_path=output, as_json=json)
+
+
+@app.command("unify-persons")
+def unify_persons_cmd(
+    primary_entity_id: str = typer.Argument(..., help="Person entity to keep"),
+    duplicate_entity_ids: list[str] = typer.Argument(..., help="Duplicate Person entities to merge into the primary"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Merge duplicate Person entities that refer to the same human."""
+    from agentgraph.cli_query import cmd_unify_persons
+
+    cmd_unify_persons(
+        primary_entity_id=primary_entity_id,
+        duplicate_entity_ids=duplicate_entity_ids,
+        as_json=json,
+    )
 
 
 @app.command()

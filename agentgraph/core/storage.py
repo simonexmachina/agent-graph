@@ -47,6 +47,20 @@ class StorageBackend(ABC):
         """
         ...
 
+    @abstractmethod
+    async def merge_person_entities(
+        self,
+        primary_entity_id: str,
+        duplicate_entity_ids: list[str],
+    ) -> EntityResult:
+        """Merge duplicate Person entities into primary_entity_id.
+
+        Backends must move all edges from duplicate persons to the primary person,
+        merge non-conflicting metadata onto the primary, delete the duplicates,
+        and return the updated primary entity.
+        """
+        ...
+
     # --- Read: entities ---
 
     @abstractmethod

@@ -340,6 +340,125 @@ class SQLiteBackend(StorageBackend):
                  edge.platform, json.dumps(dict(edge.properties)), now],
             )
 
+    async def merge_person_entities(
+        self,
+        primary_entity_id: str,
+        duplicate_entity_ids: list[str],
+    ) -> EntityResult:
+        duplicate_ids = [eid for eid in duplicate_entity_ids if eid != primary_entity_id]
+        if not duplicate_ids:
+            entity = await self.get_entity_by_id(primary_entity_id)
+            if entity is None:
+                raise ValueError(f"Entity {primary_entity_id!r} not found")
+            if entity["entity_type"] != "Person":
+                raise ValueError(f"Entity {primary_entity_id!r} is not a Person")
+            return entity
+
+        assert self._write_lock is not None
+        async with self._write_lock:
+            conn = self._conn_or_raise()
+            await conn.execute("BEGIN")
+            try:
+                all_ids = [primary_entity_id, *duplicate_ids]
+                placeholders = ",".join("?" * len(all_ids))
+                cursor = await conn.execute(
+                    f"""
+                    SELECT id, entity_type, platform, platform_entity_id,
+                           title, content, metadata, last_accessed
+                    FROM entities
+                    WHERE id IN ({placeholders})
+                    """,
+                    all_ids,
+                )
+                rows = await cursor.fetchall()
+                by_id = {str(row["id"]): row for row in rows}
+                missing = [eid for eid in all_ids if eid not in by_id]
+                if missing:
+                    raise ValueError(f"Person entity not found: {missing[0]}")
+                for eid, row in by_id.items():
+                    if row["entity_type"] != "Person":
+                        raise ValueError(f"Entity {eid!r} is not a Person")
+
+                primary = by_id[primary_entity_id]
+                merged_metadata: dict[str, Any] = {}
+                for eid in duplicate_ids:
+                    merged_metadata.update(json.loads(by_id[eid]["metadata"] or "{}"))
+                merged_metadata.update(json.loads(primary["metadata"] or "{}"))
+
+                title = primary["title"] or next(
+                    (by_id[eid]["title"] for eid in duplicate_ids if by_id[eid]["title"]),
+                    None,
+                )
+                content = primary["content"] or next(
+                    (by_id[eid]["content"] for eid in duplicate_ids if by_id[eid]["content"]),
+                    None,
+                )
+                last_accessed_values = [
+                    value for value in (by_id[eid]["last_accessed"] for eid in all_ids) if value
+                ]
+                last_accessed = max(last_accessed_values) if last_accessed_values else _now()
+
+                await conn.execute(
+                    """
+                    UPDATE entities
+                    SET title = ?, content = ?, metadata = ?, last_accessed = ?
+                    WHERE id = ?
+                    """,
+                    [title, content, json.dumps(merged_metadata), last_accessed, primary_entity_id],
+                )
+
+                dup_placeholders = ",".join("?" * len(duplicate_ids))
+                await conn.execute(
+                    f"""
+                    UPDATE OR IGNORE edges
+                    SET source_entity_id = ?
+                    WHERE source_entity_id IN ({dup_placeholders})
+                    """,
+                    [primary_entity_id, *duplicate_ids],
+                )
+                await conn.execute(
+                    f"DELETE FROM edges WHERE source_entity_id IN ({dup_placeholders})",
+                    duplicate_ids,
+                )
+                await conn.execute(
+                    f"""
+                    UPDATE OR IGNORE edges
+                    SET target_entity_id = ?
+                    WHERE target_entity_id IN ({dup_placeholders})
+                    """,
+                    [primary_entity_id, *duplicate_ids],
+                )
+                await conn.execute(
+                    f"DELETE FROM edges WHERE target_entity_id IN ({dup_placeholders})",
+                    duplicate_ids,
+                )
+                await conn.execute(
+                    "DELETE FROM edges WHERE source_entity_id = ? AND target_entity_id = ?",
+                    [primary_entity_id, primary_entity_id],
+                )
+                await conn.execute(
+                    f"DELETE FROM entities_fts WHERE id IN ({','.join('?' * len(all_ids))})",
+                    all_ids,
+                )
+                await conn.execute(
+                    f"DELETE FROM entities WHERE id IN ({dup_placeholders})",
+                    duplicate_ids,
+                )
+                if title or content:
+                    await conn.execute(
+                        "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)",
+                        [primary_entity_id, title or "", content or ""],
+                    )
+                await conn.execute("COMMIT")
+            except Exception:
+                await conn.execute("ROLLBACK")
+                raise
+
+        entity = await self.get_entity_by_id(primary_entity_id)
+        if entity is None:
+            raise RuntimeError("Merged primary person disappeared")
+        return entity
+
     # --- Read: entities ---
 
     async def search_entities(
@@ -548,14 +667,22 @@ class SQLiteBackend(StorageBackend):
             )
 
         authored_join = ""
+        authored_params: list[Any] = []
         if authored_by:
             placeholders = ", ".join("?" for _ in authored_by)
+            metadata_placeholders = ", ".join("?" for _ in authored_by)
             authored_join = f"""
             JOIN edges _auth ON _auth.edge_type = 'authored' AND _auth.target_entity_id = e.id
             JOIN entities _p ON _p.id = _auth.source_entity_id AND _p.entity_type = 'Person'
-                AND _p.platform_entity_id IN ({placeholders})
+                AND (
+                    _p.platform_entity_id IN ({placeholders})
+                    OR EXISTS (
+                        SELECT 1 FROM json_each(_p.metadata)
+                        WHERE json_each.value IN ({metadata_placeholders})
+                    )
+                )
             """
-            params.extend(authored_by)
+            authored_params.extend([*authored_by, *authored_by])
 
         where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
         params.append(limit)
@@ -569,7 +696,7 @@ class SQLiteBackend(StorageBackend):
             ORDER BY e.{order_by} DESC
             LIMIT ?
             """,
-            params,
+            [*authored_params, *params],
         )
         return [_row_to_entity(row) for row in rows]
 
