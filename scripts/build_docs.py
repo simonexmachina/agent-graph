@@ -372,6 +372,15 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{stylesheet_href}" />
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-36ETGXF6K5"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){{dataLayer.push(arguments);}}
+    gtag('js', new Date());
+
+    gtag('config', 'G-36ETGXF6K5');
+  </script>
 </head>
 <body class="{body_class}">
   <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">

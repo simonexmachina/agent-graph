@@ -53,6 +53,8 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     redirect_html = (output_dir / "commands.html").read_text(encoding="utf-8")
 
     assert 'class="shell"' in index_html
+    assert "https://www.googletagmanager.com/gtag/js?id=G-36ETGXF6K5" in index_html
+    assert "gtag('config', 'G-36ETGXF6K5');" in index_html
     assert 'id="doc-search"' in index_html
     assert 'class="toc"' in index_html
     assert 'class="page-summary"' not in index_html
