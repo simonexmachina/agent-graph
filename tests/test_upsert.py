@@ -316,6 +316,30 @@ async def test_unify_persons_merges_edges_and_identity_metadata_sqlite(
         "slack-msg-1",
     }
 
+    await upsert_batch(
+        EntityBatch(
+            persons=[
+                PersonRecord(
+                    platform="slack",
+                    platform_user_id="T1/U1",
+                    platform_username="simon.wade",
+                    display_name="Simon",
+                )
+            ]
+        )
+    )
+    person_count = await sqlite_backend._fetchval(
+        """
+        SELECT count(*)
+        FROM entities
+        WHERE entity_type = 'Person'
+        """
+    )
+    assert person_count == 1
+    refreshed_primary = await sqlite_backend.get_entity_by_id(primary_id)
+    assert refreshed_primary is not None
+    assert refreshed_primary["metadata"]["slack_user_id"] == "T1/U1"
+
 
 @pytest.mark.integration
 async def test_upsert_edge_to_existing_person_postgres(pg_backend: PostgresBackend) -> None:

@@ -83,30 +83,67 @@ class PostgresBackend(StorageBackend):
                 meta[f"{p.platform}_username"] = p.platform_username
 
             embedding = embeddings.get(canonical_key)
-            entity_id: UUID = await conn.fetchval(
-                """
-                INSERT INTO entities
-                    (entity_type, platform, platform_entity_id, title, content,
-                     content_embedding, metadata)
-                VALUES ('Person', 'canonical', $1, $2, $3, $4::vector, $5)
-                ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
-                    title             = COALESCE(EXCLUDED.title, entities.title),
-                    content           = COALESCE(EXCLUDED.content, entities.content),
-                    content_embedding = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
-                    metadata          = entities.metadata || EXCLUDED.metadata,
-                    last_accessed     = now()
-                RETURNING id
-                """,
-                canonical_key,
-                p.display_name,
-                p.canonical_email,
-                str(embedding) if embedding else None,
-                json.dumps(meta),
+            existing_id = await self._resolve_person_for_upsert(
+                conn, canonical_key, p.platform, p.platform_user_id
             )
+            if existing_id is not None:
+                entity_id = existing_id
+                await conn.execute(
+                    """
+                    UPDATE entities
+                    SET title = COALESCE($2, title),
+                        content = COALESCE($3, content),
+                        content_embedding = COALESCE($4::vector, content_embedding),
+                        metadata = metadata || $5::jsonb,
+                        last_accessed = now()
+                    WHERE id = $1
+                    """,
+                    entity_id,
+                    p.display_name,
+                    p.canonical_email,
+                    str(embedding) if embedding else None,
+                    json.dumps(meta),
+                )
+            else:
+                entity_id = await conn.fetchval(
+                    """
+                    INSERT INTO entities
+                        (entity_type, platform, platform_entity_id, title, content,
+                         content_embedding, metadata)
+                    VALUES ('Person', 'canonical', $1, $2, $3, $4::vector, $5)
+                    RETURNING id
+                    """,
+                    canonical_key,
+                    p.display_name,
+                    p.canonical_email,
+                    str(embedding) if embedding else None,
+                    json.dumps(meta),
+                )
             id_map[p.platform_user_id] = entity_id
             if p.canonical_email:
                 id_map[p.canonical_email] = entity_id
         return id_map
+
+    async def _resolve_person_for_upsert(
+        self,
+        conn: Any,
+        canonical_key: str,
+        platform: str,
+        platform_user_id: str,
+    ) -> UUID | None:
+        entity_id: UUID | None = await conn.fetchval(
+            """
+            SELECT id
+            FROM entities
+            WHERE entity_type = 'Person'
+              AND platform = 'canonical'
+              AND platform_entity_id = $1
+            """,
+            canonical_key,
+        )
+        if entity_id is not None:
+            return entity_id
+        return await self._resolve_existing_person_id(conn, platform, platform_user_id)
 
     async def _upsert_entities(
         self,
