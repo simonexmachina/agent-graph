@@ -48,9 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging(settings.log_level)
 
     backend_class: Any = get_backend_class(settings.backend)
-    if settings.backend == "postgres":
-        backend = backend_class(settings.database_url)
-    elif settings.backend == "sqlite":
+    if settings.backend == "sqlite":
         backend = backend_class(settings.backend_sqlite_path, settings.backend_sqlite_vector_mode)
     else:
         backend = backend_class(settings)

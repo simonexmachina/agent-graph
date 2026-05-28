@@ -29,10 +29,6 @@ You can also teach AgentGraph about new tools quickly: connectors live in their 
     <p>Choose the config directory, database path, retention window, dwell threshold, and transport settings.</p>
   </section>
   <section class="doc-card">
-    <h3><a href="/postgresql.html">PostgreSQL</a></h3>
-    <p>Move from the default SQLite setup to PostgreSQL when you want a separate database service.</p>
-  </section>
-  <section class="doc-card">
     <h3><a href="/extending.html">Extending</a></h3>
     <p>Learn how to extend AgentGraph with custom connectors for your own integrations, including the `BaseConnector` contract and example implementation.</p>
   </section>
@@ -52,12 +48,11 @@ You can also teach AgentGraph about new tools quickly: connectors live in their 
 - **Browser-driven capture:** watches supported URLs and triggers targeted fetches once you stay on a page long enough for it to matter.
 - **Background refresh:** polls to keep already-known resources current after the first visit.
 - **Shared interfaces:** the CLI, web viewer, and MCP server all operate on the same local graph.
-- **Pluggable storage:** SQLite is the default local backend, and PostgreSQL is available when you want AgentGraph to use an external database service.
+- **Local storage:** SQLite stores the graph on your machine by default.
 
 ## Reference
 
 - [Extending](/extending.html) for supported sources, custom connector development, and the `BaseConnector` interface reference.
-- [PostgreSQL](/postgresql.html) for running AgentGraph against PostgreSQL instead of the default SQLite backend.
 - [Commands](/commands/) for the CLI and MCP surface.
 - [MCP tools](/mcp/) for the tool-by-tool agent interface reference.
 - [Privacy](/privacy.html) for the local storage and browser observation model.

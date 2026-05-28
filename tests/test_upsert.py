@@ -7,9 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from agentgraph.backends.postgres.backend import PostgresBackend
 from agentgraph.backends.sqlite.backend import SQLiteBackend
-from agentgraph.config import get_settings
 from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
@@ -51,26 +49,7 @@ def test_fetch_policy_stale() -> None:
     assert policy.decide(old) == FetchPolicy.INCREMENTAL
 
 
-# ---------------------------------------------------------------------------
-# Integration tests
-# ---------------------------------------------------------------------------
-
-@pytest.fixture()
-async def pg_backend():
-    settings = get_settings()
-    backend = PostgresBackend(settings.database_url)
-    await backend.initialize()
-    set_backend(backend)
-    yield backend
-    pool = backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        await conn.execute("DELETE FROM edges")
-        await conn.execute("DELETE FROM entities")
-    await backend.close()
-
-
-@pytest.mark.integration
-async def test_upsert_person_with_email(pg_backend: PostgresBackend) -> None:
+async def test_upsert_person_with_email(sqlite_backend: SQLiteBackend) -> None:
     batch = EntityBatch(
         persons=[
             PersonRecord(
@@ -83,21 +62,19 @@ async def test_upsert_person_with_email(pg_backend: PostgresBackend) -> None:
     )
     await upsert_batch(batch)
 
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT * FROM entities
-            WHERE entity_type = 'Person' AND platform_entity_id = 'alice@example.com'
-            """
-        )
+    row = await sqlite_backend._fetchone(
+        """
+        SELECT * FROM entities
+        WHERE entity_type = 'Person' AND platform_entity_id = ?
+        """,
+        ["alice@example.com"],
+    )
     assert row is not None
     assert row["title"] == "Alice"
     assert row["platform"] == "canonical"
 
 
-@pytest.mark.integration
-async def test_upsert_person_idempotent(pg_backend: PostgresBackend) -> None:
+async def test_upsert_person_idempotent(sqlite_backend: SQLiteBackend) -> None:
     person = PersonRecord(
         platform="slack",
         platform_user_id="U999",
@@ -107,19 +84,17 @@ async def test_upsert_person_idempotent(pg_backend: PostgresBackend) -> None:
     await upsert_batch(EntityBatch(persons=[person]))
     await upsert_batch(EntityBatch(persons=[person]))
 
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        count = await conn.fetchval(
-            """
-            SELECT count(*) FROM entities
-            WHERE entity_type = 'Person' AND platform_entity_id = 'bob@example.com'
-            """
-        )
+    count = await sqlite_backend._fetchval(
+        """
+        SELECT count(*) FROM entities
+        WHERE entity_type = 'Person' AND platform_entity_id = ?
+        """,
+        ["bob@example.com"],
+    )
     assert count == 1
 
 
-@pytest.mark.integration
-async def test_upsert_entity_and_edge(pg_backend: PostgresBackend) -> None:
+async def test_upsert_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
     batch = EntityBatch(
         persons=[
             PersonRecord(
@@ -149,17 +124,16 @@ async def test_upsert_entity_and_edge(pg_backend: PostgresBackend) -> None:
     )
     await upsert_batch(batch)
 
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        entity = await conn.fetchrow(
-            "SELECT * FROM entities WHERE platform_entity_id = 'doc-abc'"
-        )
-        assert entity is not None
-        assert entity["title"] == "Project Plan"
-        assert entity["content_embedding"] is not None
+    entity = await sqlite_backend._fetchone(
+        "SELECT * FROM entities WHERE platform_entity_id = ?",
+        ["doc-abc"],
+    )
+    assert entity is not None
+    assert entity["title"] == "Project Plan"
+    assert entity["content_embedding"] is not None
 
-        edge_count = await conn.fetchval("SELECT count(*) FROM edges")
-        assert edge_count == 1
+    edge_count = await sqlite_backend._fetchval("SELECT count(*) FROM edges")
+    assert edge_count == 1
 
 
 async def test_upsert_edge_to_existing_person_sqlite(sqlite_backend: SQLiteBackend) -> None:
@@ -340,43 +314,3 @@ async def test_unify_persons_merges_edges_and_identity_metadata_sqlite(
     assert refreshed_primary is not None
     assert refreshed_primary["metadata"]["slack_user_id"] == "T1/U1"
 
-
-@pytest.mark.integration
-async def test_upsert_edge_to_existing_person_postgres(pg_backend: PostgresBackend) -> None:
-    await upsert_batch(
-        EntityBatch(
-            persons=[
-                PersonRecord(
-                    platform="slack",
-                    platform_user_id="T1/U1",
-                    display_name="Alice",
-                )
-            ]
-        )
-    )
-
-    await upsert_batch(
-        EntityBatch(
-            entities=[
-                EntityRecord(
-                    entity_type="Message",
-                    platform="slack",
-                    platform_entity_id="T1/C1:123.456",
-                    content="hello <@U1>",
-                )
-            ],
-            edges=[
-                EdgeRecord(
-                    edge_type="mentions",
-                    source_platform_entity_id="T1/C1:123.456",
-                    target_platform_user_id="T1/U1",
-                    platform="slack",
-                )
-            ],
-        )
-    )
-
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        edge_count = await conn.fetchval("SELECT count(*) FROM edges")
-    assert edge_count == 1

@@ -4,7 +4,7 @@ description = "Configuration directory, database settings, dwell threshold, rete
 nav_title = "Configuration"
 section = "Configuration"
 order = 10
-summary = "AgentGraph reads settings from environment variables and from a `.env` file in the config directory. The default setup is local-first SQLite, but the backend is pluggable."
+summary = "AgentGraph reads settings from environment variables and from a `.env` file in the config directory. The default setup is local-first SQLite."
 output = "configuration.html"
 source_path = "docs-src/configuration.md"
 +++
@@ -25,12 +25,7 @@ That directory controls:
 
 ## Storage backend
 
-AgentGraph uses a pluggable backend for graph storage.
-
-- `sqlite` is the default and is assumed throughout the install and quickstart docs.
-- `postgres` is available when you want AgentGraph to use a separate PostgreSQL service.
-
-The CLI, viewer, and MCP server work the same way regardless of which backend you choose.
+AgentGraph stores the graph in SQLite by default, and the install and quickstart docs assume this setup.
 
 ## Core settings
 
@@ -44,19 +39,13 @@ Directory for AgentGraph config, credentials, and the default SQLite database.
 
 Default: `sqlite`
 
-Persistence backend: `sqlite` or `postgres`.
+Persistence backend. The built-in backend is `sqlite`.
 
 ### `AGENTGRAPH_BACKEND_SQLITE_PATH`
 
 Default: `$AGENTGRAPH_CONFIG_DIR/agentgraph.db`
 
 SQLite database path.
-
-### `AGENTGRAPH_DATABASE_URL`
-
-Default: `postgresql://agentgraph:agentgraph@localhost:5432/agentgraph`
-
-PostgreSQL connection URL when backend is `postgres`.
 
 ### `AGENTGRAPH_SERVER_HOST`
 
@@ -87,10 +76,6 @@ Days before an unvisited entity is garbage collected.
 Default: `all-MiniLM-L6-v2`
 
 Sentence-transformers model used for embeddings.
-
-## PostgreSQL
-
-SQLite is the default backend. For PostgreSQL setup, environment variables, and switching guidance, see [PostgreSQL](/postgresql.html).
 
 ## Slack workspace filter
 

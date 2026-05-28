@@ -1,8 +1,8 @@
 """Backend registry: maps backend names to StorageBackend implementations.
 
-Built-in backends (sqlite, postgres) are always available. Additional backends
-can be registered by third-party packages via the ``agentgraph.backends``
-entry point group.
+The built-in SQLite backend is always available. Additional backends can be
+registered by third-party packages via the ``agentgraph.backends`` entry point
+group.
 """
 
 from __future__ import annotations
@@ -25,11 +25,9 @@ def _ensure_loaded() -> None:
 
 
 def _load_builtins() -> None:
-    from agentgraph.backends.postgres.backend import PostgresBackend
-    _registry["postgres"] = PostgresBackend
-
     try:
         from agentgraph.backends.sqlite.backend import SQLiteBackend
+
         _registry["sqlite"] = SQLiteBackend
     except ImportError:
         logger.debug("SQLite backend unavailable (aiosqlite not installed)")

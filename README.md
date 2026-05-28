@@ -7,7 +7,6 @@ AgentGraph is a local knowledge graph for AI agents. It indexes content from Sla
 - [Install](docs-src/install.md)
 - [Quickstart](docs-src/quickstart.md)
 - [Configuration](docs-src/configuration.md)
-- [PostgreSQL](docs-src/postgresql.md)
 - [Extending](docs-src/extending.md)
 - [Commands](docs-src/commands/index.md)
 - [MCP tools](docs-src/mcp/index.md)
@@ -113,7 +112,7 @@ Browser extension -> local server -> connector -> local graph
                                          +-> CLI / viewer / MCP
 ```
 
-AgentGraph is local-first. Indexed content is stored in a local SQLite database by default, or PostgreSQL if you choose that backend. The project does not run a hosted service for your graph data.
+AgentGraph is local-first. Indexed content is stored in a local SQLite database. The project does not run a hosted service for your graph data.
 
 ## Surfaces
 
@@ -184,22 +183,15 @@ Settings are read from environment variables and from a `.env` file in the confi
 | Variable | Default | Description |
 | --- | --- | --- |
 | `AGENTGRAPH_CONFIG_DIR` | `~/.agentgraph` | Directory for config, credentials, and the default SQLite database |
-| `AGENTGRAPH_BACKEND` | `sqlite` | Persistence backend: `sqlite` or `postgres` |
+| `AGENTGRAPH_BACKEND` | `sqlite` | Persistence backend. The built-in backend is `sqlite` |
 | `AGENTGRAPH_BACKEND_SQLITE_PATH` | `$AGENTGRAPH_CONFIG_DIR/agentgraph.db` | SQLite database path |
-| `AGENTGRAPH_DATABASE_URL` | `postgresql://agentgraph:agentgraph@localhost:5432/agentgraph` | PostgreSQL connection URL when backend is `postgres` |
 | `AGENTGRAPH_SERVER_HOST` | `127.0.0.1` | Server bind address |
 | `AGENTGRAPH_SERVER_PORT` | `8765` | Server port |
 | `AGENTGRAPH_DWELL_THRESHOLD_SECONDS` | `3` | Seconds of focus before a fetch is triggered |
 | `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unvisited entity is garbage collected |
 | `AGENTGRAPH_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers model used for embeddings |
 
-To switch from the default SQLite backend to PostgreSQL:
-
-```bash
-agentgraph use-postgres
-```
-
-See [Configuration](docs-src/configuration.md) and [PostgreSQL](docs-src/postgresql.md) for the full setup.
+See [Configuration](docs-src/configuration.md) for the full setup.
 
 ## MCP Tools
 

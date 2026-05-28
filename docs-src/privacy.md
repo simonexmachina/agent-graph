@@ -12,11 +12,11 @@ source_path = "docs-src/privacy.md"
 
 ## What AgentGraph is
 
-AgentGraph is an open-source application that you install and run locally on your own computer. It indexes content from connected sources into a local database and makes that data searchable via a CLI, web viewer, and MCP server. The storage backend is pluggable; SQLite is the default, and PostgreSQL is also supported.
+AgentGraph is an open-source application that you install and run locally on your own computer. It indexes content from connected sources into a local SQLite database and makes that data searchable via a CLI, web viewer, and MCP server.
 
 ## Data collection and storage
 
-- Indexed content is stored in a local SQLite database by default, or in PostgreSQL if you configure the `postgres` backend.
+- Indexed content is stored in a local SQLite database.
 - Credentials are stored in `credentials.json` inside the AgentGraph config directory.
 - AgentGraph does not operate a hosted service and does not send indexed content to a server controlled by the project.
 

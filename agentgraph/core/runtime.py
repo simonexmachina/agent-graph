@@ -16,8 +16,6 @@ def create_backend() -> StorageBackend:
 
     settings = get_settings()
     backend_class: Any = get_backend_class(settings.backend)
-    if settings.backend == "postgres":
-        return backend_class(settings.database_url)
     if settings.backend == "sqlite":
         return backend_class(settings.backend_sqlite_path, settings.backend_sqlite_vector_mode)
     return backend_class(settings)

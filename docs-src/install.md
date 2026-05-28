@@ -9,7 +9,7 @@ output = "install.html"
 source_path = "docs-src/install.md"
 +++
 
-The install flow below assumes the default SQLite backend. If you want to run AgentGraph against PostgreSQL instead, follow the normal install steps and then see [PostgreSQL](/postgresql.html).
+The install flow below uses the default SQLite backend.
 
 ## Prerequisites
 

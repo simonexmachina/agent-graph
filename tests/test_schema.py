@@ -1,95 +1,68 @@
-"""Integration tests for the database schema."""
+"""Tests for the SQLite database schema."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+
 import pytest
 
-from agentgraph.backends.postgres.backend import PostgresBackend
-from agentgraph.config import get_settings
+from agentgraph.backends.sqlite.backend import SQLiteBackend
 from agentgraph.core.context import set_backend
 
 
-@pytest.fixture(autouse=True)
-async def pg_backend():
-    """Set up and tear down the PostgresBackend for each test."""
-    settings = get_settings()
-    backend = PostgresBackend(settings.database_url)
+@pytest.fixture()
+async def sqlite_backend() -> AsyncGenerator[SQLiteBackend, None]:
+    backend = SQLiteBackend(":memory:")
     await backend.initialize()
     set_backend(backend)
     yield backend
     await backend.close()
 
 
-@pytest.mark.integration
-async def test_tables_exist(pg_backend: PostgresBackend) -> None:
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        tables = await conn.fetch(
-            """
-            SELECT tablename FROM pg_tables
-            WHERE schemaname = 'public'
-            ORDER BY tablename
-            """
-        )
-        names = {r["tablename"] for r in tables}
-    assert {"entities", "edges", "observations"} <= names
+async def test_tables_exist(sqlite_backend: SQLiteBackend) -> None:
+    rows = await sqlite_backend._fetchall(
+        """
+        SELECT name FROM sqlite_master
+        WHERE type IN ('table', 'view')
+        ORDER BY name
+        """
+    )
+    names = {row["name"] for row in rows}
+    assert {"entities", "edges", "observations", "sync_state", "entities_fts"} <= names
     assert "persons" not in names
     assert "platform_identities" not in names
 
 
-@pytest.mark.integration
-async def test_vector_extension(pg_backend: PostgresBackend) -> None:
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        result = await conn.fetchval(
-            "SELECT extname FROM pg_extension WHERE extname = 'vector'"
-        )
-    assert result == "vector"
+async def test_insert_person_and_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    person_id = "person-1"
+    entity_id = "entity-1"
+    edge_id = "edge-1"
 
+    await conn.execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, content)
+        VALUES (?, 'Person', 'canonical', 'test@example.com', 'Test User', 'test@example.com')
+        ON CONFLICT (platform, platform_entity_id) DO UPDATE SET title = EXCLUDED.title
+        """,
+        [person_id],
+    )
+    await conn.execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, content)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT (platform, platform_entity_id) DO UPDATE SET title = EXCLUDED.title
+        """,
+        [entity_id, "Document", "gdocs", "test-doc-001", "Test Document", "Some content here"],
+    )
+    await conn.execute(
+        """
+        INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id)
+        VALUES (?, ?, ?, ?)
+        """,
+        [edge_id, "authored", person_id, entity_id],
+    )
 
-@pytest.mark.integration
-async def test_insert_person_and_entity_and_edge(pg_backend: PostgresBackend) -> None:
-    pool = pg_backend._pool_or_raise()
-    async with pool.acquire() as conn:
-        person_id = await conn.fetchval(
-            """
-            INSERT INTO entities (entity_type, platform, platform_entity_id, title, content)
-            VALUES ('Person', 'canonical', 'test@example.com', 'Test User', 'test@example.com')
-            ON CONFLICT (platform, platform_entity_id) DO UPDATE SET title = EXCLUDED.title
-            RETURNING id
-            """,
-        )
-        assert person_id is not None
-
-        entity_id = await conn.fetchval(
-            """
-            INSERT INTO entities (entity_type, platform, platform_entity_id, title, content)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (platform, platform_entity_id) DO UPDATE SET title = EXCLUDED.title
-            RETURNING id
-            """,
-            "Document",
-            "gdocs",
-            "test-doc-001",
-            "Test Document",
-            "Some content here",
-        )
-        assert entity_id is not None
-
-        edge_id = await conn.fetchval(
-            """
-            INSERT INTO edges (edge_type, source_entity_id, target_entity_id)
-            VALUES ($1, $2, $3)
-            RETURNING id
-            """,
-            "authored",
-            person_id,
-            entity_id,
-        )
-        assert edge_id is not None
-
-        await conn.execute("DELETE FROM entities WHERE id = $1", entity_id)
-        count = await conn.fetchval("SELECT count(*) FROM edges WHERE id = $1", edge_id)
-        assert count == 0
-
-        await conn.execute("DELETE FROM entities WHERE id = $1", person_id)
+    await conn.execute("DELETE FROM entities WHERE id = ?", [entity_id])
+    count = await sqlite_backend._fetchval("SELECT count(*) FROM edges WHERE id = ?", [edge_id])
+    assert count == 0

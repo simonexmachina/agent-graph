@@ -40,8 +40,6 @@ aliases = ["commands.html"]
 - [`serve`](/commands/serve.html) - run the local AgentGraph HTTP server and pollers.
 - [`mcp-config`](/commands/mcp-config.html) - print MCP client configuration.
 - [`mcp-serve`](/commands/mcp-serve.html) - run the MCP server over stdio, SSE, or streaming HTTP.
-- [`migrate`](/commands/migrate.html) - migrate graph data between backends.
-- [`use-postgres`](/commands/use-postgres.html) - switch to PostgreSQL and emit compose scaffolding.
 
 ## Related
 

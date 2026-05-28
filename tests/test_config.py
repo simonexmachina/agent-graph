@@ -26,12 +26,6 @@ def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.dwell_threshold_seconds == 10
 
 
-def test_database_url_default() -> None:
-    s = config.Settings()
-    assert "localhost" in s.database_url
-    assert "agentgraph" in s.database_url
-
-
 def test_config_dir_env_controls_default_paths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

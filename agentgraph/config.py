@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # Backend selection
     backend: str = Field(
         default="sqlite",
-        description="Persistence backend: 'sqlite' | 'postgres' | any installed plugin",
+        description="Persistence backend: 'sqlite' | any installed plugin",
     )
     backend_sqlite_path: str = Field(
         default=DEFAULT_SQLITE_PATH,
@@ -42,12 +42,6 @@ class Settings(BaseSettings):
     backend_sqlite_vector_mode: str = Field(
         default="sqlite-vec",
         description="SQLite vector search mode: 'sqlite-vec' | 'numpy' | 'bm25-only'",
-    )
-
-    # Database (PostgreSQL — only used when backend='postgres')
-    database_url: str = Field(
-        default="postgresql://agentgraph:agentgraph@localhost:5432/agentgraph",
-        description="PostgreSQL connection URL",
     )
 
     # Server
