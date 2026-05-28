@@ -108,6 +108,38 @@ class SQLiteBackend(StorageBackend):
         conn = self._conn_or_raise()
         await conn.execute(sql, params or [])
 
+    async def _resolve_existing_entity_id(
+        self,
+        conn: aiosqlite.Connection,
+        platform: str,
+        platform_entity_id: str,
+    ) -> str | None:
+        cursor = await conn.execute(
+            "SELECT id FROM entities WHERE platform = ? AND platform_entity_id = ?",
+            [platform, platform_entity_id],
+        )
+        row = await cursor.fetchone()
+        return str(row[0]) if row else None
+
+    async def _resolve_existing_person_id(
+        self,
+        conn: aiosqlite.Connection,
+        platform: str,
+        platform_user_id: str,
+    ) -> str | None:
+        cursor = await conn.execute(
+            """
+            SELECT id
+            FROM entities
+            WHERE entity_type = 'Person'
+              AND platform = 'canonical'
+              AND json_extract(metadata, ?) = ?
+            """,
+            [f"$.{platform}_user_id", platform_user_id],
+        )
+        row = await cursor.fetchone()
+        return str(row[0]) if row else None
+
     # --- Write ---
 
     async def upsert_batch(
@@ -167,6 +199,8 @@ class SQLiteBackend(StorageBackend):
                  emb_blob, json.dumps(meta), now],
             )
             row = await cursor.fetchone()
+            if row is None:
+                raise RuntimeError("Failed to upsert person entity")
             entity_id: str = row[0]
 
             # Maintain FTS index
@@ -231,6 +265,8 @@ class SQLiteBackend(StorageBackend):
 
                 # Maintain FTS index for non-stub entities
                 row = await cursor.fetchone()
+                if row is None:
+                    raise RuntimeError(f"Failed to upsert entity {e.platform}:{e.platform_entity_id}")
                 entity_id: str = row[0]
                 await conn.execute("DELETE FROM entities_fts WHERE id = ?", [entity_id])
                 if e.title or e.content:
@@ -242,6 +278,8 @@ class SQLiteBackend(StorageBackend):
                 continue
 
             row = await cursor.fetchone()
+            if row is None:
+                raise RuntimeError(f"Failed to upsert stub entity {e.platform}:{e.platform_entity_id}")
             id_map[e.platform_entity_id] = row[0]
         return id_map
 
@@ -261,6 +299,15 @@ class SQLiteBackend(StorageBackend):
                 if edge.source_platform_user_id
                 else None
             )
+            if not source_id:
+                if edge.source_platform_entity_id:
+                    source_id = await self._resolve_existing_entity_id(
+                        conn, edge.platform, edge.source_platform_entity_id
+                    )
+                elif edge.source_platform_user_id:
+                    source_id = await self._resolve_existing_person_id(
+                        conn, edge.platform, edge.source_platform_user_id
+                    )
             target_id: str | None = (
                 entity_id_map.get(edge.target_platform_entity_id)
                 if edge.target_platform_entity_id
@@ -268,6 +315,15 @@ class SQLiteBackend(StorageBackend):
                 if edge.target_platform_user_id
                 else None
             )
+            if not target_id:
+                if edge.target_platform_entity_id:
+                    target_id = await self._resolve_existing_entity_id(
+                        conn, edge.platform, edge.target_platform_entity_id
+                    )
+                elif edge.target_platform_user_id:
+                    target_id = await self._resolve_existing_person_id(
+                        conn, edge.platform, edge.target_platform_user_id
+                    )
             if not source_id:
                 logger.warning("Skipping edge %s — source not resolved", edge.edge_type)
                 continue
@@ -665,6 +721,8 @@ class SQLiteBackend(StorageBackend):
             [_new_id(), entity_type, platform, platform_entity_id, _now()],
         )
         row = await cursor.fetchone()
+        if row is None:
+            raise RuntimeError(f"Failed to upsert stub entity {platform}:{platform_entity_id}")
         return row[0]
 
     async def insert_references_edge(self, source_id: str, target_id: str) -> None:

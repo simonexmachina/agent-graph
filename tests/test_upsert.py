@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from agentgraph.backends.postgres.backend import PostgresBackend
+from agentgraph.backends.sqlite.backend import SQLiteBackend
 from agentgraph.config import get_settings
 from agentgraph.connectors.base import (
     EdgeRecord,
@@ -17,6 +19,15 @@ from agentgraph.connectors.base import (
 )
 from agentgraph.core.context import set_backend
 from agentgraph.graph.upsert import upsert_batch
+
+@pytest.fixture()
+async def sqlite_backend() -> AsyncGenerator[SQLiteBackend, None]:
+    backend = SQLiteBackend(":memory:")
+    await backend.initialize()
+    set_backend(backend)
+    yield backend
+    await backend.close()
+
 
 # ---------------------------------------------------------------------------
 # FetchPolicy unit tests (no DB needed)
@@ -148,3 +159,82 @@ async def test_upsert_entity_and_edge(pg_backend: PostgresBackend) -> None:
 
         edge_count = await conn.fetchval("SELECT count(*) FROM edges")
         assert edge_count == 1
+
+
+async def test_upsert_edge_to_existing_person_sqlite(sqlite_backend: SQLiteBackend) -> None:
+    await upsert_batch(
+        EntityBatch(
+            persons=[
+                PersonRecord(
+                    platform="slack",
+                    platform_user_id="T1/U1",
+                    display_name="Alice",
+                )
+            ]
+        )
+    )
+
+    await upsert_batch(
+        EntityBatch(
+            entities=[
+                EntityRecord(
+                    entity_type="Message",
+                    platform="slack",
+                    platform_entity_id="T1/C1:123.456",
+                    content="hello <@U1>",
+                )
+            ],
+            edges=[
+                EdgeRecord(
+                    edge_type="mentions",
+                    source_platform_entity_id="T1/C1:123.456",
+                    target_platform_user_id="T1/U1",
+                    platform="slack",
+                )
+            ],
+        )
+    )
+
+    edge_count = await sqlite_backend._fetchval("SELECT count(*) FROM edges")
+    assert edge_count == 1
+
+
+@pytest.mark.integration
+async def test_upsert_edge_to_existing_person_postgres(pg_backend: PostgresBackend) -> None:
+    await upsert_batch(
+        EntityBatch(
+            persons=[
+                PersonRecord(
+                    platform="slack",
+                    platform_user_id="T1/U1",
+                    display_name="Alice",
+                )
+            ]
+        )
+    )
+
+    await upsert_batch(
+        EntityBatch(
+            entities=[
+                EntityRecord(
+                    entity_type="Message",
+                    platform="slack",
+                    platform_entity_id="T1/C1:123.456",
+                    content="hello <@U1>",
+                )
+            ],
+            edges=[
+                EdgeRecord(
+                    edge_type="mentions",
+                    source_platform_entity_id="T1/C1:123.456",
+                    target_platform_user_id="T1/U1",
+                    platform="slack",
+                )
+            ],
+        )
+    )
+
+    pool = pg_backend._pool_or_raise()
+    async with pool.acquire() as conn:
+        edge_count = await conn.fetchval("SELECT count(*) FROM edges")
+    assert edge_count == 1

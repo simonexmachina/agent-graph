@@ -161,6 +161,36 @@ class PostgresBackend(StorageBackend):
             id_map[e.platform_entity_id] = entity_id
         return id_map
 
+    async def _resolve_existing_entity_id(
+        self,
+        conn: Any,
+        platform: str,
+        platform_entity_id: str,
+    ) -> UUID | None:
+        return await conn.fetchval(
+            "SELECT id FROM entities WHERE platform = $1 AND platform_entity_id = $2",
+            platform,
+            platform_entity_id,
+        )
+
+    async def _resolve_existing_person_id(
+        self,
+        conn: Any,
+        platform: str,
+        platform_user_id: str,
+    ) -> UUID | None:
+        return await conn.fetchval(
+            """
+            SELECT id
+            FROM entities
+            WHERE entity_type = 'Person'
+              AND platform = 'canonical'
+              AND jsonb_extract_path_text(metadata, $1) = $2
+            """,
+            f"{platform}_user_id",
+            platform_user_id,
+        )
+
     async def _upsert_edges(
         self,
         conn: Any,
@@ -176,6 +206,15 @@ class PostgresBackend(StorageBackend):
                 if edge.source_platform_user_id
                 else None
             )
+            if not source_id:
+                if edge.source_platform_entity_id:
+                    source_id = await self._resolve_existing_entity_id(
+                        conn, edge.platform, edge.source_platform_entity_id
+                    )
+                elif edge.source_platform_user_id:
+                    source_id = await self._resolve_existing_person_id(
+                        conn, edge.platform, edge.source_platform_user_id
+                    )
             target_id: UUID | None = (
                 entity_id_map.get(edge.target_platform_entity_id)
                 if edge.target_platform_entity_id
@@ -183,6 +222,15 @@ class PostgresBackend(StorageBackend):
                 if edge.target_platform_user_id
                 else None
             )
+            if not target_id:
+                if edge.target_platform_entity_id:
+                    target_id = await self._resolve_existing_entity_id(
+                        conn, edge.platform, edge.target_platform_entity_id
+                    )
+                elif edge.target_platform_user_id:
+                    target_id = await self._resolve_existing_person_id(
+                        conn, edge.platform, edge.target_platform_user_id
+                    )
             if not source_id:
                 logger.warning("Skipping edge %s — source not resolved", edge.edge_type)
                 continue
