@@ -105,11 +105,11 @@ The contract is intentionally generic: core AgentGraph code calls these hooks wi
 | --- | --- | --- |
 | `source: ClassVar[str]` | Yes | Stable connector key used everywhere the platform is identified. |
 | `fetch_policy: ClassVar[FetchPolicy]` | Yes | Declares how long fetched resources stay fresh before an incremental refresh is needed. |
-| `url_patterns: ClassVar[list[str]]` | No | Chrome match patterns used by the browser extension to decide which tabs this connector can observe. |
+| `url_patterns: ClassVar[list[str]]` | No | URL match patterns that declare which browser URLs this connector can observe. |
 | `can_handle(self, url: str) -> bool` | Yes | Fine-grained URL matcher used after `url_patterns` to decide whether the connector owns a specific URL. |
 | `fetch(...) -> EntityBatch` | Yes | Fetch one resource and return the entities, people, and edges needed to represent it in the graph. |
 | `normalise_fetch_id(...) -> tuple[str, ResourceType]` | No | Override when stored entity IDs differ from the IDs required by the upstream fetch path. |
-| `poll_interval: ClassVar[timedelta | None]` | No | Enables scheduled background polling when set to a duration. |
+| `poll_interval: ClassVar[timedelta \| None]` | No | Enables scheduled background polling when set to a duration. |
 | `poll(self, cursor, account_id=None) -> tuple[EntityBatch, dict[str, Any]]` | No | Incremental background refresh hook; return both the batch and the next cursor. |
 | `ingest(self, account_id=None) -> EntityBatch` | No | One-shot historical backfill hook for loading data beyond normal polling. |
 | `run_auth_flow(cls, account_id=None, add=False) -> None` | No | Interactive auth entry point used by `agentgraph auth` and onboarding flows. |
@@ -276,17 +276,6 @@ async def _fetch_full_history() -> EntityBatch:
 async def _fetch_changes_since(cursor: str | None) -> tuple[EntityBatch, str]:
     return EntityBatch(), cursor or "initial-cursor"
 ```
-
-### Hook guide
-
-- `fetch(self, resource_type, resource_id, meta=None, account_id=None) -> EntityBatch` is required. This is the targeted fetch path used by browser dwell, `agentgraph fetch`, `fetch_entity`, and stub resolution.
-- `poll(self, cursor, account_id=None) -> tuple[EntityBatch, dict[str, Any]]` is optional. Implement it when the upstream system has a changes API, cursor, timestamp, or incremental listing endpoint.
-- `ingest(self, account_id=None) -> EntityBatch` is optional. Implement it when you need a one-shot backfill beyond what `poll()` covers, such as "all mail" instead of only new inbox threads.
-- `run_auth_flow(cls, account_id=None, add=False) -> None` is the interactive setup hook used by `agentgraph auth <source>` and `agentgraph onboard`.
-- `list_accounts(cls) -> list[ConnectorAccount]` should be overridden when one connector can manage multiple authenticated accounts.
-- `get_authenticated_user(cls) -> str | None` returns the short display string shown in `agentgraph connectors`.
-- `verify_auth(cls, account_id=None) -> tuple[str, str | None]` is where you should make a live API check if the platform supports a cheap "who am I" endpoint.
-- `current_user_id(cls) -> str | None` returns the canonical identifier stored on the user's `Person` entity so `--mine` can work across connectors.
 
 ### Output model
 

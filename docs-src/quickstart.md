@@ -29,23 +29,11 @@ agentgraph serve
 
 The default server URL is `http://127.0.0.1:8765`.
 
-## 3. Install the browser extension
-
-Download [`agentgraph-extension.zip`](https://github.com/simonexmachina/agent-graph/releases/download/v0.1.0/agentgraph-extension.zip), unzip it, and load the extracted `dist/` folder as an unpacked Chrome extension.
-
-If you prefer to build it locally instead:
-
-```bash
-cd extension
-npm install
-npm run build
-```
-
-## 4. Browse something supported
+## 3. Browse something supported
 
 Open a Slack channel, a Google Doc, a Google Sheet, a Gmail thread, or a Drive folder. Leave the tab focused long enough for the dwell threshold to trigger a fetch.
 
-## 5. Verify entities landed
+## 4. Verify entities landed
 
 ```bash
 agentgraph connectors --json
@@ -53,7 +41,7 @@ agentgraph search "slack" --limit 5
 agentgraph query --type Document --limit 5
 ```
 
-## 6. Connect an assistant
+## 5. Connect an assistant
 
 ```bash
 agentgraph mcp-config
