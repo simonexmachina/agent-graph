@@ -76,7 +76,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 - Entity IDs accept: full UUID, UUID prefix, or platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`)
 - Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs or exported Google Docs/Sheets
 - `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
-- Server logs: `/tmp/agentgraph.log`
+- Server logs go to stdout unless the process manager redirects them elsewhere
 
 ## Stub Entities
 

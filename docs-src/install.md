@@ -49,7 +49,7 @@ uv sync --extra discord
 agentgraph serve
 ```
 
-Logs are written to `/tmp/agentgraph.log`.
+Logs are written to standard output.
 
 ## Install the browser extension
 
@@ -108,9 +108,9 @@ cat > ~/Library/LaunchAgents/com.agentgraph.serve.plist <<'EOF'
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/tmp/agentgraph.log</string>
+  <string>/tmp/com.agentgraph.serve.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/agentgraph.log</string>
+  <string>/tmp/com.agentgraph.serve.log</string>
 </dict>
 </plist>
 EOF
@@ -133,8 +133,8 @@ After=network.target
 ExecStart=/home/you/.local/bin/agentgraph serve
 Restart=on-failure
 RestartSec=5
-StandardOutput=append:/tmp/agentgraph.log
-StandardError=append:/tmp/agentgraph.log
+StandardOutput=append:/tmp/agentgraph-serve.log
+StandardError=append:/tmp/agentgraph-serve.log
 
 [Install]
 WantedBy=default.target
