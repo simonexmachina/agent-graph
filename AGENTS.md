@@ -10,6 +10,10 @@ Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli
 
 - **Use `jq` for JSON parsing** in shell scripts and one-liners — prefer it over Python for command-line JSON manipulation.
 
+## Logs
+
+- Treat `/tmp/agentgraph.log` as the default server log file location when inspecting runtime errors for this repo.
+
 ## Connector / Core Boundary
 
 Connector-specific logic must live in the connector package (`packages/agentgraph-connector-*/`), not in the main `agentgraph/` package. Violations to watch for:
