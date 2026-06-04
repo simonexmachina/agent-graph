@@ -3,9 +3,9 @@ import test from "node:test";
 
 import {
   DEFAULT_SERVER_BASE_URL,
-  getFetchUrl,
   getHealthUrl,
   getMetaUrl,
+  getReportDwellUrl,
   normalizeServerBaseUrl,
 } from "../dist/lib/config.js";
 
@@ -26,5 +26,5 @@ test("derived endpoints are built from the configured base URL", () => {
   assert.equal(DEFAULT_SERVER_BASE_URL, "http://localhost:8765");
   assert.equal(getHealthUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/health");
   assert.equal(getMetaUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/cli/meta");
-  assert.equal(getFetchUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/fetch-url");
+  assert.equal(getReportDwellUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/report-dwell");
 });

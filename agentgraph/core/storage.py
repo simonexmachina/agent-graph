@@ -163,6 +163,13 @@ class StorageBackend(ABC):
     # --- Connector support ---
 
     @abstractmethod
+    async def increment_dwell_time(
+        self, platform: str, platform_entity_id: str, dwell_ms: int
+    ) -> None:
+        """Increment cumulative dwell time for an entity."""
+        ...
+
+    @abstractmethod
     async def get_last_synced_at(
         self, platform: str, platform_entity_id: str
     ) -> datetime | None: ...

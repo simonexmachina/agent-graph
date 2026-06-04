@@ -48,8 +48,8 @@ export function getMetaUrl(serverBaseUrl: string): string {
   return `${serverBaseUrl}/api/cli/meta`;
 }
 
-export function getFetchUrl(serverBaseUrl: string): string {
-  return `${serverBaseUrl}/fetch-url`;
+export function getReportDwellUrl(serverBaseUrl: string): string {
+  return `${serverBaseUrl}/report-dwell`;
 }
 
 export async function getServerBaseUrl(): Promise<string> {

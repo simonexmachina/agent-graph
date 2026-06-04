@@ -71,6 +71,8 @@ class SQLiteBackend(StorageBackend):
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.executescript(_SCHEMA_SQL)
 
+        await self._run_migrations()
+
         if self._vector_mode == "sqlite-vec":
             self._vec_loaded = await load_sqlite_vec(self._conn)
             if self._vec_loaded:
@@ -89,6 +91,15 @@ class SQLiteBackend(StorageBackend):
         return self._conn
 
     # --- Internal helpers ---
+
+    async def _run_migrations(self) -> None:
+        conn = self._conn_or_raise()
+        cursor = await conn.execute("PRAGMA table_info(entities)")
+        columns = {row["name"] for row in await cursor.fetchall()}
+        if "cumulative_dwell_ms" not in columns:
+            await conn.execute(
+                "ALTER TABLE entities ADD COLUMN cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0"
+            )
 
     async def _fetchall(self, sql: str, params: list[Any] | None = None) -> list[Any]:
         conn = self._conn_or_raise()
@@ -573,13 +584,15 @@ class SQLiteBackend(StorageBackend):
         if not top:
             return []
 
+        import math
+
         id_list = [eid for eid, _ in top]
         score_map = {eid: sc for eid, sc in top}
         placeholders = ",".join("?" * len(id_list))
         cursor = await conn.execute(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
             FROM entities WHERE id IN ({placeholders})
             """,
             id_list,
@@ -588,7 +601,11 @@ class SQLiteBackend(StorageBackend):
         results = []
         for row in rows:
             r = _row_to_entity(row)
-            r["score"] = score_map.get(r["id"], 0.0)
+            base_score = score_map.get(r["id"], 0.0)
+            dwell_ms = r.get("cumulative_dwell_ms", 0)
+            dwell_boost = 0.1 * math.log10(1 + (dwell_ms / 1000.0))
+            r["score"] = base_score + dwell_boost
+
             if (r["score"] or 0) >= min_score:
                 results.append(r)
         results.sort(key=lambda x: x.get("score") or 0, reverse=True)
@@ -598,7 +615,7 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
             FROM entities WHERE id = ?
             """,
             [entity_id],
@@ -612,7 +629,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
             FROM entities WHERE id IN ({placeholders})
             """,
             entity_ids,
@@ -623,7 +640,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
             FROM entities WHERE id LIKE ?
             """,
             [f"{prefix}%"],
@@ -636,7 +653,7 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
             FROM entities WHERE platform = ? AND platform_entity_id = ?
             """,
             [platform, platform_entity_id],
@@ -667,7 +684,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
             FROM entities
             {where}
             ORDER BY last_accessed DESC
@@ -730,7 +747,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
-                   e.title, e.content, e.metadata, e.created_at, e.updated_at
+                   e.title, e.content, e.metadata, e.created_at, e.updated_at, e.cumulative_dwell_ms
             FROM entities e
             {authored_join}
             WHERE e.entity_type = ? {where_extra}
@@ -959,6 +976,18 @@ class SQLiteBackend(StorageBackend):
 
     # --- Connector support ---
 
+    async def increment_dwell_time(
+        self, platform: str, platform_entity_id: str, dwell_ms: int
+    ) -> None:
+        await self._execute(
+            """
+            UPDATE entities
+            SET cumulative_dwell_ms = cumulative_dwell_ms + ?
+            WHERE platform = ? AND platform_entity_id = ?
+            """,
+            [dwell_ms, platform, platform_entity_id],
+        )
+
     async def get_last_synced_at(
         self, platform: str, platform_entity_id: str
     ) -> datetime | None:
@@ -1036,6 +1065,7 @@ def _row_to_entity(row: Any) -> EntityResult:
         "updated_at": row["updated_at"],
         "synced_at": row["synced_at"] if "synced_at" in keys else None,
         "last_accessed": row["last_accessed"] if "last_accessed" in keys else None,
+        "cumulative_dwell_ms": row["cumulative_dwell_ms"] if "cumulative_dwell_ms" in keys else 0,
         "score": row["score"] if "score" in keys else None,
     }
 

@@ -1,12 +1,12 @@
 /**
- * Dwell tracker: fires a /fetch-url request after the user spends
+ * Dwell tracker: reports dwell time after the user spends
  * dwell_threshold_ms on a URL that matches a connector pattern.
  *
  * Patterns and threshold are fetched from the server on startup and cached
  * in chrome.storage.local so they survive service-worker restarts.
  */
 
-import { getFetchUrl, getMetaUrl, getServerBaseUrl } from "./config.js";
+import { getMetaUrl, getServerBaseUrl, getReportDwellUrl } from "./config.js";
 
 const CACHE_KEY = "agentgraph_meta_cache";
 const DEFAULT_THRESHOLD_MS = 3000;
@@ -32,6 +32,8 @@ export interface ObservationStatus {
   sent_at?: number;
   http_status?: number;
   error?: string;
+  meta?: Record<string, string>;
+  threshold_reported_at?: number;
 }
 
 // In-memory state — rebuilt from cache on service worker restart.
@@ -129,44 +131,17 @@ export function startDwell(
     threshold_ms: thresholdMs,
     started_at: startedAt,
     fires_at: firesAt,
+    meta,
   });
 
   const timer = setTimeout(() => {
     pending.delete(tabId);
-    observations.set(tabId, {
-      url,
-      matches: true,
-      state: "sending",
-      threshold_ms: thresholdMs,
-      started_at: startedAt,
-      fires_at: firesAt,
-    });
-
-    sendFetch(url, meta)
-      .then((httpStatus) => {
-        observations.set(tabId, {
-          url,
-          matches: true,
-          state: "sent",
-          threshold_ms: thresholdMs,
-          started_at: startedAt,
-          fires_at: firesAt,
-          sent_at: Date.now(),
-          http_status: httpStatus,
-        });
-      })
-      .catch((error: unknown) => {
-        observations.set(tabId, {
-          url,
-          matches: true,
-          state: "failed",
-          threshold_ms: thresholdMs,
-          started_at: startedAt,
-          fires_at: firesAt,
-          sent_at: Date.now(),
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      });
+    const obs = observations.get(tabId);
+    if (obs && obs.matches) {
+      obs.state = "sending";
+      obs.threshold_reported_at = Date.now();
+      void sendReportDwell(obs.url, thresholdMs, obs.meta || {});
+    }
   }, thresholdMs);
 
   pending.set(tabId, { timer, url, meta, started_at: startedAt, fires_at: firesAt });
@@ -177,14 +152,28 @@ export function cancelDwell(tabId: number): void {
   if (entry) {
     clearTimeout(entry.timer);
     pending.delete(tabId);
-    observations.set(tabId, {
-      url: entry.url,
-      matches: true,
-      state: "canceled",
-      threshold_ms: thresholdMs,
-      started_at: entry.started_at,
-      fires_at: entry.fires_at,
-    });
+  }
+
+  const obs = observations.get(tabId);
+  if (obs && obs.matches && obs.started_at) {
+    obs.state = "canceled";
+    const elapsed = Date.now() - obs.started_at;
+    if (elapsed > 0) {
+      const meta = entry?.meta || obs.meta || {};
+
+      // If we already reported the threshold dwell, only report the additional duration
+      if (obs.threshold_reported_at) {
+        const remaining = elapsed - thresholdMs;
+        if (remaining > 0) {
+          void sendReportDwell(obs.url, remaining, meta);
+        }
+      } else {
+        void sendReportDwell(obs.url, elapsed, meta);
+      }
+    }
+    // Prevent double-reporting if cancelDwell is called multiple times
+    obs.started_at = undefined;
+    obs.threshold_reported_at = undefined;
   }
 }
 
@@ -194,23 +183,28 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
   if (entry) {
     Object.assign(entry.meta, extra);
   }
+  const obs = observations.get(tabId);
+  if (obs && obs.meta) {
+    Object.assign(obs.meta, extra);
+  } else if (obs) {
+    obs.meta = { ...extra };
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Server request
 // ---------------------------------------------------------------------------
 
-async function sendFetch(url: string, meta: Record<string, string>): Promise<number> {
+export async function sendReportDwell(url: string, dwellMs: number, meta: Record<string, string>): Promise<void> {
   const serverBaseUrl = await getServerBaseUrl();
-  const response = await fetch(getFetchUrl(serverBaseUrl), {
+  const response = await fetch(getReportDwellUrl(serverBaseUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, meta: Object.keys(meta).length ? meta : undefined }),
+    body: JSON.stringify({ url, dwell_ms: dwellMs, meta: Object.keys(meta).length ? meta : undefined }),
   });
   if (!response.ok) {
-    throw new Error(`POST /fetch-url failed with HTTP ${response.status}`);
+    console.error(`POST /report-dwell failed with HTTP ${response.status}`);
   }
-  return response.status;
 }
 
 export function getObservationStatus(tabId: number, url: string): ObservationStatus {

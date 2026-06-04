@@ -80,20 +80,23 @@ app.include_router(cli_router)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
-class FetchUrlRequest(BaseModel):
+class ReportDwellRequest(BaseModel):
     url: str
+    dwell_ms: int
     meta: dict[str, str] | None = None
 
 
-@app.post("/fetch-url", status_code=202)
-async def fetch_url(req: FetchUrlRequest) -> dict[str, Any]:
+@app.post("/report-dwell", status_code=202)
+async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
     """
-    Receive a dwell event from the browser extension. Classifies the URL and
-    dispatches a connector fetch as a background task.
+    Receive an incremental dwell time report (either upon hitting the threshold
+    or when a tab loses focus/closes). Records the cumulative dwell time in the
+    database for ranking, and dispatches a background connector fetch if the
+    dwell time meets the threshold.
     """
-    from agentgraph.server.dwell import dispatch_url
+    from agentgraph.server.dwell import record_dwell_time
 
-    result = await dispatch_url(req.url, req.meta)
+    result = await record_dwell_time(req.url, req.dwell_ms, req.meta)
     return result
 
 
