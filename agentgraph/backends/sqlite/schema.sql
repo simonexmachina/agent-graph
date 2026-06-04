@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS entities (
     updated_at         TEXT,  -- ISO8601 UTC
     synced_at          TEXT,  -- ISO8601 UTC
     last_accessed      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
     UNIQUE (platform, platform_entity_id)
 );
 

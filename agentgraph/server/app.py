@@ -85,6 +85,12 @@ class FetchUrlRequest(BaseModel):
     meta: dict[str, str] | None = None
 
 
+class ReportDwellRequest(BaseModel):
+    url: str
+    dwell_ms: int
+    meta: dict[str, str] | None = None
+
+
 @app.post("/fetch-url", status_code=202)
 async def fetch_url(req: FetchUrlRequest) -> dict[str, Any]:
     """
@@ -94,6 +100,18 @@ async def fetch_url(req: FetchUrlRequest) -> dict[str, Any]:
     from agentgraph.server.dwell import dispatch_url
 
     result = await dispatch_url(req.url, req.meta)
+    return result
+
+
+@app.post("/report-dwell", status_code=202)
+async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
+    """
+    Receive a total dwell time report when a tab loses focus or closes.
+    Records the cumulative dwell time in the database for ranking.
+    """
+    from agentgraph.server.dwell import record_dwell_time
+
+    result = await record_dwell_time(req.url, req.dwell_ms, req.meta)
     return result
 
 

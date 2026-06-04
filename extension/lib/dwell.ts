@@ -6,7 +6,7 @@
  * in chrome.storage.local so they survive service-worker restarts.
  */
 
-import { getFetchUrl, getMetaUrl, getServerBaseUrl } from "./config.js";
+import { getFetchUrl, getMetaUrl, getServerBaseUrl, getReportDwellUrl } from "./config.js";
 
 const CACHE_KEY = "agentgraph_meta_cache";
 const DEFAULT_THRESHOLD_MS = 3000;
@@ -32,6 +32,7 @@ export interface ObservationStatus {
   sent_at?: number;
   http_status?: number;
   error?: string;
+  meta?: Record<string, string>;
 }
 
 // In-memory state — rebuilt from cache on service worker restart.
@@ -129,6 +130,7 @@ export function startDwell(
     threshold_ms: thresholdMs,
     started_at: startedAt,
     fires_at: firesAt,
+    meta,
   });
 
   const timer = setTimeout(() => {
@@ -140,6 +142,7 @@ export function startDwell(
       threshold_ms: thresholdMs,
       started_at: startedAt,
       fires_at: firesAt,
+      meta,
     });
 
     sendFetch(url, meta)
@@ -153,6 +156,7 @@ export function startDwell(
           fires_at: firesAt,
           sent_at: Date.now(),
           http_status: httpStatus,
+          meta,
         });
       })
       .catch((error: unknown) => {
@@ -165,6 +169,7 @@ export function startDwell(
           fires_at: firesAt,
           sent_at: Date.now(),
           error: error instanceof Error ? error.message : "Unknown error",
+          meta,
         });
       });
   }, thresholdMs);
@@ -184,7 +189,20 @@ export function cancelDwell(tabId: number): void {
       threshold_ms: thresholdMs,
       started_at: entry.started_at,
       fires_at: entry.fires_at,
+      meta: entry.meta,
     });
+  }
+
+  // Track dwell time across the entire focus session (not just pending)
+  const obs = observations.get(tabId);
+  if (obs && obs.matches && obs.started_at) {
+    const elapsed = Date.now() - obs.started_at;
+    if (elapsed > 0) {
+      const meta = entry?.meta || obs.meta || {};
+      void sendReportDwell(obs.url, elapsed, meta);
+    }
+    // Prevent double-reporting if cancelDwell is called multiple times
+    obs.started_at = undefined;
   }
 }
 
@@ -193,6 +211,12 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
   const entry = pending.get(tabId);
   if (entry) {
     Object.assign(entry.meta, extra);
+  }
+  const obs = observations.get(tabId);
+  if (obs && obs.meta) {
+    Object.assign(obs.meta, extra);
+  } else if (obs) {
+    obs.meta = { ...extra };
   }
 }
 
@@ -211,6 +235,18 @@ async function sendFetch(url: string, meta: Record<string, string>): Promise<num
     throw new Error(`POST /fetch-url failed with HTTP ${response.status}`);
   }
   return response.status;
+}
+
+export async function sendReportDwell(url: string, dwellMs: number, meta: Record<string, string>): Promise<void> {
+  const serverBaseUrl = await getServerBaseUrl();
+  const response = await fetch(getReportDwellUrl(serverBaseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, dwell_ms: dwellMs, meta: Object.keys(meta).length ? meta : undefined }),
+  });
+  if (!response.ok) {
+    console.error(`POST /report-dwell failed with HTTP ${response.status}`);
+  }
 }
 
 export function getObservationStatus(tabId: number, url: string): ObservationStatus {

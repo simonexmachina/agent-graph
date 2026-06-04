@@ -12,6 +12,28 @@ from agentgraph.server.router import classify_url
 logger = logging.getLogger(__name__)
 
 
+async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None = None) -> dict[str, Any]:
+    """Classify url and increment its cumulative dwell time in the backend."""
+    ref = classify_url(url)
+    if ref is None:
+        logger.debug("report-dwell: unrecognised URL %s", url)
+        return {"status": "ignored", "reason": "unrecognised URL"}
+
+    from agentgraph.core.context import get_backend
+
+    try:
+        backend = get_backend()
+        await backend.increment_dwell_time(ref.source, ref.resource_id, dwell_ms)
+        logger.debug(
+            "Recorded dwell time: +%dms for %s %s/%s",
+            dwell_ms, ref.source, ref.resource_type, ref.resource_id
+        )
+        return {"status": "accepted", "source": ref.source, "resource_type": ref.resource_type}
+    except Exception:
+        logger.exception("Failed to record dwell time for %s", url)
+        return {"status": "error", "reason": "internal backend error"}
+
+
 async def dispatch_url(url: str, meta: dict[str, str] | None = None) -> dict[str, Any]:
     """Classify url and dispatch a background connector fetch. Returns a status dict."""
     ref = classify_url(url)

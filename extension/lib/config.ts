@@ -52,6 +52,10 @@ export function getFetchUrl(serverBaseUrl: string): string {
   return `${serverBaseUrl}/fetch-url`;
 }
 
+export function getReportDwellUrl(serverBaseUrl: string): string {
+  return `${serverBaseUrl}/report-dwell`;
+}
+
 export async function getServerBaseUrl(): Promise<string> {
   const result = await chrome.storage.local.get(SERVER_BASE_URL_KEY);
   const storedValue = result[SERVER_BASE_URL_KEY];
