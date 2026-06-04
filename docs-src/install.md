@@ -53,9 +53,7 @@ Logs are written to standard output.
 
 ## Install the browser extension
 
-Download [`agentgraph-extension.zip`](https://github.com/simonexmachina/agent-graph/releases/download/v0.1.1/agentgraph-extension.zip), unzip it, and keep the extracted `dist/` folder somewhere stable on disk.
-
-Then load that extracted `dist/` folder from `chrome://extensions` with Developer Mode enabled.
+Install the [AgentGraph Chrome Extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU) from the Chrome Web Store.
 
 If you want to build the extension yourself instead, use:
 

@@ -81,7 +81,7 @@ You can also teach AgentGraph about new tools quickly: connectors live in their 
     <tr>
       <td>Browser extension</td>
       <td>Passive indexing from supported browser tabs.</td>
-      <td><code>extension/dist/</code> in Chrome Developer Mode</td>
+      <td><a href="https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU">Chrome Web Store</a></td>
     </tr>
     <tr>
       <td>Viewer</td>

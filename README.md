@@ -70,7 +70,7 @@ The default server URL is `http://127.0.0.1:8765`.
 
 ### 3. Install the browser extension
 
-Download [`agentgraph-extension.zip`](https://github.com/simonexmachina/agent-graph/releases/download/v0.1.1/agentgraph-extension.zip), unzip it, and load the extracted `dist/` folder as an unpacked Chrome extension.
+Install the [AgentGraph Chrome Extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU) from the Chrome Web Store.
 
 To build it locally instead:
 
@@ -120,7 +120,7 @@ AgentGraph is local-first. Indexed content is stored in a local SQLite database.
 | --- | --- | --- |
 | CLI | Search, fetch, ingest, debugging, and operations | `agentgraph search`, `agentgraph fetch`, `agentgraph serve` |
 | MCP | Claude Desktop, Claude Code, ChatGPT developer mode, and other MCP clients | `agentgraph mcp-config`, `agentgraph mcp-serve` |
-| Browser extension | Passive indexing from supported browser tabs | `extension/dist/` in Chrome Developer Mode |
+| Browser extension | Passive indexing from supported browser tabs | [Chrome Web Store](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU) |
 | Viewer | Visual graph inspection and manual exploration | `http://127.0.0.1:8765/viewer` |
 
 ## Commands

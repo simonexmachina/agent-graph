@@ -36,6 +36,13 @@ def test_render_inline_preserves_code_symbols() -> None:
     assert "&amp;lt;source&amp;gt;" not in rendered
 
 
+def test_render_inline_preserves_link_query_separator() -> None:
+    rendered = build_docs.render_inline("[Extension](https://example.com/detail?id=1&hl=en-AU)")
+
+    assert 'href="https://example.com/detail?id=1&amp;hl=en-AU"' in rendered
+    assert "&amp;amp;" not in rendered
+
+
 def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     output_dir = tmp_path / "docs"
     monkeypatch.setattr(build_docs, "DOCS_OUT", output_dir)
