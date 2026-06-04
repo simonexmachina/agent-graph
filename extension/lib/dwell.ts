@@ -1,5 +1,5 @@
 /**
- * Dwell tracker: fires a /fetch-url request after the user spends
+ * Dwell tracker: reports dwell time after the user spends
  * dwell_threshold_ms on a URL that matches a connector pattern.
  *
  * Patterns and threshold are fetched from the server on startup and cached

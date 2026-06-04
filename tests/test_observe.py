@@ -1,4 +1,4 @@
-"""Tests for the /fetch-url endpoint."""
+"""Tests for the /report-dwell endpoint."""
 
 from __future__ import annotations
 

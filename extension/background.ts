@@ -3,7 +3,7 @@
  *
  * URL patterns and the dwell threshold are loaded from the AgentGraph server
  * on startup. When the user focuses a matching URL for longer than the
- * threshold, a POST /fetch-url request is sent to the server.
+ * threshold, a POST /report-dwell request is sent to the server.
  */
 
 import {
