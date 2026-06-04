@@ -71,10 +71,9 @@ class SQLiteBackend(StorageBackend):
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.executescript(_SCHEMA_SQL)
 
-        try:
+        import contextlib
+        with contextlib.suppress(Exception):
             await self._conn.execute("ALTER TABLE entities ADD COLUMN cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass  # Column likely already exists
 
         if self._vector_mode == "sqlite-vec":
             self._vec_loaded = await load_sqlite_vec(self._conn)
