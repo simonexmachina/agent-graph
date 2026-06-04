@@ -71,9 +71,7 @@ class SQLiteBackend(StorageBackend):
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.executescript(_SCHEMA_SQL)
 
-        import contextlib
-        with contextlib.suppress(Exception):
-            await self._conn.execute("ALTER TABLE entities ADD COLUMN cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0")
+        await self._run_migrations()
 
         if self._vector_mode == "sqlite-vec":
             self._vec_loaded = await load_sqlite_vec(self._conn)
@@ -93,6 +91,15 @@ class SQLiteBackend(StorageBackend):
         return self._conn
 
     # --- Internal helpers ---
+
+    async def _run_migrations(self) -> None:
+        conn = self._conn_or_raise()
+        cursor = await conn.execute("PRAGMA table_info(entities)")
+        columns = {row["name"] for row in await cursor.fetchall()}
+        if "cumulative_dwell_ms" not in columns:
+            await conn.execute(
+                "ALTER TABLE entities ADD COLUMN cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0"
+            )
 
     async def _fetchall(self, sql: str, params: list[Any] | None = None) -> list[Any]:
         conn = self._conn_or_raise()
