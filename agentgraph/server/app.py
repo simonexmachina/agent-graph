@@ -89,9 +89,10 @@ class ReportDwellRequest(BaseModel):
 @app.post("/report-dwell", status_code=202)
 async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
     """
-    Receive a total dwell time report when a tab loses focus or closes.
-    Records the cumulative dwell time in the database for ranking, and
-    dispatches a background connector fetch if the dwell time meets the threshold.
+    Receive an incremental dwell time report (either upon hitting the threshold
+    or when a tab loses focus/closes). Records the cumulative dwell time in the
+    database for ranking, and dispatches a background connector fetch if the
+    dwell time meets the threshold.
     """
     from agentgraph.server.dwell import record_dwell_time
 

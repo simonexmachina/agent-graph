@@ -33,6 +33,7 @@ export interface ObservationStatus {
   http_status?: number;
   error?: string;
   meta?: Record<string, string>;
+  threshold_reported_at?: number;
 }
 
 // In-memory state — rebuilt from cache on service worker restart.
@@ -133,34 +134,46 @@ export function startDwell(
     meta,
   });
 
-  pending.set(tabId, { timer: setTimeout(() => {}, 0), url, meta, started_at: startedAt, fires_at: firesAt });
+  const timer = setTimeout(() => {
+    pending.delete(tabId);
+    const obs = observations.get(tabId);
+    if (obs && obs.matches) {
+      obs.state = "sending";
+      obs.threshold_reported_at = Date.now();
+      void sendReportDwell(obs.url, thresholdMs, obs.meta || {});
+    }
+  }, thresholdMs);
+
+  pending.set(tabId, { timer, url, meta, started_at: startedAt, fires_at: firesAt });
 }
 
 export function cancelDwell(tabId: number): void {
   const entry = pending.get(tabId);
   if (entry) {
+    clearTimeout(entry.timer);
     pending.delete(tabId);
-    observations.set(tabId, {
-      url: entry.url,
-      matches: true,
-      state: "canceled",
-      threshold_ms: thresholdMs,
-      started_at: entry.started_at,
-      fires_at: entry.fires_at,
-      meta: entry.meta,
-    });
   }
 
-  // Track dwell time across the entire focus session (not just pending)
   const obs = observations.get(tabId);
   if (obs && obs.matches && obs.started_at) {
+    obs.state = "canceled";
     const elapsed = Date.now() - obs.started_at;
     if (elapsed > 0) {
       const meta = entry?.meta || obs.meta || {};
-      void sendReportDwell(obs.url, elapsed, meta);
+
+      // If we already reported the threshold dwell, only report the additional duration
+      if (obs.threshold_reported_at) {
+        const remaining = elapsed - thresholdMs;
+        if (remaining > 0) {
+          void sendReportDwell(obs.url, remaining, meta);
+        }
+      } else {
+        void sendReportDwell(obs.url, elapsed, meta);
+      }
     }
     // Prevent double-reporting if cancelDwell is called multiple times
     obs.started_at = undefined;
+    obs.threshold_reported_at = undefined;
   }
 }
 
