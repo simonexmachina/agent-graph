@@ -6,7 +6,7 @@
  * in chrome.storage.local so they survive service-worker restarts.
  */
 
-import { getFetchUrl, getMetaUrl, getServerBaseUrl, getReportDwellUrl } from "./config.js";
+import { getMetaUrl, getServerBaseUrl, getReportDwellUrl } from "./config.js";
 
 const CACHE_KEY = "agentgraph_meta_cache";
 const DEFAULT_THRESHOLD_MS = 3000;
@@ -133,54 +133,12 @@ export function startDwell(
     meta,
   });
 
-  const timer = setTimeout(() => {
-    pending.delete(tabId);
-    observations.set(tabId, {
-      url,
-      matches: true,
-      state: "sending",
-      threshold_ms: thresholdMs,
-      started_at: startedAt,
-      fires_at: firesAt,
-      meta,
-    });
-
-    sendFetch(url, meta)
-      .then((httpStatus) => {
-        observations.set(tabId, {
-          url,
-          matches: true,
-          state: "sent",
-          threshold_ms: thresholdMs,
-          started_at: startedAt,
-          fires_at: firesAt,
-          sent_at: Date.now(),
-          http_status: httpStatus,
-          meta,
-        });
-      })
-      .catch((error: unknown) => {
-        observations.set(tabId, {
-          url,
-          matches: true,
-          state: "failed",
-          threshold_ms: thresholdMs,
-          started_at: startedAt,
-          fires_at: firesAt,
-          sent_at: Date.now(),
-          error: error instanceof Error ? error.message : "Unknown error",
-          meta,
-        });
-      });
-  }, thresholdMs);
-
-  pending.set(tabId, { timer, url, meta, started_at: startedAt, fires_at: firesAt });
+  pending.set(tabId, { timer: setTimeout(() => {}, 0), url, meta, started_at: startedAt, fires_at: firesAt });
 }
 
 export function cancelDwell(tabId: number): void {
   const entry = pending.get(tabId);
   if (entry) {
-    clearTimeout(entry.timer);
     pending.delete(tabId);
     observations.set(tabId, {
       url: entry.url,
@@ -223,19 +181,6 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
 // ---------------------------------------------------------------------------
 // Server request
 // ---------------------------------------------------------------------------
-
-async function sendFetch(url: string, meta: Record<string, string>): Promise<number> {
-  const serverBaseUrl = await getServerBaseUrl();
-  const response = await fetch(getFetchUrl(serverBaseUrl), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, meta: Object.keys(meta).length ? meta : undefined }),
-  });
-  if (!response.ok) {
-    throw new Error(`POST /fetch-url failed with HTTP ${response.status}`);
-  }
-  return response.status;
-}
 
 export async function sendReportDwell(url: string, dwellMs: number, meta: Record<string, string>): Promise<void> {
   const serverBaseUrl = await getServerBaseUrl();

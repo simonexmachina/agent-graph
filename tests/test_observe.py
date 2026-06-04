@@ -44,7 +44,7 @@ def test_viewer_url_brackets_ipv6_hosts() -> None:
     assert viewer_url("::1", 8765) == "http://[::1]:8765/viewer"
 
 
-def test_fetch_url_unrecognised(client: TestClient) -> None:
-    resp = client.post("/fetch-url", json={"url": "https://example.com/unknown"})
+def test_report_dwell_unrecognised(client: TestClient) -> None:
+    resp = client.post("/report-dwell", json={"url": "https://example.com/unknown", "dwell_ms": 15000})
     assert resp.status_code == 202
     assert resp.json()["status"] == "ignored"
