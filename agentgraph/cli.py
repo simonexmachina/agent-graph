@@ -106,21 +106,6 @@ def auth(
             typer.echo(f"  {'':<12}  account: {account['label']} [{account['account_id']}]  |  {account_auth}")
 
 
-def _connector_help() -> str:
-    return "\n".join(
-        [
-            "Usage: agentgraph connector <source> <command> [args...] [--json]",
-            "       agentgraph connector <source> --help",
-            "",
-            "Run a connector-owned command.",
-            "",
-            "Examples:",
-            "  agentgraph connector rss add https://simonwillison.net/atom/everything/",
-            "  agentgraph connector rss import-opml feeds.opml --all",
-        ]
-    )
-
-
 @app.command(
     "connector",
     context_settings={
@@ -130,16 +115,19 @@ def _connector_help() -> str:
     },
 )
 def connector_command(
+    ctx: typer.Context,
     source: str | None = typer.Argument(None, help="Connector source, e.g. rss"),
     args: list[str] | None = typer.Argument(None, help="Connector-owned command and arguments"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
-    help: bool = typer.Option(False, "--help", help="Show connector command help"),
+    help: bool = typer.Option(False, "--help", help="Show this message and exit."),
 ) -> None:
     """Run a connector-owned command."""
     from agentgraph.connectors.registry import bootstrap, get_connector
 
     if source is None:
-        typer.echo(_connector_help())
+        from typer.rich_utils import rich_format_help
+
+        rich_format_help(obj=ctx.command, ctx=ctx, markup_mode="rich")
         return
 
     bootstrap()
