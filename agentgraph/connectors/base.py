@@ -116,6 +116,43 @@ class EntityBatch(BaseModel):
             ))
 
 
+async def get_known_channel_syncs(
+    platform: str,
+    account_id: str | None = None,
+) -> list[tuple[str, datetime | None]]:
+    """Return (platform_entity_id, synced_at) for known Channel entities on a platform."""
+    from agentgraph.core.context import get_backend
+
+    entities = await get_backend().list_entities(
+        entity_types=["Channel"],
+        platform=platform,
+        since=None,
+        limit=10_000,
+    )
+    result: list[tuple[str, datetime | None]] = []
+    for entity in entities:
+        metadata = entity.get("metadata")
+        if (
+            account_id
+            and isinstance(metadata, dict)
+            and metadata.get("account_id") not in (None, account_id)
+        ):
+            continue
+
+        platform_entity_id = entity.get("platform_entity_id")
+        if not isinstance(platform_entity_id, str):
+            continue
+
+        synced_at_value = entity.get("synced_at")
+        synced_at = (
+            datetime.fromisoformat(synced_at_value)
+            if isinstance(synced_at_value, str) and synced_at_value
+            else None
+        )
+        result.append((platform_entity_id, synced_at))
+    return result
+
+
 class ConnectorAccount(BaseModel):
     account_id: str
     label: str
@@ -334,6 +371,14 @@ class BaseConnector(ABC):
         and return metadata including the written path.
         """
         raise NotImplementedError(f"{self.source} does not support authenticated downloads")
+
+    async def enrich_results(self, entities: list[dict[str, Any]]) -> None:
+        """Mutate query/search result entities with connector-owned presentation fixes.
+
+        This hook lets connectors refresh short-lived metadata or add derived
+        fields before entities are returned to clients. The default no-ops.
+        """
+        _ = entities
 
     async def last_synced_at(self, resource_id: str) -> datetime | None:
         """Return the most recent synced_at for a platform entity, or None."""

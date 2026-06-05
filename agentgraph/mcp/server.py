@@ -132,39 +132,31 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         return json.dumps({"error": str(exc)})
 
 
-async def _refresh_discord_attachments(results: list[dict[str, Any]]) -> None:
-    """Refresh Discord CDN attachment URLs in-place for all results that need it.
+async def _enrich_results(results: list[dict[str, Any]]) -> None:
+    """Let each owning connector apply result presentation fixes in-place."""
+    from agentgraph.connectors.registry import bootstrap, get_connector
 
-    Discord signed CDN URLs expire shortly after ingestion. For any Discord
-    Message entity whose metadata contains attachments, fetch fresh URLs from
-    the Discord API concurrently and update the metadata in-place.
-    Silently skips on missing credentials or any API error.
-    """
-    try:
-        from agentgraph_connector_discord import refresh_attachment_urls
-    except ImportError:
-        return
+    bootstrap()
+    by_platform: dict[str, list[dict[str, Any]]] = {}
+    for entity in results:
+        platform = entity.get("platform")
+        if isinstance(platform, str):
+            by_platform.setdefault(platform, []).append(entity)
 
-    async def _refresh_one(entity: dict[str, Any]) -> None:
-        meta = entity.get("metadata")
-        if not isinstance(meta, dict):
+    async def _enrich_one(platform: str, entities: list[dict[str, Any]]) -> None:
+        connector = get_connector(platform)
+        if connector is None:
             return
-        stored_json: str | None = meta.get("attachments")
-        if not stored_json:
-            return
-        channel_id: str = meta.get("channel_id", "")
-        message_id: str = meta.get("message_id", "")
-        if not channel_id or not message_id:
-            return
-        fresh_json = await refresh_attachment_urls(channel_id, message_id, stored_json)
-        meta["attachments"] = fresh_json
+        try:
+            await connector.enrich_results(entities)
+        except Exception:
+            logger.exception("Connector %s failed to enrich MCP results", platform)
 
-    discord_messages = [
-        e for e in results
-        if e.get("platform") == "discord" and e.get("entity_type") == "Message"
-    ]
-    if discord_messages:
-        await asyncio.gather(*(_refresh_one(e) for e in discord_messages))
+    if by_platform:
+        await asyncio.gather(*(
+            _enrich_one(platform, entities)
+            for platform, entities in by_platform.items()
+        ))
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +199,8 @@ async def search_entities_tool(
 
     Returns:
         JSON array of matching entities with id, title, content snippet,
-        platform, and relevance score. Discord attachment URLs are
-        automatically refreshed before returning so they are valid at
-        the time of the call.
+        platform, and relevance score. Connectors may refresh or enrich
+        connector-owned metadata before results are returned.
     """
     results = await search_entities(
         query, entity_types=entity_types, limit=limit, min_score=min_score, platform=platform
@@ -217,7 +208,7 @@ async def search_entities_tool(
     for r in results:
         if r.get("content") and len(str(r["content"])) > 500:
             r["content"] = str(r["content"])[:500] + "…"
-    await _refresh_discord_attachments(results)
+    await _enrich_results(results)
     return json.dumps(results, default=str)
 
 
@@ -510,14 +501,13 @@ async def query_by_filter_tool(
         JSON array of matching entities. For Message entities with
         attachments, each result includes metadata.attachments — a JSON
         string that decodes to a list of {url, filename, content_type,
-        width?, height?} objects. Discord attachment URLs are
-        automatically refreshed before returning so they are valid at
-        the time of the call.
+        width?, height?} objects. Connectors may refresh or enrich
+        connector-owned metadata before results are returned.
     """
     str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
     results = await query_by_filter(
         entity_type, filters=str_filters, limit=limit, order_by=order_by,
         since=since, authored_by_me=authored_by_me, has_attachments=has_attachments,
     )
-    await _refresh_discord_attachments(results)
+    await _enrich_results(results)
     return json.dumps(results, default=str)

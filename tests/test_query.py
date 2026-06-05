@@ -243,6 +243,25 @@ async def test_mcp_search_entities_tool_returns_json() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_search_entities_tool_enriches_results_via_connector() -> None:
+    from agentgraph.mcp.server import search_entities_tool
+
+    entity = _entity(platform="example")
+
+    class FakeConnector:
+        async def enrich_results(self, entities: list[dict[str, Any]]) -> None:
+            entities[0]["metadata"]["enriched"] = True
+
+    with patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[entity])), \
+         patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()):
+        result = await search_entities_tool("test")
+
+    parsed = json.loads(result)
+    assert parsed[0]["metadata"]["enriched"] is True
+
+
+@pytest.mark.asyncio
 async def test_mcp_get_entity_tool_not_found() -> None:
     from agentgraph.mcp.server import get_entity_tool
 

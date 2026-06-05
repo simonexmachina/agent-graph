@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import json
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from agentgraph_connector_discord import _extract_attachments
+import pytest
+from agentgraph_connector_discord import (
+    DiscordConnector,
+    _extract_attachments,
+    refresh_attachment_urls,
+)
 
 
 def _make_attachment(**kwargs: object) -> dict[str, object]:
@@ -79,15 +86,6 @@ def test_multiple_attachments() -> None:
     assert parsed[0]["url"] == "https://cdn.discordapp.com/a/1.jpg"
     assert parsed[1]["url"] == "https://cdn.discordapp.com/a/2.png"
 
-
-# ---------------------------------------------------------------------------
-# refresh_attachment_urls
-# ---------------------------------------------------------------------------
-
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
-from agentgraph_connector_discord import refresh_attachment_urls
 
 OLD_URL = "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=old&hm=old"
 NEW_URL = "https://cdn.discordapp.com/attachments/111/222/img.jpg?ex=new&hm=new"
@@ -185,3 +183,27 @@ async def test_refresh_multiple_attachments() -> None:
     parsed = json.loads(result)
     assert parsed[0]["url"] == "https://cdn.discordapp.com/a/1.jpg?ex=new"
     assert parsed[1]["url"] == "https://cdn.discordapp.com/a/2.jpg?ex=new"
+
+
+@pytest.mark.asyncio
+async def test_connector_enrich_results_refreshes_message_attachments() -> None:
+    connector = DiscordConnector()
+    entity: dict[str, Any] = {
+        "entity_type": "Message",
+        "metadata": {
+            "attachments": STORED_JSON,
+            "channel_id": "111",
+            "message_id": "222",
+        },
+    }
+
+    with patch(
+        "agentgraph_connector_discord.refresh_attachment_urls",
+        new=AsyncMock(return_value=json.dumps([{"url": NEW_URL}])),
+    ) as refresh:
+        await connector.enrich_results([entity])
+
+    refresh.assert_awaited_once_with("111", "222", STORED_JSON)
+    metadata = entity["metadata"]
+    assert isinstance(metadata, dict)
+    assert metadata["attachments"] == json.dumps([{"url": NEW_URL}])

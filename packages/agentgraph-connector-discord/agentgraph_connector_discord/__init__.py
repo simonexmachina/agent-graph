@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -18,9 +18,10 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    get_known_channel_syncs,
 )
 from agentgraph.graph.upsert import upsert_batch
-from agentgraph_connector_discord.auth import load_discord_creds, list_discord_accounts
+from agentgraph_connector_discord.auth import list_discord_accounts, load_discord_creds
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,37 @@ class DiscordConnector(BaseConnector):
             return resource_id.split(":")[0], "channel"
         return super().normalise_fetch_id(resource_id, entity_type)
 
+    async def enrich_results(self, entities: list[dict[str, Any]]) -> None:
+        """Refresh expiring Discord CDN attachment URLs in query results."""
+        messages = [
+            entity for entity in entities
+            if entity.get("entity_type") == "Message"
+        ]
+        if not messages:
+            return
+
+        async def _refresh_one(entity: dict[str, Any]) -> None:
+            meta = entity.get("metadata")
+            if not isinstance(meta, dict):
+                return
+            metadata = cast(dict[str, Any], meta)
+            stored_json = metadata.get("attachments")
+            if not isinstance(stored_json, str) or not stored_json:
+                return
+            channel_id = metadata.get("channel_id")
+            message_id = metadata.get("message_id")
+            if not isinstance(channel_id, str) or not isinstance(message_id, str):
+                return
+            if not channel_id or not message_id:
+                return
+            metadata["attachments"] = await refresh_attachment_urls(
+                channel_id,
+                message_id,
+                stored_json,
+            )
+
+        await asyncio.gather(*(_refresh_one(message) for message in messages))
+
     async def fetch(
         self,
         resource_type: ResourceType,
@@ -257,9 +289,7 @@ class DiscordConnector(BaseConnector):
         cursor: dict[str, Any],
         account_id: str | None = None,
     ) -> tuple[EntityBatch, dict[str, Any]]:
-        from agentgraph_connector_slack import _get_known_channels
-
-        channel_rows = await _get_known_channels("discord", account_id=account_id)
+        channel_rows = await get_known_channel_syncs("discord", account_id=account_id)
         combined = EntityBatch()
         for channel_id, synced_at in channel_rows:
             after_snowflake = _snowflake_after(synced_at) if synced_at else None

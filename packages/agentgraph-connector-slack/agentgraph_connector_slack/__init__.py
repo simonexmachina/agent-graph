@@ -17,9 +17,14 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    get_known_channel_syncs,
 )
 from agentgraph.graph.upsert import upsert_batch
-from agentgraph_connector_slack.auth import account_id_for_team, list_slack_accounts, load_slack_creds
+from agentgraph_connector_slack.auth import (
+    account_id_for_team,
+    list_slack_accounts,
+    load_slack_creds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +204,7 @@ class SlackConnector(BaseConnector):
         cursor: dict[str, Any],
         account_id: str | None = None,
     ) -> tuple[EntityBatch, dict[str, Any]]:
-        channel_rows = await _get_known_channels("slack", account_id=account_id)
+        channel_rows = await get_known_channel_syncs("slack", account_id=account_id)
         combined = EntityBatch()
         for channel_id, synced_at in channel_rows:
             oldest = str(synced_at.timestamp()) if synced_at else None
@@ -483,21 +488,3 @@ async def _fetch_channel(channel_ref: str, oldest: str | None = None, account_id
     for entity in batch.entities[:]:
         batch.add_stubs_from(entity)
     return batch
-
-
-async def _get_known_channels(platform: str, account_id: str | None = None) -> list[tuple[str, datetime | None]]:
-    """Return (platform_entity_id, synced_at) for all known Channel entities on the given platform."""
-    from agentgraph.core.context import get_backend
-
-    entities = await get_backend().list_entities(
-        entity_types=["Channel"], platform=platform, since=None, limit=10_000
-    )
-    result: list[tuple[str, datetime | None]] = []
-    for e in entities:
-        metadata = e.get("metadata")
-        if account_id and isinstance(metadata, dict) and metadata.get("account_id") not in (None, account_id):
-            continue
-        synced_at_str: str | None = e.get("synced_at")  # type: ignore[assignment]
-        synced_at = datetime.fromisoformat(synced_at_str) if synced_at_str else None
-        result.append((e["platform_entity_id"], synced_at))
-    return result
