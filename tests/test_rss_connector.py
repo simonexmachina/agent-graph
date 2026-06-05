@@ -112,6 +112,20 @@ def test_parse_opml_feeds_deduplicates_feed_urls(tmp_path: Path) -> None:
     assert feeds[0].html_url == "https://example.com/"
 
 
+def test_parse_opml_feeds_accepts_file_uri(tmp_path: Path) -> None:
+    opml_path = tmp_path / "feeds with spaces.opml"
+    opml_path.write_text(
+        """<opml version="2.0"><body>
+  <outline text="Example" xmlUrl="https://example.com/feed.xml" />
+</body></opml>""",
+        encoding="utf-8",
+    )
+
+    feeds = parse_opml_feeds(opml_path.as_uri())
+
+    assert [feed.feed_url for feed in feeds] == ["https://example.com/feed.xml"]
+
+
 def test_select_opml_feeds_supports_indexes_and_ranges(tmp_path: Path) -> None:
     opml_path = tmp_path / "feeds.opml"
     opml_path.write_text(

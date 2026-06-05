@@ -128,7 +128,7 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
     try:
         result = type(connector).run_cli_command(args)
         return json.dumps(result, default=str)
-    except (NotImplementedError, ValueError) as exc:
+    except (NotImplementedError, OSError, ValueError) as exc:
         return json.dumps({"error": str(exc)})
 
 

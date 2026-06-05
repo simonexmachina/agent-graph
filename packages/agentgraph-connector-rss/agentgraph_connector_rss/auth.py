@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import unquote, urlparse
 from xml.etree import ElementTree
 
 from pydantic import BaseModel, Field
@@ -92,7 +93,7 @@ def add_feed_urls(
 
 def parse_opml_feeds(path: str | Path) -> list[OpmlFeed]:
     """Parse feed outlines from an OPML file."""
-    source_path = Path(path).expanduser()
+    source_path = _opml_source_path(path)
     if not source_path.exists():
         raise FileNotFoundError(f"OPML file not found: {source_path}")
 
@@ -117,6 +118,16 @@ def parse_opml_feeds(path: str | Path) -> list[OpmlFeed]:
         html_url = (outline.attrib.get("htmlUrl") or outline.attrib.get("htmlurl") or "").strip()
         feeds.append(OpmlFeed(title=title.strip(), feed_url=feed_url, html_url=html_url or None))
     return feeds
+
+
+def _opml_source_path(path: str | Path) -> Path:
+    raw_path = str(path)
+    parsed = urlparse(raw_path)
+    if parsed.scheme == "file":
+        if parsed.netloc not in ("", "localhost"):
+            raise ValueError(f"Unsupported OPML file URI host: {parsed.netloc}")
+        return Path(unquote(parsed.path)).expanduser()
+    return Path(path).expanduser()
 
 
 def select_opml_feeds(
