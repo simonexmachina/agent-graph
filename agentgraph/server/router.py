@@ -24,6 +24,8 @@ def classify_url(url: str) -> SourceReference | None:
     normalised_url = normalise_url_for_matching(url)
     bootstrap()
     for connector in get_all_connectors():
+        if type(connector).is_generic_url_fallback:
+            continue
         ref = connector.resolve_url(normalised_url)
         if ref is not None:
             return ref

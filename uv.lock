@@ -14,6 +14,7 @@ members = [
     "agentgraph-connector-google",
     "agentgraph-connector-rss",
     "agentgraph-connector-slack",
+    "agentgraph-connector-web",
 ]
 
 [[package]]
@@ -21,6 +22,7 @@ name = "agentgraph"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "agentgraph-connector-web" },
     { name = "aiosqlite" },
     { name = "apscheduler" },
     { name = "fastapi" },
@@ -41,6 +43,7 @@ all = [
     { name = "agentgraph-connector-google" },
     { name = "agentgraph-connector-rss" },
     { name = "agentgraph-connector-slack" },
+    { name = "agentgraph-connector-web" },
 ]
 discord = [
     { name = "agentgraph-connector-discord" },
@@ -53,6 +56,9 @@ rss = [
 ]
 slack = [
     { name = "agentgraph-connector-slack" },
+]
+web = [
+    { name = "agentgraph-connector-web" },
 ]
 
 [package.dev-dependencies]
@@ -74,6 +80,9 @@ requires-dist = [
     { name = "agentgraph-connector-rss", marker = "extra == 'rss'", editable = "packages/agentgraph-connector-rss" },
     { name = "agentgraph-connector-slack", marker = "extra == 'all'", editable = "packages/agentgraph-connector-slack" },
     { name = "agentgraph-connector-slack", marker = "extra == 'slack'", editable = "packages/agentgraph-connector-slack" },
+    { name = "agentgraph-connector-web", editable = "packages/agentgraph-connector-web" },
+    { name = "agentgraph-connector-web", marker = "extra == 'all'", editable = "packages/agentgraph-connector-web" },
+    { name = "agentgraph-connector-web", marker = "extra == 'web'", editable = "packages/agentgraph-connector-web" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "apscheduler", specifier = ">=3.11.2" },
     { name = "fastapi", specifier = ">=0.135.2" },
@@ -160,6 +169,21 @@ requires-dist = [
 name = "agentgraph-connector-slack"
 version = "0.1.0"
 source = { editable = "packages/agentgraph-connector-slack" }
+dependencies = [
+    { name = "agentgraph" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agentgraph", editable = "." },
+    { name = "httpx", specifier = ">=0.28.1" },
+]
+
+[[package]]
+name = "agentgraph-connector-web"
+version = "0.1.0"
+source = { editable = "packages/agentgraph-connector-web" }
 dependencies = [
     { name = "agentgraph" },
     { name = "httpx" },

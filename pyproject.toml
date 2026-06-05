@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.20.0",
+    "agentgraph-connector-web",
     "apscheduler>=3.11.2",
     "fastapi>=0.135.2",
     "httpx>=0.28.1",
@@ -24,7 +25,9 @@ google     = ["agentgraph-connector-google"]
 slack      = ["agentgraph-connector-slack"]
 discord    = ["agentgraph-connector-discord"]
 rss        = ["agentgraph-connector-rss"]
+web        = ["agentgraph-connector-web"]
 all        = [
+    "agentgraph-connector-web",
     "agentgraph-connector-google",
     "agentgraph-connector-slack",
     "agentgraph-connector-discord",
@@ -60,6 +63,7 @@ agentgraph-connector-google  = { workspace = true }
 agentgraph-connector-slack   = { workspace = true }
 agentgraph-connector-discord = { workspace = true }
 agentgraph-connector-rss     = { workspace = true }
+agentgraph-connector-web     = { workspace = true }
 
 [tool.setuptools.packages.find]
 include = ["agentgraph*"]

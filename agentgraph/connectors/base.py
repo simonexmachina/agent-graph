@@ -201,6 +201,8 @@ class FetchPolicy:
 class BaseConnector(ABC):
     source: ClassVar[str]           # platform name, e.g. "slack" — must be set by subclass
     fetch_policy: ClassVar[FetchPolicy]  # staleness policy — must be set by subclass
+    is_generic_url_fallback: ClassVar[bool] = False
+    """True for broad fallback connectors that should not claim URLs during discovery."""
 
     poll_interval: ClassVar[timedelta | None] = None
     """Interval between background poll() calls. None disables polling for this connector."""
