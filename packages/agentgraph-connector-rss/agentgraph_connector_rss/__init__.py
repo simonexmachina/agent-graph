@@ -21,6 +21,7 @@ from agentgraph.connectors.base import (
 )
 from agentgraph_connector_rss.auth import (
     add_feed_urls,
+    import_opml_feeds,
     list_rss_accounts,
     load_rss_creds,
     preview_feed,
@@ -74,18 +75,32 @@ class RssConnector(BaseConnector):
     @classmethod
     def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
         if not args:
-            raise ValueError("Usage: agentgraph connector rss add <feed-url> [feed-url...]")
+            raise ValueError(_rss_usage())
         command, *rest = args
-        if command != "add":
-            raise ValueError(f"Unknown rss connector command '{command}'. Available: add")
-        creds = add_feed_urls(rest)
-        return {
-            "status": "ok",
-            "source": cls.source,
-            "account_id": creds.account_id,
-            "feed_urls": creds.feed_urls,
-            "added": rest,
-        }
+        if command == "add":
+            account_id, feed_urls = _parse_account_option(rest)
+            creds = add_feed_urls(feed_urls, account_id=account_id)
+            return {
+                "status": "ok",
+                "source": cls.source,
+                "account_id": creds.account_id,
+                "feed_urls": creds.feed_urls,
+                "added": feed_urls,
+            }
+        if command == "import-opml":
+            options = _parse_import_opml_args(rest)
+            creds, feeds, selected_feeds = import_opml_feeds(**options)
+            selected_feed_urls = [feed.feed_url for feed in selected_feeds]
+            return {
+                "status": "ok",
+                "source": cls.source,
+                "account_id": creds.account_id,
+                "feed_urls": creds.feed_urls,
+                "imported_feed_count": len(feeds),
+                "selected_feed_count": len(selected_feeds),
+                "added": selected_feed_urls,
+            }
+        raise ValueError(f"Unknown rss connector command '{command}'. Available: add, import-opml")
 
     def can_handle(self, url: str) -> bool:
         try:
@@ -168,6 +183,72 @@ async def _fetch_feed(feed_url: str) -> EntityBatch:
     batch.entities = [*entities, *batch.entities]
     batch.edges = [*edges, *batch.edges]
     return batch
+
+
+def _rss_usage() -> str:
+    return (
+        "Usage: agentgraph connector rss add <feed-url> [feed-url...] [--account <account-id>]\n"
+        "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>] [--account <account-id>]"
+    )
+
+
+def _parse_account_option(args: list[str]) -> tuple[str | None, list[str]]:
+    account_id: str | None = None
+    remaining: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--account":
+            if index + 1 >= len(args):
+                raise ValueError("--account requires a value")
+            account_id = args[index + 1]
+            index += 2
+            continue
+        remaining.append(arg)
+        index += 1
+    return account_id, remaining
+
+
+def _parse_import_opml_args(args: list[str]) -> dict[str, Any]:
+    path: str | None = None
+    account_id: str | None = None
+    include_all = False
+    selection: str | None = None
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--all":
+            include_all = True
+            index += 1
+            continue
+        if arg == "--select":
+            if index + 1 >= len(args):
+                raise ValueError("--select requires a value")
+            selection = args[index + 1]
+            index += 2
+            continue
+        if arg == "--account":
+            if index + 1 >= len(args):
+                raise ValueError("--account requires a value")
+            account_id = args[index + 1]
+            index += 2
+            continue
+        if arg.startswith("--"):
+            raise ValueError(f"Unknown import-opml option: {arg}")
+        if path is not None:
+            raise ValueError(_rss_usage())
+        path = arg
+        index += 1
+    if path is None:
+        raise ValueError(_rss_usage())
+    if include_all and selection is not None:
+        raise ValueError("Use either --all or --select, not both")
+    return {
+        "path": path,
+        "account_id": account_id,
+        "include_all": include_all,
+        "selection": selection,
+    }
 
 
 def _entry_to_entity(

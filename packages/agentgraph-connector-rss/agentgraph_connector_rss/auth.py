@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
+from xml.etree import ElementTree
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +16,12 @@ class RssCredentials(BaseModel):
     feed_urls: list[str] = Field(default_factory=list)
     account_id: str | None = None
     label: str | None = None
+
+
+class OpmlFeed(BaseModel):
+    title: str
+    feed_url: str
+    html_url: str | None = None
 
 
 def load_rss_creds(account_id: str | None = None) -> RssCredentials:
@@ -80,6 +88,116 @@ def add_feed_urls(
     else:
         save_platform("rss", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
     return creds
+
+
+def parse_opml_feeds(path: str | Path) -> list[OpmlFeed]:
+    """Parse feed outlines from an OPML file."""
+    source_path = Path(path).expanduser()
+    if not source_path.exists():
+        raise FileNotFoundError(f"OPML file not found: {source_path}")
+
+    try:
+        root = ElementTree.parse(source_path).getroot()
+    except ElementTree.ParseError as exc:
+        raise ValueError(f"Could not parse OPML file: {exc}") from exc
+
+    feeds: list[OpmlFeed] = []
+    seen: set[str] = set()
+    for outline in root.iter("outline"):
+        feed_url = (outline.attrib.get("xmlUrl") or outline.attrib.get("xmlurl") or "").strip()
+        if not feed_url or feed_url in seen:
+            continue
+        seen.add(feed_url)
+        title = (
+            outline.attrib.get("title")
+            or outline.attrib.get("text")
+            or outline.attrib.get("description")
+            or feed_url
+        )
+        html_url = (outline.attrib.get("htmlUrl") or outline.attrib.get("htmlurl") or "").strip()
+        feeds.append(OpmlFeed(title=title.strip(), feed_url=feed_url, html_url=html_url or None))
+    return feeds
+
+
+def select_opml_feeds(
+    feeds: list[OpmlFeed],
+    *,
+    include_all: bool = False,
+    selection: str | None = None,
+) -> list[OpmlFeed]:
+    if include_all:
+        return feeds
+    if selection is not None:
+        selected_indexes = _parse_feed_selection(selection, len(feeds))
+        return [feeds[index - 1] for index in selected_indexes]
+    return _prompt_for_opml_feeds(feeds)
+
+
+def import_opml_feeds(
+    path: str | Path,
+    *,
+    account_id: str | None = None,
+    include_all: bool = False,
+    selection: str | None = None,
+) -> tuple[RssCredentials, list[OpmlFeed], list[OpmlFeed]]:
+    feeds = parse_opml_feeds(path)
+    if not feeds:
+        raise ValueError("No RSS/Atom feeds found in OPML file")
+
+    selected_feeds = select_opml_feeds(feeds, include_all=include_all, selection=selection)
+    if not selected_feeds:
+        raise ValueError("No feeds selected")
+
+    creds = add_feed_urls([feed.feed_url for feed in selected_feeds], account_id=account_id)
+    return creds, feeds, selected_feeds
+
+
+def _parse_feed_selection(selection: str, feed_count: int) -> list[int]:
+    indexes: list[int] = []
+    seen: set[int] = set()
+    for raw_part in selection.split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start_raw, end_raw = part.split("-", 1)
+            try:
+                start = int(start_raw.strip())
+                end = int(end_raw.strip())
+            except ValueError as exc:
+                raise ValueError(f"Invalid feed selection: {selection}") from exc
+            if start > end:
+                raise ValueError(f"Invalid feed selection range: {part}")
+            candidates = range(start, end + 1)
+        else:
+            try:
+                candidates = range(int(part), int(part) + 1)
+            except ValueError as exc:
+                raise ValueError(f"Invalid feed selection: {selection}") from exc
+        for index in candidates:
+            if index < 1 or index > feed_count:
+                raise ValueError(f"Feed selection {index} is out of range 1-{feed_count}")
+            if index not in seen:
+                seen.add(index)
+                indexes.append(index)
+    return indexes
+
+
+def _prompt_for_opml_feeds(feeds: list[OpmlFeed]) -> list[OpmlFeed]:
+    import sys
+
+    import typer
+
+    if not sys.stdin.isatty():
+        raise ValueError("Use --all or --select <indexes> when importing OPML non-interactively")
+
+    typer.echo(f"Found {len(feeds)} feed(s) in OPML:")
+    for index, feed in enumerate(feeds, start=1):
+        typer.echo(f"  {index}. {feed.title} - {feed.feed_url}")
+    if typer.confirm("Add all feeds?", default=True):
+        return feeds
+    selection = typer.prompt("Feed numbers to add (comma-separated, ranges allowed)").strip()
+    return select_opml_feeds(feeds, selection=selection)
 
 
 async def preview_feed(feed_url: str, *, count: int = 3) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import feedparser  # type: ignore[import-untyped]
@@ -11,6 +12,8 @@ from agentgraph_connector_rss.auth import (
     RssCredentials,
     add_feed_urls,
     list_rss_accounts,
+    parse_opml_feeds,
+    select_opml_feeds,
     verify_rss_auth,
 )
 
@@ -77,6 +80,127 @@ def test_add_feed_urls_creates_rss_account(
     assert saved["platform"] == "rss"
     assert saved["data"] == {
         "feed_urls": ["https://example.com/feed.xml"],
+        "account_id": "rss",
+        "label": "RSS",
+    }
+
+
+def test_parse_opml_feeds_deduplicates_feed_urls(tmp_path: Path) -> None:
+    opml_path = tmp_path / "feeds.opml"
+    opml_path.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline text="Tech">
+      <outline text="Example One" title="Example One" type="rss" xmlUrl="https://example.com/feed.xml" htmlUrl="https://example.com/" />
+      <outline text="Example Two" type="rss" xmlUrl="https://example.com/two.xml" />
+      <outline text="Duplicate" type="rss" xmlUrl="https://example.com/feed.xml" />
+    </outline>
+  </body>
+</opml>
+""",
+        encoding="utf-8",
+    )
+
+    feeds = parse_opml_feeds(opml_path)
+
+    assert [feed.title for feed in feeds] == ["Example One", "Example Two"]
+    assert [feed.feed_url for feed in feeds] == [
+        "https://example.com/feed.xml",
+        "https://example.com/two.xml",
+    ]
+    assert feeds[0].html_url == "https://example.com/"
+
+
+def test_select_opml_feeds_supports_indexes_and_ranges(tmp_path: Path) -> None:
+    opml_path = tmp_path / "feeds.opml"
+    opml_path.write_text(
+        """<opml version="2.0"><body>
+  <outline text="One" xmlUrl="https://example.com/one.xml" />
+  <outline text="Two" xmlUrl="https://example.com/two.xml" />
+  <outline text="Three" xmlUrl="https://example.com/three.xml" />
+</body></opml>""",
+        encoding="utf-8",
+    )
+    feeds = parse_opml_feeds(opml_path)
+
+    selected = select_opml_feeds(feeds, selection="1,3")
+    ranged = select_opml_feeds(feeds, selection="2-3")
+
+    assert [feed.feed_url for feed in selected] == [
+        "https://example.com/one.xml",
+        "https://example.com/three.xml",
+    ]
+    assert [feed.feed_url for feed in ranged] == [
+        "https://example.com/two.xml",
+        "https://example.com/three.xml",
+    ]
+
+
+def test_rss_connector_import_opml_all(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opml_path = tmp_path / "feeds.opml"
+    opml_path.write_text(
+        """<opml version="2.0"><body>
+  <outline text="One" xmlUrl="https://example.com/one.xml" />
+  <outline text="Two" xmlUrl="https://example.com/two.xml" />
+</body></opml>""",
+        encoding="utf-8",
+    )
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
+    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
+    monkeypatch.setattr(
+        "agentgraph.auth.credentials.save_platform",
+        lambda platform, data: saved.update({"platform": platform, "data": data}),
+    )
+
+    result = RssConnector.run_cli_command(["import-opml", str(opml_path), "--all"])
+
+    assert result["status"] == "ok"
+    assert result["imported_feed_count"] == 2
+    assert result["selected_feed_count"] == 2
+    assert result["added"] == [
+        "https://example.com/one.xml",
+        "https://example.com/two.xml",
+    ]
+    assert saved["data"] == {
+        "feed_urls": ["https://example.com/one.xml", "https://example.com/two.xml"],
+        "account_id": "rss",
+        "label": "RSS",
+    }
+
+
+def test_rss_connector_import_opml_select(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opml_path = tmp_path / "feeds.opml"
+    opml_path.write_text(
+        """<opml version="2.0"><body>
+  <outline text="One" xmlUrl="https://example.com/one.xml" />
+  <outline text="Two" xmlUrl="https://example.com/two.xml" />
+</body></opml>""",
+        encoding="utf-8",
+    )
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
+    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
+    monkeypatch.setattr(
+        "agentgraph.auth.credentials.save_platform",
+        lambda platform, data: saved.update({"platform": platform, "data": data}),
+    )
+
+    result = RssConnector.run_cli_command(["import-opml", str(opml_path), "--select", "2"])
+
+    assert result["selected_feed_count"] == 1
+    assert result["added"] == ["https://example.com/two.xml"]
+    assert saved["data"] == {
+        "feed_urls": ["https://example.com/two.xml"],
         "account_id": "rss",
         "label": "RSS",
     }

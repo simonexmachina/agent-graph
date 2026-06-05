@@ -109,6 +109,9 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         source: Connector source, e.g. "rss".
         args: Connector command and arguments, e.g.
             ["add", "https://simonwillison.net/atom/everything/"].
+            RSS OPML import is also available as:
+            ["import-opml", "/path/to/feeds.opml", "--all"] or
+            ["import-opml", "/path/to/feeds.opml", "--select", "1,3-5"].
 
     Returns:
         JSON object returned by the connector, or an error.
