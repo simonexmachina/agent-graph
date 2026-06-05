@@ -336,9 +336,9 @@ def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None
     )
 
 
-def cmd_bookmark(entity_id: str, as_json: bool) -> None:
+def cmd_bookmark(target: str, as_json: bool) -> None:
     try:
-        result = _post("/bookmark", params={"entity_id": entity_id})
+        result = _post("/bookmark", params={"target": target})
     except httpx.HTTPStatusError as exc:
         try:
             detail = exc.response.json().get("detail", str(exc))
@@ -349,11 +349,11 @@ def cmd_bookmark(entity_id: str, as_json: bool) -> None:
     if result is None:
         _warn_local()
         from agentgraph.core.runtime import backend_context
-        from agentgraph.graph.bookmark import bookmark_entity
+        from agentgraph.graph.bookmark import bookmark_target
 
         async def _bookmark() -> dict[str, Any]:
             async with backend_context():
-                return await bookmark_entity(entity_id)
+                return await bookmark_target(target)
 
         try:
             result = _run(_bookmark())

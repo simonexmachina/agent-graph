@@ -47,7 +47,7 @@ def test_bookmark_command_dispatches_to_cli_query() -> None:
         result = runner.invoke(app, ["bookmark", "abc123", "--json"])
 
     assert result.exit_code == 0
-    cmd_bookmark.assert_called_once_with(entity_id="abc123", as_json=True)
+    cmd_bookmark.assert_called_once_with(target="abc123", as_json=True)
 
 
 def test_auth_help() -> None:

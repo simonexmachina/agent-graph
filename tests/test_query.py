@@ -227,6 +227,84 @@ async def test_bookmark_entity_missing_raises_value_error() -> None:
         await bookmark_entity("missing")
 
 
+@pytest.mark.asyncio
+async def test_bookmark_url_uses_owning_connector() -> None:
+    from agentgraph.connectors.base import EntityBatch, SourceReference
+    from agentgraph.graph.bookmark import bookmark_target
+
+    entity = _entity(platform="gdocs", title="Fetched Doc")
+    updated = dict(entity)
+    updated["bookmarked"] = True
+    backend = _mock_backend(
+        get_entity_by_platform=AsyncMock(return_value=entity),
+        set_entity_bookmarked=AsyncMock(return_value=updated),
+    )
+    set_backend(backend)
+
+    class FakeConnector:
+        async def fetch(
+            self,
+            resource_type: str,
+            resource_id: str,
+        ) -> EntityBatch:
+            assert resource_type == "document"
+            assert resource_id == "doc-1"
+            return EntityBatch()
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()), \
+         patch(
+             "agentgraph.server.router.classify_url",
+             return_value=SourceReference("gdocs", "document", "doc-1"),
+         ):
+        result = await bookmark_target("https://docs.google.com/document/d/doc-1/edit")
+
+    assert result["bookmarked"] is True
+    backend.set_entity_bookmarked.assert_awaited_once_with(entity["id"], True)
+
+
+@pytest.mark.asyncio
+async def test_bookmark_url_falls_back_to_web_connector() -> None:
+    from agentgraph.connectors.base import EntityBatch, EntityRecord
+    from agentgraph.graph.bookmark import bookmark_target
+
+    entity = _entity(platform="web", title="Fetched Page")
+    updated = dict(entity)
+    updated["bookmarked"] = True
+    backend = _mock_backend(
+        get_entity_by_platform=AsyncMock(return_value=entity),
+        set_entity_bookmarked=AsyncMock(return_value=updated),
+    )
+    set_backend(backend)
+
+    class FakeWebConnector:
+        async def fetch(
+            self,
+            resource_type: str,
+            resource_id: str,
+        ) -> EntityBatch:
+            assert resource_type == "document"
+            assert resource_id == "https://example.com/page"
+            return EntityBatch(entities=[
+                EntityRecord(
+                    entity_type="Document",
+                    platform="web",
+                    platform_entity_id="https://example.com/page",
+                    title="Fetched Page",
+                    content="Body",
+                )
+            ])
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()), \
+         patch("agentgraph.server.router.classify_url", return_value=None), \
+         patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()):
+        result = await bookmark_target("https://example.com/page")
+
+    assert result["bookmarked"] is True
+    backend.set_entity_bookmarked.assert_awaited_once_with(entity["id"], True)
+
+
 # ---------------------------------------------------------------------------
 # MCP tool wrappers
 # ---------------------------------------------------------------------------
@@ -331,7 +409,7 @@ async def test_mcp_bookmark_entity_tool() -> None:
 
     fake_result = _entity(title="My Doc")
     fake_result["bookmarked"] = True
-    with patch("agentgraph.graph.bookmark.bookmark_entity", new=AsyncMock(return_value=fake_result)):
+    with patch("agentgraph.graph.bookmark.bookmark_target", new=AsyncMock(return_value=fake_result)):
         result = await bookmark_entity_tool("abc123")
 
     parsed = json.loads(result)
