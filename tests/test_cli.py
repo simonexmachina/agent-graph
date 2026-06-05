@@ -38,7 +38,16 @@ def test_help() -> None:
     assert "search" in result.output
     assert "auth" in result.output
     assert "download" in result.output
+    assert "bookmark" in result.output
     assert "unify-persons" in result.output
+
+
+def test_bookmark_command_dispatches_to_cli_query() -> None:
+    with patch("agentgraph.cli_query.cmd_bookmark") as cmd_bookmark:
+        result = runner.invoke(app, ["bookmark", "abc123", "--json"])
+
+    assert result.exit_code == 0
+    cmd_bookmark.assert_called_once_with(entity_id="abc123", as_json=True)
 
 
 def test_auth_help() -> None:

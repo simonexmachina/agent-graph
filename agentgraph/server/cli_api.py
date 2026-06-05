@@ -296,6 +296,19 @@ async def cli_fetch(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/bookmark")
+async def cli_bookmark(
+    entity_id: str = Query(...),
+) -> dict[str, Any]:
+    """Bookmark an entity so garbage collection will not remove it."""
+    from agentgraph.graph.bookmark import bookmark_entity
+
+    try:
+        return await bookmark_entity(entity_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/unify-persons")
 async def cli_unify_persons(
     primary: str = Query(...),

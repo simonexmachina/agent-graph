@@ -33,6 +33,7 @@ def _entity(
         "metadata": {},
         "created_at": None,
         "updated_at": None,
+        "bookmarked": False,
     }
     if score is not None:
         base["score"] = score
@@ -72,6 +73,7 @@ def _mock_backend(**method_overrides: Any) -> Any:
         "list_entities": AsyncMock(return_value=[]),
         "touch_last_accessed_by_ids": AsyncMock(return_value=None),
         "get_platform_last_synced_at": AsyncMock(return_value=None),
+        "set_entity_bookmarked": AsyncMock(return_value=_entity(title="Bookmarked Doc")),
     }
     for name, value in {**defaults, **method_overrides}.items():
         setattr(backend, name, value)
@@ -191,6 +193,41 @@ async def test_get_edges_returns_edges() -> None:
 
 
 # ---------------------------------------------------------------------------
+# bookmark_entity
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_bookmark_entity_resolves_id_and_sets_bookmark() -> None:
+    from agentgraph.graph.bookmark import bookmark_entity
+
+    entity = _entity(title="Target")
+    updated = dict(entity)
+    updated["bookmarked"] = True
+    set_bookmarked = AsyncMock(return_value=updated)
+    backend = _mock_backend(
+        get_entities_by_id_prefix=AsyncMock(return_value=[entity]),
+        set_entity_bookmarked=set_bookmarked,
+    )
+    set_backend(backend)
+
+    result = await bookmark_entity(entity["id"][:8])
+
+    assert result["bookmarked"] is True
+    set_bookmarked.assert_awaited_once_with(entity["id"], True)
+
+
+@pytest.mark.asyncio
+async def test_bookmark_entity_missing_raises_value_error() -> None:
+    from agentgraph.graph.bookmark import bookmark_entity
+
+    backend = _mock_backend(get_entities_by_id_prefix=AsyncMock(return_value=[]))
+    set_backend(backend)
+
+    with pytest.raises(ValueError, match="not found"):
+        await bookmark_entity("missing")
+
+
+# ---------------------------------------------------------------------------
 # MCP tool wrappers
 # ---------------------------------------------------------------------------
 
@@ -267,6 +304,19 @@ async def test_mcp_download_entity_tool() -> None:
         result = await download_entity_tool("abc123", "/tmp")
 
     assert json.loads(result) == fake_result
+
+
+@pytest.mark.asyncio
+async def test_mcp_bookmark_entity_tool() -> None:
+    from agentgraph.mcp.server import bookmark_entity_tool
+
+    fake_result = _entity(title="My Doc")
+    fake_result["bookmarked"] = True
+    with patch("agentgraph.graph.bookmark.bookmark_entity", new=AsyncMock(return_value=fake_result)):
+        result = await bookmark_entity_tool("abc123")
+
+    parsed = json.loads(result)
+    assert parsed["bookmarked"] is True
 
 
 @pytest.mark.asyncio
