@@ -1,68 +1,10 @@
-"""Source router: classifies URLs into source type + resource ID."""
+"""URL routing through connector-owned resolvers."""
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 
-from agentgraph.connectors.base import ResourceType
-
-
-@dataclass(frozen=True)
-class SourceReference:
-    source: str
-    resource_type: ResourceType
-    resource_id: str
-
-
-# Pattern: https://docs.google.com/document/d/{docId}/...
-_GDOCS_RE = re.compile(
-    r"https://docs\.google\.com/document/d/(?P<doc_id>[a-zA-Z0-9_-]+)"
-)
-
-# Pattern: https://docs.google.com/spreadsheets/d/{spreadsheetId}/...
-_GSHEETS_RE = re.compile(
-    r"https://docs\.google\.com/spreadsheets/d/(?P<spreadsheet_id>[a-zA-Z0-9_-]+)"
-)
-
-# Pattern: https://drive.google.com/drive/folders/{folderId}
-_GDRIVE_FOLDER_RE = re.compile(
-    r"https://drive\.google\.com/drive/folders/(?P<folder_id>[a-zA-Z0-9_-]+)"
-)
-
-# Pattern: https://drive.google.com/file/d/{fileId}/...
-_GDRIVE_FILE_RE = re.compile(
-    r"https://drive\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
-)
-
-# Pattern: https://docs.google.com/file/d/{fileId}/...
-_GDOCS_FILE_RE = re.compile(
-    r"https://docs\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
-)
-
-# Pattern: https://app.slack.com/client/{workspaceId}/{channelId}
-_SLACK_CHANNEL_RE = re.compile(
-    r"https://app\.slack\.com/client/(?P<workspace_id>[A-Z0-9]+)/(?P<channel_id>[A-Z0-9]+)"
-)
-
-# Pattern: https://discord.com/channels/{guildId}/{channelId}
-_DISCORD_CHANNEL_RE = re.compile(
-    r"https://discord\.com/channels/(?P<guild_id>\d+)/(?P<channel_id>\d+)"
-)
-
-# Pattern: https://discord.com/channels/@me/{channelId}  (DMs and group DMs)
-_DISCORD_DM_RE = re.compile(
-    r"https://discord\.com/channels/@me/(?P<channel_id>\d+)"
-)
-
-# Gmail thread view — extract the ID from the hash fragment.
-# Handles: #inbox/{id}, #search/{query}/{id}, #sent/{id}, etc.
-# Thread IDs are always 16+ mixed-case/hex chars; Gmail tab labels
-# (promotions, social, updates, forums) are short lowercase words and excluded.
-_GMAIL_THREAD_RE = re.compile(
-    r"https://mail\.google\.com/mail/u/\d+/#[^/\s]+(?:/[^/\s]+)*/(?P<thread_id>[A-Za-z0-9_+=:/|-]{16,})"
-)
-
+from agentgraph.connectors.base import SourceReference
 
 # U+200B zero-width space, U+200C/D/E/F directional marks, U+00AD soft hyphen, U+FEFF BOM
 _INVISIBLE_CHARS_RE = re.compile(
@@ -70,82 +12,19 @@ _INVISIBLE_CHARS_RE = re.compile(
 )
 
 
+def normalise_url_for_matching(url: str) -> str:
+    """Strip invisible characters and punctuation commonly wrapping URLs in prose."""
+    return _INVISIBLE_CHARS_RE.sub("", url).rstrip(".,)>\"'")
+
+
 def classify_url(url: str) -> SourceReference | None:
-    """Return a SourceReference for a known URL, or None if unrecognised."""
-    # Strip invisible Unicode chars first (e.g. zero-width spaces from email HTML),
-    # then strip trailing punctuation that commonly wraps URLs in prose/markdown.
-    url = _INVISIBLE_CHARS_RE.sub("", url).rstrip(".,)>\"'")
-    # Sheets must be checked before Docs — both live under docs.google.com
-    m = _GSHEETS_RE.match(url)
-    if m:
-        return SourceReference(
-            source="gsheets",
-            resource_type="spreadsheet",
-            resource_id=m.group("spreadsheet_id"),
-        )
+    """Return a SourceReference for a connector-owned URL, or None."""
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
 
-    m = _GDRIVE_FOLDER_RE.match(url)
-    if m:
-        return SourceReference(
-            source="gdrive",
-            resource_type="folder",
-            resource_id=m.group("folder_id"),
-        )
-
-    m = _GDRIVE_FILE_RE.match(url)
-    if m:
-        return SourceReference(
-            source="gdrive",
-            resource_type="document",
-            resource_id=m.group("file_id"),
-        )
-
-    m = _GDOCS_FILE_RE.match(url)
-    if m:
-        return SourceReference(
-            source="gdrive",
-            resource_type="document",
-            resource_id=m.group("file_id"),
-        )
-
-    m = _GDOCS_RE.match(url)
-    if m:
-        return SourceReference(
-            source="gdocs",
-            resource_type="document",
-            resource_id=m.group("doc_id"),
-        )
-
-    m = _SLACK_CHANNEL_RE.match(url)
-    if m:
-        return SourceReference(
-            source="slack",
-            resource_type="channel",
-            resource_id=f"{m.group('workspace_id')}/{m.group('channel_id')}",
-        )
-
-    m = _DISCORD_DM_RE.match(url)
-    if m:
-        return SourceReference(
-            source="discord",
-            resource_type="dm",
-            resource_id=m.group("channel_id"),
-        )
-
-    m = _DISCORD_CHANNEL_RE.match(url)
-    if m:
-        return SourceReference(
-            source="discord",
-            resource_type="channel",
-            resource_id=m.group("channel_id"),
-        )
-
-    m = _GMAIL_THREAD_RE.search(url)
-    if m:
-        return SourceReference(
-            source="gmail",
-            resource_type="thread",
-            resource_id=m.group("thread_id"),
-        )
-
+    normalised_url = normalise_url_for_matching(url)
+    bootstrap()
+    for connector in get_all_connectors():
+        ref = connector.resolve_url(normalised_url)
+        if ref is not None:
+            return ref
     return None

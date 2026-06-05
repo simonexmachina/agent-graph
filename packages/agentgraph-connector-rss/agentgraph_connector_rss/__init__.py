@@ -18,6 +18,7 @@ from agentgraph.connectors.base import (
     EntityRecord,
     FetchPolicy,
     ResourceType,
+    SourceReference,
 )
 from agentgraph_connector_rss.auth import (
     add_feed_urls,
@@ -111,11 +112,20 @@ class RssConnector(BaseConnector):
         return _format_rss_cli_result(result)
 
     def can_handle(self, url: str) -> bool:
+        return self.resolve_url(url) is not None
+
+    def resolve_url(self, url: str) -> SourceReference | None:
         try:
             creds = load_rss_creds()
         except RuntimeError:
-            return False
-        return url in creds.feed_urls
+            return None
+        if url not in creds.feed_urls:
+            return None
+        return SourceReference(
+            source=self.source,
+            resource_type="document",
+            resource_id=url,
+        )
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         creds = load_rss_creds(account_id)

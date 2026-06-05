@@ -16,6 +16,8 @@ from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
 from agentgraph.auth.google_provider import (
     get_credentials as google_credentials,
+)
+from agentgraph.auth.google_provider import (
     get_user_email,
     list_google_accounts,
     verify_google_auth,
@@ -29,10 +31,15 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    SourceReference,
 )
 from agentgraph.graph.upsert import upsert_batch
 
 logger = logging.getLogger(__name__)
+
+_GMAIL_THREAD_URL_RE = re.compile(
+    r"https://mail\.google\.com/mail/u/\d+/#[^/\s]+(?:/[^/\s]+)*/(?P<thread_id>[A-Za-z0-9_+=:/|-]{16,})"
+)
 
 _STALE_AFTER = 15 * 60
 
@@ -155,7 +162,17 @@ class GmailConnector(BaseConnector):
         return [str(account["email"]) for account in list_google_accounts() if account.get("email")]
 
     def can_handle(self, url: str) -> bool:
-        return "mail.google.com" in url
+        return self.resolve_url(url) is not None
+
+    def resolve_url(self, url: str) -> SourceReference | None:
+        match = _GMAIL_THREAD_URL_RE.search(url)
+        if match is None:
+            return None
+        return SourceReference(
+            source=self.source,
+            resource_type="thread",
+            resource_id=match.group("thread_id"),
+        )
 
     def entity_url(self, platform_entity_id: str) -> str | None:
         return f"https://mail.google.com/mail/u/0/#all/{platform_entity_id}"

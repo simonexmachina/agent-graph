@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,8 @@ from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
 from agentgraph.auth.google_provider import (
     get_credentials as google_credentials,
+)
+from agentgraph.auth.google_provider import (
     get_user_email,
     list_google_accounts,
     verify_google_auth,
@@ -28,6 +31,7 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    SourceReference,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +43,15 @@ _GDRIVE_SHEET_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.sprea
 _GDRIVE_SHEET_EXPORT_URL = (
     "https://www.googleapis.com/drive/v3/files/{file_id}/export?"
     f"mimeType={_GDRIVE_SHEET_EXPORT_MIME}"
+)
+_GDRIVE_FOLDER_URL_RE = re.compile(
+    r"https://drive\.google\.com/drive/folders/(?P<folder_id>[a-zA-Z0-9_-]+)"
+)
+_GDRIVE_FILE_URL_RE = re.compile(
+    r"https://drive\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
+)
+_GDOCS_FILE_URL_RE = re.compile(
+    r"https://docs\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
 )
 _MIME_EXTENSIONS: dict[str, str] = {
     "application/pdf": ".pdf",
@@ -103,11 +116,25 @@ class DriveChangesConnector(BaseConnector):
         return [str(account["email"]) for account in list_google_accounts() if account.get("email")]
 
     def can_handle(self, url: str) -> bool:
-        return (
-            "drive.google.com/drive/folders/" in url
-            or "drive.google.com/file/d/" in url
-            or "docs.google.com/file/d/" in url
-        )
+        return self.resolve_url(url) is not None
+
+    def resolve_url(self, url: str) -> SourceReference | None:
+        folder_match = _GDRIVE_FOLDER_URL_RE.match(url)
+        if folder_match is not None:
+            return SourceReference(
+                source=self.source,
+                resource_type="folder",
+                resource_id=folder_match.group("folder_id"),
+            )
+
+        file_match = _GDRIVE_FILE_URL_RE.match(url) or _GDOCS_FILE_URL_RE.match(url)
+        if file_match is not None:
+            return SourceReference(
+                source=self.source,
+                resource_type="document",
+                resource_id=file_match.group("file_id"),
+            )
+        return None
 
     def entity_url(self, platform_entity_id: str) -> str | None:
         return f"https://drive.google.com/drive/folders/{platform_entity_id}"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -17,6 +18,7 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    SourceReference,
     get_known_channel_syncs,
 )
 from agentgraph.graph.upsert import upsert_batch
@@ -31,6 +33,9 @@ logger = logging.getLogger(__name__)
 SLACK_API = "https://slack.com/api"
 _STALE_AFTER = 5 * 60  # 5 minutes
 _PADDING_MESSAGES = 20  # messages to fetch on first visit as immediate context
+_SLACK_CHANNEL_URL_RE = re.compile(
+    r"https://app\.slack\.com/client/(?P<workspace_id>[A-Z0-9]+)/(?P<channel_id>[A-Z0-9]+)"
+)
 
 
 def _get_headers(account_id: str | None = None) -> dict[str, str]:
@@ -170,7 +175,17 @@ class SlackConnector(BaseConnector):
         return ids
 
     def can_handle(self, url: str) -> bool:
-        return "app.slack.com" in url
+        return self.resolve_url(url) is not None
+
+    def resolve_url(self, url: str) -> SourceReference | None:
+        match = _SLACK_CHANNEL_URL_RE.match(url)
+        if match is None:
+            return None
+        return SourceReference(
+            source=self.source,
+            resource_type="channel",
+            resource_id=f"{match.group('workspace_id')}/{match.group('channel_id')}",
+        )
 
     async def fetch(
         self,

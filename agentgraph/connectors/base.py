@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, Literal
 
@@ -40,6 +41,13 @@ RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
     "spreadsheet": "Spreadsheet",
     "thread":      "Thread",
 }
+
+
+@dataclass(frozen=True)
+class SourceReference:
+    source: str
+    resource_type: ResourceType
+    resource_id: str
 
 
 class PersonRecord(BaseModel):
@@ -317,6 +325,11 @@ class BaseConnector(ABC):
 
     @abstractmethod
     def can_handle(self, url: str) -> bool: ...
+
+    def resolve_url(self, url: str) -> SourceReference | None:
+        """Return the fetchable resource behind a URL, if this connector owns it."""
+        _ = url
+        return None
 
     @abstractmethod
     async def fetch(

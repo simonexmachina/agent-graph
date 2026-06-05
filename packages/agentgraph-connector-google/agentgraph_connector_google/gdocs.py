@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +16,8 @@ from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
 from agentgraph.auth.google_provider import (
     get_credentials as google_credentials,
+)
+from agentgraph.auth.google_provider import (
     get_user_email,
     list_google_accounts,
     verify_google_auth,
@@ -28,10 +31,15 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    SourceReference,
 )
 from agentgraph.graph.upsert import upsert_batch
 
 logger = logging.getLogger(__name__)
+
+_GDOCS_URL_RE = re.compile(
+    r"https://docs\.google\.com/document/d/(?P<doc_id>[a-zA-Z0-9_-]+)"
+)
 
 # Staleness: re-fetch if doc hasn't been synced in the last 15 minutes
 _STALE_AFTER = 15 * 60
@@ -119,7 +127,17 @@ class GoogleDocsConnector(BaseConnector):
         return [str(account["email"]) for account in list_google_accounts() if account.get("email")]
 
     def can_handle(self, url: str) -> bool:
-        return "docs.google.com/document" in url
+        return self.resolve_url(url) is not None
+
+    def resolve_url(self, url: str) -> SourceReference | None:
+        match = _GDOCS_URL_RE.match(url)
+        if match is None:
+            return None
+        return SourceReference(
+            source=self.source,
+            resource_type="document",
+            resource_id=match.group("doc_id"),
+        )
 
     def entity_url(self, platform_entity_id: str) -> str | None:
         return f"https://docs.google.com/document/d/{platform_entity_id}"

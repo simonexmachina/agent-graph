@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -18,6 +19,7 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    SourceReference,
     get_known_channel_syncs,
 )
 from agentgraph.graph.upsert import upsert_batch
@@ -28,6 +30,12 @@ logger = logging.getLogger(__name__)
 DISCORD_API = "https://discord.com/api/v10"
 _STALE_AFTER = 5 * 60  # 5 minutes
 _MAX_RETRIES = 3
+_DISCORD_CHANNEL_URL_RE = re.compile(
+    r"https://discord\.com/channels/(?P<guild_id>\d+)/(?P<channel_id>\d+)"
+)
+_DISCORD_DM_URL_RE = re.compile(
+    r"https://discord\.com/channels/@me/(?P<channel_id>\d+)"
+)
 
 # Module-level user cache so repeated syncs don't re-fetch the same users
 _user_cache: dict[str, PersonRecord] = {}
@@ -214,7 +222,25 @@ class DiscordConnector(BaseConnector):
             return ("invalid", f"network error: {type(exc).__name__}")
 
     def can_handle(self, url: str) -> bool:
-        return "discord.com/channels/" in url
+        return self.resolve_url(url) is not None
+
+    def resolve_url(self, url: str) -> SourceReference | None:
+        dm_match = _DISCORD_DM_URL_RE.match(url)
+        if dm_match is not None:
+            return SourceReference(
+                source=self.source,
+                resource_type="dm",
+                resource_id=dm_match.group("channel_id"),
+            )
+
+        channel_match = _DISCORD_CHANNEL_URL_RE.match(url)
+        if channel_match is not None:
+            return SourceReference(
+                source=self.source,
+                resource_type="channel",
+                resource_id=channel_match.group("channel_id"),
+            )
+        return None
 
     def normalise_fetch_id(self, resource_id: str, entity_type: str) -> tuple[str, ResourceType]:
         # Message IDs are stored as "channel_id:message_id"; fetch operates on the channel.
