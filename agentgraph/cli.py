@@ -300,6 +300,17 @@ def download(
     cmd_download(entity_id=entity_id, output_path=output, as_json=json)
 
 
+@app.command()
+def bookmark(
+    entity_id: str = typer.Argument(..., help="Entity ID, UUID prefix, or platform ref"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Bookmark an entity so garbage collection will not remove it."""
+    from agentgraph.cli_query import cmd_bookmark
+
+    cmd_bookmark(entity_id=entity_id, as_json=json)
+
+
 @app.command("unify-persons")
 def unify_persons_cmd(
     primary_entity_id: str = typer.Argument(..., help="Person entity to keep"),

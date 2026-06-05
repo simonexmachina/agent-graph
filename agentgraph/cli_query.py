@@ -336,6 +336,39 @@ def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None
     )
 
 
+def cmd_bookmark(entity_id: str, as_json: bool) -> None:
+    try:
+        result = _post("/bookmark", params={"entity_id": entity_id})
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        console.print(f"[red]{detail}[/red]")
+        return
+    if result is None:
+        _warn_local()
+        from agentgraph.core.runtime import backend_context
+        from agentgraph.graph.bookmark import bookmark_entity
+
+        async def _bookmark() -> dict[str, Any]:
+            async with backend_context():
+                return await bookmark_entity(entity_id)
+
+        try:
+            result = _run(_bookmark())
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            return
+
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+
+    label = result.get("title") or result.get("platform_entity_id") or result["id"]
+    console.print(f"[green]Bookmarked:[/green] {label} [{result['id'][:8]}]")
+
+
 def cmd_unify_persons(
     primary_entity_id: str,
     duplicate_entity_ids: list[str],
