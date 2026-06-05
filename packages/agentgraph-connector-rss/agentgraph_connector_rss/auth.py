@@ -135,13 +135,14 @@ def select_opml_feeds(
     *,
     include_all: bool = False,
     selection: str | None = None,
+    configured_feed_urls: list[str] | None = None,
 ) -> list[OpmlFeed]:
     if include_all:
         return feeds
     if selection is not None:
         selected_indexes = _parse_feed_selection(selection, len(feeds))
         return [feeds[index - 1] for index in selected_indexes]
-    return _prompt_for_opml_feeds(feeds)
+    return _prompt_for_opml_feeds(feeds, configured_feed_urls=configured_feed_urls or [])
 
 
 def import_opml_feeds(
@@ -155,7 +156,18 @@ def import_opml_feeds(
     if not feeds:
         raise ValueError("No RSS/Atom feeds found in OPML file")
 
-    selected_feeds = select_opml_feeds(feeds, include_all=include_all, selection=selection)
+    configured_feed_urls: list[str] = []
+    try:
+        configured_feed_urls = load_rss_creds(account_id or "rss").feed_urls
+    except RuntimeError:
+        configured_feed_urls = []
+
+    selected_feeds = select_opml_feeds(
+        feeds,
+        include_all=include_all,
+        selection=selection,
+        configured_feed_urls=configured_feed_urls,
+    )
     if not selected_feeds:
         raise ValueError("No feeds selected")
 
@@ -194,26 +206,35 @@ def _parse_feed_selection(selection: str, feed_count: int) -> list[int]:
     return indexes
 
 
-def _prompt_for_opml_feeds(feeds: list[OpmlFeed]) -> list[OpmlFeed]:
+def _prompt_for_opml_feeds(
+    feeds: list[OpmlFeed],
+    *,
+    configured_feed_urls: list[str],
+) -> list[OpmlFeed]:
     import sys
 
     if not sys.stdin.isatty():
         raise ValueError("Use --all or --select <indexes> when importing OPML non-interactively")
 
     try:
-        return _checkbox_select_opml_feeds(feeds)
+        return _checkbox_select_opml_feeds(feeds, configured_feed_urls=configured_feed_urls)
     except ImportError:
         return _prompt_for_opml_feeds_numeric(feeds)
 
 
-def _checkbox_select_opml_feeds(feeds: list[OpmlFeed]) -> list[OpmlFeed]:
+def _checkbox_select_opml_feeds(
+    feeds: list[OpmlFeed],
+    *,
+    configured_feed_urls: list[str],
+) -> list[OpmlFeed]:
     import questionary  # type: ignore[import-untyped]
 
+    configured = set(configured_feed_urls)
     choices = [
         questionary.Choice(
             title=f"{feed.title} ({feed.feed_url})",
             value=feed.feed_url,
-            checked=True,
+            checked=feed.feed_url in configured,
         )
         for feed in feeds
     ]

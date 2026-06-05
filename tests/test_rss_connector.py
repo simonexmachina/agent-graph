@@ -15,6 +15,7 @@ from agentgraph_connector_rss.auth import (
     RssCredentials,
     _checkbox_select_opml_feeds,
     add_feed_urls,
+    import_opml_feeds,
     list_rss_accounts,
     parse_opml_feeds,
     select_opml_feeds,
@@ -168,7 +169,7 @@ def test_checkbox_select_opml_feeds_uses_questionary(monkeypatch: pytest.MonkeyP
 
     def fake_checkbox(prompt: str, *, choices: list[_FakeChoice]) -> _FakeQuestion:
         assert "2 found" in prompt
-        assert [choice.checked for choice in choices] == [True, True]
+        assert [choice.checked for choice in choices] == [False, True]
         return _FakeQuestion()
 
     questionary = ModuleType("questionary")
@@ -176,12 +177,61 @@ def test_checkbox_select_opml_feeds_uses_questionary(monkeypatch: pytest.MonkeyP
     questionary.__dict__["checkbox"] = fake_checkbox
     monkeypatch.setitem(sys.modules, "questionary", questionary)
 
-    selected = _checkbox_select_opml_feeds([
-        OpmlFeed(title="One", feed_url="https://example.com/one.xml"),
-        OpmlFeed(title="Two", feed_url="https://example.com/two.xml"),
-    ])
+    selected = _checkbox_select_opml_feeds(
+        [
+            OpmlFeed(title="One", feed_url="https://example.com/one.xml"),
+            OpmlFeed(title="Two", feed_url="https://example.com/two.xml"),
+        ],
+        configured_feed_urls=["https://example.com/two.xml"],
+    )
 
     assert selected == [OpmlFeed(title="Two", feed_url="https://example.com/two.xml")]
+
+
+def test_import_opml_prompt_uses_existing_rss_account_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opml_path = tmp_path / "feeds.opml"
+    opml_path.write_text(
+        """<opml version="2.0"><body>
+  <outline text="One" xmlUrl="https://example.com/one.xml" />
+  <outline text="Two" xmlUrl="https://example.com/two.xml" />
+</body></opml>""",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_select(
+        feeds: list[OpmlFeed],
+        *,
+        include_all: bool = False,
+        selection: str | None = None,
+        configured_feed_urls: list[str] | None = None,
+    ) -> list[OpmlFeed]:
+        captured["configured_feed_urls"] = configured_feed_urls
+        return [feeds[0]]
+
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: RssCredentials(
+            feed_urls=["https://example.com/two.xml"],
+            account_id=account_id or "rss",
+        ),
+    )
+    monkeypatch.setattr("agentgraph_connector_rss.auth.select_opml_feeds", fake_select)
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.list_rss_accounts",
+        lambda: [{"account_id": "rss", "label": "RSS", "feed_count": "1"}],
+    )
+    monkeypatch.setattr(
+        "agentgraph.auth.credentials.upsert_platform_account",
+        lambda *args, **kwargs: None,
+    )
+
+    import_opml_feeds(opml_path)
+
+    assert captured["configured_feed_urls"] == ["https://example.com/two.xml"]
 
 
 def test_rss_connector_import_opml_all(
