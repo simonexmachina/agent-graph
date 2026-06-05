@@ -1,15 +1,16 @@
 [project]
-name = "agentgraph-connector-feedly"
+name = "agentgraph-connector-rss"
 version = "0.1.0"
-description = "Feedly connector for AgentGraph"
+description = "RSS and Atom connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
     "agentgraph",
+    "feedparser>=6.0.11",
     "httpx>=0.28.1",
 ]
 
 [project.entry-points."agentgraph.connectors"]
-feedly = "agentgraph_connector_feedly:FeedlyConnector"
+rss = "agentgraph_connector_rss:RssConnector"
 
 [tool.uv]
 package = true

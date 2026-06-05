@@ -38,10 +38,10 @@ agentgraph download <entity-id|platform/ref> [--output <file-or-dir>] [--json]
 agentgraph unify-persons <primary-person-id> <duplicate-person-id>... [--json]
 
 # Trigger a background poll for one or all connectors
-agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, feedly — omit for all
+agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, rss — omit for all
 
 # Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
-agentgraph ingest <source> [--json]   # e.g. gmail, feedly
+agentgraph ingest <source> [--json]   # e.g. gmail, rss
 
 # List installed connectors and their auth/sync status
 agentgraph connectors [--json] # auth_provider, auth_status/auth_detail, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
@@ -53,7 +53,7 @@ agentgraph auth status [--json] # provider, connectors[], auth_status/auth_detai
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
 agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
-agentgraph auth feedly [--add] [--account <account-id>]   # Feedly API token and stream IDs
+agentgraph auth rss [--add] [--account <account-id>]      # RSS/Atom feed URLs
 
 # Server
 agentgraph serve [--reload]
