@@ -28,5 +28,5 @@ agentgraph connector rss import-opml feeds.opml --all
 agentgraph connector rss import-opml feeds.opml --select 1,3-5
 ```
 
-For RSS OPML imports, omit `--all` and `--select` in an interactive terminal to review the
-feeds and choose whether to add all feeds or only selected feed numbers.
+For RSS OPML imports, omit `--all` and `--select` in an interactive terminal to choose
+feeds with a checkbox prompt.

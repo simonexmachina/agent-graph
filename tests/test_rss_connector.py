@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 import feedparser  # type: ignore[import-untyped]
 import pytest
 from agentgraph_connector_rss import RssConnector, _fetch_feed
 from agentgraph_connector_rss.auth import (
+    OpmlFeed,
     RssCredentials,
+    _checkbox_select_opml_feeds,
     add_feed_urls,
     list_rss_accounts,
     parse_opml_feeds,
@@ -149,6 +153,35 @@ def test_select_opml_feeds_supports_indexes_and_ranges(tmp_path: Path) -> None:
         "https://example.com/two.xml",
         "https://example.com/three.xml",
     ]
+
+
+def test_checkbox_select_opml_feeds_uses_questionary(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeChoice:
+        def __init__(self, *, title: str, value: str, checked: bool) -> None:
+            self.title = title
+            self.value = value
+            self.checked = checked
+
+    class _FakeQuestion:
+        def ask(self) -> list[str]:
+            return ["https://example.com/two.xml"]
+
+    def fake_checkbox(prompt: str, *, choices: list[_FakeChoice]) -> _FakeQuestion:
+        assert "2 found" in prompt
+        assert [choice.checked for choice in choices] == [True, True]
+        return _FakeQuestion()
+
+    questionary = ModuleType("questionary")
+    questionary.__dict__["Choice"] = _FakeChoice
+    questionary.__dict__["checkbox"] = fake_checkbox
+    monkeypatch.setitem(sys.modules, "questionary", questionary)
+
+    selected = _checkbox_select_opml_feeds([
+        OpmlFeed(title="One", feed_url="https://example.com/one.xml"),
+        OpmlFeed(title="Two", feed_url="https://example.com/two.xml"),
+    ])
+
+    assert selected == [OpmlFeed(title="Two", feed_url="https://example.com/two.xml")]
 
 
 def test_rss_connector_import_opml_all(

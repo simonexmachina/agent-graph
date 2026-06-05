@@ -197,10 +197,38 @@ def _parse_feed_selection(selection: str, feed_count: int) -> list[int]:
 def _prompt_for_opml_feeds(feeds: list[OpmlFeed]) -> list[OpmlFeed]:
     import sys
 
-    import typer
-
     if not sys.stdin.isatty():
         raise ValueError("Use --all or --select <indexes> when importing OPML non-interactively")
+
+    try:
+        return _checkbox_select_opml_feeds(feeds)
+    except ImportError:
+        return _prompt_for_opml_feeds_numeric(feeds)
+
+
+def _checkbox_select_opml_feeds(feeds: list[OpmlFeed]) -> list[OpmlFeed]:
+    import questionary  # type: ignore[import-untyped]
+
+    choices = [
+        questionary.Choice(
+            title=f"{feed.title} ({feed.feed_url})",
+            value=feed.feed_url,
+            checked=True,
+        )
+        for feed in feeds
+    ]
+    selected_urls = questionary.checkbox(
+        f"Select feeds to add ({len(feeds)} found):",
+        choices=choices,
+    ).ask()
+    if selected_urls is None:
+        raise ValueError("No feeds selected")
+    selected = set(cast(list[str], selected_urls))
+    return [feed for feed in feeds if feed.feed_url in selected]
+
+
+def _prompt_for_opml_feeds_numeric(feeds: list[OpmlFeed]) -> list[OpmlFeed]:
+    import typer
 
     typer.echo(f"Found {len(feeds)} feed(s) in OPML:")
     for index, feed in enumerate(feeds, start=1):

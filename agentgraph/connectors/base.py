@@ -231,6 +231,13 @@ class BaseConnector(ABC):
         """Return help text for connector-owned CLI commands."""
         return f"{cls.source} does not expose connector commands"
 
+    @classmethod
+    def format_cli_result(cls, result: dict[str, Any]) -> str:
+        """Return human-readable output for a connector-owned CLI command result."""
+        import json
+
+        return json.dumps(result, indent=2, default=str)
+
     def normalise_fetch_id(
         self, resource_id: str, entity_type: str
     ) -> tuple[str, ResourceType]:

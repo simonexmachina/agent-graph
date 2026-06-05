@@ -106,6 +106,10 @@ class RssConnector(BaseConnector):
     def cli_help(cls) -> str:
         return _rss_help()
 
+    @classmethod
+    def format_cli_result(cls, result: dict[str, Any]) -> str:
+        return _format_rss_cli_result(result)
+
     def can_handle(self, url: str) -> bool:
         try:
             creds = load_rss_creds()
@@ -207,7 +211,7 @@ def _rss_help() -> str:
             "  add <feed-url> [feed-url...]",
             "      Add one or more RSS/Atom feed URLs.",
             "  import-opml <file.opml> [--all | --select <indexes>]",
-            "      Import RSS/Atom feed URLs from an OPML file.",
+            "      Import RSS/Atom feed URLs from an OPML file. Omit flags for checkbox selection.",
             "",
             "Options:",
             "  --account <account-id>  Add feeds to a specific RSS account.",
@@ -216,6 +220,29 @@ def _rss_help() -> str:
             "  --json                  Output command results as JSON.",
         ]
     )
+
+
+def _format_rss_cli_result(result: dict[str, Any]) -> str:
+    account_id = str(result.get("account_id") or "rss")
+    added = [str(item) for item in cast(list[object], result.get("added") or [])]
+    feed_urls = cast(list[object], result.get("feed_urls") or [])
+
+    if "imported_feed_count" in result:
+        imported_count = int(result.get("imported_feed_count") or 0)
+        selected_count = int(result.get("selected_feed_count") or len(added))
+        lines = [
+            f"Imported {selected_count} of {imported_count} feed(s) into RSS account {account_id}."
+        ]
+    else:
+        lines = [f"Added {len(added)} feed(s) to RSS account {account_id}."]
+
+    if added:
+        lines.append("Added feeds:")
+        lines.extend(f"  - {feed_url}" for feed_url in added[:20])
+        if len(added) > 20:
+            lines.append(f"  ... {len(added) - 20} more")
+    lines.append(f"Total configured feeds: {len(feed_urls)}")
+    return "\n".join(lines)
 
 
 def _parse_account_option(args: list[str]) -> tuple[str | None, list[str]]:

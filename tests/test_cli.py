@@ -141,6 +141,10 @@ class _FakeRssConnector:
     def cli_help(cls) -> str:
         return "RSS connector help"
 
+    @classmethod
+    def format_cli_result(cls, result: dict[str, Any]) -> str:
+        return f"formatted {result['status']}"
+
 
 class _FakeGoogleToken:
     token = "new-access-token"
@@ -242,7 +246,22 @@ def test_connector_command_dispatches_to_connector() -> None:
 
     assert result.exit_code == 0
     assert captured == {"args": ["add", "https://simonwillison.net/atom/everything/"]}
+    assert result.output == "formatted ok\n"
+
+
+def test_connector_command_json_outputs_raw_result() -> None:
+    def fake_run_cli_command(args: list[str]) -> dict[str, object]:
+        return {"status": "ok", "args": args}
+
+    _FakeRssConnector.run_cli_command = classmethod(lambda cls, args: fake_run_cli_command(args))
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=_FakeRssConnector()):
+        result = runner.invoke(app, ["connector", "rss", "add", "https://example.com/feed.xml", "--json"])
+
+    assert result.exit_code == 0
     assert '"status": "ok"' in result.output
+    assert '"args": [' in result.output
 
 
 def test_connector_command_dispatches_help_to_connector() -> None:

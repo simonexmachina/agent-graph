@@ -152,7 +152,7 @@ def connector_command(
     if json:
         typer.echo(_json.dumps(result, indent=2))
         return
-    typer.echo(_json.dumps(result, indent=2))
+    typer.echo(type(connector).format_cli_result(result))
 
 
 @app.command()
