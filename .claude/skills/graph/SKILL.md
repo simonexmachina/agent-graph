@@ -46,6 +46,9 @@ agentgraph ingest <source> [--json]   # e.g. gmail, rss
 # List installed connectors and their auth/sync status
 agentgraph connectors [--json] # auth_provider, auth_status/auth_detail, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
 
+# Run a connector-owned command
+agentgraph connector <source> <command> [args...] [--json] # e.g. agentgraph connector rss add https://simonwillison.net/atom/everything/
+
 # Show auth provider state (dedupes shared providers like Google)
 agentgraph auth status [--json] # provider, connectors[], auth_status/auth_detail, accounts[]
 
@@ -53,7 +56,7 @@ agentgraph auth status [--json] # provider, connectors[], auth_status/auth_detai
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
 agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
-agentgraph auth rss [--add] [--account <account-id>]      # RSS/Atom feed URLs
+agentgraph auth rss [--add] [--account <account-id>]      # RSS/Atom feed URLs interactively
 
 # Server
 agentgraph serve [--reload]

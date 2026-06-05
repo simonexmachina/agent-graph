@@ -44,6 +44,44 @@ def list_rss_accounts() -> list[dict[str, str | None]]:
     return results
 
 
+def add_feed_urls(
+    feed_urls: list[str],
+    *,
+    account_id: str | None = None,
+) -> RssCredentials:
+    """Add feed URLs to the configured RSS account and return the updated credentials."""
+    from agentgraph.auth.credentials import save_platform, upsert_platform_account
+
+    selected_feed_urls = [part.strip() for part in feed_urls if part.strip()]
+    if not selected_feed_urls:
+        raise ValueError("Usage: agentgraph connector rss add <feed-url> [feed-url...]")
+
+    resolved_account_id = account_id or "rss"
+    existing_accounts = list_rss_accounts()
+    try:
+        existing = load_rss_creds(resolved_account_id)
+        label = existing.label or "RSS"
+        merged = [*existing.feed_urls]
+    except RuntimeError:
+        label = "RSS"
+        merged = []
+
+    for feed_url in selected_feed_urls:
+        if feed_url not in merged:
+            merged.append(feed_url)
+
+    creds = RssCredentials(
+        feed_urls=merged,
+        account_id=resolved_account_id,
+        label=label,
+    )
+    if existing_accounts:
+        upsert_platform_account("rss", resolved_account_id, creds, make_default=True)
+    else:
+        save_platform("rss", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
+    return creds
+
+
 async def preview_feed(feed_url: str, *, count: int = 3) -> dict[str, Any]:
     """Fetch and parse a small preview from an RSS/Atom feed URL."""
     import asyncio
@@ -105,12 +143,12 @@ def run_rss_flow(
         "and AgentGraph will fetch those feeds directly.\n"
     )
     raw_feeds: str = typer.prompt("RSS/Atom feed URLs (comma-separated)").strip()
-    feed_urls = [part.strip() for part in raw_feeds.split(",") if part.strip()]
+    selected_feed_urls = [part.strip() for part in raw_feeds.split(",") if part.strip()]
     label: str = typer.prompt("Account label", default="RSS").strip()
     resolved_account_id = account_id or "rss"
 
     creds = RssCredentials(
-        feed_urls=feed_urls,
+        feed_urls=selected_feed_urls,
         account_id=resolved_account_id,
         label=label,
     )
@@ -120,14 +158,14 @@ def run_rss_flow(
         upsert_platform_account("rss", resolved_account_id, creds, make_default=True)
 
     typer.echo(f"\nRSS feeds saved to {CREDENTIALS_FILE}")
-    if feed_urls:
+    if selected_feed_urls:
         typer.echo("Checking configured feed(s)...")
 
         async def _check() -> None:
             status, detail = await verify_rss_auth(resolved_account_id)
             if status == "ok":
                 typer.echo(f"RSS feed check passed: {detail}")
-                preview = await preview_feed(feed_urls[0], count=3)
+                preview = await preview_feed(selected_feed_urls[0], count=3)
                 entries = cast(list[dict[str, str]], preview.get("entries") or [])
                 if entries:
                     typer.echo("Sample articles from first feed:")

@@ -9,6 +9,7 @@ import pytest
 from agentgraph_connector_rss import RssConnector, _fetch_feed
 from agentgraph_connector_rss.auth import (
     RssCredentials,
+    add_feed_urls,
     list_rss_accounts,
     verify_rss_auth,
 )
@@ -56,6 +57,29 @@ def test_list_rss_accounts(monkeypatch: pytest.MonkeyPatch) -> None:
             "feed_count": "1",
         }
     ]
+
+
+def test_add_feed_urls_creates_rss_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
+    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
+    monkeypatch.setattr(
+        "agentgraph.auth.credentials.save_platform",
+        lambda platform, data: saved.update({"platform": platform, "data": data}),
+    )
+
+    creds = add_feed_urls(["https://example.com/feed.xml"])
+
+    assert creds.feed_urls == ["https://example.com/feed.xml"]
+    assert saved["platform"] == "rss"
+    assert saved["data"] == {
+        "feed_urls": ["https://example.com/feed.xml"],
+        "account_id": "rss",
+        "label": "RSS",
+    }
 
 
 @pytest.mark.asyncio

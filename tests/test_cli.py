@@ -125,6 +125,19 @@ class _FakeDriveConnector:
         return _FakeGoogleConnector.list_accounts()
 
 
+class _FakeRssConnector:
+    source = "rss"
+    auth_label = "rss"
+    auth_description = "RSS"
+    poll_interval = None
+    poll_delegates: list[str] = []
+    url_patterns: list[str] = []
+
+    @classmethod
+    async def verify_auth(cls) -> tuple[str, str | None]:
+        return ("missing", None)
+
+
 class _FakeGoogleToken:
     token = "new-access-token"
     refresh_token = "new-refresh-token"
@@ -208,6 +221,24 @@ def test_auth_provider_dispatches_to_connector() -> None:
         result = runner.invoke(app, ["auth", "slack"])
     assert result.exit_code == 0
     assert _FakeConnector.auth_called
+
+
+def test_connector_command_dispatches_to_connector() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_cli_command(args: list[str]) -> dict[str, object]:
+        captured["args"] = args
+        return {"status": "ok", "args": args}
+
+    _FakeRssConnector.run_cli_command = classmethod(lambda cls, args: fake_run_cli_command(args))
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=_FakeRssConnector()):
+        result = runner.invoke(app, ["connector", "rss", "add", "https://simonwillison.net/atom/everything/"])
+
+    assert result.exit_code == 0
+    assert captured == {"args": ["add", "https://simonwillison.net/atom/everything/"]}
+    assert '"status": "ok"' in result.output
 
 
 def test_connectors_reports_delegated_polling() -> None:

@@ -20,6 +20,7 @@ from agentgraph.connectors.base import (
     ResourceType,
 )
 from agentgraph_connector_rss.auth import (
+    add_feed_urls,
     list_rss_accounts,
     load_rss_creds,
     preview_feed,
@@ -69,6 +70,22 @@ class RssConnector(BaseConnector):
     @classmethod
     async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         return await verify_rss_auth(account_id)
+
+    @classmethod
+    def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+        if not args:
+            raise ValueError("Usage: agentgraph connector rss add <feed-url> [feed-url...]")
+        command, *rest = args
+        if command != "add":
+            raise ValueError(f"Unknown rss connector command '{command}'. Available: add")
+        creds = add_feed_urls(rest)
+        return {
+            "status": "ok",
+            "source": cls.source,
+            "account_id": creds.account_id,
+            "feed_urls": creds.feed_urls,
+            "added": rest,
+        }
 
     def can_handle(self, url: str) -> bool:
         try:

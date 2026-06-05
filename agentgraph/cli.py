@@ -106,6 +106,36 @@ def auth(
             typer.echo(f"  {'':<12}  account: {account['label']} [{account['account_id']}]  |  {account_auth}")
 
 
+@app.command("connector", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def connector_command(
+    source: str = typer.Argument(..., help="Connector source, e.g. rss"),
+    args: list[str] = typer.Argument(..., help="Connector-owned command and arguments"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Run a connector-owned command."""
+    from agentgraph.connectors.registry import bootstrap, get_connector
+
+    bootstrap()
+    connector = get_connector(source)
+    if connector is None:
+        typer.echo(f"Unknown connector '{source}'", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        result = type(connector).run_cli_command(args)
+    except NotImplementedError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    if json:
+        typer.echo(_json.dumps(result, indent=2))
+        return
+    typer.echo(_json.dumps(result, indent=2))
+
+
 @app.command()
 def connectors(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),

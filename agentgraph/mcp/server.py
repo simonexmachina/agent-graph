@@ -94,6 +94,38 @@ async def list_auth_providers_tool() -> str:
     return json.dumps(result)
 
 
+@mcp.tool()
+async def run_connector_command_tool(source: str, args: list[str]) -> str:
+    """
+    Run a connector-owned command.
+
+    This is the MCP equivalent of:
+        agentgraph connector <source> <args...>
+
+    Core dispatches to the connector generically; the connector owns command
+    names, argument parsing, and behaviour.
+
+    Args:
+        source: Connector source, e.g. "rss".
+        args: Connector command and arguments, e.g.
+            ["add", "https://simonwillison.net/atom/everything/"].
+
+    Returns:
+        JSON object returned by the connector, or an error.
+    """
+    from agentgraph.connectors.registry import bootstrap, get_connector
+
+    bootstrap()
+    connector = get_connector(source)
+    if connector is None:
+        return json.dumps({"error": f"Unknown connector {source!r}"})
+    try:
+        result = type(connector).run_cli_command(args)
+        return json.dumps(result, default=str)
+    except (NotImplementedError, ValueError) as exc:
+        return json.dumps({"error": str(exc)})
+
+
 async def _refresh_discord_attachments(results: list[dict[str, Any]]) -> None:
     """Refresh Discord CDN attachment URLs in-place for all results that need it.
 

@@ -25,6 +25,8 @@ Connector-specific logic must live in the connector package (`packages/agentgrap
 
 The correct pattern: connectors expose standardised interfaces (`BaseConnector` methods, `EntityBatch` output, `resolve_me()` hook) that core code calls generically. If you need platform-specific behaviour, add a hook to `BaseConnector` that the connector overrides.
 
+When a connector needs behaviour that core does not currently provide, treat that as an architectural decision. Ask the human how to provide the needed capability while preserving separation of concerns instead of adding connector-specific branches or commands to core. Prefer generic core extension points, such as connector-owned command hooks, where the connector package owns parsing and behaviour and core only dispatches through the registry.
+
 ## Development Standards
 
 - **Write tests as you go.** Every feature bean gets tests in the same commit. Unit tests for pure logic; integration tests (marked `@pytest.mark.integration`) for anything touching the database or external APIs. Integration tests are skipped by default (`pytest -m "not integration"`).

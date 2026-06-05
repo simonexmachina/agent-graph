@@ -216,6 +216,16 @@ class BaseConnector(ABC):
             return ("missing", None)
         return ("ok", user)
 
+    @classmethod
+    def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+        """Run a connector-owned CLI command.
+
+        Core dispatches to this hook generically via `agentgraph connector <source> ...`.
+        Connectors own their command names, argument parsing, and behaviour.
+        """
+        _ = args
+        raise NotImplementedError(f"{cls.source} does not expose connector commands")
+
     def normalise_fetch_id(
         self, resource_id: str, entity_type: str
     ) -> tuple[str, ResourceType]:
