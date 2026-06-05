@@ -11,6 +11,7 @@ resolution-markers = [
 members = [
     "agentgraph",
     "agentgraph-connector-discord",
+    "agentgraph-connector-feedly",
     "agentgraph-connector-google",
     "agentgraph-connector-slack",
 ]
@@ -37,11 +38,15 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "agentgraph-connector-discord" },
+    { name = "agentgraph-connector-feedly" },
     { name = "agentgraph-connector-google" },
     { name = "agentgraph-connector-slack" },
 ]
 discord = [
     { name = "agentgraph-connector-discord" },
+]
+feedly = [
+    { name = "agentgraph-connector-feedly" },
 ]
 google = [
     { name = "agentgraph-connector-google" },
@@ -63,6 +68,8 @@ dev = [
 requires-dist = [
     { name = "agentgraph-connector-discord", marker = "extra == 'all'", editable = "packages/agentgraph-connector-discord" },
     { name = "agentgraph-connector-discord", marker = "extra == 'discord'", editable = "packages/agentgraph-connector-discord" },
+    { name = "agentgraph-connector-feedly", marker = "extra == 'all'", editable = "packages/agentgraph-connector-feedly" },
+    { name = "agentgraph-connector-feedly", marker = "extra == 'feedly'", editable = "packages/agentgraph-connector-feedly" },
     { name = "agentgraph-connector-google", marker = "extra == 'all'", editable = "packages/agentgraph-connector-google" },
     { name = "agentgraph-connector-google", marker = "extra == 'google'", editable = "packages/agentgraph-connector-google" },
     { name = "agentgraph-connector-slack", marker = "extra == 'all'", editable = "packages/agentgraph-connector-slack" },
@@ -104,6 +111,21 @@ dependencies = [
 requires-dist = [
     { name = "agentgraph", editable = "." },
     { name = "agentgraph-connector-slack", editable = "packages/agentgraph-connector-slack" },
+    { name = "httpx", specifier = ">=0.28.1" },
+]
+
+[[package]]
+name = "agentgraph-connector-feedly"
+version = "0.1.0"
+source = { editable = "packages/agentgraph-connector-feedly" }
+dependencies = [
+    { name = "agentgraph" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agentgraph", editable = "." },
     { name = "httpx", specifier = ">=0.28.1" },
 ]
 

@@ -160,7 +160,7 @@ async def search_entities_tool(
             (e.g. ["Message", "Document", "Channel"]). To find images or
             attachments, pass ["Message"].
         platform: Optional platform name to scope the search to a single
-            source (e.g. "slack", "discord", "gdocs", "gmail"). When
+            source (e.g. "slack", "discord", "gdocs", "gmail", "feedly"). When
             omitted, all platforms are searched. Use this to avoid
             cross-platform noise when the user specifies a source.
         limit: Maximum number of results to return (default 10).
@@ -274,7 +274,7 @@ async def fetch_entity_tool(platform: str, resource_id: str) -> str:
     updating content and edges in the graph.
 
     Args:
-        platform: Platform name (e.g. "gdocs", "slack", "discord", "gmail").
+        platform: Platform name (e.g. "gdocs", "slack", "discord", "gmail", "feedly").
         resource_id: Platform-specific entity ID.
 
     Returns:

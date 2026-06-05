@@ -36,7 +36,7 @@ def _status_label(status: str) -> str:
 
 @auth_app.callback()
 def auth(
-    target: str | None = typer.Argument(None, help="Use 'status' or an auth provider such as google, slack, or discord"),
+    target: str | None = typer.Argument(None, help="Use 'status' or an auth provider such as google, slack, discord, or feedly"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
     add: bool = typer.Option(False, "--add", help="Add another authenticated account for this provider"),
     account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
@@ -218,7 +218,7 @@ def traverse(
 
 @app.command()
 def fetch(
-    platform: str = typer.Argument(..., help="Platform name (e.g. gdocs, slack, discord)"),
+    platform: str = typer.Argument(..., help="Platform name (e.g. gdocs, slack, discord, feedly)"),
     resource_id: str = typer.Argument(..., help="Platform-specific entity ID"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -360,7 +360,7 @@ def mcp_serve(
 
 @app.command()
 def poll(
-    source: str | None = typer.Argument(None, help="Connector source to poll (e.g. slack, gmail). Omit to poll all."),
+    source: str | None = typer.Argument(None, help="Connector source to poll (e.g. slack, gmail, feedly). Omit to poll all."),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Trigger a background poll for one or all connectors."""
@@ -371,7 +371,7 @@ def poll(
 
 @app.command()
 def ingest(
-    source: str = typer.Argument(..., help="Connector source to ingest (e.g. gmail)"),
+    source: str = typer.Argument(..., help="Connector source to ingest (e.g. gmail, feedly)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Run a one-shot bulk ingest for a connector (all data within the retention window)."""

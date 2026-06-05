@@ -23,10 +23,12 @@ dependencies = [
 google     = ["agentgraph-connector-google"]
 slack      = ["agentgraph-connector-slack"]
 discord    = ["agentgraph-connector-discord"]
+feedly     = ["agentgraph-connector-feedly"]
 all        = [
     "agentgraph-connector-google",
     "agentgraph-connector-slack",
     "agentgraph-connector-discord",
+    "agentgraph-connector-feedly",
 ]
 
 [dependency-groups]
@@ -57,6 +59,7 @@ members = ["packages/*"]
 agentgraph-connector-google  = { workspace = true }
 agentgraph-connector-slack   = { workspace = true }
 agentgraph-connector-discord = { workspace = true }
+agentgraph-connector-feedly  = { workspace = true }
 
 [tool.setuptools.packages.find]
 include = ["agentgraph*"]

@@ -1,0 +1,18 @@
+[project]
+name = "agentgraph-connector-feedly"
+version = "0.1.0"
+description = "Feedly connector for AgentGraph"
+requires-python = ">=3.12"
+dependencies = [
+    "agentgraph",
+    "httpx>=0.28.1",
+]
+
+[project.entry-points."agentgraph.connectors"]
+feedly = "agentgraph_connector_feedly:FeedlyConnector"
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+agentgraph = { workspace = true }
