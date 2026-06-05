@@ -106,7 +106,15 @@ def run_token_flow(
     typer.echo(
         "\n"
         "Feedly authentication uses an API access token plus one or more stream IDs.\n"
-        "Create/copy the token from Feedly's API access page, then copy stream IDs\n"
+        "Create/copy the token from Feedly's API access page:\n"
+        "\n"
+        "  https://feedly.com/i/team/api\n"
+        "\n"
+        "Feedly API authorization docs:\n"
+        "\n"
+        "  https://developers.feedly.com/reference/authorization\n"
+        "\n"
+        "Then copy stream IDs\n"
         "from the Feedly folder, Board, or AI Feed you want AgentGraph to inspect.\n"
     )
     token: str = typer.prompt("Feedly API access token", hide_input=True).strip()
