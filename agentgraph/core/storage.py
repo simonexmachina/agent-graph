@@ -61,6 +61,15 @@ class StorageBackend(ABC):
         """
         ...
 
+    @abstractmethod
+    async def set_entity_bookmarked(
+        self,
+        entity_id: str,
+        bookmarked: bool,
+    ) -> EntityResult:
+        """Set or clear GC protection for an entity and return the updated entity."""
+        ...
+
     # --- Read: entities ---
 
     @abstractmethod

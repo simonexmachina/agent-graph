@@ -100,6 +100,13 @@ class SQLiteBackend(StorageBackend):
             await conn.execute(
                 "ALTER TABLE entities ADD COLUMN cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0"
             )
+        if "bookmarked" not in columns:
+            await conn.execute(
+                "ALTER TABLE entities ADD COLUMN bookmarked INTEGER NOT NULL DEFAULT 0"
+            )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_bookmarked ON entities(bookmarked)"
+        )
 
     async def _fetchall(self, sql: str, params: list[Any] | None = None) -> list[Any]:
         conn = self._conn_or_raise()
@@ -511,6 +518,28 @@ class SQLiteBackend(StorageBackend):
             raise RuntimeError("Merged primary person disappeared")
         return entity
 
+    async def set_entity_bookmarked(
+        self,
+        entity_id: str,
+        bookmarked: bool,
+    ) -> EntityResult:
+        now = _now()
+        cursor = await self._conn_or_raise().execute(
+            """
+            UPDATE entities
+            SET bookmarked = ?, last_accessed = ?
+            WHERE id = ?
+            RETURNING id, entity_type, platform, platform_entity_id,
+                      title, content, metadata, created_at, updated_at, synced_at,
+                      last_accessed, cumulative_dwell_ms, bookmarked
+            """,
+            [1 if bookmarked else 0, now, entity_id],
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Entity {entity_id!r} not found")
+        return _row_to_entity(row)
+
     # --- Read: entities ---
 
     async def search_entities(
@@ -592,7 +621,7 @@ class SQLiteBackend(StorageBackend):
         cursor = await conn.execute(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities WHERE id IN ({placeholders})
             """,
             id_list,
@@ -615,7 +644,7 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities WHERE id = ?
             """,
             [entity_id],
@@ -629,7 +658,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities WHERE id IN ({placeholders})
             """,
             entity_ids,
@@ -640,7 +669,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities WHERE id LIKE ?
             """,
             [f"{prefix}%"],
@@ -653,7 +682,7 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities WHERE platform = ? AND platform_entity_id = ?
             """,
             [platform, platform_entity_id],
@@ -684,7 +713,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities
             {where}
             ORDER BY last_accessed DESC
@@ -747,7 +776,7 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
-                   e.title, e.content, e.metadata, e.created_at, e.updated_at, e.cumulative_dwell_ms
+                   e.title, e.content, e.metadata, e.created_at, e.updated_at, e.cumulative_dwell_ms, e.bookmarked
             FROM entities e
             {authored_join}
             WHERE e.entity_type = ? {where_extra}
@@ -833,7 +862,7 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                       title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 frontier,
@@ -874,7 +903,7 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at, synced_at, last_accessed
+                       title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 unvisited,
@@ -935,7 +964,8 @@ class SQLiteBackend(StorageBackend):
             await conn.execute("BEGIN")
             try:
                 cursor = await conn.execute(
-                    "SELECT id FROM entities WHERE last_accessed < ?", [cutoff]
+                    "SELECT id FROM entities WHERE last_accessed < ? AND bookmarked = 0",
+                    [cutoff],
                 )
                 to_delete = [row[0] for row in await cursor.fetchall()]
                 if to_delete:
@@ -1066,6 +1096,7 @@ def _row_to_entity(row: Any) -> EntityResult:
         "synced_at": row["synced_at"] if "synced_at" in keys else None,
         "last_accessed": row["last_accessed"] if "last_accessed" in keys else None,
         "cumulative_dwell_ms": row["cumulative_dwell_ms"] if "cumulative_dwell_ms" in keys else 0,
+        "bookmarked": bool(row["bookmarked"]) if "bookmarked" in keys else False,
         "score": row["score"] if "score" in keys else None,
     }
 

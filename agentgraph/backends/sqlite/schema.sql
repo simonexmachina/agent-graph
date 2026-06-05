@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS entities (
     synced_at          TEXT,  -- ISO8601 UTC
     last_accessed      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
+    bookmarked         INTEGER NOT NULL DEFAULT 0,
     UNIQUE (platform, platform_entity_id)
 );
 
@@ -54,6 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_entities_type         ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_platform     ON entities(platform);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_eid ON entities(platform, platform_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entities_last_accessed ON entities(last_accessed);
+CREATE INDEX IF NOT EXISTS idx_entities_bookmarked ON entities(bookmarked);
 
 -- Edge indexes
 CREATE INDEX IF NOT EXISTS idx_edges_source  ON edges(source_entity_id);
