@@ -112,6 +112,7 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             RSS OPML import is also available as:
             ["import-opml", "/path/to/feeds.opml", "--all"] or
             ["import-opml", "/path/to/feeds.opml", "--select", "1,3-5"].
+            Connector-owned help is available as ["--help"].
 
     Returns:
         JSON object returned by the connector, or an error.
@@ -122,6 +123,8 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
     connector = get_connector(source)
     if connector is None:
         return json.dumps({"error": f"Unknown connector {source!r}"})
+    if args in (["--help"], ["help"]):
+        return json.dumps({"source": source, "help": type(connector).cli_help()})
     try:
         result = type(connector).run_cli_command(args)
         return json.dumps(result, default=str)

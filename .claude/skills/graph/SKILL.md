@@ -48,6 +48,7 @@ agentgraph connectors [--json] # auth_provider, auth_status/auth_detail, url_pat
 
 # Run a connector-owned command
 agentgraph connector <source> <command> [args...] [--json] # e.g. agentgraph connector rss add https://simonwillison.net/atom/everything/
+agentgraph connector <source> --help
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json]
 
 # Show auth provider state (dedupes shared providers like Google)

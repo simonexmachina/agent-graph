@@ -102,6 +102,10 @@ class RssConnector(BaseConnector):
             }
         raise ValueError(f"Unknown rss connector command '{command}'. Available: add, import-opml")
 
+    @classmethod
+    def cli_help(cls) -> str:
+        return _rss_help()
+
     def can_handle(self, url: str) -> bool:
         try:
             creds = load_rss_creds()
@@ -189,6 +193,28 @@ def _rss_usage() -> str:
     return (
         "Usage: agentgraph connector rss add <feed-url> [feed-url...] [--account <account-id>]\n"
         "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>] [--account <account-id>]"
+    )
+
+
+def _rss_help() -> str:
+    return "\n".join(
+        [
+            "RSS connector commands:",
+            "",
+            _rss_usage(),
+            "",
+            "Commands:",
+            "  add <feed-url> [feed-url...]",
+            "      Add one or more RSS/Atom feed URLs.",
+            "  import-opml <file.opml> [--all | --select <indexes>]",
+            "      Import RSS/Atom feed URLs from an OPML file.",
+            "",
+            "Options:",
+            "  --account <account-id>  Add feeds to a specific RSS account.",
+            "  --all                   Import every feed from the OPML file.",
+            "  --select <indexes>      Import selected feed numbers, e.g. 1,3-5.",
+            "  --json                  Output command results as JSON.",
+        ]
     )
 
 

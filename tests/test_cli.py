@@ -137,6 +137,10 @@ class _FakeRssConnector:
     async def verify_auth(cls) -> tuple[str, str | None]:
         return ("missing", None)
 
+    @classmethod
+    def cli_help(cls) -> str:
+        return "RSS connector help"
+
 
 class _FakeGoogleToken:
     token = "new-access-token"
@@ -239,6 +243,15 @@ def test_connector_command_dispatches_to_connector() -> None:
     assert result.exit_code == 0
     assert captured == {"args": ["add", "https://simonwillison.net/atom/everything/"]}
     assert '"status": "ok"' in result.output
+
+
+def test_connector_command_dispatches_help_to_connector() -> None:
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=_FakeRssConnector()):
+        result = runner.invoke(app, ["connector", "rss", "--help"])
+
+    assert result.exit_code == 0
+    assert result.output == "RSS connector help\n"
 
 
 def test_connectors_reports_delegated_polling() -> None:

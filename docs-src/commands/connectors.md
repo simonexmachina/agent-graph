@@ -14,6 +14,7 @@ source_path = "docs-src/commands/connectors.md"
 ```bash
 agentgraph connectors [--json]
 agentgraph connector <source> <command> [args...] [--json]
+agentgraph connector <source> --help
 ```
 
 ## Example
@@ -22,6 +23,7 @@ agentgraph connector <source> <command> [args...] [--json]
 agentgraph connectors
 agentgraph connectors --json
 agentgraph connector rss add https://simonwillison.net/atom/everything/
+agentgraph connector rss --help
 agentgraph connector rss import-opml feeds.opml --all
 agentgraph connector rss import-opml feeds.opml --select 1,3-5
 ```

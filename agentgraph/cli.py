@@ -106,14 +106,41 @@ def auth(
             typer.echo(f"  {'':<12}  account: {account['label']} [{account['account_id']}]  |  {account_auth}")
 
 
-@app.command("connector", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def _connector_help() -> str:
+    return "\n".join(
+        [
+            "Usage: agentgraph connector <source> <command> [args...] [--json]",
+            "       agentgraph connector <source> --help",
+            "",
+            "Run a connector-owned command.",
+            "",
+            "Examples:",
+            "  agentgraph connector rss add https://simonwillison.net/atom/everything/",
+            "  agentgraph connector rss import-opml feeds.opml --all",
+        ]
+    )
+
+
+@app.command(
+    "connector",
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "help_option_names": [],
+    },
+)
 def connector_command(
-    source: str = typer.Argument(..., help="Connector source, e.g. rss"),
-    args: list[str] = typer.Argument(..., help="Connector-owned command and arguments"),
+    source: str | None = typer.Argument(None, help="Connector source, e.g. rss"),
+    args: list[str] | None = typer.Argument(None, help="Connector-owned command and arguments"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
+    help: bool = typer.Option(False, "--help", help="Show connector command help"),
 ) -> None:
     """Run a connector-owned command."""
     from agentgraph.connectors.registry import bootstrap, get_connector
+
+    if source is None:
+        typer.echo(_connector_help())
+        return
 
     bootstrap()
     connector = get_connector(source)
@@ -121,8 +148,12 @@ def connector_command(
         typer.echo(f"Unknown connector '{source}'", err=True)
         raise typer.Exit(code=1)
 
+    if help:
+        typer.echo(type(connector).cli_help())
+        return
+
     try:
-        result = type(connector).run_cli_command(args)
+        result = type(connector).run_cli_command(args or [])
     except NotImplementedError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc

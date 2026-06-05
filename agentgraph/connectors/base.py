@@ -226,6 +226,11 @@ class BaseConnector(ABC):
         _ = args
         raise NotImplementedError(f"{cls.source} does not expose connector commands")
 
+    @classmethod
+    def cli_help(cls) -> str:
+        """Return help text for connector-owned CLI commands."""
+        return f"{cls.source} does not expose connector commands"
+
     def normalise_fetch_id(
         self, resource_id: str, entity_type: str
     ) -> tuple[str, ResourceType]:
