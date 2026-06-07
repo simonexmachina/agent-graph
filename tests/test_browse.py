@@ -405,6 +405,33 @@ async def test_browse_message_nodes_include_truncated_viewer_label() -> None:
     assert len(node["viewer_label"]) <= 80
 
 
+@pytest.mark.asyncio
+async def test_browse_nodes_preserve_bookmarked_flag() -> None:
+    """Viewer nodes expose bookmark state for graph styling and detail actions."""
+    from agentgraph.server.cli_api import cli_browse
+
+    document = _entity(entity_type="Document", title="Pinned Doc")
+    document["bookmarked"] = True
+
+    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
+         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[document])), \
+         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+        result = await cli_browse(
+            node_id=None,
+            entity_type=[],
+            search=None,
+            platform=None,
+            since=None,
+            depth=2,
+            limit=50,
+        )
+
+    assert result["nodes"][0]["bookmarked"] is True
+
+
 # ---------------------------------------------------------------------------
 # 404 when node_id not found
 # ---------------------------------------------------------------------------

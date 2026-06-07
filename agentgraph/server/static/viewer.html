@@ -501,7 +501,8 @@
           'label': (ele) => {
             const type = ele.data('entity_type') || '';
             const lbl = truncateLabel(ele.data('label') || '', 30);
-            return `[${type}]\n${lbl}`;
+            const marker = ele.data('bookmarked') ? '★ ' : '';
+            return `${marker}[${type}]\n${lbl}`;
           },
           'color': '#e2e8f0',
           'font-size': '12px',
@@ -522,6 +523,14 @@
         style: {
           'border-opacity': 1,
           'border-color': '#e8a045',
+        },
+      },
+      {
+        selector: 'node[?bookmarked]',
+        style: {
+          'border-opacity': 1,
+          'border-color': '#fbbf24',
+          'border-width': '3px',
         },
       },
       {
@@ -567,6 +576,9 @@
         'text-max-width': Z.textMaxWidth / zc,
         'text-margin-y':  Z.textMarginY / zc,
         'border-width':   Z.nodeBorder / zc,
+      });
+      cy.nodes('[?bookmarked]').style({
+        'border-width': (Z.nodeBorder + 1) / zc,
       });
       cy.edges().style({
         'font-size':   Z.edgeFont / zc,
@@ -635,6 +647,7 @@
         platform: entity.platform,
         platform_entity_id: entity.platform_entity_id || '',
         content: (entity.content || '').substring(0, 200),
+        bookmarked: Boolean(entity.bookmarked),
       }
     };
   }
@@ -647,6 +660,10 @@
   }
 
   let _lastBrowseUrl = null;
+
+  function invalidateGraphCache() {
+    _lastBrowseUrl = null;
+  }
 
   async function loadGraph(params) {
     const url = buildUrl('/api/cli/browse', params);
@@ -777,6 +794,11 @@
     loadGraph(collectParams(override));
   }
 
+  function forceRefreshGraph(override) {
+    invalidateGraphCache();
+    refreshGraph(override);
+  }
+
   // ── Event wiring ──────────────────────────────────────────────────────────
   searchInput.addEventListener('input', () => {
     clearTimeout(debounceTimer);
@@ -807,7 +829,7 @@
     refreshGraph();
   });
 
-  refreshBtn.addEventListener('click', () => refreshGraph());
+  refreshBtn.addEventListener('click', () => forceRefreshGraph());
 
   // ── Lookup ────────────────────────────────────────────────────────────────
   async function doLookup() {
@@ -905,6 +927,45 @@
     detailTitle.textContent = entity.title || entity.display_name || entity.id;
     detailBody.innerHTML = '';
 
+    const bookmarkRow = document.createElement('div');
+    bookmarkRow.className = 'control-group';
+    const bookmarkBtn = document.createElement('button');
+    const bookmarkError = document.createElement('div');
+    bookmarkBtn.textContent = entity.bookmarked ? 'Bookmarked' : 'Bookmark';
+    bookmarkBtn.disabled = Boolean(entity.bookmarked);
+    bookmarkBtn.style.marginTop = '2px';
+    bookmarkError.style.color = '#fca5a5';
+    bookmarkError.style.fontSize = '11px';
+    bookmarkError.style.lineHeight = '1.4';
+    bookmarkError.style.display = 'none';
+    bookmarkBtn.addEventListener('click', async () => {
+      bookmarkBtn.textContent = 'Bookmarking…';
+      bookmarkBtn.disabled = true;
+      bookmarkError.textContent = '';
+      bookmarkError.style.display = 'none';
+      try {
+        const res = await fetch(
+          `/api/cli/bookmark?entity_id=${encodeURIComponent(entity.id)}`,
+          { method: 'POST' }
+        );
+        if (!res.ok) throw new Error(await readErrorDetail(res));
+        const updated = await res.json();
+        const node = cy.getElementById(entity.id);
+        if (node.length) node.data('bookmarked', true);
+        invalidateGraphCache();
+        renderDetail({ ...entity, ...updated, bookmarked: true });
+      } catch (err) {
+        bookmarkBtn.textContent = 'Bookmark';
+        bookmarkBtn.disabled = false;
+        bookmarkError.textContent = err instanceof Error ? err.message : 'Bookmark failed';
+        bookmarkError.style.display = 'block';
+        console.error('bookmark error:', err);
+      }
+    });
+    bookmarkRow.appendChild(bookmarkBtn);
+    bookmarkRow.appendChild(bookmarkError);
+    detailBody.appendChild(bookmarkRow);
+
     const typeColor = nodeColor(entity.entity_type);
     const typeRow = document.createElement('div');
     typeRow.className = 'detail-row';
@@ -967,7 +1028,7 @@
           );
           if (!res.ok) throw new Error(await readErrorDetail(res));
           await showEntityDetail(entity.id);
-          refreshGraph();
+          forceRefreshGraph();
         } catch (err) {
           fetchBtn.textContent = 'Fetch content';
           fetchBtn.disabled = false;
