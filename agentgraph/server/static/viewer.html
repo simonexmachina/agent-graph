@@ -1207,8 +1207,24 @@
       .replace(/>/g, '&gt;');
   }
 
+  function isHttpUrl(value) {
+    if (!value || typeof value !== 'string') return false;
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (_) {
+      return false;
+    }
+  }
+
   function getPlatformUrl(entity) {
-    return (entity.metadata && entity.metadata.web_url) || null;
+    const metadata = entity.metadata || {};
+    const candidates = [
+      metadata.web_url,
+      entity.platform === 'rss' ? metadata.link : null,
+      entity.platform === 'rss' ? metadata.feed_url : null,
+    ];
+    return candidates.find(isHttpUrl) || null;
   }
 
   function positionHoverCard(node) {

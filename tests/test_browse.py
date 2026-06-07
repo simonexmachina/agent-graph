@@ -80,6 +80,18 @@ def test_viewer_uses_bookmark_symbol_with_status() -> None:
     assert "/api/cli/delete" in viewer_html
 
 
+def test_viewer_renders_rss_document_links() -> None:
+    """RSS documents expose source article links in the detail panel."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "function getPlatformUrl(entity)" in viewer_html
+    assert "metadata.web_url" in viewer_html
+    assert "entity.platform === 'rss' ? metadata.link : null" in viewer_html
+    assert "entity.platform === 'rss' ? metadata.feed_url : null" in viewer_html
+    assert "candidates.find(isHttpUrl)" in viewer_html
+    assert "detailBody.appendChild(row('Link', linkHtml))" in viewer_html
+
+
 # ---------------------------------------------------------------------------
 # Rule: focal node always shown regardless of filters
 # ---------------------------------------------------------------------------
