@@ -1,6 +1,6 @@
 # AgentGraph
 
-AgentGraph is a local knowledge graph for AI agents. It indexes content from Slack, Discord, Gmail, Google Docs, Google Sheets, and Google Drive into a queryable graph of entities, people, and relationships that you can use from the CLI, web viewer, browser extension, or MCP.
+AgentGraph is a local knowledge graph for AI agents. It indexes content from Slack, Discord, Gmail, Google Docs, Google Sheets, Google Drive, and RSS/Atom feeds into a queryable graph of entities, people, and relationships that you can use from the CLI, web viewer, browser extension, or MCP.
 
 ## Docs
 
@@ -40,6 +40,7 @@ Or install only the connectors you need:
 uv sync --extra google
 uv sync --extra slack
 uv sync --extra discord
+uv sync --extra rss
 ```
 
 Credentials and local state live in `~/.agentgraph/` by default, or under `AGENTGRAPH_CONFIG_DIR` if you set a custom config directory.
@@ -149,6 +150,7 @@ agentgraph download <entity-id>
 agentgraph connectors
 agentgraph poll
 agentgraph ingest gmail
+agentgraph connector rss add https://example.com/feed.xml
 ```
 
 ### MCP
@@ -173,6 +175,7 @@ Included connectors:
 | Google Sheets | Spreadsheet | Google OAuth | Browser dwell plus Drive-backed refresh |
 | Google Drive | Folder, Document | Google OAuth | Browser dwell for folders and files, plus Drive changes polling |
 | Gmail | Thread | Google OAuth | Browser dwell plus background poll and ingest |
+| RSS | Folder, Document | Feed URLs | Background poll and ingest; `add` validates feeds and can discover feeds from HTML |
 
 AgentGraph is designed to be extended. Custom connectors live in separate packages, register through the connector entry point, and implement the shared `BaseConnector` interface. See [Extending](docs-src/extending.md).
 

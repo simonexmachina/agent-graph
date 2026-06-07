@@ -17,12 +17,14 @@ agentgraph auth PLATFORM [--xoxc-token TOKEN] [--d-cookie VALUE]
 
 ## Notes
 
-- `PLATFORM` is the auth label, such as `google`, `slack`, or `discord`
+- `PLATFORM` is the auth label, such as `google`, `slack`, `discord`, or `rss`
 - for Slack, `--xoxc-token` and `--d-cookie` skip the interactive prompt
+- RSS auth asks for feed URLs and validates them before saving
 
 ## Examples
 
 ```bash
 agentgraph auth google
 agentgraph auth slack --xoxc-token "$XOXC" --d-cookie "$D_COOKIE"
+agentgraph auth rss
 ```

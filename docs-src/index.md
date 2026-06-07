@@ -9,7 +9,7 @@ output = "index.html"
 source_path = "docs-src/index.md"
 +++
 
-AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, and Drive, so your AI agents can search, fetch, and reason over the same connected context you work from.
+AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, Drive, and RSS/Atom feeds, so your AI agents can search, fetch, and reason over the same connected context you work from.
 
 You can also teach AgentGraph about new tools quickly: connectors live in their own packages, follow a small interface, and are straightforward to build with a coding agent. That makes it practical to extend the graph to internal tools, niche SaaS products, or one-off data sources without forking the core system.
 
@@ -29,6 +29,10 @@ You can also teach AgentGraph about new tools quickly: connectors live in their 
     <p>Choose the config directory, database path, retention window, dwell threshold, and transport settings.</p>
   </section>
   <section class="doc-card">
+    <h3><a href="/rss.html">RSS</a></h3>
+    <p>Add RSS and Atom feeds, import OPML subscriptions, and query feed articles as documents.</p>
+  </section>
+  <section class="doc-card">
     <h3><a href="/extending.html">Extending</a></h3>
     <p>Learn how to extend AgentGraph with custom connectors for your own integrations, including the `BaseConnector` contract and example implementation.</p>
   </section>
@@ -45,6 +49,7 @@ You can also teach AgentGraph about new tools quickly: connectors live in their 
 ## What AgentGraph does
 
 - **Connectors:** turn messages, documents, spreadsheets, folders, and email threads into graph entities, people, and edges, and you can add your own.
+- **Feeds:** index RSS and Atom feed entries as documents, with feed pages represented as folders.
 - **Browser-driven capture:** watches supported URLs and triggers targeted fetches once you stay on a page long enough for it to matter.
 - **Background refresh:** polls to keep already-known resources current after the first visit.
 - **Shared interfaces:** the CLI, web viewer, and MCP server all operate on the same local graph.
@@ -53,6 +58,7 @@ You can also teach AgentGraph about new tools quickly: connectors live in their 
 ## Reference
 
 - [Extending](/extending.html) for supported sources, custom connector development, and the `BaseConnector` interface reference.
+- [RSS](/rss.html) for feed setup, OPML imports, and RSS query examples.
 - [Commands](/commands/) for the CLI and MCP surface.
 - [MCP tools](/mcp/) for the tool-by-tool agent interface reference.
 - [Privacy](/privacy.html) for the local storage and browser observation model.

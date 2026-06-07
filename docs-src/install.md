@@ -35,6 +35,7 @@ You can also sync only the connectors you want:
 uv sync --extra google
 uv sync --extra slack
 uv sync --extra discord
+uv sync --extra rss
 ```
 
 <div class="callout">

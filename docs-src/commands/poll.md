@@ -20,4 +20,5 @@ agentgraph poll [SOURCE] [--json]
 ```bash
 agentgraph poll
 agentgraph poll slack
+agentgraph poll rss
 ```

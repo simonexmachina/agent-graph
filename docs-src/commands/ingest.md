@@ -19,4 +19,5 @@ agentgraph ingest SOURCE [--json]
 
 ```bash
 agentgraph ingest gmail
+agentgraph ingest rss
 ```

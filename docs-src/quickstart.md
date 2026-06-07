@@ -33,6 +33,13 @@ The default server URL is `http://127.0.0.1:8765`.
 
 Open a Slack channel, a Google Doc, a Google Sheet, a Gmail thread, or a Drive folder. Leave the tab focused long enough for the dwell threshold to trigger a fetch.
 
+For RSS, add a feed or page with a discoverable feed link, then ingest it:
+
+```bash
+agentgraph connector rss add https://example.com/feed.xml
+agentgraph ingest rss
+```
+
 ## 4. Verify entities landed
 
 ```bash

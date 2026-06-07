@@ -16,7 +16,7 @@ AgentGraph is designed to be extended with new connectors.
 
 - Build connectors for internal tools, private APIs, or niche SaaS products that are specific to your team.
 - Keep your own integration logic outside the core package by shipping it as a separate connector package.
-- Reuse the same fetch, poll, auth, and graph-upsert model that the built-in Slack, Discord, Google Docs, Drive, Sheets, and Gmail connectors use.
+- Reuse the same fetch, poll, auth, and graph-upsert model that the built-in Slack, Discord, Google Docs, Drive, Sheets, Gmail, and RSS connectors use.
 
 ## Included connectors
 
@@ -65,6 +65,12 @@ AgentGraph is designed to be extended with new connectors.
       <td>Thread</td>
       <td>Google OAuth</td>
       <td>Browser dwell plus background poll and ingest</td>
+    </tr>
+    <tr>
+      <td>RSS</td>
+      <td>Folder, Document</td>
+      <td>Feed URLs</td>
+      <td>Background poll and ingest; validated feed add and OPML import</td>
     </tr>
   </tbody>
 </table>
