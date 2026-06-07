@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 from xml.etree import ElementTree
 
 from pydantic import BaseModel, Field
@@ -23,6 +25,32 @@ class OpmlFeed(BaseModel):
     title: str
     feed_url: str
     html_url: str | None = None
+
+
+@dataclass(frozen=True)
+class HtmlSource:
+    text: str
+    base_url: str
+
+
+class _FeedLinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "link":
+            return
+        attr_map = {name.lower(): value for name, value in attrs if value is not None}
+        rel_tokens = {token.lower() for token in attr_map.get("rel", "").split()}
+        if "alternate" not in rel_tokens:
+            return
+        link_type = attr_map.get("type", "").lower()
+        if link_type not in {"application/rss+xml", "application/atom+xml", "text/xml"}:
+            return
+        href = attr_map.get("href", "").strip()
+        if href:
+            self.hrefs.append(href)
 
 
 def load_rss_creds(account_id: str | None = None) -> RssCredentials:
@@ -57,6 +85,7 @@ def add_feed_urls(
     feed_urls: list[str],
     *,
     account_id: str | None = None,
+    validate: bool = True,
 ) -> RssCredentials:
     """Add feed URLs to the configured RSS account and return the updated credentials."""
     from agentgraph.auth.credentials import save_platform, upsert_platform_account
@@ -64,6 +93,8 @@ def add_feed_urls(
     selected_feed_urls = [part.strip() for part in feed_urls if part.strip()]
     if not selected_feed_urls:
         raise ValueError("Usage: agentgraph connector rss add <feed-url> [feed-url...]")
+    if validate:
+        selected_feed_urls = resolve_feed_sources(selected_feed_urls)
 
     resolved_account_id = account_id or "rss"
     existing_accounts = list_rss_accounts()
@@ -89,6 +120,105 @@ def add_feed_urls(
     else:
         save_platform("rss", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
     return creds
+
+
+def resolve_feed_sources(sources: list[str]) -> list[str]:
+    """Resolve user-provided feed or HTML sources to validated RSS/Atom feed URLs."""
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for source in sources:
+        feed_url = resolve_feed_source(source)
+        if feed_url not in seen:
+            seen.add(feed_url)
+            resolved.append(feed_url)
+    return resolved
+
+
+def resolve_feed_source(source: str) -> str:
+    """Return a valid feed URL, discovering it from HTML when necessary."""
+    candidate = source.strip()
+    if not candidate:
+        raise ValueError("RSS feed URL cannot be empty")
+
+    parsed = _parse_feed(candidate)
+    if _is_valid_feed(parsed):
+        return candidate
+
+    html_source = _load_html_source(candidate)
+    if html_source is None:
+        raise ValueError(f"Not a valid RSS/Atom feed: {candidate}")
+
+    feed_links = _extract_feed_links(html_source.text, html_source.base_url)
+    if not feed_links:
+        raise ValueError(f"No RSS/Atom feed link found in HTML: {candidate}")
+
+    for feed_link in feed_links:
+        if _is_valid_feed(_parse_feed(feed_link)):
+            return feed_link
+    raise ValueError(f"No valid RSS/Atom feed found in HTML: {candidate}")
+
+
+def _parse_feed(feed_url: str) -> Any:
+    import feedparser  # type: ignore[import-untyped]
+
+    return feedparser.parse(feed_url)
+
+
+def _is_valid_feed(parsed: Any) -> bool:
+    version = str(getattr(parsed, "version", "") or "")
+    if not version:
+        return False
+    feed = cast(dict[str, Any], getattr(parsed, "feed", {}) or {})
+    entries = cast(list[Any], getattr(parsed, "entries", []) or [])
+    return bool(feed or entries)
+
+
+def _load_html_source(source: str) -> HtmlSource | None:
+    parsed = urlparse(source)
+    if parsed.scheme in {"http", "https"}:
+        return _fetch_html_url(source)
+    if parsed.scheme == "file":
+        path = _local_file_path(source, kind="HTML")
+        return _read_html_file(path)
+    if parsed.scheme:
+        return None
+    path = Path(source).expanduser()
+    if path.exists():
+        return _read_html_file(path)
+    return None
+
+
+def _fetch_html_url(url: str) -> HtmlSource | None:
+    import httpx
+
+    try:
+        response = httpx.get(url, follow_redirects=True, timeout=10)
+        response.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    text = response.text
+    content_type = response.headers.get("content-type", "").lower()
+    if "html" not in content_type and not _looks_like_html(text):
+        return None
+    return HtmlSource(text=text, base_url=str(response.url))
+
+
+def _read_html_file(path: Path) -> HtmlSource | None:
+    text = path.read_text(encoding="utf-8")
+    if not _looks_like_html(text):
+        return None
+    return HtmlSource(text=text, base_url=path.resolve().as_uri())
+
+
+def _looks_like_html(text: str) -> bool:
+    sample = text[:500].lower()
+    return "<html" in sample or "<!doctype html" in sample or "<link" in sample
+
+
+def _extract_feed_links(html: str, base_url: str) -> list[str]:
+    parser = _FeedLinkParser()
+    parser.feed(html)
+    return [urljoin(base_url, href) for href in parser.hrefs]
 
 
 def parse_opml_feeds(path: str | Path) -> list[OpmlFeed]:
@@ -121,11 +251,15 @@ def parse_opml_feeds(path: str | Path) -> list[OpmlFeed]:
 
 
 def _opml_source_path(path: str | Path) -> Path:
+    return _local_file_path(path, kind="OPML")
+
+
+def _local_file_path(path: str | Path, *, kind: str) -> Path:
     raw_path = str(path)
     parsed = urlparse(raw_path)
     if parsed.scheme == "file":
         if parsed.netloc not in ("", "localhost"):
-            raise ValueError(f"Unsupported OPML file URI host: {parsed.netloc}")
+            raise ValueError(f"Unsupported {kind} file URI host: {parsed.netloc}")
         return Path(unquote(parsed.path)).expanduser()
     return Path(path).expanduser()
 
@@ -321,7 +455,7 @@ def run_rss_flow(
         "and AgentGraph will fetch those feeds directly.\n"
     )
     raw_feeds: str = typer.prompt("RSS/Atom feed URLs (comma-separated)").strip()
-    selected_feed_urls = [part.strip() for part in raw_feeds.split(",") if part.strip()]
+    selected_feed_urls = resolve_feed_sources([part.strip() for part in raw_feeds.split(",") if part.strip()])
     label: str = typer.prompt("Account label", default="RSS").strip()
     resolved_account_id = account_id or "rss"
 

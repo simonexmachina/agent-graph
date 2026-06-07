@@ -26,6 +26,7 @@ from agentgraph_connector_rss.auth import (
     list_rss_accounts,
     load_rss_creds,
     preview_feed,
+    resolve_feed_sources,
     run_rss_flow,
     verify_rss_auth,
 )
@@ -79,8 +80,9 @@ class RssConnector(BaseConnector):
             raise ValueError(_rss_usage())
         command, *rest = args
         if command == "add":
-            account_id, feed_urls = _parse_account_option(rest)
-            creds = add_feed_urls(feed_urls, account_id=account_id)
+            account_id, sources = _parse_account_option(rest)
+            feed_urls = resolve_feed_sources(sources)
+            creds = add_feed_urls(feed_urls, account_id=account_id, validate=False)
             return {
                 "status": "ok",
                 "source": cls.source,
@@ -205,7 +207,7 @@ async def _fetch_feed(feed_url: str) -> EntityBatch:
 
 def _rss_usage() -> str:
     return (
-        "Usage: agentgraph connector rss add <feed-url> [feed-url...] [--account <account-id>]\n"
+        "Usage: agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--account <account-id>]\n"
         "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>] [--account <account-id>]"
     )
 
@@ -218,8 +220,8 @@ def _rss_help() -> str:
             _rss_usage(),
             "",
             "Commands:",
-            "  add <feed-url> [feed-url...]",
-            "      Add one or more RSS/Atom feed URLs.",
+            "  add <feed-or-html-url> [feed-or-html-url...]",
+            "      Add one or more RSS/Atom feeds. HTML pages are scanned for RSS/Atom <link> tags.",
             "  import-opml <file.opml> [--all | --select <indexes>]",
             "      Import RSS/Atom feed URLs from an OPML file. Omit flags for checkbox selection.",
             "",

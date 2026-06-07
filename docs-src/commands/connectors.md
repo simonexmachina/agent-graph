@@ -23,10 +23,15 @@ agentgraph connector <source> --help
 agentgraph connectors
 agentgraph connectors --json
 agentgraph connector rss add https://simonwillison.net/atom/everything/
+agentgraph connector rss add https://simonwillison.net/
 agentgraph connector rss --help
 agentgraph connector rss import-opml feeds.opml --all
 agentgraph connector rss import-opml feeds.opml --select 1,3-5
 ```
+
+RSS `add` validates each feed before saving. If you pass an HTML page or file,
+AgentGraph scans standard RSS/Atom `<link rel="alternate">` tags and adds the
+discovered feed URL.
 
 For RSS OPML imports, omit `--all` and `--select` in an interactive terminal to choose
 feeds with a checkbox prompt.
