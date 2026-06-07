@@ -174,6 +174,121 @@ async def test_get_entity_not_found() -> None:
     assert result is None
 
 
+@pytest.mark.asyncio
+async def test_get_entity_by_url_uses_owning_connector() -> None:
+    from agentgraph.connectors.base import SourceReference
+    from agentgraph.graph.query import get_entity_by_url
+
+    entity = _entity(platform="gdocs", title="URL Doc")
+    backend = _mock_backend(get_entity_by_platform=AsyncMock(return_value=entity))
+    set_backend(backend)
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch(
+             "agentgraph.server.router.classify_url",
+             return_value=SourceReference("gdocs", "document", "doc-1"),
+         ):
+        result = await get_entity_by_url("https://docs.google.com/document/d/doc-1/edit")
+
+    assert result is entity
+    backend.get_entity_by_platform.assert_awaited_once_with("gdocs", "doc-1")
+
+
+@pytest.mark.asyncio
+async def test_get_entity_by_url_uses_web_canonical_url() -> None:
+    from agentgraph.connectors.base import SourceReference
+    from agentgraph.graph.query import get_entity_by_url
+
+    entity = _entity(platform="web", title="Web Page")
+    backend = _mock_backend(get_entity_by_platform=AsyncMock(return_value=entity))
+    set_backend(backend)
+
+    class FakeWebConnector:
+        def resolve_url(self, url: str) -> SourceReference | None:
+            return SourceReference("web", "document", url.removesuffix("#section"))
+
+        def entity_url(self, platform_entity_id: str) -> str:
+            return platform_entity_id
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.server.router.classify_url", return_value=None), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()):
+        result = await get_entity_by_url("https://example.com/page#section")
+
+    assert result is entity
+    backend.get_entity_by_platform.assert_awaited_once_with("web", "https://example.com/page")
+
+
+@pytest.mark.asyncio
+async def test_get_entity_by_url_falls_back_to_web_metadata_urls() -> None:
+    from agentgraph.connectors.base import SourceReference
+    from agentgraph.graph.query import get_entity_by_url
+
+    entity = _entity(platform="web", title="Redirected Page")
+    backend = _mock_backend(
+        get_entity_by_platform=AsyncMock(return_value=None),
+        query_by_filter=AsyncMock(side_effect=[[], [entity]]),
+    )
+    set_backend(backend)
+
+    class FakeWebConnector:
+        def resolve_url(self, url: str) -> SourceReference | None:
+            return SourceReference("web", "document", "https://example.com/final")
+
+        def entity_url(self, platform_entity_id: str) -> str:
+            return platform_entity_id
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.server.router.classify_url", return_value=None), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()):
+        result = await get_entity_by_url("https://example.com/original")
+
+    assert result is entity
+    backend.query_by_filter.assert_any_await(
+        "Document",
+        {"platform": "web", "url": "https://example.com/original"},
+        1,
+        "updated_at",
+        None,
+        None,
+    )
+    backend.query_by_filter.assert_any_await(
+        "Document",
+        {"platform": "web", "final_url": "https://example.com/original"},
+        1,
+        "updated_at",
+        None,
+        None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_entity_by_url_missing_does_not_fetch_or_upsert() -> None:
+    from agentgraph.connectors.base import SourceReference
+    from agentgraph.graph.query import get_entity_by_url
+
+    backend = _mock_backend(get_entity_by_platform=AsyncMock(return_value=None))
+    set_backend(backend)
+    fetch = AsyncMock()
+
+    class FakeWebConnector:
+        async def fetch(self, *_args: object) -> None:
+            await fetch()
+
+        def resolve_url(self, url: str) -> SourceReference | None:
+            return SourceReference("web", "document", url)
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.server.router.classify_url", return_value=None), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()), \
+         patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert_batch:
+        result = await get_entity_by_url("https://example.com/missing")
+
+    assert result is None
+    fetch.assert_not_awaited()
+    upsert_batch.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # get_edges
 # ---------------------------------------------------------------------------
@@ -363,6 +478,29 @@ async def test_mcp_get_entity_tool_found() -> None:
 
     parsed = json.loads(result)
     assert parsed["title"] == "My Doc"
+
+
+@pytest.mark.asyncio
+async def test_mcp_get_entity_tool_url_found() -> None:
+    from agentgraph.mcp.server import get_entity_tool
+
+    fake_entity = _entity(platform="web", title="Web Page")
+    with patch("agentgraph.graph.query.get_entity_by_url", new=AsyncMock(return_value=fake_entity)):
+        result = await get_entity_tool("https://example.com/page")
+
+    parsed = json.loads(result)
+    assert parsed["title"] == "Web Page"
+
+
+@pytest.mark.asyncio
+async def test_mcp_get_entity_tool_url_not_found() -> None:
+    from agentgraph.mcp.server import get_entity_tool
+
+    with patch("agentgraph.graph.query.get_entity_by_url", new=AsyncMock(return_value=None)):
+        result = await get_entity_tool("https://example.com/missing")
+
+    parsed = json.loads(result)
+    assert "error" in parsed
 
 
 @pytest.mark.asyncio

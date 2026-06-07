@@ -229,11 +229,11 @@ def search(
 
 @app.command()
 def get(
-    entity_id: str = typer.Argument(..., help="Entity ID"),
+    entity_id: str = typer.Argument(..., help="Entity ID, platform ref, or URL"),
     resolve: bool = typer.Option(False, "--resolve", "-r", help="Fetch from source if entity is a stub (no content)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Fetch full details for an entity."""
+    """Fetch full details for an existing entity."""
     from agentgraph.cli_query import cmd_get
 
     cmd_get(entity_id=entity_id, as_json=json, resolve=resolve)

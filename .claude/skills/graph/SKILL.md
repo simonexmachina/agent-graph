@@ -13,8 +13,8 @@ Use the `agentgraph` CLI to query the local knowledge graph. Always prefer the C
 # Semantic search across entities
 agentgraph search "<query>" [--type <type>] [--platform <platform>] [--limit N] [--json]
 
-# Fetch full entity details by ID, UUID prefix, or platform ref (platform/entity_id)
-agentgraph get <entity-id|platform/ref> --resolve [--json]
+# Fetch full existing entity details by ID, UUID prefix, platform ref, or URL
+agentgraph get <entity-id|platform/ref|url> --resolve [--json]
 
 # List edges for an entity
 agentgraph edges <entity-id|platform/ref> [--type <edge-type>] [--direction in|out|both] [--json]

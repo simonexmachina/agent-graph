@@ -219,15 +219,17 @@ async def search_entities_tool(
 @mcp.tool()
 async def get_entity_tool(entity_id: str) -> str:
     """
-    Retrieve full details for a single entity by its UUID.
+    Retrieve full details for a single existing entity.
 
     Args:
-        entity_id: The UUID of the entity (obtained from search results).
+        entity_id: Entity UUID, UUID prefix, platform ref, or HTTP(S) URL.
 
     Returns:
         JSON object with all entity fields, or an error message if not found.
     """
-    entity = await get_entity(entity_id)
+    from agentgraph.graph.query import get_entity_by_url, is_http_url
+
+    entity = await get_entity_by_url(entity_id) if is_http_url(entity_id) else await get_entity(entity_id)
     if entity is None:
         return json.dumps({"error": f"Entity {entity_id!r} not found"})
     return json.dumps(entity, default=str)

@@ -124,11 +124,24 @@ def _is_stub(entity: dict[str, Any]) -> bool:
 
 
 def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
-    entity = _get(f"/entity/{entity_id}")
+    from agentgraph.graph.query import is_http_url
+
+    target_is_url = is_http_url(entity_id)
+    try:
+        entity = (
+            _get("/entity-by-url", {"url": entity_id})
+            if target_is_url
+            else _get(f"/entity/{entity_id}")
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code != 404:
+            raise
+        entity = None
     if entity is None:
         _warn_local()
-        from agentgraph.graph.query import get_entity
-        entity = _run(get_entity(entity_id))
+        from agentgraph.graph.query import get_entity, get_entity_by_url
+
+        entity = _run(get_entity_by_url(entity_id) if target_is_url else get_entity(entity_id))
 
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")

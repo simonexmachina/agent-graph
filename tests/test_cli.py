@@ -51,6 +51,47 @@ def test_bookmark_command_dispatches_to_cli_query() -> None:
     cmd_bookmark.assert_called_once_with(target="abc123", as_json=True)
 
 
+def test_get_url_uses_entity_by_url_endpoint() -> None:
+    from agentgraph.cli_query import cmd_get
+
+    entity = {
+        "id": "entity-12345678",
+        "entity_type": "Document",
+        "platform": "web",
+        "title": "Page",
+        "metadata": {},
+    }
+
+    with patch("agentgraph.cli_query._get", return_value=entity) as get:
+        cmd_get("https://example.com/page", as_json=True)
+
+    get.assert_called_once_with("/entity-by-url", {"url": "https://example.com/page"})
+
+
+def test_get_url_falls_back_when_running_server_lacks_endpoint() -> None:
+    from agentgraph.cli_query import cmd_get
+
+    response = httpx.Response(
+        404,
+        json={"detail": "Not Found"},
+        request=httpx.Request("GET", "http://127.0.0.1:8765/api/cli/entity-by-url"),
+    )
+    entity = {
+        "id": "entity-12345678",
+        "entity_type": "Document",
+        "platform": "web",
+        "title": "Page",
+        "metadata": {},
+    }
+    error = httpx.HTTPStatusError("not found", request=response.request, response=response)
+
+    with patch("agentgraph.cli_query._get", side_effect=error), \
+         patch("agentgraph.graph.query.get_entity_by_url", new=AsyncMock(return_value=entity)) as get_by_url:
+        cmd_get("https://example.com/page", as_json=True)
+
+    get_by_url.assert_awaited_once_with("https://example.com/page")
+
+
 def test_bookmark_falls_back_when_running_server_lacks_endpoint() -> None:
     from agentgraph.cli_query import cmd_bookmark
 

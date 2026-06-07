@@ -16,6 +16,7 @@ from agentgraph.graph.query import (
     get_edges_for_entities,
     get_entities_by_ids,
     get_entity,
+    get_entity_by_url,
     list_entities,
     query_by_filter,
     search_entities,
@@ -116,6 +117,14 @@ async def cli_search(
 @router.get("/entity/{entity_id:path}")
 async def cli_get_entity(entity_id: str) -> dict[str, Any]:
     entity = await get_entity(entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return _with_display_name(entity)
+
+
+@router.get("/entity-by-url")
+async def cli_get_entity_by_url(url: str = Query(...)) -> dict[str, Any]:
+    entity = await get_entity_by_url(url)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
     return _with_display_name(entity)

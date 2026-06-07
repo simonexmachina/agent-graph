@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
+from urllib.parse import urlparse
 
 from agentgraph.core.context import get_backend
 from agentgraph.core.storage import EdgeResult, EntityResult
@@ -18,17 +19,20 @@ def _enrich_web_url(entities: list[EntityResult]) -> None:
 
     for entity in entities:
         meta = entity.get("metadata")
-        if isinstance(meta, dict) and meta.get("web_url"):
+        metadata = cast(dict[str, Any], meta) if isinstance(meta, dict) else None
+        if metadata is not None and metadata.get("web_url"):
             continue
-        connector = get_connector(entity.get("platform", ""))
+        platform = entity.get("platform")
+        connector = get_connector(platform if isinstance(platform, str) else "")
         if connector is None:
             continue
-        url = connector.entity_url(entity.get("platform_entity_id", ""))
+        platform_entity_id = entity.get("platform_entity_id")
+        url = connector.entity_url(platform_entity_id if isinstance(platform_entity_id, str) else "")
         if url:
-            if not isinstance(meta, dict):
+            if metadata is None:
                 entity["metadata"] = {"web_url": url}
             else:
-                meta["web_url"] = url
+                metadata["web_url"] = url
 
 
 async def search_entities(
@@ -75,6 +79,35 @@ async def get_entity(entity_id: str) -> EntityResult | None:
                 f"Ambiguous prefix {entity_id!r} matches {len(results)} entities"
             )
         entity = results[0] if results else None
+    if entity is not None:
+        _enrich_web_url([entity])
+    return entity
+
+
+async def get_entity_by_url(url: str) -> EntityResult | None:
+    """Fetch a single existing entity by URL without fetching or creating it."""
+    from agentgraph.connectors.registry import bootstrap, get_connector
+    from agentgraph.server.router import classify_url, normalise_url_for_matching
+
+    normalised_url = normalise_url_for_matching(url)
+    bootstrap()
+    ref = classify_url(normalised_url)
+    backend = get_backend()
+
+    if ref is not None:
+        entity = await backend.get_entity_by_platform(ref.source, ref.resource_id)
+        if entity is not None:
+            _enrich_web_url([entity])
+        return entity
+
+    connector = get_connector("web")
+    web_ref = connector.resolve_url(normalised_url) if connector is not None else None
+    if web_ref is None:
+        return None
+
+    entity = await backend.get_entity_by_platform(web_ref.source, web_ref.resource_id)
+    if entity is None:
+        entity = await _get_web_entity_by_metadata_url(normalised_url)
     if entity is not None:
         _enrich_web_url([entity])
     return entity
@@ -145,6 +178,27 @@ def _resolve_me() -> list[str] | None:
             if user_id not in user_ids:
                 user_ids.append(user_id)
     return user_ids or None
+
+
+async def _get_web_entity_by_metadata_url(url: str) -> EntityResult | None:
+    backend = get_backend()
+    for key in ("url", "final_url"):
+        results = await backend.query_by_filter(
+            "Document",
+            {"platform": "web", key: url},
+            1,
+            "updated_at",
+            None,
+            None,
+        )
+        if results:
+            return results[0]
+    return None
+
+
+def is_http_url(target: str) -> bool:
+    parsed = urlparse(target)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
 def _parse_since(since: str) -> datetime:
