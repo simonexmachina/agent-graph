@@ -91,12 +91,30 @@ def test_parse_unsupported_content_type_raises_clear_error() -> None:
         )
 
 
+def test_conditional_request_headers_use_document_metadata() -> None:
+    headers = agentgraph_connector_web._conditional_request_headers(  # noqa: SLF001
+        {
+            "http_etag": '"abc123"',
+            "http_last_modified": "Mon, 08 Jun 2026 00:00:00 GMT",
+        }
+    )
+
+    assert headers == {
+        "If-None-Match": '"abc123"',
+        "If-Modified-Since": "Mon, 08 Jun 2026 00:00:00 GMT",
+    }
+
+
 @pytest.mark.asyncio
 async def test_fetch_web_entity_streams_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            headers={"content-type": "text/html"},
+            headers={
+                "content-type": "text/html",
+                "etag": '"fresh"',
+                "last-modified": "Mon, 08 Jun 2026 01:23:45 GMT",
+            },
             content=b"<title>Fetched</title><p>Body</p>",
             request=request,
         )
@@ -115,6 +133,51 @@ async def test_fetch_web_entity_streams_response() -> None:
     assert entity.title == "Fetched"
     assert entity.content == "<title>Fetched</title><p>Body</p>"
     assert entity.metadata["content_type"] == "text/html"
+    assert entity.metadata["web_url"] == "https://example.com/page"
+    assert entity.metadata["http_etag"] == '"fresh"'
+    assert entity.metadata["http_last_modified"] == "Mon, 08 Jun 2026 01:23:45 GMT"
+
+
+@pytest.mark.asyncio
+async def test_fetch_web_entity_uses_document_validators_on_304() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["if-none-match"] == '"cached"'
+        assert request.headers["if-modified-since"] == "Sun, 07 Jun 2026 12:00:00 GMT"
+        return httpx.Response(
+            304,
+            headers={
+                "etag": '"cached"',
+                "last-modified": "Sun, 07 Jun 2026 12:00:00 GMT",
+            },
+            request=request,
+        )
+
+    existing = {
+        "entity_type": "Document",
+        "platform": "web",
+        "platform_entity_id": "https://example.com/page",
+        "title": "Cached title",
+        "content": "Cached body",
+        "metadata": {
+            "web_url": "https://example.com/page",
+            "content_sha256": "cached-hash",
+            "http_etag": '"cached"',
+            "http_last_modified": "Sun, 07 Jun 2026 12:00:00 GMT",
+        },
+    }
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        entity = await agentgraph_connector_web._fetch_web_entity(  # noqa: SLF001
+            "https://example.com/page",
+            client=client,
+            existing_entity=existing,
+        )
+
+    assert entity.title == "Cached title"
+    assert entity.content == "Cached body"
+    assert entity.metadata["status_code"] == 304
+    assert entity.metadata["content_sha256"] == "cached-hash"
+    assert entity.metadata["http_etag"] == '"cached"'
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,7 @@ from agentgraph.connectors.base import (
     ResourceType,
     SourceReference,
 )
+from agentgraph.core.context import get_backend
 from agentgraph.graph.upsert import upsert_batch
 
 _STALE_AFTER = 24 * 60 * 60
@@ -70,7 +71,8 @@ class WebConnector(BaseConnector):
         if ref is None:
             raise ValueError("Web connector only supports http:// and https:// URLs")
 
-        entity = await _fetch_web_entity(ref.resource_id)
+        existing = await get_backend().get_entity_by_platform(self.source, ref.resource_id)
+        entity = await _fetch_web_entity(ref.resource_id, existing_entity=existing)
         batch = EntityBatch(entities=[entity])
         await upsert_batch(batch)
         return batch
@@ -83,6 +85,7 @@ async def _fetch_web_entity(
     url: str,
     *,
     client: httpx.AsyncClient | None = None,
+    existing_entity: dict[str, object] | None = None,
 ) -> EntityRecord:
     if client is None:
         async with httpx.AsyncClient(
@@ -90,10 +93,24 @@ async def _fetch_web_entity(
             max_redirects=_MAX_REDIRECTS,
             timeout=httpx.Timeout(10.0, connect=5.0),
         ) as owned_client:
-            return await _fetch_web_entity(url, client=owned_client)
+            return await _fetch_web_entity(
+                url,
+                client=owned_client,
+                existing_entity=existing_entity,
+            )
 
-    headers = {"Accept": _ACCEPT, "User-Agent": "AgentGraph/0.1"}
+    existing_metadata = _entity_metadata(existing_entity)
+    headers = {
+        "Accept": _ACCEPT,
+        "User-Agent": "AgentGraph/0.1",
+        **_conditional_request_headers(existing_metadata),
+    }
     async with client.stream("GET", url, headers=headers) as response:
+        if response.status_code == 304:
+            if existing_entity is None:
+                raise ValueError(f"Received 304 for {url} without an existing Document")
+            return _not_modified_entity(url, response, existing_entity)
+
         response.raise_for_status()
         body = bytearray()
         async for chunk in response.aiter_bytes():
@@ -114,12 +131,89 @@ async def _fetch_web_entity(
             metadata={
                 "url": url,
                 "final_url": final_url,
+                "web_url": final_url,
                 "content_type": content_type,
                 "status_code": response.status_code,
                 "fetched_at": datetime.now(UTC).isoformat(),
                 "content_sha256": hashlib.sha256(body).hexdigest(),
+                **_response_cache_metadata(response.headers),
             },
         )
+
+
+async def fetch_http_document(
+    url: str,
+    *,
+    existing_entity: dict[str, object] | None = None,
+) -> EntityRecord:
+    """Fetch an HTTP-backed Document, using validators from existing metadata when present."""
+    return await _fetch_web_entity(url, existing_entity=existing_entity)
+
+
+def _conditional_request_headers(metadata: dict[str, object]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    etag = metadata.get("http_etag")
+    if isinstance(etag, str) and etag:
+        headers["If-None-Match"] = etag
+    last_modified = metadata.get("http_last_modified")
+    if isinstance(last_modified, str) and last_modified:
+        headers["If-Modified-Since"] = last_modified
+    return headers
+
+
+def _response_cache_metadata(headers: httpx.Headers) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    etag = headers.get("etag")
+    if etag:
+        metadata["http_etag"] = etag
+    last_modified = headers.get("last-modified")
+    if last_modified:
+        metadata["http_last_modified"] = last_modified
+    return metadata
+
+
+def _entity_metadata(entity: dict[str, object] | None) -> dict[str, object]:
+    metadata = entity.get("metadata") if entity is not None else None
+    return cast(dict[str, object], metadata) if isinstance(metadata, dict) else {}
+
+
+def _not_modified_entity(
+    url: str,
+    response: httpx.Response,
+    existing_entity: dict[str, object],
+) -> EntityRecord:
+    metadata: dict[str, str | int | float | bool | None] = {
+        **_entity_record_metadata(existing_entity),
+        "url": url,
+        "final_url": str(existing_entity.get("platform_entity_id") or url),
+        "web_url": str(existing_entity.get("platform_entity_id") or url),
+        "status_code": response.status_code,
+        "fetched_at": datetime.now(UTC).isoformat(),
+        **_response_cache_metadata(response.headers),
+    }
+    return EntityRecord(
+        entity_type=str(existing_entity.get("entity_type") or "Document"),
+        platform="web",
+        platform_entity_id=str(existing_entity.get("platform_entity_id") or url),
+        title=_optional_str(existing_entity.get("title")),
+        content=_optional_str(existing_entity.get("content")),
+        updated_at=datetime.now(UTC),
+        metadata=metadata,
+    )
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _entity_record_metadata(
+    entity: dict[str, object],
+) -> dict[str, str | int | float | bool | None]:
+    metadata: dict[str, str | int | float | bool | None] = {}
+    for key, value in _entity_metadata(entity).items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            metadata[key] = value
+    return metadata
 
 
 class _ParsedContent:

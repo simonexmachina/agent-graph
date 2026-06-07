@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
+from importlib import import_module
 from typing import Any, cast
 
 from agentgraph.connectors.base import (
@@ -20,6 +22,7 @@ from agentgraph.connectors.base import (
     ResourceType,
     SourceReference,
 )
+from agentgraph.core.context import get_backend
 from agentgraph_connector_rss.auth import (
     add_feed_urls,
     import_opml_feeds,
@@ -161,6 +164,9 @@ class RssConnector(BaseConnector):
         _ = (resource_type, meta, account_id)
         if resource_id.startswith(("http://", "https://")):
             return await _fetch_feed(resource_id)
+        if resource_type == "document" and meta and meta.get("web_url"):
+            entity = await _fetch_entry_document(resource_id, meta)
+            return EntityBatch(entities=[entity])
         return EntityBatch()
 
 
@@ -349,6 +355,63 @@ def _entry_to_entity(
         updated_at=_parse_entry_datetime(entry.get("updated")) or published,
         metadata=metadata,
     )
+
+
+async def _fetch_entry_document(
+    platform_entity_id: str,
+    metadata: dict[str, str],
+) -> EntityRecord:
+    web_url = metadata["web_url"]
+    existing = await get_backend().get_entity_by_platform("rss", platform_entity_id)
+    http_existing = _http_existing_entity(existing, web_url)
+    fetched = await _fetch_http_document(web_url, existing_entity=http_existing)
+    fetched_metadata = dict(fetched.metadata)
+    rss_metadata: dict[str, str | int | float | bool | None] = {
+        **_entity_record_metadata(metadata),
+        **fetched_metadata,
+        "web_url": str(fetched_metadata.get("web_url") or web_url),
+        "link": str(metadata.get("link") or web_url),
+    }
+    return EntityRecord(
+        entity_type="Document",
+        platform="rss",
+        platform_entity_id=platform_entity_id,
+        title=fetched.title,
+        content=fetched.content,
+        updated_at=fetched.updated_at,
+        metadata=rss_metadata,
+    )
+
+
+def _http_existing_entity(
+    existing: dict[str, Any] | None,
+    web_url: str,
+) -> dict[str, object] | None:
+    if existing is None:
+        return None
+    http_existing = dict(existing)
+    http_existing["platform_entity_id"] = web_url
+    return http_existing
+
+
+async def _fetch_http_document(
+    url: str,
+    *,
+    existing_entity: dict[str, object] | None,
+) -> EntityRecord:
+    module: Any = import_module("agentgraph_connector_web")
+    result = await module.fetch_http_document(url, existing_entity=existing_entity)
+    return cast(EntityRecord, result)
+
+
+def _entity_record_metadata(
+    metadata: Mapping[str, object],
+) -> dict[str, str | int | float | bool | None]:
+    result: dict[str, str | int | float | bool | None] = {}
+    for key, value in metadata.items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            result[key] = value
+    return result
 
 
 def _entry_text(entry: dict[str, Any]) -> str:

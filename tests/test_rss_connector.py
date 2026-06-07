@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import feedparser  # type: ignore[import-untyped]
 import pytest
@@ -22,6 +22,9 @@ from agentgraph_connector_rss.auth import (
     select_opml_feeds,
     verify_rss_auth,
 )
+
+from agentgraph.connectors.base import EntityRecord
+from agentgraph.core.context import set_backend
 
 
 class _ParsedFeed:
@@ -476,3 +479,63 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
     assert entry.metadata["link"] == "https://example.com/first"
     assert entry.metadata["web_url"] == "https://example.com/first"
     assert batch.edges[0].edge_type == "posted_in"
+
+
+@pytest.mark.asyncio
+async def test_rss_fetch_entry_document_uses_http_document_cache() -> None:
+    existing = {
+        "entity_type": "Document",
+        "platform": "rss",
+        "platform_entity_id": "entry/cached",
+        "title": "Cached",
+        "content": "Cached content",
+        "metadata": {
+            "feed_url": "https://example.com/feed.xml",
+            "feed_entity_id": "feed/abc",
+            "link": "https://example.com/post",
+            "web_url": "https://example.com/post",
+            "http_etag": '"cached"',
+        },
+    }
+    backend = MagicMock()
+    backend.get_entity_by_platform = AsyncMock(return_value=existing)
+    set_backend(backend)
+
+    fetched = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/post",
+        title="Fresh article",
+        content="Fresh article body",
+        metadata={
+            "web_url": "https://example.com/post",
+            "http_etag": '"fresh"',
+            "http_last_modified": "Mon, 08 Jun 2026 01:23:45 GMT",
+            "status_code": 200,
+        },
+    )
+
+    with patch("agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)) as fetch:
+        batch = await RssConnector().fetch(
+            "document",
+            "entry/cached",
+            meta={
+                "feed_url": "https://example.com/feed.xml",
+                "feed_entity_id": "feed/abc",
+                "link": "https://example.com/post",
+                "web_url": "https://example.com/post",
+                "http_etag": '"cached"',
+            },
+        )
+
+    fetch.assert_awaited_once()
+    existing_arg = fetch.await_args.kwargs["existing_entity"]
+    assert existing_arg["platform_entity_id"] == "https://example.com/post"
+    entity = batch.entities[0]
+    assert entity.platform == "rss"
+    assert entity.platform_entity_id == "entry/cached"
+    assert entity.title == "Fresh article"
+    assert entity.content == "Fresh article body"
+    assert entity.metadata["feed_url"] == "https://example.com/feed.xml"
+    assert entity.metadata["web_url"] == "https://example.com/post"
+    assert entity.metadata["http_etag"] == '"fresh"'
