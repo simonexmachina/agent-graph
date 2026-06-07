@@ -344,8 +344,11 @@ def cmd_bookmark(target: str, as_json: bool) -> None:
             detail = exc.response.json().get("detail", str(exc))
         except Exception:
             detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
+        if exc.response.status_code == 404 and detail == "Not Found":
+            result = None
+        else:
+            console.print(f"[red]{detail}[/red]")
+            return
     if result is None:
         _warn_local()
         from agentgraph.core.runtime import backend_context

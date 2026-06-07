@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -129,3 +131,43 @@ async def test_sqlite_set_entity_bookmarked_returns_updated_entity(
 
     assert entity["id"] == entity_id
     assert entity["bookmarked"] is True
+
+
+async def test_sqlite_migration_adds_bookmarked_before_index(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE entities (
+                id TEXT PRIMARY KEY,
+                entity_type TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                platform_entity_id TEXT NOT NULL,
+                title TEXT,
+                content TEXT,
+                content_embedding BLOB,
+                metadata TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT,
+                updated_at TEXT,
+                synced_at TEXT,
+                last_accessed TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+                cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
+                UNIQUE (platform, platform_entity_id)
+            )
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    backend = SQLiteBackend(str(db_path))
+    await backend.initialize()
+    try:
+        columns = await backend._fetchall("PRAGMA table_info(entities)")
+        indexes = await backend._fetchall("PRAGMA index_list(entities)")
+    finally:
+        await backend.close()
+
+    assert "bookmarked" in {row["name"] for row in columns}
+    assert "idx_entities_bookmarked" in {row["name"] for row in indexes}
