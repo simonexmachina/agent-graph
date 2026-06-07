@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -63,6 +64,16 @@ def _mock_backend(**overrides: Any) -> Any:
     for name, value in {**defaults, **overrides}.items():
         setattr(backend, name, value)
     return backend
+
+
+def test_viewer_uses_bookmark_symbol_with_status() -> None:
+    """The web viewer presents bookmark state with a compact symbol control."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert 'id="detail-bookmark"' in viewer_html
+    assert 'class="bookmark-glyph"' in viewer_html
+    assert "Bookmark status" in viewer_html
+    assert "aria-pressed" in viewer_html
 
 
 # ---------------------------------------------------------------------------
