@@ -387,26 +387,27 @@ async def download_entity_tool(entity_id: str, output_path: str | None = None) -
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def bookmark_entity_tool(entity_id: str) -> str:
+async def bookmark_entity_tool(entity_id: str, bookmarked: bool = True) -> str:
     """
-    Bookmark an entity or URL so garbage collection will not remove it.
+    Set or remove bookmark protection for an entity or URL.
 
     Supports entity UUIDs, UUID prefixes, and platform refs such as
     "gdrive/file-id" when those resolve to a graph entity. HTTP(S) URLs are
-    fetched through an owning connector when possible, otherwise through the
-    generic web connector.
+    fetched through an owning connector when possible when adding a bookmark,
+    otherwise through the generic web connector.
 
     Args:
         entity_id: Entity UUID, UUID prefix, platform/entity_id reference, or URL.
+        bookmarked: True to add bookmark protection; false to remove it.
 
     Returns:
-        JSON object for the updated entity with bookmarked=true, or an error
+        JSON object for the updated entity with its bookmark state, or an error
         message if the entity cannot be found.
     """
-    from agentgraph.graph.bookmark import bookmark_target
+    from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
 
     try:
-        result = await bookmark_target(entity_id)
+        result = await bookmark_target(entity_id) if bookmarked else await set_entity_bookmark(entity_id, False)
         return json.dumps(result, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})

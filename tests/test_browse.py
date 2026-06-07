@@ -11,7 +11,6 @@ import pytest
 
 from agentgraph.core.context import set_backend
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -71,9 +70,14 @@ def test_viewer_uses_bookmark_symbol_with_status() -> None:
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert 'id="detail-bookmark"' in viewer_html
+    assert 'id="detail-delete"' in viewer_html
     assert 'class="bookmark-glyph"' in viewer_html
+    assert 'class="delete-glyph"' in viewer_html
     assert "Bookmark status" in viewer_html
     assert "aria-pressed" in viewer_html
+    assert "applyZoomStyles();" in viewer_html
+    assert "cy.style().update();" in viewer_html
+    assert "/api/cli/delete" in viewer_html
 
 
 # ---------------------------------------------------------------------------
@@ -451,18 +455,19 @@ async def test_browse_nodes_preserve_bookmarked_flag() -> None:
 async def test_browse_404_when_node_id_not_found() -> None:
     """Returns 404 when the specified node_id does not exist."""
     from fastapi import HTTPException
+
     from agentgraph.server.cli_api import cli_browse
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)):
-        with pytest.raises(HTTPException) as exc_info:
-            await cli_browse(
-                node_id="nonexistent-id",
-                entity_type=[],
-                search=None,
-                platform=None,
-                since=None,
-                depth=2,
-                limit=50,
-            )
+    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
+         pytest.raises(HTTPException) as exc_info:
+        await cli_browse(
+            node_id="nonexistent-id",
+            entity_type=[],
+            search=None,
+            platform=None,
+            since=None,
+            depth=2,
+            limit=50,
+        )
 
     assert exc_info.value.status_code == 404

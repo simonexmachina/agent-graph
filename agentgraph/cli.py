@@ -303,12 +303,13 @@ def download(
 @app.command()
 def bookmark(
     target: str = typer.Argument(..., help="Entity ID, UUID prefix, platform ref, or URL"),
+    remove: bool = typer.Option(False, "--remove", help="Remove bookmark protection instead of adding it"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Bookmark an entity or URL so garbage collection will not remove it."""
+    """Set or remove bookmark protection for an entity or URL."""
     from agentgraph.cli_query import cmd_bookmark
 
-    cmd_bookmark(target=target, as_json=json)
+    cmd_bookmark(target=target, bookmarked=not remove, as_json=json)
 
 
 @app.command("delete")

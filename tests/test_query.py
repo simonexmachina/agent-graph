@@ -643,6 +643,20 @@ async def test_mcp_bookmark_entity_tool() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_bookmark_entity_tool_can_remove_bookmark() -> None:
+    from agentgraph.mcp.server import bookmark_entity_tool
+
+    fake_result = _entity(title="My Doc")
+    fake_result["bookmarked"] = False
+    with patch("agentgraph.graph.bookmark.set_entity_bookmark", new=AsyncMock(return_value=fake_result)) as set_bookmark:
+        result = await bookmark_entity_tool("abc123", bookmarked=False)
+
+    parsed = json.loads(result)
+    assert parsed["bookmarked"] is False
+    set_bookmark.assert_awaited_once_with("abc123", False)
+
+
+@pytest.mark.asyncio
 async def test_mcp_delete_entity_tool() -> None:
     from agentgraph.mcp.server import delete_entity_tool
 

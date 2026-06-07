@@ -27,3 +27,7 @@ source_path = "docs-src/mcp/index.md"
 - [`fetch_entity_by_id_tool`](/mcp/fetch-entity-by-id.html) - fetch by internal entity UUID.
 - [`download_entity_tool`](/mcp/download-entity.html) - download the source file behind an entity.
 - [`delete_entity_tool`](/mcp/delete-entity.html) - remove an entity and its connected edges.
+
+## State
+
+- `bookmark_entity_tool(entity_id, bookmarked=false)` clears bookmark protection for an existing entity.

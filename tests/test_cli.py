@@ -49,7 +49,15 @@ def test_bookmark_command_dispatches_to_cli_query() -> None:
         result = runner.invoke(app, ["bookmark", "abc123", "--json"])
 
     assert result.exit_code == 0
-    cmd_bookmark.assert_called_once_with(target="abc123", as_json=True)
+    cmd_bookmark.assert_called_once_with(target="abc123", bookmarked=True, as_json=True)
+
+
+def test_bookmark_remove_command_dispatches_to_cli_query() -> None:
+    with patch("agentgraph.cli_query.cmd_bookmark") as cmd_bookmark:
+        result = runner.invoke(app, ["bookmark", "abc123", "--remove", "--json"])
+
+    assert result.exit_code == 0
+    cmd_bookmark.assert_called_once_with(target="abc123", bookmarked=False, as_json=True)
 
 
 def test_delete_command_dispatches_to_cli_query() -> None:
@@ -140,9 +148,37 @@ def test_bookmark_falls_back_when_running_server_lacks_endpoint() -> None:
              "agentgraph.graph.bookmark.bookmark_target",
              new=AsyncMock(return_value=entity),
          ) as bookmark_target:
-        cmd_bookmark("https://example.com/page", as_json=True)
+        cmd_bookmark("https://example.com/page", bookmarked=True, as_json=True)
 
     bookmark_target.assert_awaited_once_with("https://example.com/page")
+
+
+def test_bookmark_remove_falls_back_when_running_server_lacks_endpoint() -> None:
+    from agentgraph.cli_query import cmd_bookmark
+
+    response = httpx.Response(
+        404,
+        json={"detail": "Not Found"},
+        request=httpx.Request("POST", "http://127.0.0.1:8765/api/cli/bookmark"),
+    )
+    entity = {
+        "id": "entity-12345678",
+        "title": "Unbookmarked",
+        "platform_entity_id": "ref",
+        "bookmarked": False,
+    }
+
+    error = httpx.HTTPStatusError("not found", request=response.request, response=response)
+
+    with patch("agentgraph.cli_query._post", side_effect=error), \
+         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
+         patch(
+             "agentgraph.graph.bookmark.set_entity_bookmark",
+             new=AsyncMock(return_value=entity),
+         ) as set_entity_bookmark:
+        cmd_bookmark("abc123", bookmarked=False, as_json=True)
+
+    set_entity_bookmark.assert_awaited_once_with("abc123", False)
 
 
 def test_delete_falls_back_when_running_server_lacks_endpoint() -> None:

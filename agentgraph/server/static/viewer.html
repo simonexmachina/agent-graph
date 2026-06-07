@@ -325,6 +325,22 @@
     fill: currentColor;
   }
 
+  #detail-delete:hover {
+    color: #f87171;
+  }
+
+  .delete-glyph {
+    width: 14px;
+    height: 14px;
+    display: block;
+    overflow: visible;
+    fill: transparent;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   #detail-close {
     font-size: 16px;
   }
@@ -491,6 +507,15 @@
         <button id="detail-bookmark" class="detail-icon-btn" title="Not bookmarked" aria-label="Bookmark entity" aria-pressed="false">
           <svg class="bookmark-glyph" viewBox="0 0 16 20" aria-hidden="true" focusable="false">
             <path d="M4 2.5h8v14l-4-2.75-4 2.75z"></path>
+          </svg>
+        </button>
+        <button id="detail-delete" class="detail-icon-btn" title="Delete entity" aria-label="Delete entity">
+          <svg class="delete-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M3 6h18"></path>
+            <path d="M8 6V4h8v2"></path>
+            <path d="M6 6l1 14h10l1-14"></path>
+            <path d="M10 11v5"></path>
+            <path d="M14 11v5"></path>
           </svg>
         </button>
         <button id="detail-close" class="detail-icon-btn" title="Close">✕</button>
@@ -664,6 +689,7 @@
   const detailTitle   = document.getElementById('detail-title');
   const detailBody    = document.getElementById('detail-body');
   const detailBookmark = document.getElementById('detail-bookmark');
+  const detailDelete  = document.getElementById('detail-delete');
   const detailClose   = document.getElementById('detail-close');
 
   // ── Fetch helpers ─────────────────────────────────────────────────────────
@@ -1001,7 +1027,11 @@
         if (!res.ok) throw new Error(await readErrorDetail(res));
         const updated = await res.json();
         const node = cy.getElementById(entity.id);
-        if (node.length) node.data('bookmarked', Boolean(updated.bookmarked));
+        if (node.length) {
+          node.data('bookmarked', Boolean(updated.bookmarked));
+          applyZoomStyles();
+          cy.style().update();
+        }
         invalidateGraphCache();
         renderDetail({ ...entity, ...updated });
       } catch (err) {
@@ -1015,6 +1045,32 @@
 
     detailBody.appendChild(row('Bookmark status', isBookmarked ? 'Bookmarked' : 'Not bookmarked'));
     detailBody.appendChild(bookmarkError);
+
+    detailDelete.disabled = false;
+    detailDelete.title = 'Delete entity';
+    detailDelete.onclick = async () => {
+      if (!window.confirm('Delete this entity from the graph? Connected edges will also be removed.')) return;
+      detailDelete.disabled = true;
+      detailDelete.title = 'Deleting…';
+      try {
+        const res = await fetch(
+          `/api/cli/delete?target=${encodeURIComponent(entity.id)}`,
+          { method: 'POST' }
+        );
+        if (!res.ok) throw new Error(await readErrorDetail(res));
+        const node = cy.getElementById(entity.id);
+        if (node.length) node.connectedEdges().remove();
+        if (node.length) node.remove();
+        invalidateGraphCache();
+        closeDetail();
+      } catch (err) {
+        detailDelete.disabled = false;
+        detailDelete.title = 'Delete entity';
+        bookmarkError.textContent = err instanceof Error ? err.message : 'Delete failed';
+        bookmarkError.style.display = 'block';
+        console.error('delete error:', err);
+      }
+    };
 
     const typeColor = nodeColor(entity.entity_type);
     const typeRow = document.createElement('div');

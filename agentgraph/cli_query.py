@@ -355,9 +355,9 @@ def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None
     )
 
 
-def cmd_bookmark(target: str, as_json: bool) -> None:
+def cmd_bookmark(target: str, bookmarked: bool, as_json: bool) -> None:
     try:
-        result = _post("/bookmark", params={"target": target})
+        result = _post("/bookmark", params={"target": target, "bookmarked": bookmarked})
     except httpx.HTTPStatusError as exc:
         try:
             detail = exc.response.json().get("detail", str(exc))
@@ -371,11 +371,13 @@ def cmd_bookmark(target: str, as_json: bool) -> None:
     if result is None:
         _warn_local()
         from agentgraph.core.runtime import backend_context
-        from agentgraph.graph.bookmark import bookmark_target
+        from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
 
         async def _bookmark() -> dict[str, Any]:
             async with backend_context():
-                return await bookmark_target(target)
+                if bookmarked:
+                    return await bookmark_target(target)
+                return await set_entity_bookmark(target, False)
 
         try:
             result = _run(_bookmark())
@@ -388,7 +390,8 @@ def cmd_bookmark(target: str, as_json: bool) -> None:
         return
 
     label = result.get("title") or result.get("platform_entity_id") or result["id"]
-    console.print(f"[green]Bookmarked:[/green] {label} [{result['id'][:8]}]")
+    action = "Bookmarked" if bookmarked else "Bookmark removed"
+    console.print(f"[green]{action}:[/green] {label} [{result['id'][:8]}]")
 
 
 def cmd_delete(target: str, as_json: bool) -> None:

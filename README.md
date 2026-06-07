@@ -142,6 +142,7 @@ agentgraph traverse <entity-id> --depth 2
 agentgraph fetch gdocs <document-id>
 agentgraph fetch-entity <entity-id>
 agentgraph download <entity-id>
+agentgraph bookmark <entity-id> --remove
 agentgraph delete <entity-id>
 ```
 
