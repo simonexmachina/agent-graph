@@ -21,17 +21,19 @@ def test_web_connector_resolves_http_urls() -> None:
     assert connector.resolve_url("ftp://example.com/file") is None
 
 
-def test_parse_html_extracts_title_and_text() -> None:
+def test_parse_html_extracts_title_and_preserves_source() -> None:
+    source = (
+        b"<html><head><title>Hello</title><script>x()</script></head>"
+        b"<body><h1>Hi</h1><p>World</p></body></html>"
+    )
     parsed = agentgraph_connector_web._parse_content(  # noqa: SLF001
-        b"<html><head><title>Hello</title><script>x()</script></head><body><h1>Hi</h1><p>World</p></body></html>",
+        source,
         "text/html",
         "https://example.com/hello",
     )
 
     assert parsed.title == "Hello"
-    assert "Hi" in parsed.content
-    assert "World" in parsed.content
-    assert "x()" not in parsed.content
+    assert parsed.content == source.decode()
 
 
 def test_parse_markdown_uses_first_heading() -> None:
@@ -46,14 +48,15 @@ def test_parse_markdown_uses_first_heading() -> None:
 
 
 def test_parse_json_uses_title_key() -> None:
+    source = b'{"title":"API","ok":true}'
     parsed = agentgraph_connector_web._parse_content(  # noqa: SLF001
-        b'{"title":"API","ok":true}',
+        source,
         "application/json",
         "https://example.com/api",
     )
 
     assert parsed.title == "API"
-    assert '"ok": true' in parsed.content
+    assert parsed.content == source.decode()
 
 
 def test_parse_plain_text() -> None:
@@ -68,14 +71,15 @@ def test_parse_plain_text() -> None:
 
 
 def test_parse_xml_uses_first_title() -> None:
+    source = b"<rss><channel><title>Feed</title><item><title>Entry</title></item></channel></rss>"
     parsed = agentgraph_connector_web._parse_content(  # noqa: SLF001
-        b"<rss><channel><title>Feed</title><item><title>Entry</title></item></channel></rss>",
+        source,
         "application/rss+xml",
         "https://example.com/feed.xml",
     )
 
     assert parsed.title == "Feed"
-    assert "Entry" in parsed.content
+    assert parsed.content == source.decode()
 
 
 def test_parse_unsupported_content_type_raises_clear_error() -> None:
@@ -109,6 +113,7 @@ async def test_fetch_web_entity_streams_response() -> None:
     assert entity.platform == "web"
     assert entity.platform_entity_id == "https://example.com/page"
     assert entity.title == "Fetched"
+    assert entity.content == "<title>Fetched</title><p>Body</p>"
     assert entity.metadata["content_type"] == "text/html"
 
 

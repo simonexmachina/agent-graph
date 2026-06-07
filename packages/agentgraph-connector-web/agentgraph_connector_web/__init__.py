@@ -35,7 +35,7 @@ _ACCEPT = (
 
 
 class UnsupportedFormatError(ValueError):
-    """Raised when a URL returns content AgentGraph cannot turn into text."""
+    """Raised when a URL returns content AgentGraph cannot store for LLM use."""
 
 
 class WebConnector(BaseConnector):
@@ -214,8 +214,7 @@ def _parse_html(text: str, url: str) -> _ParsedContent:
     parser = _TextHTMLParser()
     parser.feed(text)
     title = _clean_text(" ".join(parser.title_parts)) or _title_from_url(url)
-    content = _clean_text("\n".join(parser.text_parts))
-    return _ParsedContent(title=title, content=content)
+    return _ParsedContent(title=title, content=text.strip())
 
 
 def _parse_markdown(text: str, url: str) -> _ParsedContent:
@@ -235,8 +234,7 @@ def _parse_json(text: str, url: str) -> _ParsedContent:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON response for web bookmark: {exc.msg}") from exc
     title = _json_title(value) or _title_from_url(url)
-    content = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False)
-    return _ParsedContent(title=title, content=content)
+    return _ParsedContent(title=title, content=text.strip())
 
 
 def _json_title(value: object) -> str | None:
@@ -255,10 +253,8 @@ def _parse_xml(text: str, url: str) -> _ParsedContent:
         root = ElementTree.fromstring(text)
     except ElementTree.ParseError as exc:
         raise ValueError(f"Invalid XML response for web bookmark: {exc}") from exc
-    pieces = [_clean_text(part) for part in root.itertext()]
-    content = "\n".join(part for part in pieces if part)
     title = _xml_title(root) or _title_from_url(url)
-    return _ParsedContent(title=title, content=content)
+    return _ParsedContent(title=title, content=text.strip())
 
 
 def _xml_title(root: ElementTree.Element) -> str | None:
