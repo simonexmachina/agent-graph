@@ -311,6 +311,17 @@ def bookmark(
     cmd_bookmark(target=target, as_json=json)
 
 
+@app.command("delete")
+def delete_cmd(
+    target: str = typer.Argument(..., help="Entity ID, UUID prefix, platform ref, or URL"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Delete an entity from the graph."""
+    from agentgraph.cli_query import cmd_delete
+
+    cmd_delete(target=target, as_json=json)
+
+
 @app.command("unify-persons")
 def unify_persons_cmd(
     primary_entity_id: str = typer.Argument(..., help="Person entity to keep"),

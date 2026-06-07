@@ -133,6 +133,61 @@ async def test_sqlite_set_entity_bookmarked_returns_updated_entity(
     assert entity["bookmarked"] is True
 
 
+async def test_sqlite_delete_entity_removes_entity_edges_and_fts(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    entity_id = "delete-target"
+    other_id = "delete-neighbour"
+    await conn.execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title)
+        VALUES (?, 'Document', 'gdrive', 'file', 'File')
+        """,
+        [entity_id],
+    )
+    await conn.execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title)
+        VALUES (?, 'Document', 'gdrive', 'other-file', 'Other file')
+        """,
+        [other_id],
+    )
+    await conn.execute(
+        "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)",
+        [entity_id, "File", "content"],
+    )
+    await conn.execute(
+        """
+        INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id, platform)
+        VALUES (?, 'references', ?, ?, 'cross')
+        """,
+        ["delete-edge", entity_id, other_id],
+    )
+
+    deleted = await sqlite_backend.delete_entity(entity_id)
+
+    entity_count = await sqlite_backend._fetchval(
+        "SELECT count(*) FROM entities WHERE id = ?",
+        [entity_id],
+    )
+    other_count = await sqlite_backend._fetchval(
+        "SELECT count(*) FROM entities WHERE id = ?",
+        [other_id],
+    )
+    edge_count = await sqlite_backend._fetchval("SELECT count(*) FROM edges")
+    fts_count = await sqlite_backend._fetchval(
+        "SELECT count(*) FROM entities_fts WHERE id = ?",
+        [entity_id],
+    )
+
+    assert deleted["id"] == entity_id
+    assert entity_count == 0
+    assert other_count == 1
+    assert edge_count == 0
+    assert fts_count == 0
+
+
 async def test_sqlite_migration_adds_bookmarked_before_index(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy.db"
     conn = sqlite3.connect(db_path)

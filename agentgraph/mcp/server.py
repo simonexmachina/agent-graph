@@ -413,6 +413,35 @@ async def bookmark_entity_tool(entity_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# delete_entity — remove an entity
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def delete_entity_tool(entity_id: str) -> str:
+    """
+    Delete an entity from the graph.
+
+    Supports entity UUIDs, UUID prefixes, platform refs such as
+    "gdrive/file-id", and HTTP(S) URLs when those resolve to a graph entity.
+    Connected edges are deleted with the entity.
+
+    Args:
+        entity_id: Entity UUID, UUID prefix, platform/entity_id reference, or URL.
+
+    Returns:
+        JSON object with deleted=true and the deleted entity, or an error
+        message if the entity cannot be found.
+    """
+    from agentgraph.graph.delete import delete_entity
+
+    try:
+        result = await delete_entity(entity_id)
+        return json.dumps(result, default=str)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
 # unify_persons — manually merge duplicate Person entities
 # ---------------------------------------------------------------------------
 

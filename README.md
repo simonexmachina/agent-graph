@@ -142,6 +142,7 @@ agentgraph traverse <entity-id> --depth 2
 agentgraph fetch gdocs <document-id>
 agentgraph fetch-entity <entity-id>
 agentgraph download <entity-id>
+agentgraph delete <entity-id>
 ```
 
 ### Sync and connectors
@@ -209,6 +210,7 @@ See [Configuration](docs-src/configuration.md) for the full setup.
 - `fetch_entity_tool`
 - `fetch_entity_by_id_tool`
 - `download_entity_tool`
+- `delete_entity_tool`
 
 ## Contributing
 

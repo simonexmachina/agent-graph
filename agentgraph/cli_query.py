@@ -391,6 +391,43 @@ def cmd_bookmark(target: str, as_json: bool) -> None:
     console.print(f"[green]Bookmarked:[/green] {label} [{result['id'][:8]}]")
 
 
+def cmd_delete(target: str, as_json: bool) -> None:
+    try:
+        result = _post("/delete", params={"target": target})
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        if exc.response.status_code == 404 and detail == "Not Found":
+            result = None
+        else:
+            console.print(f"[red]{detail}[/red]")
+            return
+    if result is None:
+        _warn_local()
+        from agentgraph.core.runtime import backend_context
+        from agentgraph.graph.delete import delete_entity
+
+        async def _delete() -> dict[str, Any]:
+            async with backend_context():
+                return await delete_entity(target)
+
+        try:
+            result = _run(_delete())
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            return
+
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+
+    entity = result["entity"]
+    label = entity.get("title") or entity.get("platform_entity_id") or entity["id"]
+    console.print(f"[green]Deleted:[/green] {label} [{entity['id'][:8]}]")
+
+
 def cmd_unify_persons(
     primary_entity_id: str,
     duplicate_entity_ids: list[str],

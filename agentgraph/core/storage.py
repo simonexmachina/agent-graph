@@ -70,6 +70,11 @@ class StorageBackend(ABC):
         """Set or clear GC protection for an entity and return the updated entity."""
         ...
 
+    @abstractmethod
+    async def delete_entity(self, entity_id: str) -> EntityResult:
+        """Delete an entity and return the deleted entity."""
+        ...
+
     # --- Read: entities ---
 
     @abstractmethod

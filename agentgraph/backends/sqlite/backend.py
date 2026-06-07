@@ -540,6 +540,33 @@ class SQLiteBackend(StorageBackend):
             raise ValueError(f"Entity {entity_id!r} not found")
         return _row_to_entity(row)
 
+    async def delete_entity(self, entity_id: str) -> EntityResult:
+        """Delete one entity by internal ID. Edges cascade; FTS rows are removed explicitly."""
+        assert self._write_lock is not None
+        async with self._write_lock:
+            conn = self._conn_or_raise()
+            await conn.execute("BEGIN")
+            try:
+                cursor = await conn.execute(
+                    """
+                    DELETE FROM entities
+                    WHERE id = ?
+                    RETURNING id, entity_type, platform, platform_entity_id,
+                              title, content, metadata, created_at, updated_at, synced_at,
+                              last_accessed, cumulative_dwell_ms, bookmarked
+                    """,
+                    [entity_id],
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise ValueError(f"Entity {entity_id!r} not found")
+                await conn.execute("DELETE FROM entities_fts WHERE id = ?", [entity_id])
+                await conn.execute("COMMIT")
+            except Exception:
+                await conn.execute("ROLLBACK")
+                raise
+        return _row_to_entity(row)
+
     # --- Read: entities ---
 
     async def search_entities(

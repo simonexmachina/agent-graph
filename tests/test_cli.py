@@ -40,6 +40,7 @@ def test_help() -> None:
     assert "auth" in result.output
     assert "download" in result.output
     assert "bookmark" in result.output
+    assert "delete" in result.output
     assert "unify-persons" in result.output
 
 
@@ -49,6 +50,14 @@ def test_bookmark_command_dispatches_to_cli_query() -> None:
 
     assert result.exit_code == 0
     cmd_bookmark.assert_called_once_with(target="abc123", as_json=True)
+
+
+def test_delete_command_dispatches_to_cli_query() -> None:
+    with patch("agentgraph.cli_query.cmd_delete") as cmd_delete:
+        result = runner.invoke(app, ["delete", "abc123", "--json"])
+
+    assert result.exit_code == 0
+    cmd_delete.assert_called_once_with(target="abc123", as_json=True)
 
 
 def test_get_url_uses_entity_by_url_endpoint() -> None:
@@ -134,6 +143,36 @@ def test_bookmark_falls_back_when_running_server_lacks_endpoint() -> None:
         cmd_bookmark("https://example.com/page", as_json=True)
 
     bookmark_target.assert_awaited_once_with("https://example.com/page")
+
+
+def test_delete_falls_back_when_running_server_lacks_endpoint() -> None:
+    from agentgraph.cli_query import cmd_delete
+
+    response = httpx.Response(
+        404,
+        json={"detail": "Not Found"},
+        request=httpx.Request("POST", "http://127.0.0.1:8765/api/cli/delete"),
+    )
+    result = {
+        "deleted": True,
+        "entity": {
+            "id": "entity-12345678",
+            "title": "Deleted",
+            "platform_entity_id": "ref",
+        },
+    }
+
+    error = httpx.HTTPStatusError("not found", request=response.request, response=response)
+
+    with patch("agentgraph.cli_query._post", side_effect=error), \
+         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
+         patch(
+             "agentgraph.graph.delete.delete_entity",
+             new=AsyncMock(return_value=result),
+         ) as delete_entity:
+        cmd_delete("abc123", as_json=True)
+
+    delete_entity.assert_awaited_once_with("abc123")
 
 
 def test_auth_help() -> None:

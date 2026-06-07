@@ -37,6 +37,9 @@ agentgraph download <entity-id|platform/ref> [--output <file-or-dir>] [--json]
 # Bookmark an entity or retrieve and bookmark an HTTP(S) URL
 agentgraph bookmark <entity-id|platform/ref|url> [--json]
 
+# Delete an entity from the graph
+agentgraph delete <entity-id|platform/ref|url> [--json]
+
 # Merge duplicate Person entities that refer to the same human
 agentgraph unify-persons <primary-person-id> <duplicate-person-id>... [--json]
 
@@ -87,6 +90,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 - The CLI automatically falls back to local DB if the server isn't running (prints a dim warning)
 - Use `--json` when you need to parse results programmatically
 - Bookmark targets accept: full UUID, UUID prefix, platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`), or HTTP(S) URL
+- Delete targets accept: full UUID, UUID prefix, platform ref, or HTTP(S) URL. Connected edges are removed with the entity.
 - Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs or exported Google Docs/Sheets
 - Use `agentgraph bookmark` for entities or HTTP(S) URLs that should survive retention-window garbage collection
 - Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep

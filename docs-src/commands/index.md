@@ -24,6 +24,7 @@ aliases = ["commands.html"]
 - [`fetch-entity`](/commands/fetch-entity.html) - re-fetch by internal entity UUID.
 - [`download`](/commands/download.html) - download the source file for a graph entity.
 - [`bookmark`](/commands/bookmark.html) - protect an entity or URL from garbage collection.
+- [`delete`](/commands/delete.html) - remove an entity and its connected edges.
 
 ## Sync and connectors
 

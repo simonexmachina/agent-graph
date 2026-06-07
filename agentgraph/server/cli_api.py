@@ -325,6 +325,19 @@ async def cli_bookmark(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/delete")
+async def cli_delete(
+    target: str = Query(...),
+) -> dict[str, Any]:
+    """Delete an entity from the graph."""
+    from agentgraph.graph.delete import delete_entity
+
+    try:
+        return await delete_entity(target)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/unify-persons")
 async def cli_unify_persons(
     primary: str = Query(...),
