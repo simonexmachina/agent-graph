@@ -92,6 +92,22 @@ def test_get_url_falls_back_when_running_server_lacks_endpoint() -> None:
     get_by_url.assert_awaited_once_with("https://example.com/page")
 
 
+def test_get_prints_raw_content_without_rich_markup_errors() -> None:
+    from agentgraph.cli_query import cmd_get
+
+    entity = {
+        "id": "entity-12345678",
+        "entity_type": "Document",
+        "platform": "web",
+        "title": "Page [literal]",
+        "content": "window.DD_RUM.init({allowedTracingUrls: [/https?:\\/\\/(.+\\/.)?substack(cdn)?\\.com/]});",
+        "metadata": {"pattern": "[/not-rich-markup]"},
+    }
+
+    with patch("agentgraph.cli_query._get", return_value=entity):
+        cmd_get("entity-12345678", as_json=False)
+
+
 def test_bookmark_falls_back_when_running_server_lacks_endpoint() -> None:
     from agentgraph.cli_query import cmd_bookmark
 

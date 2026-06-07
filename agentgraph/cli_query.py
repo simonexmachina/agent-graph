@@ -123,6 +123,11 @@ def _is_stub(entity: dict[str, Any]) -> bool:
     return not entity.get("title") and not entity.get("content")
 
 
+def _print_field(label: str, value: object) -> None:
+    console.print(f"\n[bold]{label}:[/bold] ", end="")
+    console.print(str(value), markup=False, highlight=False)
+
+
 def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
     from agentgraph.graph.query import is_http_url
 
@@ -162,11 +167,12 @@ def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
     console.print(f"[bold]{entity['entity_type']}[/bold] — {entity['platform']}")
     console.print(f"[dim]{entity['id']}[/dim]")
     if entity.get("title"):
-        console.print(f"\n[bold]Title:[/bold] {entity['title']}")
+        _print_field("Title", entity["title"])
     if entity.get("content"):
-        console.print(f"\n[bold]Content:[/bold]\n{entity['content']}")
+        console.print("\n[bold]Content:[/bold]")
+        console.print(str(entity["content"]), markup=False, highlight=False)
     if entity.get("metadata"):
-        console.print(f"\n[bold]Metadata:[/bold] {entity['metadata']}")
+        _print_field("Metadata", entity["metadata"])
 
 
 # ---------------------------------------------------------------------------
