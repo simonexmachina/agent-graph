@@ -468,6 +468,7 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
     entry = batch.entities[1]
     assert feed.entity_type == "Folder"
     assert feed.title == "Example Feed"
+    assert feed.metadata["web_url"] == "https://example.com/feed.xml"
     assert entry.entity_type == "Document"
     assert entry.platform == "rss"
     assert entry.title == "First Post"

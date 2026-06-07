@@ -80,15 +80,15 @@ def test_viewer_uses_bookmark_symbol_with_status() -> None:
     assert "/api/cli/delete" in viewer_html
 
 
-def test_viewer_renders_rss_document_links() -> None:
-    """RSS documents expose source article links in the detail panel."""
+def test_viewer_renders_standard_web_url_links() -> None:
+    """Graph entities expose source links through the standard web_url metadata field."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "function getPlatformUrl(entity)" in viewer_html
     assert "metadata.web_url" in viewer_html
-    assert "entity.platform === 'rss' ? metadata.link : null" in viewer_html
-    assert "entity.platform === 'rss' ? metadata.feed_url : null" in viewer_html
-    assert "candidates.find(isHttpUrl)" in viewer_html
+    assert "isHttpUrl(metadata.web_url) ? metadata.web_url : null" in viewer_html
+    assert "metadata.link" not in viewer_html
+    assert "metadata.feed_url" not in viewer_html
     assert "detailBody.appendChild(row('Link', linkHtml))" in viewer_html
 
 

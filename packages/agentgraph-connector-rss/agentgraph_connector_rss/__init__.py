@@ -180,7 +180,7 @@ async def _fetch_feed(feed_url: str) -> EntityBatch:
             platform_entity_id=feed_entity_id,
             title=feed_title,
             content=f"RSS feed: {feed_title}\n{feed_url}",
-            metadata={"feed_url": feed_url},
+            metadata={"feed_url": feed_url, "web_url": feed_url},
         )
     ]
     edges: list[EdgeRecord] = []
