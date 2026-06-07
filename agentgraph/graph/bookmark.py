@@ -11,10 +11,15 @@ from agentgraph.graph.query import get_entity
 
 async def bookmark_entity(entity_id: str) -> EntityResult:
     """Mark an entity as bookmarked by UUID, UUID prefix, or platform ref."""
+    return await set_entity_bookmark(entity_id, True)
+
+
+async def set_entity_bookmark(entity_id: str, bookmarked: bool) -> EntityResult:
+    """Set bookmark state by UUID, UUID prefix, or platform ref."""
     entity = await get_entity(entity_id)
     if entity is None:
         raise ValueError(f"Entity {entity_id!r} not found")
-    return await get_backend().set_entity_bookmarked(entity["id"], True)
+    return await get_backend().set_entity_bookmarked(entity["id"], bookmarked)
 
 
 async def bookmark_target(target: str) -> EntityResult:

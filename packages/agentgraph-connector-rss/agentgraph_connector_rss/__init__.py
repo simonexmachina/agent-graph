@@ -331,6 +331,7 @@ def _entry_to_entity(
         "feed_url": feed_url,
         "feed_entity_id": feed_entity_id,
         "link": link or None,
+        "web_url": link or None,
         "author": str(entry.get("author")) if entry.get("author") else None,
     }
     content_parts = [title]

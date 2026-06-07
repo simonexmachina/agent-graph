@@ -473,4 +473,5 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
     assert entry.title == "First Post"
     assert entry.content and "A short summary" in entry.content
     assert entry.metadata["link"] == "https://example.com/first"
+    assert entry.metadata["web_url"] == "https://example.com/first"
     assert batch.edges[0].edge_type == "posted_in"

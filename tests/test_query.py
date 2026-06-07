@@ -332,6 +332,44 @@ async def test_bookmark_entity_resolves_id_and_sets_bookmark() -> None:
 
 
 @pytest.mark.asyncio
+async def test_set_entity_bookmark_can_clear_bookmark() -> None:
+    from agentgraph.graph.bookmark import set_entity_bookmark
+
+    entity = _entity(title="Target")
+    entity["bookmarked"] = True
+    updated = dict(entity)
+    updated["bookmarked"] = False
+    set_bookmarked = AsyncMock(return_value=updated)
+    backend = _mock_backend(
+        get_entities_by_id_prefix=AsyncMock(return_value=[entity]),
+        set_entity_bookmarked=set_bookmarked,
+    )
+    set_backend(backend)
+
+    result = await set_entity_bookmark(entity["id"][:8], False)
+
+    assert result["bookmarked"] is False
+    set_bookmarked.assert_awaited_once_with(entity["id"], False)
+
+
+@pytest.mark.asyncio
+async def test_cli_bookmark_can_clear_bookmark() -> None:
+    from agentgraph.server.cli_api import cli_bookmark
+
+    fake_result = _entity(title="Target")
+    fake_result["bookmarked"] = False
+
+    with patch(
+        "agentgraph.graph.bookmark.set_entity_bookmark",
+        new=AsyncMock(return_value=fake_result),
+    ) as set_bookmark:
+        result = await cli_bookmark(target=None, entity_id="abc123", bookmarked=False)
+
+    assert result["bookmarked"] is False
+    set_bookmark.assert_awaited_once_with("abc123", False)
+
+
+@pytest.mark.asyncio
 async def test_bookmark_entity_missing_raises_value_error() -> None:
     from agentgraph.graph.bookmark import bookmark_entity
 

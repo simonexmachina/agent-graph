@@ -307,12 +307,14 @@
   }
 
   .bookmark-glyph {
-    width: 10px;
-    height: 14px;
-    display: inline-block;
-    border: 1.5px solid currentColor;
-    border-bottom: none;
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
+    width: 12px;
+    height: 16px;
+    display: block;
+    overflow: visible;
+    fill: transparent;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linejoin: round;
   }
 
   #detail-bookmark[aria-pressed="true"] {
@@ -320,7 +322,7 @@
   }
 
   #detail-bookmark[aria-pressed="true"] .bookmark-glyph {
-    background: currentColor;
+    fill: currentColor;
   }
 
   #detail-close {
@@ -487,7 +489,9 @@
       <div id="detail-title">—</div>
       <div id="detail-actions">
         <button id="detail-bookmark" class="detail-icon-btn" title="Not bookmarked" aria-label="Bookmark entity" aria-pressed="false">
-          <span class="bookmark-glyph" aria-hidden="true"></span>
+          <svg class="bookmark-glyph" viewBox="0 0 16 20" aria-hidden="true" focusable="false">
+            <path d="M4 2.5h8v14l-4-2.75-4 2.75z"></path>
+          </svg>
         </button>
         <button id="detail-close" class="detail-icon-btn" title="Close">✕</button>
       </div>
@@ -973,9 +977,9 @@
 
     const isBookmarked = Boolean(entity.bookmarked);
     detailBookmark.setAttribute('aria-pressed', isBookmarked ? 'true' : 'false');
-    detailBookmark.setAttribute('aria-label', isBookmarked ? 'Entity is bookmarked' : 'Bookmark entity');
+    detailBookmark.setAttribute('aria-label', isBookmarked ? 'Remove bookmark' : 'Bookmark entity');
     detailBookmark.title = isBookmarked ? 'Bookmarked' : 'Not bookmarked';
-    detailBookmark.disabled = isBookmarked;
+    detailBookmark.disabled = false;
 
     const bookmarkError = document.createElement('div');
     bookmarkError.style.color = '#fca5a5';
@@ -984,24 +988,25 @@
     bookmarkError.style.display = 'none';
 
     detailBookmark.onclick = async () => {
+      const desiredBookmarked = !isBookmarked;
       detailBookmark.disabled = true;
-      detailBookmark.title = 'Bookmarking…';
+      detailBookmark.title = desiredBookmarked ? 'Bookmarking…' : 'Removing bookmark…';
       bookmarkError.textContent = '';
       bookmarkError.style.display = 'none';
       try {
         const res = await fetch(
-          `/api/cli/bookmark?entity_id=${encodeURIComponent(entity.id)}`,
+          `/api/cli/bookmark?entity_id=${encodeURIComponent(entity.id)}&bookmarked=${desiredBookmarked ? 'true' : 'false'}`,
           { method: 'POST' }
         );
         if (!res.ok) throw new Error(await readErrorDetail(res));
         const updated = await res.json();
         const node = cy.getElementById(entity.id);
-        if (node.length) node.data('bookmarked', true);
+        if (node.length) node.data('bookmarked', Boolean(updated.bookmarked));
         invalidateGraphCache();
-        renderDetail({ ...entity, ...updated, bookmarked: true });
+        renderDetail({ ...entity, ...updated });
       } catch (err) {
         detailBookmark.disabled = false;
-        detailBookmark.title = 'Not bookmarked';
+        detailBookmark.title = isBookmarked ? 'Bookmarked' : 'Not bookmarked';
         bookmarkError.textContent = err instanceof Error ? err.message : 'Bookmark failed';
         bookmarkError.style.display = 'block';
         console.error('bookmark error:', err);

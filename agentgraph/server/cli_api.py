@@ -309,14 +309,17 @@ async def cli_fetch(
 async def cli_bookmark(
     target: str | None = Query(default=None),
     entity_id: str | None = Query(default=None),
+    bookmarked: bool = Query(default=True),
 ) -> dict[str, Any]:
-    """Bookmark an entity or URL so garbage collection will not remove it."""
-    from agentgraph.graph.bookmark import bookmark_target
+    """Set bookmark state for an entity or URL."""
+    from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
 
     try:
         bookmark_target_value = target or entity_id
         if bookmark_target_value is None:
             raise ValueError("Missing bookmark target")
+        if not bookmarked:
+            return await set_entity_bookmark(bookmark_target_value, False)
         return await bookmark_target(bookmark_target_value)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
