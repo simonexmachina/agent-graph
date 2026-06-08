@@ -5,6 +5,7 @@ description = "RSS and Atom connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
     "agentgraph",
+    "agentgraph-connector-web",
     "feedparser>=6.0.11",
     "httpx>=0.28.1",
     "questionary>=2.1.1",
@@ -18,3 +19,4 @@ package = true
 
 [tool.uv.sources]
 agentgraph = { workspace = true }
+agentgraph-connector-web = { workspace = true }

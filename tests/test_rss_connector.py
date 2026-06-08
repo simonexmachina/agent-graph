@@ -482,6 +482,117 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
+async def test_fetch_feed_hydrates_entry_documents_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Parsed:
+        bozo = False
+        feed = {"title": "Example Feed"}
+        entries = [
+            {
+                "id": "post-1",
+                "title": "First Post",
+                "link": "https://example.com/first",
+                "summary": "A short summary",
+                "published": "Fri, 05 Jun 2026 10:00:00 GMT",
+            }
+        ]
+
+    monkeypatch.setattr(feedparser, "parse", lambda _feed_url: _Parsed())
+    backend = MagicMock()
+    backend.get_entity_by_platform = AsyncMock(return_value=None)
+    set_backend(backend)
+
+    fetched = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/first",
+        title="Full First Post",
+        content="Full article body",
+        metadata={
+            "web_url": "https://example.com/first",
+            "http_etag": '"fresh"',
+            "status_code": 200,
+        },
+    )
+
+    with patch("agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)) as fetch:
+        batch = await _fetch_feed("https://example.com/feed.xml", hydrate_documents=True)
+
+    fetch.assert_awaited_once()
+    assert fetch.await_args.args == ("https://example.com/first",)
+    assert fetch.await_args.kwargs["existing_entity"] is None
+    entry = batch.entities[1]
+    assert entry.platform == "rss"
+    assert entry.title == "Full First Post"
+    assert entry.content == "Full article body"
+    assert entry.created_at is not None
+    assert entry.metadata["feed_url"] == "https://example.com/feed.xml"
+    assert entry.metadata["web_url"] == "https://example.com/first"
+    assert entry.metadata["http_etag"] == '"fresh"'
+
+
+@pytest.mark.asyncio
+async def test_fetch_feed_hydrates_existing_entries_with_cache_validators(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Parsed:
+        bozo = False
+        feed = {"title": "Example Feed"}
+        entries = [
+            {
+                "id": "post-1",
+                "title": "First Post",
+                "link": "https://example.com/first",
+                "summary": "A short summary",
+            }
+        ]
+
+    monkeypatch.setattr(feedparser, "parse", lambda _feed_url: _Parsed())
+    existing = {
+        "entity_type": "Document",
+        "platform": "rss",
+        "platform_entity_id": "entry/cached",
+        "title": "Cached title",
+        "content": "Cached body",
+        "metadata": {
+            "web_url": "https://example.com/first",
+            "http_etag": '"cached"',
+            "http_last_modified": "Sun, 07 Jun 2026 12:00:00 GMT",
+        },
+    }
+    backend = MagicMock()
+    backend.get_entity_by_platform = AsyncMock(return_value=existing)
+    set_backend(backend)
+
+    fetched = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/first",
+        title="Cached title",
+        content="Cached body",
+        metadata={
+            "web_url": "https://example.com/first",
+            "http_etag": '"cached"',
+            "http_last_modified": "Sun, 07 Jun 2026 12:00:00 GMT",
+            "status_code": 304,
+        },
+    )
+
+    with patch("agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)) as fetch:
+        batch = await _fetch_feed("https://example.com/feed.xml", hydrate_documents=True)
+
+    fetch.assert_awaited_once()
+    existing_arg = fetch.await_args.kwargs["existing_entity"]
+    assert existing_arg["platform_entity_id"] == "https://example.com/first"
+    assert existing_arg["metadata"]["http_etag"] == '"cached"'
+    entry = batch.entities[1]
+    assert entry.content == "Cached body"
+    assert entry.metadata["status_code"] == 304
+    assert entry.metadata["http_etag"] == '"cached"'
+
+
+@pytest.mark.asyncio
 async def test_rss_fetch_entry_document_uses_http_document_cache() -> None:
     existing = {
         "entity_type": "Document",

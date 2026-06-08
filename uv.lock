@@ -152,6 +152,7 @@ version = "0.1.0"
 source = { editable = "packages/agentgraph-connector-rss" }
 dependencies = [
     { name = "agentgraph" },
+    { name = "agentgraph-connector-web" },
     { name = "feedparser" },
     { name = "httpx" },
     { name = "questionary" },
@@ -160,6 +161,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "agentgraph", editable = "." },
+    { name = "agentgraph-connector-web", editable = "packages/agentgraph-connector-web" },
     { name = "feedparser", specifier = ">=6.0.11" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "questionary", specifier = ">=2.1.1" },

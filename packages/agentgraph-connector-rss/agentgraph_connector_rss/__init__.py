@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -35,6 +36,7 @@ from agentgraph_connector_rss.auth import (
 )
 
 _STALE_AFTER = 30 * 60
+logger = logging.getLogger(__name__)
 
 
 class RssConnector(BaseConnector):
@@ -136,7 +138,7 @@ class RssConnector(BaseConnector):
         creds = load_rss_creds(account_id)
         combined = EntityBatch()
         for feed_url in creds.feed_urls:
-            batch = await _fetch_feed(feed_url)
+            batch = await _fetch_feed(feed_url, hydrate_documents=True)
             combined.entities.extend(batch.entities)
             combined.edges.extend(batch.edges)
             combined.persons.extend(batch.persons)
@@ -170,7 +172,7 @@ class RssConnector(BaseConnector):
         return EntityBatch()
 
 
-async def _fetch_feed(feed_url: str) -> EntityBatch:
+async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> EntityBatch:
     import asyncio
 
     import feedparser  # type: ignore[import-untyped]
@@ -195,6 +197,8 @@ async def _fetch_feed(feed_url: str) -> EntityBatch:
     for raw_entry in cast(list[Any], parsed.entries):
         entry = cast(dict[str, Any], raw_entry)
         entity = _entry_to_entity(feed_url, feed_entity_id, entry)
+        if hydrate_documents:
+            entity = await _hydrate_entry_document(entity)
         entities.append(entity)
         edges.append(
             EdgeRecord(
@@ -359,9 +363,13 @@ def _entry_to_entity(
 
 async def _fetch_entry_document(
     platform_entity_id: str,
-    metadata: dict[str, str],
+    metadata: Mapping[str, object],
+    *,
+    fallback: EntityRecord | None = None,
 ) -> EntityRecord:
-    web_url = metadata["web_url"]
+    web_url = _metadata_str(metadata, "web_url")
+    if web_url is None:
+        raise ValueError(f"RSS document {platform_entity_id} has no web_url")
     existing = await get_backend().get_entity_by_platform("rss", platform_entity_id)
     http_existing = _http_existing_entity(existing, web_url)
     fetched = await _fetch_http_document(web_url, existing_entity=http_existing)
@@ -370,17 +378,32 @@ async def _fetch_entry_document(
         **_entity_record_metadata(metadata),
         **fetched_metadata,
         "web_url": str(fetched_metadata.get("web_url") or web_url),
-        "link": str(metadata.get("link") or web_url),
+        "link": _metadata_str(metadata, "link") or web_url,
     }
     return EntityRecord(
         entity_type="Document",
         platform="rss",
         platform_entity_id=platform_entity_id,
-        title=fetched.title,
-        content=fetched.content,
-        updated_at=fetched.updated_at,
+        title=fetched.title or (fallback.title if fallback else None),
+        content=fetched.content or (fallback.content if fallback else None),
+        created_at=fallback.created_at if fallback else None,
+        updated_at=fetched.updated_at or (fallback.updated_at if fallback else None),
         metadata=rss_metadata,
     )
+
+
+async def _hydrate_entry_document(entity: EntityRecord) -> EntityRecord:
+    if _metadata_str(entity.metadata, "web_url") is None:
+        return entity
+    try:
+        return await _fetch_entry_document(
+            entity.platform_entity_id,
+            entity.metadata,
+            fallback=entity,
+        )
+    except Exception:
+        logger.exception("Failed to hydrate RSS entry document %s", entity.platform_entity_id)
+        return entity
 
 
 def _http_existing_entity(
@@ -412,6 +435,11 @@ def _entity_record_metadata(
         if isinstance(value, (str, int, float, bool)) or value is None:
             result[key] = value
     return result
+
+
+def _metadata_str(metadata: Mapping[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    return value if isinstance(value, str) and value else None
 
 
 def _entry_text(entry: dict[str, Any]) -> str:
