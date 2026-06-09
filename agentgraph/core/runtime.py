@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -22,7 +22,7 @@ def create_backend() -> StorageBackend:
 
 
 @asynccontextmanager
-async def backend_context() -> AsyncIterator[StorageBackend]:
+async def backend_context() -> AsyncGenerator[StorageBackend, None]:
     """Initialise the configured backend, set graph context, and close it."""
     from agentgraph.core.context import set_backend
 

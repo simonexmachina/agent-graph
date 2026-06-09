@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
@@ -371,7 +371,7 @@ def _fake_webbrowser_open(url: str) -> bool:
 
 
 @asynccontextmanager
-async def _fake_backend_context() -> AsyncIterator[Any]:
+async def _fake_backend_context() -> AsyncGenerator[Any, None]:
     backend = MagicMock()
     async def _get_platform_last_synced_at(platform: str) -> datetime | None:
         values = {
