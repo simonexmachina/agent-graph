@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import json
+import tomllib
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
@@ -33,6 +35,10 @@ class HtmlSource:
     base_url: str
 
 
+_RSS_CONFIG_BEGIN = "# BEGIN AgentGraph managed RSS config"
+_RSS_CONFIG_END = "# END AgentGraph managed RSS config"
+
+
 class _FeedLinkParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -54,31 +60,190 @@ class _FeedLinkParser(HTMLParser):
 
 
 def load_rss_creds(account_id: str | None = None) -> RssCredentials:
-    from agentgraph.auth.credentials import load_platform_account
-
-    data = load_platform_account("rss", account_id)
+    data = load_rss_config_account(account_id)
     if data is None:
         raise RuntimeError("RSS feeds not configured. Run: agentgraph auth rss")
     return RssCredentials(**data)
 
 
 def list_rss_accounts() -> list[dict[str, str | None]]:
-    from agentgraph.auth.credentials import load_platform_accounts
-
     results: list[dict[str, str | None]] = []
-    for raw in load_platform_accounts("rss"):
+    for raw in load_rss_config_accounts():
         try:
             creds = RssCredentials(**raw)
         except Exception:
             continue
         account_id = str(raw.get("account_id") or creds.account_id or "rss")
         label = creds.label or f"{len(creds.feed_urls)} RSS feed(s)"
-        results.append({
-            "account_id": account_id,
-            "label": label,
-            "feed_count": str(len(creds.feed_urls)),
-        })
+        results.append(
+            {
+                "account_id": account_id,
+                "label": label,
+                "feed_count": str(len(creds.feed_urls)),
+            }
+        )
     return results
+
+
+def load_rss_config_account(account_id: str | None = None) -> dict[str, Any] | None:
+    """Return one RSS account from config.toml, falling back to legacy credentials.json."""
+    accounts, default_account_id = _load_rss_config_accounts()
+    if accounts:
+        target_id = account_id or default_account_id
+        if target_id:
+            for account in accounts:
+                if account.get("account_id") == target_id:
+                    return account
+        return accounts[0]
+
+    from agentgraph.auth.credentials import load_platform_account
+
+    return load_platform_account("rss", account_id)
+
+
+def load_rss_config_accounts() -> list[dict[str, Any]]:
+    """Return RSS accounts from config.toml, falling back to legacy credentials.json."""
+    accounts, _default_account_id = _load_rss_config_accounts()
+    if accounts:
+        return accounts
+
+    from agentgraph.auth.credentials import load_platform_accounts
+
+    return load_platform_accounts("rss")
+
+
+def save_rss_config_account(data: Any) -> None:
+    payload = data.model_dump(mode="json") if hasattr(data, "model_dump") else dict(data)
+    account_id = str(payload.get("account_id") or "rss")
+    payload["account_id"] = account_id
+    save_rss_config_accounts([payload], default_account_id=account_id)
+
+
+def save_rss_config_accounts(
+    accounts: list[Any],
+    *,
+    default_account_id: str | None = None,
+) -> None:
+    serialised = [
+        account.model_dump(mode="json") if hasattr(account, "model_dump") else dict(account)
+        for account in accounts
+    ]
+    default_id = default_account_id
+    if default_id is None and serialised:
+        default_id = str(serialised[0].get("account_id") or "rss")
+    _write_rss_config_accounts(serialised, default_id)
+
+
+def upsert_rss_config_account(
+    account_id: str,
+    data: Any,
+    *,
+    make_default: bool = False,
+) -> None:
+    existing = load_rss_config_accounts()
+    payload = data.model_dump(mode="json") if hasattr(data, "model_dump") else dict(data)
+    payload["account_id"] = account_id
+
+    updated = False
+    for i, account in enumerate(existing):
+        existing_id = str(account.get("account_id") or "rss")
+        if existing_id == account_id:
+            existing[i] = payload
+            updated = True
+            break
+    if not updated:
+        existing.append(payload)
+
+    _accounts, current_default = _load_rss_config_accounts()
+    default_id = account_id if make_default else current_default
+    save_rss_config_accounts(existing, default_account_id=default_id or account_id)
+
+
+def _load_rss_config_accounts() -> tuple[list[dict[str, Any]], str | None]:
+    from agentgraph.config import CONFIG_FILE
+
+    if not CONFIG_FILE.exists():
+        return [], None
+    try:
+        raw = tomllib.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return [], None
+    connectors = raw.get("connectors")
+    if not isinstance(connectors, dict):
+        return [], None
+    rss = connectors.get("rss")
+    if not isinstance(rss, dict):
+        return [], None
+    raw_accounts = rss.get("accounts")
+    if not isinstance(raw_accounts, list):
+        return [], None
+
+    accounts: list[dict[str, Any]] = []
+    for raw_account in raw_accounts:
+        if isinstance(raw_account, dict):
+            accounts.append(dict(raw_account))
+    default_account_id = rss.get("default_account_id")
+    return accounts, str(default_account_id) if default_account_id else None
+
+
+def _write_rss_config_accounts(
+    accounts: list[dict[str, Any]],
+    default_account_id: str | None,
+) -> None:
+    from agentgraph.config import CONFIG_DIR, CONFIG_FILE
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    existing = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
+    prefix = _strip_managed_rss_config(existing).rstrip()
+    block = _format_rss_config_block(accounts, default_account_id)
+    content = f"{prefix}\n\n{block}" if prefix else block
+    CONFIG_FILE.write_text(content, encoding="utf-8")
+
+
+def _strip_managed_rss_config(content: str) -> str:
+    begin = content.find(_RSS_CONFIG_BEGIN)
+    if begin == -1:
+        return content
+    end = content.find(_RSS_CONFIG_END, begin)
+    if end == -1:
+        return content[:begin]
+    return f"{content[:begin]}{content[end + len(_RSS_CONFIG_END) :]}"
+
+
+def _format_rss_config_block(
+    accounts: list[dict[str, Any]],
+    default_account_id: str | None,
+) -> str:
+    lines = [
+        _RSS_CONFIG_BEGIN,
+        "[connectors.rss]",
+    ]
+    if default_account_id:
+        lines.append(f"default_account_id = {_toml_string(default_account_id)}")
+    for account in accounts:
+        account_id = str(account.get("account_id") or "rss")
+        label = account.get("label")
+        feed_urls = [
+            str(feed_url)
+            for feed_url in account.get("feed_urls", [])
+            if isinstance(feed_url, str) and feed_url
+        ]
+        lines.extend(
+            [
+                "",
+                "[[connectors.rss.accounts]]",
+                f"account_id = {_toml_string(account_id)}",
+            ]
+        )
+        if label:
+            lines.append(f"label = {_toml_string(str(label))}")
+        lines.append(f"feed_urls = [{', '.join(_toml_string(url) for url in feed_urls)}]")
+    lines.append(_RSS_CONFIG_END)
+    return "\n".join(lines) + "\n"
+
+
+def _toml_string(value: str) -> str:
+    return json.dumps(value)
 
 
 def add_feed_urls(
@@ -88,8 +253,6 @@ def add_feed_urls(
     validate: bool = True,
 ) -> RssCredentials:
     """Add feed URLs to the configured RSS account and return the updated credentials."""
-    from agentgraph.auth.credentials import save_platform, upsert_platform_account
-
     selected_feed_urls = [part.strip() for part in feed_urls if part.strip()]
     if not selected_feed_urls:
         raise ValueError("Usage: agentgraph connector rss add <feed-url> [feed-url...]")
@@ -116,9 +279,9 @@ def add_feed_urls(
         label=label,
     )
     if existing_accounts:
-        upsert_platform_account("rss", resolved_account_id, creds, make_default=True)
+        upsert_rss_config_account(resolved_account_id, creds, make_default=True)
     else:
-        save_platform("rss", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
+        save_rss_config_account(creds)
     return creds
 
 
@@ -403,7 +566,9 @@ async def preview_feed(feed_url: str, *, count: int = 3) -> dict[str, Any]:
     parsed: Any = await asyncio.to_thread(feedparser.parse, feed_url)
     entries = [
         {
-            "title": str(entry.get("title") or entry.get("id") or entry.get("link") or "(untitled)"),
+            "title": str(
+                entry.get("title") or entry.get("id") or entry.get("link") or "(untitled)"
+            ),
             "link": str(entry.get("link") or ""),
         }
         for entry in cast(list[Any], parsed.entries)[: max(1, min(count, 50))]
@@ -446,8 +611,7 @@ def run_rss_flow(
 
     import typer
 
-    from agentgraph.auth.credentials import save_platform, upsert_platform_account
-    from agentgraph.config import CREDENTIALS_FILE
+    from agentgraph.config import CONFIG_FILE
 
     typer.echo(
         "\n"
@@ -455,7 +619,9 @@ def run_rss_flow(
         "and AgentGraph will fetch those feeds directly.\n"
     )
     raw_feeds: str = typer.prompt("RSS/Atom feed URLs (comma-separated)").strip()
-    selected_feed_urls = resolve_feed_sources([part.strip() for part in raw_feeds.split(",") if part.strip()])
+    selected_feed_urls = resolve_feed_sources(
+        [part.strip() for part in raw_feeds.split(",") if part.strip()]
+    )
     label: str = typer.prompt("Account label", default="RSS").strip()
     resolved_account_id = account_id or "rss"
 
@@ -465,11 +631,11 @@ def run_rss_flow(
         label=label,
     )
     if not add and account_id is None and not list_rss_accounts():
-        save_platform("rss", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
+        save_rss_config_account(creds)
     else:
-        upsert_platform_account("rss", resolved_account_id, creds, make_default=True)
+        upsert_rss_config_account(resolved_account_id, creds, make_default=True)
 
-    typer.echo(f"\nRSS feeds saved to {CREDENTIALS_FILE}")
+    typer.echo(f"\nRSS feeds saved to {CONFIG_FILE}")
     if selected_feed_urls:
         typer.echo("Checking configured feed(s)...")
 

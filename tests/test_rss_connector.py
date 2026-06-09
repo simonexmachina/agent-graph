@@ -17,8 +17,10 @@ from agentgraph_connector_rss.auth import (
     add_feed_urls,
     import_opml_feeds,
     list_rss_accounts,
+    load_rss_config_accounts,
     parse_opml_feeds,
     resolve_feed_source,
+    save_rss_config_account,
     select_opml_feeds,
     verify_rss_auth,
 )
@@ -63,8 +65,7 @@ def test_rss_can_handle_returns_false_without_config() -> None:
 
 
 def test_list_rss_accounts(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_load_platform_accounts(platform: str) -> list[dict[str, object]]:
-        assert platform == "rss"
+    def fake_load_rss_config_accounts() -> list[dict[str, object]]:
         return [
             {
                 "account_id": "rss-main",
@@ -74,8 +75,8 @@ def test_list_rss_accounts(monkeypatch: pytest.MonkeyPatch) -> None:
         ]
 
     monkeypatch.setattr(
-        "agentgraph.auth.credentials.load_platform_accounts",
-        fake_load_platform_accounts,
+        "agentgraph_connector_rss.auth.load_rss_config_accounts",
+        fake_load_rss_config_accounts,
     )
 
     assert list_rss_accounts() == [
@@ -87,6 +88,64 @@ def test_list_rss_accounts(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
 
+def test_rss_config_roundtrip_uses_config_toml(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", config_file)
+
+    save_rss_config_account(
+        RssCredentials(
+            account_id="rss",
+            label="RSS",
+            feed_urls=["https://example.com/feed.xml"],
+        )
+    )
+
+    assert load_rss_config_accounts() == [
+        {
+            "account_id": "rss",
+            "label": "RSS",
+            "feed_urls": ["https://example.com/feed.xml"],
+        }
+    ]
+    rendered = config_file.read_text(encoding="utf-8")
+    assert "[connectors.rss]" in rendered
+    assert "[[connectors.rss.accounts]]" in rendered
+
+
+def test_rss_config_reads_legacy_credentials_when_config_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
+
+    def fake_load_platform_accounts(platform: str) -> list[dict[str, object]]:
+        assert platform == "rss"
+        return [
+            {
+                "account_id": "rss",
+                "label": "RSS",
+                "feed_urls": ["https://example.com/feed.xml"],
+            }
+        ]
+
+    monkeypatch.setattr(
+        "agentgraph.auth.credentials.load_platform_accounts",
+        fake_load_platform_accounts,
+    )
+
+    assert load_rss_config_accounts() == [
+        {
+            "account_id": "rss",
+            "label": "RSS",
+            "feed_urls": ["https://example.com/feed.xml"],
+        }
+    ]
+
+
 def test_add_feed_urls_creates_rss_account(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -94,16 +153,18 @@ def test_add_feed_urls_creates_rss_account(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
     monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
-    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
     monkeypatch.setattr(
-        "agentgraph.auth.credentials.save_platform",
-        lambda platform, data: saved.update({"platform": platform, "data": data}),
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.save_rss_config_account",
+        lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
     creds = add_feed_urls(["https://example.com/feed.xml"])
 
     assert creds.feed_urls == ["https://example.com/feed.xml"]
-    assert saved["platform"] == "rss"
     assert saved["data"] == {
         "feed_urls": ["https://example.com/feed.xml"],
         "account_id": "rss",
@@ -118,10 +179,13 @@ def test_add_feed_urls_rejects_invalid_feed_before_saving(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedNonFeed())
     monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
-    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
     monkeypatch.setattr(
-        "agentgraph.auth.credentials.save_platform",
-        lambda platform, data: saved.update({"platform": platform, "data": data}),
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.save_rss_config_account",
+        lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
     with pytest.raises(ValueError, match="Not a valid RSS/Atom feed"):
@@ -176,10 +240,13 @@ def test_rss_connector_add_html_file_reports_discovered_feed_url(
 
     monkeypatch.setattr(feedparser, "parse", fake_parse)
     monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
-    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
     monkeypatch.setattr(
-        "agentgraph.auth.credentials.save_platform",
-        lambda platform, data: saved.update({"platform": platform, "data": data}),
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.save_rss_config_account",
+        lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
     result = RssConnector.run_cli_command(["add", str(html_path)])
@@ -329,7 +396,7 @@ def test_import_opml_prompt_uses_existing_rss_account_state(
         lambda: [{"account_id": "rss", "label": "RSS", "feed_count": "1"}],
     )
     monkeypatch.setattr(
-        "agentgraph.auth.credentials.upsert_platform_account",
+        "agentgraph_connector_rss.auth.upsert_rss_config_account",
         lambda *args, **kwargs: None,
     )
 
@@ -354,10 +421,13 @@ def test_rss_connector_import_opml_all(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
     monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
-    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
     monkeypatch.setattr(
-        "agentgraph.auth.credentials.save_platform",
-        lambda platform, data: saved.update({"platform": platform, "data": data}),
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.save_rss_config_account",
+        lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
     result = RssConnector.run_cli_command(["import-opml", str(opml_path), "--all"])
@@ -392,10 +462,13 @@ def test_rss_connector_import_opml_select(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
     monkeypatch.setattr("agentgraph_connector_rss.auth.list_rss_accounts", lambda: [])
-    monkeypatch.setattr("agentgraph_connector_rss.auth.load_rss_creds", lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")))
     monkeypatch.setattr(
-        "agentgraph.auth.credentials.save_platform",
-        lambda platform, data: saved.update({"platform": platform, "data": data}),
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.save_rss_config_account",
+        lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
     result = RssConnector.run_cli_command(["import-opml", str(opml_path), "--select", "2"])
@@ -516,7 +589,9 @@ async def test_fetch_feed_hydrates_entry_documents_when_requested(
         },
     )
 
-    with patch("agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)) as fetch:
+    with patch(
+        "agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)
+    ) as fetch:
         batch = await _fetch_feed("https://example.com/feed.xml", hydrate_documents=True)
 
     fetch.assert_awaited_once()
@@ -579,7 +654,9 @@ async def test_fetch_feed_hydrates_existing_entries_with_cache_validators(
         },
     )
 
-    with patch("agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)) as fetch:
+    with patch(
+        "agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)
+    ) as fetch:
         batch = await _fetch_feed("https://example.com/feed.xml", hydrate_documents=True)
 
     fetch.assert_awaited_once()
@@ -626,7 +703,9 @@ async def test_rss_fetch_entry_document_uses_http_document_cache() -> None:
         },
     )
 
-    with patch("agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)) as fetch:
+    with patch(
+        "agentgraph_connector_rss._fetch_http_document", new=AsyncMock(return_value=fetched)
+    ) as fetch:
         batch = await RssConnector().fetch(
             "document",
             "entry/cached",

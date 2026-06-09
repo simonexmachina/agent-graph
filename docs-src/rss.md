@@ -11,6 +11,9 @@ source_path = "docs-src/rss.md"
 
 AgentGraph can index RSS and Atom feeds without API credentials. Each feed becomes a `Folder` entity, and each article or entry in the feed becomes a `Document` entity linked back to that feed.
 
+RSS feed URLs are stored as connector configuration in `~/.agentgraph/config.toml`
+by default. They are not stored in `credentials.json`.
+
 ## Install
 
 Install every first-party connector:
