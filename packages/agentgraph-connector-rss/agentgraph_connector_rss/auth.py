@@ -14,6 +14,7 @@ from typing import Any, cast
 from urllib.parse import unquote, urljoin, urlparse
 from xml.etree import ElementTree
 
+import yaml
 from pydantic import BaseModel, Field
 
 
@@ -160,14 +161,40 @@ def upsert_rss_config_account(
 
 
 def _load_rss_config_accounts() -> tuple[list[dict[str, Any]], str | None]:
-    from agentgraph.config import CONFIG_FILE
+    from agentgraph.config import CONFIG_FILE, CONFIG_YAML_FILE
 
-    if not CONFIG_FILE.exists():
+    yaml_accounts = _load_rss_yaml_config_accounts(CONFIG_YAML_FILE)
+    if yaml_accounts[0]:
+        return yaml_accounts
+    toml_accounts = _load_rss_toml_config_accounts(CONFIG_FILE)
+    if toml_accounts[0]:
+        return toml_accounts
+    return [], None
+
+
+def _load_rss_toml_config_accounts(config_file: Path) -> tuple[list[dict[str, Any]], str | None]:
+    if not config_file.exists():
         return [], None
     try:
-        raw = tomllib.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        raw = tomllib.loads(config_file.read_text(encoding="utf-8"))
     except Exception:
         return [], None
+    return _extract_rss_config_accounts(raw)
+
+
+def _load_rss_yaml_config_accounts(config_file: Path) -> tuple[list[dict[str, Any]], str | None]:
+    if not config_file.exists():
+        return [], None
+    try:
+        raw = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+    except Exception:
+        return [], None
+    if not isinstance(raw, dict):
+        return [], None
+    return _extract_rss_config_accounts(raw)
+
+
+def _extract_rss_config_accounts(raw: dict[Any, Any]) -> tuple[list[dict[str, Any]], str | None]:
     connectors = raw.get("connectors")
     if not isinstance(connectors, dict):
         return [], None
@@ -190,14 +217,63 @@ def _write_rss_config_accounts(
     accounts: list[dict[str, Any]],
     default_account_id: str | None,
 ) -> None:
-    from agentgraph.config import CONFIG_DIR, CONFIG_FILE
+    from agentgraph.config import CONFIG_DIR, CONFIG_FILE, CONFIG_YAML_FILE
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if CONFIG_YAML_FILE.exists():
+        _write_rss_yaml_config_accounts(CONFIG_YAML_FILE, accounts, default_account_id)
+        return
     existing = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
     prefix = _strip_managed_rss_config(existing).rstrip()
     block = _format_rss_config_block(accounts, default_account_id)
     content = f"{prefix}\n\n{block}" if prefix else block
     CONFIG_FILE.write_text(content, encoding="utf-8")
+
+
+def _rss_config_write_path() -> Path:
+    from agentgraph.config import CONFIG_FILE, CONFIG_YAML_FILE
+
+    return CONFIG_YAML_FILE if CONFIG_YAML_FILE.exists() else CONFIG_FILE
+
+
+def _write_rss_yaml_config_accounts(
+    config_file: Path,
+    accounts: list[dict[str, Any]],
+    default_account_id: str | None,
+) -> None:
+    raw: dict[str, Any]
+    if config_file.exists():
+        loaded = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+        raw = loaded if isinstance(loaded, dict) else {}
+    else:
+        raw = {}
+    connectors = raw.get("connectors")
+    if not isinstance(connectors, dict):
+        connectors = {}
+    connectors["rss"] = {
+        "default_account_id": default_account_id,
+        "accounts": [_normalise_rss_config_account(account) for account in accounts],
+    }
+    raw["connectors"] = connectors
+    config_file.write_text(
+        yaml.safe_dump(raw, sort_keys=False, allow_unicode=False),
+        encoding="utf-8",
+    )
+
+
+def _normalise_rss_config_account(account: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "account_id": str(account.get("account_id") or "rss"),
+        "feed_urls": [
+            str(feed_url)
+            for feed_url in account.get("feed_urls", [])
+            if isinstance(feed_url, str) and feed_url
+        ],
+    }
+    label = account.get("label")
+    if label:
+        result["label"] = str(label)
+    return result
 
 
 def _strip_managed_rss_config(content: str) -> str:
@@ -611,8 +687,6 @@ def run_rss_flow(
 
     import typer
 
-    from agentgraph.config import CONFIG_FILE
-
     typer.echo(
         "\n"
         "RSS authentication does not need an API key. Provide one or more RSS/Atom feed URLs,\n"
@@ -635,7 +709,7 @@ def run_rss_flow(
     else:
         upsert_rss_config_account(resolved_account_id, creds, make_default=True)
 
-    typer.echo(f"\nRSS feeds saved to {CONFIG_FILE}")
+    typer.echo(f"\nRSS feeds saved to {_rss_config_write_path()}")
     if selected_feed_urls:
         typer.echo("Checking configured feed(s)...")
 

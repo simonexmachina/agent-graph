@@ -20,12 +20,14 @@ AGENTGRAPH_CONFIG_DIR=/path/to/agentgraph agentgraph serve
 That directory controls:
 
 - `config.toml`
+- `config.yaml` (optional alternative for connector configuration)
 - `credentials.json`
 - the config `.env`
 - the default SQLite database path
 
 Connector configuration that is not a secret, such as RSS feed URLs, is stored in
-`config.toml`. Provider tokens and OAuth credentials remain in `credentials.json`.
+`config.toml` by default, or `config.yaml` if that file exists. Provider tokens and
+OAuth credentials remain in `credentials.json`.
 
 ## Storage backend
 

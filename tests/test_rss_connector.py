@@ -95,6 +95,7 @@ def test_rss_config_roundtrip_uses_config_toml(
     config_file = tmp_path / "config.toml"
     monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
     monkeypatch.setattr("agentgraph.config.CONFIG_FILE", config_file)
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
 
     save_rss_config_account(
         RssCredentials(
@@ -116,11 +117,87 @@ def test_rss_config_roundtrip_uses_config_toml(
     assert "[[connectors.rss.accounts]]" in rendered
 
 
+def test_rss_config_roundtrip_uses_config_yaml_when_present(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_yaml_file = tmp_path / "config.yaml"
+    config_yaml_file.write_text("server:\n  host: 127.0.0.1\n", encoding="utf-8")
+    monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", config_file)
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", config_yaml_file)
+
+    save_rss_config_account(
+        RssCredentials(
+            account_id="rss",
+            label="RSS",
+            feed_urls=["https://example.com/feed.xml"],
+        )
+    )
+
+    assert load_rss_config_accounts() == [
+        {
+            "account_id": "rss",
+            "label": "RSS",
+            "feed_urls": ["https://example.com/feed.xml"],
+        }
+    ]
+    rendered = config_yaml_file.read_text(encoding="utf-8")
+    assert "connectors:" in rendered
+    assert "rss:" in rendered
+    assert not config_file.exists()
+
+
+def test_rss_config_prefers_yaml_over_toml(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_yaml_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+[connectors.rss]
+default_account_id = "rss"
+
+[[connectors.rss.accounts]]
+account_id = "rss"
+label = "TOML"
+feed_urls = ["https://example.com/toml.xml"]
+""",
+        encoding="utf-8",
+    )
+    config_yaml_file.write_text(
+        """
+connectors:
+  rss:
+    default_account_id: rss
+    accounts:
+      - account_id: rss
+        label: YAML
+        feed_urls:
+          - https://example.com/yaml.xml
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", config_file)
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", config_yaml_file)
+
+    assert load_rss_config_accounts() == [
+        {
+            "account_id": "rss",
+            "label": "YAML",
+            "feed_urls": ["https://example.com/yaml.xml"],
+        }
+    ]
+
+
 def test_rss_config_reads_legacy_credentials_when_config_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
 
     def fake_load_platform_accounts(platform: str) -> list[dict[str, object]]:
         assert platform == "rss"

@@ -16,6 +16,7 @@ def _default_config_dir() -> Path:
 
 CONFIG_DIR = _default_config_dir()
 CONFIG_FILE = CONFIG_DIR / "config.toml"
+CONFIG_YAML_FILE = CONFIG_DIR / "config.yaml"
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
 DEFAULT_SQLITE_PATH = str(CONFIG_DIR / "agentgraph.db")
 

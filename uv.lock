@@ -155,6 +155,7 @@ dependencies = [
     { name = "agentgraph-connector-web" },
     { name = "feedparser" },
     { name = "httpx" },
+    { name = "pyyaml" },
     { name = "questionary" },
 ]
 
@@ -164,6 +165,7 @@ requires-dist = [
     { name = "agentgraph-connector-web", editable = "packages/agentgraph-connector-web" },
     { name = "feedparser", specifier = ">=6.0.11" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "questionary", specifier = ">=2.1.1" },
 ]
 

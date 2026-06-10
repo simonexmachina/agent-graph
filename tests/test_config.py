@@ -37,6 +37,7 @@ def test_config_dir_env_controls_default_paths(
         settings = reloaded.Settings()
         assert tmp_path == reloaded.CONFIG_DIR
         assert tmp_path / "credentials.json" == reloaded.CREDENTIALS_FILE
+        assert tmp_path / "config.yaml" == reloaded.CONFIG_YAML_FILE
         assert settings.backend_sqlite_path == str(tmp_path / "agentgraph.db")
         env_files = settings.model_config["env_file"]
         assert env_files == [str(tmp_path / ".env"), ".env"]

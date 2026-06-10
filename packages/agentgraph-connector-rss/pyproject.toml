@@ -8,6 +8,7 @@ dependencies = [
     "agentgraph-connector-web",
     "feedparser>=6.0.11",
     "httpx>=0.28.1",
+    "pyyaml>=6.0.3",
     "questionary>=2.1.1",
 ]
 
