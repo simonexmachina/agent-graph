@@ -217,6 +217,14 @@ See [Configuration](docs-src/configuration.md) for the full setup.
 
 See [AGENTS.md](AGENTS.md) for repo-specific development rules.
 
+Before opening a change, run:
+
+```bash
+uv run pytest tests/ -m "not integration" -q
+uv run pyright
+uv run ruff check agentgraph/
+```
+
 ## License
 
 See [LICENSE](LICENSE).

@@ -95,3 +95,18 @@ pythonVersion = "3.12"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
+include = [
+    "agentgraph/config.py",
+    "packages/agentgraph-connector-discord/agentgraph_connector_discord",
+    "packages/agentgraph-connector-google/agentgraph_connector_google",
+    "packages/agentgraph-connector-rss/agentgraph_connector_rss",
+    "packages/agentgraph-connector-slack/agentgraph_connector_slack",
+    "packages/agentgraph-connector-web/agentgraph_connector_web",
+]
+extraPaths = [
+    "packages/agentgraph-connector-discord",
+    "packages/agentgraph-connector-google",
+    "packages/agentgraph-connector-rss",
+    "packages/agentgraph-connector-slack",
+    "packages/agentgraph-connector-web",
+]

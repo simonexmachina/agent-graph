@@ -10,7 +10,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr, parsedate_to_datetime
-from typing import Any
+from typing import Any, cast
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
@@ -480,9 +480,12 @@ async def _list_threads(
         if page_token:
             kwargs["pageToken"] = page_token
 
+        def _list_threads_page(request_kwargs: dict[str, Any] = kwargs) -> dict[str, Any]:
+            return cast(dict[str, Any], service.users().threads().list(**request_kwargs).execute())
+
         response: dict[str, Any] = await loop.run_in_executor(
             None,
-            lambda kw=kwargs: service.users().threads().list(**kw).execute(),
+            _list_threads_page,
         )
 
         stubs = response.get("threads", [])

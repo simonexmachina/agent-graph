@@ -25,5 +25,8 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -m "not integration" -q
 
+      - name: Type check
+        run: uv run pyright
+
       - name: Lint
         run: uv run ruff check agentgraph/
