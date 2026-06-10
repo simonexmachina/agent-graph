@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
+# pyright: reportOptionalMemberAccess=false
+# pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false
 import sys
 from pathlib import Path
 from types import ModuleType

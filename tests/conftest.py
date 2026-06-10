@@ -1,5 +1,7 @@
 """Shared pytest fixtures."""
 
+# pyright: reportUnusedFunction=false
+
 import pytest
 
 

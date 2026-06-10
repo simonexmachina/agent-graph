@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
@@ -313,4 +314,3 @@ async def test_unify_persons_merges_edges_and_identity_metadata_sqlite(
     refreshed_primary = await sqlite_backend.get_entity_by_id(primary_id)
     assert refreshed_primary is not None
     assert refreshed_primary["metadata"]["slack_user_id"] == "T1/U1"
-

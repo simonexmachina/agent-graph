@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch

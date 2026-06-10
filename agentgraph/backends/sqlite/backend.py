@@ -111,7 +111,7 @@ class SQLiteBackend(StorageBackend):
     async def _fetchall(self, sql: str, params: list[Any] | None = None) -> list[Any]:
         conn = self._conn_or_raise()
         cursor = await conn.execute(sql, params or [])
-        return await cursor.fetchall()
+        return list(await cursor.fetchall())
 
     async def _fetchone(self, sql: str, params: list[Any] | None = None) -> Any:
         conn = self._conn_or_raise()
@@ -654,7 +654,7 @@ class SQLiteBackend(StorageBackend):
             id_list,
         )
         rows = await cursor.fetchall()
-        results = []
+        results: list[dict[str, Any]] = []
         for row in rows:
             r = _row_to_entity(row)
             base_score = score_map.get(r["id"], 0.0)
@@ -664,7 +664,11 @@ class SQLiteBackend(StorageBackend):
 
             if (r["score"] or 0) >= min_score:
                 results.append(r)
-        results.sort(key=lambda x: x.get("score") or 0, reverse=True)
+        def _score(result: dict[str, Any]) -> float:
+            raw_score = result.get("score")
+            return float(raw_score) if isinstance(raw_score, int | float) else 0.0
+
+        results.sort(key=_score, reverse=True)
         return results
 
     async def get_entity_by_id(self, entity_id: str) -> EntityResult | None:

@@ -20,6 +20,7 @@ from typer.testing import CliRunner
 from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
 from agentgraph.cli import app
 from agentgraph.connectors.base import ConnectorAccount
+from agentgraph.core.storage import EntityResult
 
 runner = CliRunner()
 
@@ -71,7 +72,7 @@ def test_delete_command_dispatches_to_cli_query() -> None:
 def test_get_url_uses_entity_by_url_endpoint() -> None:
     from agentgraph.cli_query import cmd_get
 
-    entity = {
+    entity: EntityResult = {
         "id": "entity-12345678",
         "entity_type": "Document",
         "platform": "web",
@@ -93,7 +94,7 @@ def test_get_url_falls_back_when_running_server_lacks_endpoint() -> None:
         json={"detail": "Not Found"},
         request=httpx.Request("GET", "http://127.0.0.1:8765/api/cli/entity-by-url"),
     )
-    entity = {
+    entity: EntityResult = {
         "id": "entity-12345678",
         "entity_type": "Document",
         "platform": "web",
@@ -404,14 +405,14 @@ def test_auth_provider_dispatches_to_connector() -> None:
 def test_connector_command_dispatches_to_connector() -> None:
     captured: dict[str, object] = {}
 
-    def fake_run_cli_command(args: list[str]) -> dict[str, object]:
-        captured["args"] = args
-        return {"status": "ok", "args": args}
-
-    _FakeRssConnector.run_cli_command = classmethod(lambda cls, args: fake_run_cli_command(args))
+    class _DispatchRssConnector(_FakeRssConnector):
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, object]:
+            captured["args"] = args
+            return {"status": "ok", "args": args}
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=_FakeRssConnector()):
+         patch("agentgraph.connectors.registry.get_connector", return_value=_DispatchRssConnector()):
         result = runner.invoke(app, ["connector", "rss", "add", "https://simonwillison.net/atom/everything/"])
 
     assert result.exit_code == 0
@@ -420,13 +421,13 @@ def test_connector_command_dispatches_to_connector() -> None:
 
 
 def test_connector_command_json_outputs_raw_result() -> None:
-    def fake_run_cli_command(args: list[str]) -> dict[str, object]:
-        return {"status": "ok", "args": args}
-
-    _FakeRssConnector.run_cli_command = classmethod(lambda cls, args: fake_run_cli_command(args))
+    class _JsonRssConnector(_FakeRssConnector):
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, object]:
+            return {"status": "ok", "args": args}
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=_FakeRssConnector()):
+         patch("agentgraph.connectors.registry.get_connector", return_value=_JsonRssConnector()):
         result = runner.invoke(app, ["connector", "rss", "add", "https://example.com/feed.xml", "--json"])
 
     assert result.exit_code == 0

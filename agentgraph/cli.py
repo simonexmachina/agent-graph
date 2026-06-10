@@ -93,17 +93,19 @@ def auth(
         typer.echo(f"  {item['provider']:<12}  {item['description']}")
         typer.echo(f"  {'':<12}  auth: {auth_state}  |  connectors: {connectors}")
         accounts = cast(list[dict[str, object]], item.get("accounts") or [])
-        for account in accounts:
-            account_status = str(account["auth_status"])
+        for account_row in accounts:
+            account_status = str(account_row["auth_status"])
             account_auth = _status_label(account_status)
-            account_detail = account.get("auth_detail")
+            account_detail = account_row.get("auth_detail")
             if account_detail:
                 account_auth = (
                     f"{account_auth} ({account_detail})"
                     if account_status != "ok"
                     else f"{account_auth} as {account_detail}"
                 )
-            typer.echo(f"  {'':<12}  account: {account['label']} [{account['account_id']}]  |  {account_auth}")
+            typer.echo(
+                f"  {'':<12}  account: {account_row['label']} [{account_row['account_id']}]  |  {account_auth}"
+            )
 
 
 @app.command(

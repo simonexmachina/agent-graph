@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
 import agentgraph_connector_web
 import httpx
 import pytest
@@ -152,7 +153,7 @@ async def test_fetch_web_entity_uses_document_validators_on_304() -> None:
             request=request,
         )
 
-    existing = {
+    existing: dict[str, object] = {
         "entity_type": "Document",
         "platform": "web",
         "platform_entity_id": "https://example.com/page",

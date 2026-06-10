@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 
-from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE
+from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE, SourceReference
 from agentgraph.core.context import get_backend
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ async def link_entity_to_urls(platform_entity_id: str, platform: str, content: s
     """
     from agentgraph.server.router import classify_url
 
-    refs = []
+    refs: list[SourceReference] = []
     for url in _URL_RE.findall(content):
         ref = classify_url(url.rstrip(".,)>\"'"))
         if ref:
@@ -49,7 +49,7 @@ async def link_entity_to_urls(platform_entity_id: str, platform: str, content: s
 
         tgt_id = await backend.find_entity_id(ref.source, ref.resource_id)
         if not tgt_id:
-            entity_type = RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type]  # type: ignore[index]
+            entity_type = RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type]
             tgt_id = await backend.upsert_stub_entity(entity_type, ref.source, ref.resource_id)
             logger.debug("Created stub entity %s/%s", ref.source, ref.resource_id)
 

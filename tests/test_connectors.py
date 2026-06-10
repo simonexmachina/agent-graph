@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -161,7 +162,9 @@ async def test_gdocs_fetch_doc_adds_download_metadata(monkeypatch: pytest.Monkey
     assert batch.entities
     entity = batch.entities[0]
     assert entity.metadata["mime_type"] == "text/html"
-    assert entity.metadata["download_url"].endswith("/export?mimeType=text/html")
+    download_url = entity.metadata["download_url"]
+    assert isinstance(download_url, str)
+    assert download_url.endswith("/export?mimeType=text/html")
     assert entity.metadata["web_url"] == "https://docs.google.com/document/d/doc-123/view"
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false
 import html
 import posixpath
 import re
@@ -8,17 +9,10 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    from pygments import highlight
-    from pygments.formatters import HtmlFormatter
-    from pygments.lexers import TextLexer, get_lexer_by_name
-    from pygments.util import ClassNotFound
-except ImportError:  # pragma: no cover - handled explicitly during docs build
-    highlight = None
-    TextLexer = None
-    get_lexer_by_name = None
-    ClassNotFound = Exception
-    HtmlFormatter = None
+from pygments import highlight
+from pygments.formatters import HtmlFormatter
+from pygments.lexers import TextLexer, get_lexer_by_name
+from pygments.util import ClassNotFound
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS_SRC = ROOT / "docs-src"
@@ -26,17 +20,11 @@ DOCS_OUT = ROOT / "docs"
 GITHUB_ROOT = "https://github.com/simonexmachina/agent-graph/blob/main"
 SECTION_ORDER = {"Start": 10, "Configuration": 15, "Reference": 20, "MCP": 30}
 
-_FORMATTER = HtmlFormatter(nowrap=True, classprefix="tok-") if HtmlFormatter else None
+_FORMATTER = HtmlFormatter(nowrap=True, classprefix="tok-")
 
 
 def ensure_syntax_highlighter() -> None:
-    if (
-        highlight is None
-        or HtmlFormatter is None
-        or TextLexer is None
-        or get_lexer_by_name is None
-        or _FORMATTER is None
-    ):
+    if not callable(highlight):
         raise RuntimeError(
             "Docs build requires Pygments. Run it from the project environment "
             "(for example `.venv/bin/python scripts/build_docs.py`)."
@@ -125,7 +113,6 @@ def render_inline(text: str) -> str:
 
 def render_code_block(code: str, language: str) -> str:
     code_class = f' class="language-{html.escape(language, quote=True)}"' if language else ""
-    ensure_syntax_highlighter()
 
     try:
         lexer = get_lexer_by_name(language, stripall=False) if language else TextLexer(stripall=False)

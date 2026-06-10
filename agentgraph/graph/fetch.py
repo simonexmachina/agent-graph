@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from agentgraph.core.context import get_backend
 
@@ -22,9 +22,10 @@ async def fetch_entity(platform: str, resource_id: str) -> dict[str, Any]:
 
     backend = get_backend()
     entity = await backend.get_entity_by_platform(platform, resource_id)
-    entity_type = (entity or {}).get("entity_type") or "Document"
+    raw_entity_type = (entity or {}).get("entity_type") or "Document"
+    entity_type = str(raw_entity_type)
     entity_meta = (entity or {}).get("metadata")
-    meta = entity_meta if isinstance(entity_meta, dict) else None
+    meta = cast(dict[str, Any], entity_meta) if isinstance(entity_meta, dict) else None
 
     resource_id, resource_type = connector.normalise_fetch_id(resource_id, entity_type)
 

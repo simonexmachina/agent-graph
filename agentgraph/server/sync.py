@@ -20,7 +20,7 @@ def _sync_scope(source: str, account_id: str | None) -> str:
     return source if account_id is None else f"{source}:{account_id}"
 
 
-async def _poll_connector(connector: BaseConnector) -> None:
+async def poll_connector(connector: BaseConnector) -> None:
     source = connector.source
     try:
         backend = get_backend()
@@ -56,7 +56,7 @@ async def _poll_connector(connector: BaseConnector) -> None:
         logger.exception("poll failed for connector %s", source)
 
 
-async def _run_ingest(connector: BaseConnector) -> None:
+async def run_ingest(connector: BaseConnector) -> None:
     source = connector.source
     try:
         for account_id in connector.poll_account_ids():
@@ -86,7 +86,7 @@ def setup_sync(scheduler: AsyncIOScheduler) -> None:
             continue
         total_seconds = int(interval.total_seconds())
         scheduler.add_job(
-            _poll_connector,
+            poll_connector,
             "interval",
             seconds=total_seconds,
             args=[connector],

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
 import sqlite3
 from collections.abc import AsyncGenerator
 from pathlib import Path

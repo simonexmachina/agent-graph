@@ -358,7 +358,7 @@ async def cli_poll(
 ) -> dict[str, Any]:
     """Trigger a background poll for one connector (by source) or all connectors."""
     from agentgraph.connectors.registry import get_all_connectors
-    from agentgraph.server.sync import _poll_connector
+    from agentgraph.server.sync import poll_connector
 
     connectors = get_all_connectors()
     if source is not None:
@@ -370,7 +370,7 @@ async def cli_poll(
     for connector in connectors:
         if connector.poll_interval is None:
             continue
-        asyncio.create_task(_poll_connector(connector))
+        asyncio.create_task(poll_connector(connector))
         polled.append(connector.source)
 
     return {"polled": polled}
@@ -382,13 +382,13 @@ async def cli_ingest(
 ) -> dict[str, Any]:
     """Kick off a background bulk ingest for a connector and return immediately."""
     from agentgraph.connectors.registry import get_all_connectors
-    from agentgraph.server.sync import _run_ingest
+    from agentgraph.server.sync import run_ingest
 
     connectors = [c for c in get_all_connectors() if c.source == source]
     if not connectors:
         raise HTTPException(status_code=404, detail=f"No connector registered for source '{source}'")
 
-    asyncio.create_task(_run_ingest(connectors[0]))
+    asyncio.create_task(run_ingest(connectors[0]))
     return {"source": source, "status": "started"}
 
 

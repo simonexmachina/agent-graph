@@ -16,19 +16,31 @@ async def relink_all() -> dict[str, Any]:
     Creates stub entities for any classifiable URLs not yet in the graph.
     Safe to call multiple times — uses ON CONFLICT DO NOTHING/UPDATE.
     """
-    from agentgraph.db.connection import get_pool
+    from agentgraph.core.context import get_backend
     from agentgraph.graph.link import link_entity_to_urls
 
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT platform, platform_entity_id, content FROM entities WHERE content IS NOT NULL"
-        )
+    rows = await get_backend().list_entities(
+        entity_types=None,
+        platform=None,
+        since=None,
+        limit=100_000,
+    )
 
     total_links = 0
     for row in rows:
+        content = row.get("content")
+        platform = row.get("platform")
+        platform_entity_id = row.get("platform_entity_id")
+        if not (
+            isinstance(content, str)
+            and isinstance(platform, str)
+            and isinstance(platform_entity_id, str)
+        ):
+            continue
         total_links += await link_entity_to_urls(
-            row["platform_entity_id"], row["platform"], row["content"]
+            platform_entity_id,
+            platform,
+            content,
         )
 
     return {"relinked": len(rows), "edges_created": total_links}

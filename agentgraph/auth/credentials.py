@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
@@ -40,7 +40,7 @@ def _load_all_credentials() -> dict[str, Any]:
         data = json.loads(CREDENTIALS_FILE.read_text())
     except Exception:
         return {}
-    return data if isinstance(data, dict) else {}
+    return cast(dict[str, Any], data) if isinstance(data, dict) else {}
 
 
 def _write_all_credentials(raw: dict[str, Any]) -> None:
@@ -63,10 +63,10 @@ def load_platform_account(platform: str, account_id: str | None = None) -> dict[
     if not isinstance(val, dict):
         return None
     if "accounts" not in val:
-        return val
+        return cast(dict[str, Any], val)
 
     try:
-        data = PlatformAccounts(**val)
+        data = PlatformAccounts.model_validate(val)
     except Exception:
         return None
     if not data.accounts:
@@ -85,9 +85,9 @@ def load_platform_accounts(platform: str) -> list[dict[str, Any]]:
     if not isinstance(val, dict):
         return []
     if "accounts" not in val:
-        return [val]
+        return [cast(dict[str, Any], val)]
     try:
-        data = PlatformAccounts(**val)
+        data = PlatformAccounts.model_validate(val)
     except Exception:
         return []
     return data.accounts
@@ -107,8 +107,10 @@ def save_platform_accounts(
     default_account_id: str | None = None,
 ) -> None:
     """Persist all accounts for a platform."""
-    serialised = [
-        account.model_dump(mode="json") if hasattr(account, "model_dump") else account
+    serialised: list[dict[str, Any]] = [
+        cast(dict[str, Any], account.model_dump(mode="json"))
+        if hasattr(account, "model_dump")
+        else cast(dict[str, Any], account)
         for account in accounts
     ]
     raw = _load_all_credentials()
@@ -144,5 +146,7 @@ def upsert_platform_account(
     if default_id is None:
         current = _load_all_credentials().get(platform)
         if isinstance(current, dict) and "default_account_id" in current:
-            default_id = current.get("default_account_id")
+            current_data = cast(dict[str, Any], current)
+            raw_default_id = current_data.get("default_account_id")
+            default_id = raw_default_id if isinstance(raw_default_id, str) else None
     save_platform_accounts(platform, existing, default_account_id=default_id or account_id)

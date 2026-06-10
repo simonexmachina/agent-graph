@@ -12,7 +12,12 @@ from urllib.parse import parse_qs, urlparse
 
 import typer
 
-from agentgraph.auth.credentials import GoogleCredentials, load_platform_accounts, save_platform, upsert_platform_account
+from agentgraph.auth.credentials import (
+    GoogleCredentials,
+    load_platform_accounts,
+    save_platform,
+    upsert_platform_account,
+)
 from agentgraph.auth.google_provider import GOOGLE_SCOPES
 
 
