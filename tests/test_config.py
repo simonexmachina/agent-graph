@@ -15,6 +15,7 @@ def test_defaults() -> None:
     assert s.server_port == 8765
     assert s.dwell_threshold_seconds == 3
     assert s.retention_days == 90
+    assert s.embedding_model == "BAAI/bge-small-en-v1.5"
     assert s.embedding_dimensions == 384
 
 

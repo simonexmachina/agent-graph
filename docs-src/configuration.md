@@ -79,9 +79,9 @@ Days before an unvisited entity is garbage collected.
 
 ### `AGENTGRAPH_EMBEDDING_MODEL`
 
-Default: `all-MiniLM-L6-v2`
+Default: `BAAI/bge-small-en-v1.5`
 
-Sentence-transformers model used for embeddings.
+FastEmbed model used for embeddings.
 
 ## Slack workspace filter
 

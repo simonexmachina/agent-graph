@@ -65,8 +65,8 @@ class Settings(BaseSettings):
         description="Days since last_accessed before an entity is garbage collected",
     )
     embedding_model: str = Field(
-        default="all-MiniLM-L6-v2",
-        description="sentence-transformers model name for content embeddings",
+        default="BAAI/bge-small-en-v1.5",
+        description="FastEmbed model name for content embeddings",
     )
     embedding_dimensions: int = Field(default=384)
 

@@ -194,7 +194,7 @@ Settings are read from environment variables and from a `.env` file in the confi
 | `AGENTGRAPH_SERVER_PORT` | `8765` | Server port |
 | `AGENTGRAPH_DWELL_THRESHOLD_SECONDS` | `3` | Seconds of focus before a fetch is triggered |
 | `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unvisited entity is garbage collected |
-| `AGENTGRAPH_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers model used for embeddings |
+| `AGENTGRAPH_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | FastEmbed model used for embeddings |
 
 See [Configuration](docs-src/configuration.md) for the full setup.
 

@@ -30,7 +30,7 @@ def configure_logging(level: str = "INFO") -> None:
     for noisy in (
         "httpx",
         "httpcore",
-        "sentence_transformers",
+        "fastembed",
         "uvicorn.access",
         "googleapiclient.discovery_cache",
     ):
