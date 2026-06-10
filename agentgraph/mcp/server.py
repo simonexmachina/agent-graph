@@ -352,6 +352,77 @@ async def fetch_entity_by_id_tool(entity_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# poll_connectors — trigger background connector polling
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def poll_connectors_tool(source: str | None = None) -> str:
+    """
+    Trigger a background poll for one connector or all polling connectors.
+
+    This is the MCP equivalent of:
+        agentgraph poll [<source>]
+
+    Args:
+        source: Optional connector source to poll. When omitted, all connectors
+            with poll_interval configured are polled.
+
+    Returns:
+        JSON object with polled connector sources, or an error if a requested
+        connector source is not registered.
+    """
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.server.sync import poll_connector
+
+    bootstrap()
+    connectors = get_all_connectors()
+    if source is not None:
+        connectors = [connector for connector in connectors if connector.source == source]
+        if not connectors:
+            return json.dumps({"error": f"No connector registered for source {source!r}"})
+
+    polled: list[str] = []
+    for connector in connectors:
+        if connector.poll_interval is None:
+            continue
+        asyncio.create_task(poll_connector(connector))
+        polled.append(connector.source)
+
+    return json.dumps({"polled": polled})
+
+
+# ---------------------------------------------------------------------------
+# ingest_connector — trigger background bulk ingest
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def ingest_connector_tool(source: str) -> str:
+    """
+    Trigger a background one-shot bulk ingest for a connector.
+
+    This is the MCP equivalent of:
+        agentgraph ingest <source>
+
+    Args:
+        source: Connector source to ingest.
+
+    Returns:
+        JSON object with source and status, or an error if the connector source
+        is not registered.
+    """
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.server.sync import run_ingest
+
+    bootstrap()
+    connectors = [connector for connector in get_all_connectors() if connector.source == source]
+    if not connectors:
+        return json.dumps({"error": f"No connector registered for source {source!r}"})
+
+    asyncio.create_task(run_ingest(connectors[0]))
+    return json.dumps({"source": source, "status": "started"})
+
+
+# ---------------------------------------------------------------------------
 # download_entity — authenticated source-file download
 # ---------------------------------------------------------------------------
 

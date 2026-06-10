@@ -12,6 +12,8 @@ source_path = "docs-src/mcp/index.md"
 ## Discovery
 
 - [`list_connectors_tool`](/mcp/list-connectors.html) - inspect installed connectors, auth state, and valid platform values.
+- [`list_auth_providers_tool`](/mcp/list-auth-providers.html) - inspect provider-level authentication state.
+- [`run_connector_command_tool`](/mcp/run-connector-command.html) - run connector-owned commands.
 
 ## Query and traversal
 
@@ -26,8 +28,11 @@ source_path = "docs-src/mcp/index.md"
 - [`fetch_entity_tool`](/mcp/fetch-entity.html) - fetch by platform and platform ID.
 - [`fetch_entity_by_id_tool`](/mcp/fetch-entity-by-id.html) - fetch by internal entity UUID.
 - [`download_entity_tool`](/mcp/download-entity.html) - download the source file behind an entity.
-- [`delete_entity_tool`](/mcp/delete-entity.html) - remove an entity and its connected edges.
+- [`poll_connectors_tool`](/mcp/poll-connectors.html) - trigger background polling for one connector or all polling connectors.
+- [`ingest_connector_tool`](/mcp/ingest-connector.html) - trigger a connector's one-shot background ingest.
 
 ## State
 
-- `bookmark_entity_tool(entity_id, bookmarked=false)` clears bookmark protection for an existing entity.
+- [`bookmark_entity_tool`](/mcp/bookmark-entity.html) - add or remove bookmark protection.
+- [`delete_entity_tool`](/mcp/delete-entity.html) - remove an entity and its connected edges.
+- [`unify_persons_tool`](/mcp/unify-persons.html) - merge duplicate Person entities after confirmation.

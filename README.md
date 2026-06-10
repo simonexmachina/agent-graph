@@ -203,6 +203,8 @@ See [Configuration](docs-src/configuration.md) for the full setup.
 `agentgraph mcp-serve` exposes these tool families to MCP clients:
 
 - `list_connectors_tool`
+- `list_auth_providers_tool`
+- `run_connector_command_tool`
 - `search_entities_tool`
 - `get_entity_tool`
 - `get_edges_tool`
@@ -211,7 +213,11 @@ See [Configuration](docs-src/configuration.md) for the full setup.
 - `fetch_entity_tool`
 - `fetch_entity_by_id_tool`
 - `download_entity_tool`
+- `poll_connectors_tool`
+- `ingest_connector_tool`
+- `bookmark_entity_tool`
 - `delete_entity_tool`
+- `unify_persons_tool`
 
 ## Contributing
 

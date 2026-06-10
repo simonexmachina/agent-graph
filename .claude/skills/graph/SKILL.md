@@ -73,6 +73,29 @@ agentgraph mcp-serve
 agentgraph mcp-config   # config snippet for Claude Desktop, Claude Code, and ChatGPT developer mode
 ```
 
+## MCP tool equivalents
+
+When using AgentGraph through MCP instead of the CLI, use these equivalent tools:
+
+```text
+agentgraph connectors              -> list_connectors_tool()
+agentgraph auth status             -> list_auth_providers_tool()
+agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
+agentgraph search ...              -> search_entities_tool(...)
+agentgraph get ...                 -> get_entity_tool(entity_id)
+agentgraph edges ...               -> get_edges_tool(entity_id, edge_type, direction)
+agentgraph traverse ...            -> traverse_graph_tool(entity_id, max_depth)
+agentgraph query ...               -> query_by_filter_tool(...)
+agentgraph fetch ...               -> fetch_entity_tool(platform, resource_id)
+agentgraph fetch-entity ...        -> fetch_entity_by_id_tool(entity_id)
+agentgraph download ...            -> download_entity_tool(entity_id, output_path)
+agentgraph poll [source]           -> poll_connectors_tool(source)
+agentgraph ingest <source>         -> ingest_connector_tool(source)
+agentgraph bookmark ...            -> bookmark_entity_tool(entity_id, bookmarked)
+agentgraph delete ...              -> delete_entity_tool(entity_id)
+agentgraph unify-persons ...       -> unify_persons_tool(primary_entity_id, duplicate_entity_ids)
+```
+
 ## Entity types
 
 | Type | Contains |
