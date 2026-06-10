@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agentgraph.connectors.base import EntityBatch
 from agentgraph.core.context import get_backend
-from agentgraph.graph.embeddings import encode
+from agentgraph.graph.embeddings import encode_passage
 
 
 async def upsert_batch(batch: EntityBatch) -> None:
@@ -14,7 +14,7 @@ async def upsert_batch(batch: EntityBatch) -> None:
     for p in batch.persons:
         canonical_key = p.canonical_email or f"{p.platform}:{p.platform_user_id}"
         text = " ".join(filter(None, [p.display_name, p.canonical_email]))
-        vec: list[float] | None = encode(text) if text else None
+        vec: list[float] | None = encode_passage(text) if text else None
         person_embeddings[canonical_key] = vec
         person_embeddings[p.platform_user_id] = vec  # also indexed by user_id for edge resolution
 
@@ -22,7 +22,7 @@ async def upsert_batch(batch: EntityBatch) -> None:
     for e in batch.entities:
         if not e.is_stub and e.content:
             text = f"{e.title or ''} {e.content}".strip()
-            entity_embeddings[e.platform_entity_id] = encode(text)
+            entity_embeddings[e.platform_entity_id] = encode_passage(text)
         else:
             entity_embeddings[e.platform_entity_id] = None
 

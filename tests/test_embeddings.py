@@ -14,19 +14,27 @@ from agentgraph.graph import embeddings
 
 class FakeTextEmbedding:
     model_names: list[str] = []
+    passage_calls: list[list[str]] = []
+    query_calls: list[str] = []
 
     def __init__(self, model_name: str) -> None:
         self.model_names.append(model_name)
 
-    def embed(self, documents: list[str]) -> list[np.ndarray[Any, np.dtype[np.float32]]]:
-        assert documents == ["hello"]
+    def passage_embed(self, documents: list[str]) -> list[np.ndarray[Any, np.dtype[np.float32]]]:
+        self.passage_calls.append(documents)
         return [np.array([3.0, 4.0], dtype=np.float32)]
 
+    def query_embed(self, query: str) -> list[np.ndarray[Any, np.dtype[np.float32]]]:
+        self.query_calls.append(query)
+        return [np.array([5.0, 12.0], dtype=np.float32)]
 
-def test_encode_uses_configured_fastembed_model_and_normalizes(
+
+def test_encode_passage_uses_configured_fastembed_model_and_normalizes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     FakeTextEmbedding.model_names = []
+    FakeTextEmbedding.passage_calls = []
+    FakeTextEmbedding.query_calls = []
     embeddings_module = importlib.reload(embeddings)
     monkeypatch.setattr(embeddings_module, "TextEmbedding", FakeTextEmbedding)
     monkeypatch.setattr(
@@ -36,11 +44,40 @@ def test_encode_uses_configured_fastembed_model_and_normalizes(
     )
 
     try:
-        encoded = embeddings_module.encode("hello")
+        encoded = embeddings_module.encode_passage("hello")
 
         assert len(encoded) == 2
         assert abs(encoded[0] - 0.6) < 1e-6
         assert abs(encoded[1] - 0.8) < 1e-6
         assert FakeTextEmbedding.model_names == ["test/model"]
+        assert FakeTextEmbedding.passage_calls == [["hello"]]
+        assert FakeTextEmbedding.query_calls == []
+    finally:
+        importlib.reload(embeddings_module)
+
+
+def test_encode_query_uses_fastembed_query_path_and_normalizes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeTextEmbedding.model_names = []
+    FakeTextEmbedding.passage_calls = []
+    FakeTextEmbedding.query_calls = []
+    embeddings_module = importlib.reload(embeddings)
+    monkeypatch.setattr(embeddings_module, "TextEmbedding", FakeTextEmbedding)
+    monkeypatch.setattr(
+        embeddings_module,
+        "get_settings",
+        lambda: SimpleNamespace(embedding_model="test/model"),
+    )
+
+    try:
+        encoded = embeddings_module.encode_query("needle")
+
+        assert len(encoded) == 2
+        assert abs(encoded[0] - (5.0 / 13.0)) < 1e-6
+        assert abs(encoded[1] - (12.0 / 13.0)) < 1e-6
+        assert FakeTextEmbedding.model_names == ["test/model"]
+        assert FakeTextEmbedding.query_calls == ["needle"]
+        assert FakeTextEmbedding.passage_calls == []
     finally:
         importlib.reload(embeddings_module)

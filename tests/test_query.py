@@ -93,7 +93,7 @@ async def test_search_entities_returns_results() -> None:
     backend = _mock_backend(search_entities=AsyncMock(return_value=expected))
     set_backend(backend)
 
-    with patch("agentgraph.graph.query.encode", return_value=[0.1] * 384):
+    with patch("agentgraph.graph.query.encode_query", return_value=[0.1] * 384):
         results = await search_entities("test query", limit=5)
 
     assert len(results) == 2
@@ -107,7 +107,7 @@ async def test_search_entities_empty_results() -> None:
     backend = _mock_backend(search_entities=AsyncMock(return_value=[]))
     set_backend(backend)
 
-    with patch("agentgraph.graph.query.encode", return_value=[0.0] * 384):
+    with patch("agentgraph.graph.query.encode_query", return_value=[0.0] * 384):
         results = await search_entities("empty query")
 
     assert results == []
@@ -121,7 +121,7 @@ async def test_search_entities_passes_platform_to_backend() -> None:
     backend = _mock_backend(search_entities=mock_search)
     set_backend(backend)
 
-    with patch("agentgraph.graph.query.encode", return_value=[0.1] * 384):
+    with patch("agentgraph.graph.query.encode_query", return_value=[0.1] * 384):
         await search_entities("discord stuff", platform="discord")
 
     mock_search.assert_called_once()
@@ -137,7 +137,7 @@ async def test_search_entities_platform_none_by_default() -> None:
     backend = _mock_backend(search_entities=mock_search)
     set_backend(backend)
 
-    with patch("agentgraph.graph.query.encode", return_value=[0.1] * 384):
+    with patch("agentgraph.graph.query.encode_query", return_value=[0.1] * 384):
         await search_entities("anything")
 
     mock_search.assert_called_once()
