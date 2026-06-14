@@ -67,14 +67,8 @@ def load_rss_creds(account_id: str | None = None) -> RssCredentials:
 
 
 def load_rss_config() -> dict[str, Any] | None:
-    """Return RSS feed config, falling back to legacy account-shaped credentials."""
-    config = _load_rss_config()
-    if config is not None:
-        return config
-
-    from agentgraph.auth.credentials import load_platform_accounts
-
-    return _flatten_legacy_rss_accounts(load_platform_accounts("rss")) or None
+    """Return RSS feed config."""
+    return _load_rss_config()
 
 
 def save_rss_config(data: Any) -> None:
@@ -126,11 +120,6 @@ def _extract_rss_config(raw: dict[Any, Any]) -> dict[str, Any] | None:
     feed_urls = rss.get("feed_urls")
     if isinstance(feed_urls, list):
         return _normalise_rss_config({"feed_urls": feed_urls})
-    raw_accounts = rss.get("accounts")
-    if isinstance(raw_accounts, list):
-        return _flatten_legacy_rss_accounts(
-            [dict(account) for account in raw_accounts if isinstance(account, dict)]
-        )
     return None
 
 
@@ -183,17 +172,6 @@ def _normalise_rss_config(config: dict[str, Any]) -> dict[str, Any]:
             if isinstance(feed_url, str) and feed_url
         ],
     }
-
-
-def _flatten_legacy_rss_accounts(accounts: list[dict[str, Any]]) -> dict[str, Any]:
-    feed_urls: list[str] = []
-    seen: set[str] = set()
-    for account in accounts:
-        for feed_url in account.get("feed_urls", []):
-            if isinstance(feed_url, str) and feed_url and feed_url not in seen:
-                seen.add(feed_url)
-                feed_urls.append(feed_url)
-    return {"feed_urls": feed_urls}
 
 
 def _strip_managed_rss_config(content: str) -> str:

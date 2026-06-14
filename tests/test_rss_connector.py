@@ -142,65 +142,6 @@ connectors:
     assert load_rss_config() == {"feed_urls": ["https://example.com/yaml.xml"]}
 
 
-def test_rss_config_reads_legacy_account_shape(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config_yaml_file = tmp_path / "config.yaml"
-    config_yaml_file.write_text(
-        """
-connectors:
-  rss:
-    default_account_id: rss
-    accounts:
-      - account_id: rss
-        label: RSS
-        feed_urls:
-          - https://example.com/one.xml
-      - account_id: old
-        label: Old Feeds
-        feed_urls:
-          - https://example.com/two.xml
-          - https://example.com/one.xml
-""",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
-    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", config_yaml_file)
-
-    assert load_rss_config() == {
-        "feed_urls": [
-            "https://example.com/one.xml",
-            "https://example.com/two.xml",
-        ]
-    }
-
-
-def test_rss_config_reads_legacy_credentials_when_config_missing(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
-    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
-
-    def fake_load_platform_accounts(platform: str) -> list[dict[str, object]]:
-        assert platform == "rss"
-        return [
-            {
-                "account_id": "rss",
-                "label": "RSS",
-                "feed_urls": ["https://example.com/feed.xml"],
-            }
-        ]
-
-    monkeypatch.setattr(
-        "agentgraph.auth.credentials.load_platform_accounts",
-        fake_load_platform_accounts,
-    )
-
-    assert load_rss_config() == {"feed_urls": ["https://example.com/feed.xml"]}
-
-
 def test_add_feed_urls_creates_rss_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
