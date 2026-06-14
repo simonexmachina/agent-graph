@@ -22,6 +22,7 @@ from agentgraph_connector_rss.auth import (
     list_rss_accounts,
     load_rss_config_accounts,
     parse_opml_feeds,
+    remove_feed_urls,
     resolve_feed_source,
     save_rss_config_account,
     select_opml_feeds,
@@ -274,6 +275,64 @@ def test_add_feed_urls_rejects_invalid_feed_before_saving(
     assert saved == {}
 
 
+def test_remove_feed_urls_updates_existing_rss_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: RssCredentials(
+            feed_urls=[
+                "https://example.com/one.xml",
+                "https://example.com/two.xml",
+            ],
+            account_id=account_id or "rss",
+            label="RSS",
+        ),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.upsert_rss_config_account",
+        lambda account_id, data, make_default=False: saved.update(
+            {
+                "account_id": account_id,
+                "data": data.model_dump(mode="json"),
+                "make_default": make_default,
+            }
+        ),
+    )
+
+    creds, removed = remove_feed_urls(["https://example.com/two.xml"])
+
+    assert removed == ["https://example.com/two.xml"]
+    assert creds.feed_urls == ["https://example.com/one.xml"]
+    assert saved == {
+        "account_id": "rss",
+        "data": {
+            "feed_urls": ["https://example.com/one.xml"],
+            "account_id": "rss",
+            "label": "RSS",
+        },
+        "make_default": True,
+    }
+
+
+def test_remove_feed_urls_rejects_unconfigured_feed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: RssCredentials(
+            feed_urls=["https://example.com/one.xml"],
+            account_id=account_id or "rss",
+            label="RSS",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="No matching RSS feed URLs"):
+        remove_feed_urls(["https://example.com/missing.xml"])
+
+
 def test_resolve_feed_source_discovers_feed_from_html_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -337,6 +396,40 @@ def test_rss_connector_add_html_file_reports_discovered_feed_url(
         "account_id": "rss",
         "label": "RSS",
     }
+
+
+def test_rss_connector_remove_reports_removed_feed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.load_rss_creds",
+        lambda account_id=None: RssCredentials(
+            feed_urls=[
+                "https://example.com/one.xml",
+                "https://example.com/two.xml",
+            ],
+            account_id=account_id or "rss",
+            label="RSS",
+        ),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.upsert_rss_config_account",
+        lambda account_id, data, make_default=False: saved.update(
+            {
+                "account_id": account_id,
+                "data": data.model_dump(mode="json"),
+                "make_default": make_default,
+            }
+        ),
+    )
+
+    result = RssConnector.run_cli_command(["remove", "https://example.com/two.xml"])
+
+    assert result["removed"] == ["https://example.com/two.xml"]
+    assert result["feed_urls"] == ["https://example.com/one.xml"]
+    assert saved["make_default"] is True
 
 
 def test_parse_opml_feeds_deduplicates_feed_urls(tmp_path: Path) -> None:

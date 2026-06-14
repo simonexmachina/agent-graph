@@ -30,6 +30,7 @@ from agentgraph_connector_rss.auth import (
     list_rss_accounts,
     load_rss_creds,
     preview_feed,
+    remove_feed_urls,
     resolve_feed_sources,
     run_rss_flow,
     verify_rss_auth,
@@ -95,6 +96,16 @@ class RssConnector(BaseConnector):
                 "feed_urls": creds.feed_urls,
                 "added": feed_urls,
             }
+        if command == "remove":
+            account_id, feed_urls = _parse_account_option(rest)
+            creds, removed_feed_urls = remove_feed_urls(feed_urls, account_id=account_id)
+            return {
+                "status": "ok",
+                "source": cls.source,
+                "account_id": creds.account_id,
+                "feed_urls": creds.feed_urls,
+                "removed": removed_feed_urls,
+            }
         if command == "import-opml":
             options = _parse_import_opml_args(rest)
             creds, feeds, selected_feeds = import_opml_feeds(**options)
@@ -108,7 +119,7 @@ class RssConnector(BaseConnector):
                 "selected_feed_count": len(selected_feeds),
                 "added": selected_feed_urls,
             }
-        raise ValueError(f"Unknown rss connector command '{command}'. Available: add, import-opml")
+        raise ValueError(f"Unknown rss connector command '{command}'. Available: add, remove, import-opml")
 
     @classmethod
     def cli_help(cls) -> str:
@@ -218,6 +229,7 @@ async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> Enti
 def _rss_usage() -> str:
     return (
         "Usage: agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--account <account-id>]\n"
+        "   or: agentgraph connector rss remove <feed-url> [feed-url...] [--account <account-id>]\n"
         "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>] [--account <account-id>]"
     )
 
@@ -232,11 +244,13 @@ def _rss_help() -> str:
             "Commands:",
             "  add <feed-or-html-url> [feed-or-html-url...]",
             "      Add one or more RSS/Atom feeds. HTML pages are scanned for RSS/Atom <link> tags.",
+            "  remove <feed-url> [feed-url...]",
+            "      Remove one or more exact RSS/Atom feed URLs from the configured account.",
             "  import-opml <file.opml> [--all | --select <indexes>]",
             "      Import RSS/Atom feed URLs from an OPML file. Omit flags for checkbox selection.",
             "",
             "Options:",
-            "  --account <account-id>  Add feeds to a specific RSS account.",
+            "  --account <account-id>  Add/remove feeds in a specific RSS account.",
             "  --all                   Import every feed from the OPML file.",
             "  --select <indexes>      Import selected feed numbers, e.g. 1,3-5.",
             "  --json                  Output command results as JSON.",
@@ -247,6 +261,7 @@ def _rss_help() -> str:
 def _format_rss_cli_result(result: dict[str, Any]) -> str:
     account_id = str(result.get("account_id") or "rss")
     added = [str(item) for item in cast(list[object], result.get("added") or [])]
+    removed = [str(item) for item in cast(list[object], result.get("removed") or [])]
     feed_urls = cast(list[object], result.get("feed_urls") or [])
 
     if "imported_feed_count" in result:
@@ -255,6 +270,8 @@ def _format_rss_cli_result(result: dict[str, Any]) -> str:
         lines = [
             f"Imported {selected_count} of {imported_count} feed(s) into RSS account {account_id}."
         ]
+    elif "removed" in result:
+        lines = [f"Removed {len(removed)} feed(s) from RSS account {account_id}."]
     else:
         lines = [f"Added {len(added)} feed(s) to RSS account {account_id}."]
 
@@ -263,6 +280,11 @@ def _format_rss_cli_result(result: dict[str, Any]) -> str:
         lines.extend(f"  - {feed_url}" for feed_url in added[:20])
         if len(added) > 20:
             lines.append(f"  ... {len(added) - 20} more")
+    if removed:
+        lines.append("Removed feeds:")
+        lines.extend(f"  - {feed_url}" for feed_url in removed[:20])
+        if len(removed) > 20:
+            lines.append(f"  ... {len(removed) - 20} more")
     lines.append(f"Total configured feeds: {len(feed_urls)}")
     return "\n".join(lines)
 

@@ -361,6 +361,33 @@ def add_feed_urls(
     return creds
 
 
+def remove_feed_urls(
+    feed_urls: list[str],
+    *,
+    account_id: str | None = None,
+) -> tuple[RssCredentials, list[str]]:
+    """Remove exact feed URLs from the configured RSS account."""
+    selected_feed_urls = [part.strip() for part in feed_urls if part.strip()]
+    if not selected_feed_urls:
+        raise ValueError("Usage: agentgraph connector rss remove <feed-url> [feed-url...]")
+
+    resolved_account_id = account_id or "rss"
+    existing = load_rss_creds(resolved_account_id)
+    remove_set = set(selected_feed_urls)
+    updated_feed_urls = [feed_url for feed_url in existing.feed_urls if feed_url not in remove_set]
+    removed_feed_urls = [feed_url for feed_url in existing.feed_urls if feed_url in remove_set]
+    if not removed_feed_urls:
+        raise ValueError("No matching RSS feed URLs are configured for removal")
+
+    creds = RssCredentials(
+        feed_urls=updated_feed_urls,
+        account_id=resolved_account_id,
+        label=existing.label or "RSS",
+    )
+    upsert_rss_config_account(resolved_account_id, creds, make_default=True)
+    return creds, removed_feed_urls
+
+
 def resolve_feed_sources(sources: list[str]) -> list[str]:
     """Resolve user-provided feed or HTML sources to validated RSS/Atom feed URLs."""
     resolved: list[str] = []

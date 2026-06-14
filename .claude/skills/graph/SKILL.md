@@ -56,6 +56,7 @@ agentgraph connectors [--json] # auth_provider, auth_status/auth_detail, url_pat
 agentgraph connector <source> <command> [args...] [--json] # e.g. agentgraph connector rss add https://simonwillison.net/atom/everything/
 agentgraph connector <source> --help
 agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--json] # validates feeds; HTML pages/files resolve via RSS/Atom <link>
+agentgraph connector rss remove <feed-url> [feed-url...] [--json] # removes exact configured feed URLs
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
 
 # Show auth provider state (dedupes shared providers like Google)

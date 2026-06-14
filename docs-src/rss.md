@@ -49,6 +49,14 @@ For an interactive setup prompt, use:
 agentgraph auth rss
 ```
 
+## Remove feeds
+
+Remove one or more exact configured feed URLs:
+
+```bash
+agentgraph connector rss remove https://example.com/feed.xml
+```
+
 ## Import OPML
 
 Import an OPML export from a feed reader:

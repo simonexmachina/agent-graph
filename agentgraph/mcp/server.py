@@ -112,6 +112,8 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             RSS add validates feeds before saving. If an HTML page/file is
             supplied, the connector looks for an alternate RSS/Atom <link> and
             adds the discovered feed.
+            RSS remove is available as:
+            ["remove", "https://simonwillison.net/atom/everything/"].
             RSS OPML import is also available as:
             ["import-opml", "/path/to/feeds.opml", "--all"] or
             ["import-opml", "/path/to/feeds.opml", "--select", "1,3-5"].
