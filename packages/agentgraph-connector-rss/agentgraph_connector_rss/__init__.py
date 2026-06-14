@@ -27,7 +27,7 @@ from agentgraph.core.context import get_backend
 from agentgraph_connector_rss.auth import (
     add_feed_urls,
     import_opml_feeds,
-    load_rss_creds,
+    load_rss_settings,
     preview_feed,
     remove_feed_urls,
     resolve_feed_sources,
@@ -55,10 +55,10 @@ class RssConnector(BaseConnector):
     @classmethod
     def get_authenticated_user(cls) -> str | None:
         try:
-            creds = load_rss_creds()
+            settings = load_rss_settings()
         except RuntimeError:
             return None
-        return "RSS" if creds.feed_urls else None
+        return "RSS" if settings.feed_urls else None
 
     @classmethod
     def list_accounts(cls) -> list[ConnectorAccount]:
@@ -76,30 +76,30 @@ class RssConnector(BaseConnector):
         if command == "add":
             sources = _parse_feed_url_args(rest, command="add")
             feed_urls = resolve_feed_sources(sources)
-            creds = add_feed_urls(feed_urls, validate=False)
+            config = add_feed_urls(feed_urls, validate=False)
             return {
                 "status": "ok",
                 "source": cls.source,
-                "feed_urls": creds.feed_urls,
+                "feed_urls": config.feed_urls,
                 "added": feed_urls,
             }
         if command == "remove":
             feed_urls = _parse_feed_url_args(rest, command="remove")
-            creds, removed_feed_urls = remove_feed_urls(feed_urls)
+            config, removed_feed_urls = remove_feed_urls(feed_urls)
             return {
                 "status": "ok",
                 "source": cls.source,
-                "feed_urls": creds.feed_urls,
+                "feed_urls": config.feed_urls,
                 "removed": removed_feed_urls,
             }
         if command == "import-opml":
             options = _parse_import_opml_args(rest)
-            creds, feeds, selected_feeds = import_opml_feeds(**options)
+            config, feeds, selected_feeds = import_opml_feeds(**options)
             selected_feed_urls = [feed.feed_url for feed in selected_feeds]
             return {
                 "status": "ok",
                 "source": cls.source,
-                "feed_urls": creds.feed_urls,
+                "feed_urls": config.feed_urls,
                 "imported_feed_count": len(feeds),
                 "selected_feed_count": len(selected_feeds),
                 "added": selected_feed_urls,
@@ -119,10 +119,10 @@ class RssConnector(BaseConnector):
 
     def resolve_url(self, url: str) -> SourceReference | None:
         try:
-            creds = load_rss_creds()
+            settings = load_rss_settings()
         except RuntimeError:
             return None
-        if url not in creds.feed_urls:
+        if url not in settings.feed_urls:
             return None
         return SourceReference(
             source=self.source,
@@ -131,9 +131,9 @@ class RssConnector(BaseConnector):
         )
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
-        creds = load_rss_creds(account_id)
+        settings = load_rss_settings(account_id)
         combined = EntityBatch()
-        for feed_url in creds.feed_urls:
+        for feed_url in settings.feed_urls:
             batch = await _fetch_feed(feed_url, hydrate_documents=True)
             combined.entities.extend(batch.entities)
             combined.edges.extend(batch.edges)

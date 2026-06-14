@@ -18,7 +18,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 
-class RssCredentials(BaseModel):
+class RssConfig(BaseModel):
     feed_urls: list[str] = Field(default_factory=list)
 
 
@@ -58,12 +58,12 @@ class _FeedLinkParser(HTMLParser):
             self.hrefs.append(href)
 
 
-def load_rss_creds(account_id: str | None = None) -> RssCredentials:
+def load_rss_settings(account_id: str | None = None) -> RssConfig:
     _ = account_id
     data = load_rss_config()
     if data is None:
         raise RuntimeError("RSS feeds not configured. Run: agentgraph auth rss")
-    return RssCredentials(**data)
+    return RssConfig(**data)
 
 
 def load_rss_config() -> dict[str, Any] | None:
@@ -207,8 +207,8 @@ def add_feed_urls(
     feed_urls: list[str],
     *,
     validate: bool = True,
-) -> RssCredentials:
-    """Add feed URLs to the configured RSS feed list and return the updated credentials."""
+) -> RssConfig:
+    """Add feed URLs to the configured RSS feed list and return the updated config."""
     selected_feed_urls = [part.strip() for part in feed_urls if part.strip()]
     if not selected_feed_urls:
         raise ValueError("Usage: agentgraph connector rss add <feed-url> [feed-url...]")
@@ -216,7 +216,7 @@ def add_feed_urls(
         selected_feed_urls = resolve_feed_sources(selected_feed_urls)
 
     try:
-        existing = load_rss_creds()
+        existing = load_rss_settings()
         merged = [*existing.feed_urls]
     except RuntimeError:
         merged = []
@@ -225,29 +225,29 @@ def add_feed_urls(
         if feed_url not in merged:
             merged.append(feed_url)
 
-    creds = RssCredentials(feed_urls=merged)
-    save_rss_config(creds)
-    return creds
+    config = RssConfig(feed_urls=merged)
+    save_rss_config(config)
+    return config
 
 
 def remove_feed_urls(
     feed_urls: list[str],
-) -> tuple[RssCredentials, list[str]]:
+) -> tuple[RssConfig, list[str]]:
     """Remove exact feed URLs from the configured RSS feed list."""
     selected_feed_urls = [part.strip() for part in feed_urls if part.strip()]
     if not selected_feed_urls:
         raise ValueError("Usage: agentgraph connector rss remove <feed-url> [feed-url...]")
 
-    existing = load_rss_creds()
+    existing = load_rss_settings()
     remove_set = set(selected_feed_urls)
     updated_feed_urls = [feed_url for feed_url in existing.feed_urls if feed_url not in remove_set]
     removed_feed_urls = [feed_url for feed_url in existing.feed_urls if feed_url in remove_set]
     if not removed_feed_urls:
         raise ValueError("No matching RSS feed URLs are configured for removal")
 
-    creds = RssCredentials(feed_urls=updated_feed_urls)
-    save_rss_config(creds)
-    return creds, removed_feed_urls
+    config = RssConfig(feed_urls=updated_feed_urls)
+    save_rss_config(config)
+    return config, removed_feed_urls
 
 
 def resolve_feed_sources(sources: list[str]) -> list[str]:
@@ -412,14 +412,14 @@ def import_opml_feeds(
     *,
     include_all: bool = False,
     selection: str | None = None,
-) -> tuple[RssCredentials, list[OpmlFeed], list[OpmlFeed]]:
+) -> tuple[RssConfig, list[OpmlFeed], list[OpmlFeed]]:
     feeds = parse_opml_feeds(path)
     if not feeds:
         raise ValueError("No RSS/Atom feeds found in OPML file")
 
     configured_feed_urls: list[str] = []
     try:
-        configured_feed_urls = load_rss_creds().feed_urls
+        configured_feed_urls = load_rss_settings().feed_urls
     except RuntimeError:
         configured_feed_urls = []
 
@@ -432,8 +432,8 @@ def import_opml_feeds(
     if not selected_feeds:
         raise ValueError("No feeds selected")
 
-    creds = add_feed_urls([feed.feed_url for feed in selected_feeds])
-    return creds, feeds, selected_feeds
+    config = add_feed_urls([feed.feed_url for feed in selected_feeds])
+    return config, feeds, selected_feeds
 
 
 def _parse_feed_selection(selection: str, feed_count: int) -> list[int]:
@@ -549,22 +549,22 @@ async def preview_feed(feed_url: str, *, count: int = 3) -> dict[str, Any]:
 
 async def verify_rss_auth(account_id: str | None = None) -> tuple[str, str | None]:
     try:
-        creds = load_rss_creds(account_id)
+        settings = load_rss_settings(account_id)
     except RuntimeError:
         return ("missing", None)
 
-    if not creds.feed_urls:
+    if not settings.feed_urls:
         return ("invalid", "No RSS feed URLs configured")
 
     try:
-        preview = await preview_feed(creds.feed_urls[0], count=1)
+        preview = await preview_feed(settings.feed_urls[0], count=1)
     except Exception as exc:
         return ("invalid", str(exc))
 
     entry_count = len(cast(list[object], preview.get("entries") or []))
     if preview.get("bozo") and entry_count == 0:
         return ("invalid", str(preview.get("bozo_exception") or "Feed could not be parsed"))
-    return ("ok", f"{len(creds.feed_urls)} feed(s), sample returned {entry_count} article(s)")
+    return ("ok", f"{len(settings.feed_urls)} feed(s), sample returned {entry_count} article(s)")
 
 
 def run_rss_flow(
@@ -586,8 +586,8 @@ def run_rss_flow(
         [part.strip() for part in raw_feeds.split(",") if part.strip()]
     )
 
-    creds = RssCredentials(feed_urls=selected_feed_urls)
-    save_rss_config(creds)
+    config = RssConfig(feed_urls=selected_feed_urls)
+    save_rss_config(config)
 
     typer.echo(f"\nRSS feeds saved to {_rss_config_write_path()}")
     if selected_feed_urls:

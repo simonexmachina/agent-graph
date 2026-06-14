@@ -15,7 +15,7 @@ import pytest
 from agentgraph_connector_rss import RssConnector, _fetch_feed
 from agentgraph_connector_rss.auth import (
     OpmlFeed,
-    RssCredentials,
+    RssConfig,
     _checkbox_select_opml_feeds,
     add_feed_urls,
     import_opml_feeds,
@@ -52,8 +52,8 @@ def test_rss_can_handle_configured_feed_urls() -> None:
     connector = RssConnector()
 
     with patch(
-        "agentgraph_connector_rss.load_rss_creds",
-        return_value=RssCredentials(feed_urls=["https://example.com/feed.xml"]),
+        "agentgraph_connector_rss.load_rss_settings",
+        return_value=RssConfig(feed_urls=["https://example.com/feed.xml"]),
     ):
         assert connector.can_handle("https://example.com/feed.xml")
         assert not connector.can_handle("http://example.com/rss")
@@ -62,7 +62,7 @@ def test_rss_can_handle_configured_feed_urls() -> None:
 def test_rss_can_handle_returns_false_without_config() -> None:
     connector = RssConnector()
 
-    with patch("agentgraph_connector_rss.load_rss_creds", side_effect=RuntimeError("missing")):
+    with patch("agentgraph_connector_rss.load_rss_settings", side_effect=RuntimeError("missing")):
         assert not connector.can_handle("https://example.com/feed.xml")
     assert not connector.can_handle("file:///tmp/feed.xml")
 
@@ -77,7 +77,7 @@ def test_rss_config_roundtrip_uses_config_toml(
     monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
 
     save_rss_config(
-        RssCredentials(
+        RssConfig(
             feed_urls=["https://example.com/feed.xml"],
         )
     )
@@ -101,7 +101,7 @@ def test_rss_config_roundtrip_uses_config_yaml_when_present(
     monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", config_yaml_file)
 
     save_rss_config(
-        RssCredentials(
+        RssConfig(
             feed_urls=["https://example.com/feed.xml"],
         )
     )
@@ -149,7 +149,7 @@ def test_add_feed_urls_creates_rss_config(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
+        "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
     )
     monkeypatch.setattr(
@@ -157,9 +157,9 @@ def test_add_feed_urls_creates_rss_config(
         lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
-    creds = add_feed_urls(["https://example.com/feed.xml"])
+    config = add_feed_urls(["https://example.com/feed.xml"])
 
-    assert creds.feed_urls == ["https://example.com/feed.xml"]
+    assert config.feed_urls == ["https://example.com/feed.xml"]
     assert saved["data"] == {
         "feed_urls": ["https://example.com/feed.xml"],
     }
@@ -172,7 +172,7 @@ def test_add_feed_urls_rejects_invalid_feed_before_saving(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedNonFeed())
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
+        "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
     )
     monkeypatch.setattr(
@@ -192,8 +192,8 @@ def test_remove_feed_urls_updates_existing_rss_config(
     saved: dict[str, object] = {}
 
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
-        lambda account_id=None: RssCredentials(
+        "agentgraph_connector_rss.auth.load_rss_settings",
+        lambda account_id=None: RssConfig(
             feed_urls=[
                 "https://example.com/one.xml",
                 "https://example.com/two.xml",
@@ -205,10 +205,10 @@ def test_remove_feed_urls_updates_existing_rss_config(
         lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
-    creds, removed = remove_feed_urls(["https://example.com/two.xml"])
+    config, removed = remove_feed_urls(["https://example.com/two.xml"])
 
     assert removed == ["https://example.com/two.xml"]
-    assert creds.feed_urls == ["https://example.com/one.xml"]
+    assert config.feed_urls == ["https://example.com/one.xml"]
     assert saved == {
         "data": {
             "feed_urls": ["https://example.com/one.xml"],
@@ -220,8 +220,8 @@ def test_remove_feed_urls_rejects_unconfigured_feed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
-        lambda account_id=None: RssCredentials(
+        "agentgraph_connector_rss.auth.load_rss_settings",
+        lambda account_id=None: RssConfig(
             feed_urls=["https://example.com/one.xml"],
         ),
     )
@@ -276,7 +276,7 @@ def test_rss_connector_add_html_file_reports_discovered_feed_url(
 
     monkeypatch.setattr(feedparser, "parse", fake_parse)
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
+        "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
     )
     monkeypatch.setattr(
@@ -298,8 +298,8 @@ def test_rss_connector_remove_reports_removed_feed(
     saved: dict[str, object] = {}
 
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
-        lambda account_id=None: RssCredentials(
+        "agentgraph_connector_rss.auth.load_rss_settings",
+        lambda account_id=None: RssConfig(
             feed_urls=[
                 "https://example.com/one.xml",
                 "https://example.com/two.xml",
@@ -416,7 +416,7 @@ def test_checkbox_select_opml_feeds_uses_questionary(monkeypatch: pytest.MonkeyP
     assert selected == [OpmlFeed(title="Two", feed_url="https://example.com/two.xml")]
 
 
-def test_import_opml_prompt_uses_existing_rss_account_state(
+def test_import_opml_prompt_uses_existing_rss_feed_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -443,8 +443,8 @@ def test_import_opml_prompt_uses_existing_rss_account_state(
         return [feeds[0]]
 
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
-        lambda account_id=None: RssCredentials(
+        "agentgraph_connector_rss.auth.load_rss_settings",
+        lambda account_id=None: RssConfig(
             feed_urls=["https://example.com/two.xml"],
         ),
     )
@@ -475,7 +475,7 @@ def test_rss_connector_import_opml_all(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
+        "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
     )
     monkeypatch.setattr(
@@ -513,7 +513,7 @@ def test_rss_connector_import_opml_select(
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth.load_rss_creds",
+        "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
     )
     monkeypatch.setattr(
@@ -532,15 +532,15 @@ def test_rss_connector_import_opml_select(
 
 @pytest.mark.asyncio
 async def test_verify_rss_auth_missing() -> None:
-    with patch("agentgraph_connector_rss.auth.load_rss_creds", side_effect=RuntimeError("missing")):
+    with patch("agentgraph_connector_rss.auth.load_rss_settings", side_effect=RuntimeError("missing")):
         assert await verify_rss_auth() == ("missing", None)
 
 
 @pytest.mark.asyncio
 async def test_verify_rss_auth_requires_feed_urls() -> None:
     with patch(
-        "agentgraph_connector_rss.auth.load_rss_creds",
-        return_value=RssCredentials(feed_urls=[]),
+        "agentgraph_connector_rss.auth.load_rss_settings",
+        return_value=RssConfig(feed_urls=[]),
     ):
         assert await verify_rss_auth() == ("invalid", "No RSS feed URLs configured")
 
@@ -549,8 +549,8 @@ async def test_verify_rss_auth_requires_feed_urls() -> None:
 async def test_verify_rss_auth_uses_feed_preview() -> None:
     with (
         patch(
-            "agentgraph_connector_rss.auth.load_rss_creds",
-            return_value=RssCredentials(feed_urls=["https://example.com/feed.xml"]),
+            "agentgraph_connector_rss.auth.load_rss_settings",
+            return_value=RssConfig(feed_urls=["https://example.com/feed.xml"]),
         ),
         patch(
             "agentgraph_connector_rss.auth.preview_feed",
