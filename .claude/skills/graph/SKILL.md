@@ -70,7 +70,7 @@ agentgraph auth rss [--add] [--account <account-id>]      # RSS/Atom feed URLs i
 # Server
 agentgraph serve [--reload]
 agentgraph mcp-serve
-agentgraph mcp-config   # config snippet for Claude Desktop, Claude Code, and ChatGPT developer mode
+agentgraph mcp-config   # stdio config for Claude Desktop/Claude Code; ChatGPT uses a tunneled HTTPS /mcp endpoint
 ```
 
 ## MCP tool equivalents

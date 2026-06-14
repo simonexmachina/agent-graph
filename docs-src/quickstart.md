@@ -54,4 +54,4 @@ agentgraph query --type Document --limit 5
 agentgraph mcp-config
 ```
 
-Use the printed config in Claude Desktop or Claude Code, or expose SSE / streaming HTTP for ChatGPT developer mode.
+Use the printed stdio config in Claude Desktop or Claude Code. For ChatGPT developer mode, run AgentGraph with streamable HTTP, expose the local `/mcp` endpoint through HTTPS, and create an app/connector using that public `/mcp` URL.

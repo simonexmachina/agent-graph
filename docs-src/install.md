@@ -78,7 +78,7 @@ agentgraph mcp-config
 
 See [`mcp-config`](/commands/mcp-config.html) for the command details and transport examples.
 
-For ChatGPT, enable Developer mode and point a remote MCP connector at an AgentGraph SSE or streaming HTTP endpoint.
+For ChatGPT, do not use the stdio JSON config. Run `agentgraph mcp-serve --transport streamable-http --port 8808`, expose `http://127.0.0.1:8808/mcp` through an HTTPS tunnel, then create an app/connector in ChatGPT developer mode with the public URL ending in `/mcp`.
 
 ## Run in the background
 

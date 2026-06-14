@@ -225,6 +225,9 @@ def test_mcp_config_includes_chatgpt() -> None:
     assert "Claude Code" in result.output
     assert "ChatGPT" in result.output
     assert "streamable-http" in result.output
+    assert "do not use the stdio JSON" in result.output
+    assert "http://127.0.0.1:8808/mcp" in result.output
+    assert "https://your-tunnel.example/mcp" in result.output
 
 
 class _FakeConnector:

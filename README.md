@@ -101,7 +101,7 @@ agentgraph query --type Document --limit 5
 agentgraph mcp-config
 ```
 
-Use the printed config with Claude Desktop or Claude Code, or expose SSE / streaming HTTP for ChatGPT developer mode.
+Use the printed stdio config with Claude Desktop or Claude Code. For ChatGPT developer mode, run AgentGraph with streamable HTTP and expose the local `/mcp` endpoint through HTTPS before creating the app/connector.
 
 ## How It Works
 
@@ -162,6 +162,8 @@ agentgraph mcp-serve
 agentgraph mcp-serve --transport sse --port 8808
 agentgraph mcp-serve --transport streamable-http --host 0.0.0.0 --port 8808
 ```
+
+ChatGPT uses the streamable HTTP endpoint, such as `https://your-tunnel.example/mcp`, not the stdio JSON config.
 
 See the full [command reference](docs-src/commands/index.md) and [MCP tool reference](docs-src/mcp/index.md).
 
