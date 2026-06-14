@@ -1,11 +1,9 @@
-"""CLI query commands — call the running server when available, fall back to local."""
+"""CLI query commands backed by the running AgentGraph server."""
 
 from __future__ import annotations
 
-import asyncio
 import json
-from collections.abc import Awaitable
-from typing import Any
+from typing import Any, NoReturn
 
 import httpx
 from rich.console import Console
@@ -21,11 +19,16 @@ def _server_base() -> str:
     return f"http://{s.server_host}:{s.server_port}/api/cli"
 
 
-def _get(path: str, params: dict[str, Any] | None = None) -> Any | None:
-    """
-    GET from the server's CLI API.  Returns parsed JSON on success, None if the
-    server is unreachable (connection refused / timeout).
-    """
+def _server_unavailable(exc: Exception) -> NoReturn:
+    console.print(
+        f"[red]AgentGraph server is not available at {_server_base()}.[/red]\n"
+        "Start it with: [bold]agentgraph serve[/bold]",
+    )
+    raise SystemExit(1) from exc
+
+
+def _get(path: str, params: dict[str, Any] | None = None) -> Any:
+    """GET from the server's CLI API and return parsed JSON."""
     try:
         resp = httpx.get(
             f"{_server_base()}{path}",
@@ -34,14 +37,12 @@ def _get(path: str, params: dict[str, Any] | None = None) -> Any | None:
         )
         resp.raise_for_status()
         return resp.json()
-    except httpx.ConnectError:
-        return None
-    except httpx.TimeoutException:
-        return None
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        _server_unavailable(exc)
 
 
-def _post(path: str, params: dict[str, Any] | None = None) -> Any | None:
-    """POST to the server's CLI API. Returns parsed JSON on success, None if unreachable."""
+def _post(path: str, params: dict[str, Any] | None = None) -> Any:
+    """POST to the server's CLI API and return parsed JSON."""
     try:
         resp = httpx.post(
             f"{_server_base()}{path}",
@@ -50,32 +51,8 @@ def _post(path: str, params: dict[str, Any] | None = None) -> Any | None:
         )
         resp.raise_for_status()
         return resp.json()
-    except httpx.ConnectError:
-        return None
-    except httpx.TimeoutException:
-        return None
-
-
-def _run(coro: Any) -> Any:
-    return asyncio.run(coro)
-
-
-def _run_local(coro: Awaitable[Any]) -> Any:
-    async def _with_backend() -> Any:
-        from agentgraph.connectors.registry import bootstrap
-        from agentgraph.core.runtime import backend_context
-
-        bootstrap()
-        async with backend_context():
-            return await coro
-
-    return _run(_with_backend())
-
-
-def _warn_local() -> None:
-    console.print(
-        "[dim]Server not running — using local DB (embedding model will load)[/dim]"
-    )
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        _server_unavailable(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -97,12 +74,6 @@ def cmd_search(
         params["platform"] = platform
 
     results = _get("/search", params)
-    if results is None:
-        _warn_local()
-        from agentgraph.graph.query import search_entities
-        results = _run_local(search_entities(
-            query, entity_types=entity_types or None, limit=limit, min_score=min_score, platform=platform
-        ))
 
     if as_json:
         console.print_json(json.dumps(results, default=str))
@@ -156,28 +127,13 @@ def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
             raise
         entity = None
     if entity is None:
-        _warn_local()
-        from agentgraph.graph.query import get_entity, get_entity_by_url
-
-        entity = _run_local(get_entity_by_url(entity_id) if target_is_url else get_entity(entity_id))
-
-    if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
 
     if resolve and _is_stub(entity):
         console.print("[dim]Stub entity — fetching from source…[/dim]")
-        fetch_result = _post("/fetch-entity", params={"entity_id": entity["id"]})
-        refreshed = _get(f"/entity/{entity['id']}") if fetch_result is not None else None
-        if refreshed is None:
-            from agentgraph.graph.fetch import fetch_entity_by_id
-            from agentgraph.graph.query import get_entity
-
-            try:
-                _run_local(fetch_entity_by_id(entity["id"]))
-                refreshed = _run_local(get_entity(entity["id"]))
-            except ValueError as exc:
-                console.print(f"[red]{exc}[/red]")
+        _post("/fetch-entity", params={"entity_id": entity["id"]})
+        refreshed = _get(f"/entity/{entity['id']}")
         if refreshed is not None:
             entity = refreshed
 
@@ -207,15 +163,13 @@ def cmd_edges(
     if edge_type:
         params["edge_type"] = edge_type
 
-    edges = _get(f"/edges/{entity_id}", params)
-    if edges is None:
-        _warn_local()
-        from agentgraph.graph.query import get_edges, get_entity
-        entity = _run_local(get_entity(entity_id))
-        if entity is None:
-            console.print(f"[red]Entity {entity_id!r} not found.[/red]")
-            return
-        edges = _run_local(get_edges(entity["id"], edge_type=edge_type, direction=direction))
+    try:
+        edges = _get(f"/edges/{entity_id}", params)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code != 404:
+            raise
+        console.print(f"[red]Entity {entity_id!r} not found.[/red]")
+        return
 
     if as_json:
         console.print_json(json.dumps(edges, default=str))
@@ -248,36 +202,21 @@ def cmd_edges(
 # ---------------------------------------------------------------------------
 
 def cmd_traverse(entity_id: str, max_depth: int, as_json: bool, resolve: bool = False) -> None:
-    result = _get(f"/traverse/{entity_id}", {"depth": max_depth})
-    if result is None:
-        _warn_local()
-        from agentgraph.graph.query import get_entity, traverse_graph
-        entity = _run_local(get_entity(entity_id))
-        if entity is None:
-            console.print(f"[red]Entity {entity_id!r} not found.[/red]")
-            return
-        result = _run_local(traverse_graph(entity["id"], max_depth=max_depth))
+    try:
+        result = _get(f"/traverse/{entity_id}", {"depth": max_depth})
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code != 404:
+            raise
+        console.print(f"[red]Entity {entity_id!r} not found.[/red]")
+        return
 
     if resolve and result:
         stubs = [n for n in result.get("nodes", []) if _is_stub(n)]
         if stubs:
             console.print(f"[dim]Resolving {len(stubs)} stub node(s)…[/dim]")
             for stub in stubs:
-                fetch_result = _post("/fetch-entity", params={"entity_id": stub["id"]})
-                if fetch_result is None:
-                    from agentgraph.graph.fetch import fetch_entity_by_id
-
-                    try:
-                        _run_local(fetch_entity_by_id(stub["id"]))
-                    except ValueError as exc:
-                        console.print(f"[red]{exc}[/red]")
+                _post("/fetch-entity", params={"entity_id": stub["id"]})
             refreshed = _get(f"/traverse/{entity_id}", {"depth": max_depth})
-            if refreshed is None:
-                from agentgraph.graph.query import get_entity, traverse_graph
-
-                entity = _run_local(get_entity(entity_id))
-                if entity is not None:
-                    refreshed = _run_local(traverse_graph(entity["id"], max_depth=max_depth))
             if refreshed is not None:
                 result = refreshed
 
@@ -316,15 +255,6 @@ def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
             detail = str(exc)
         console.print(f"[red]{detail}[/red]")
         return
-    if result is None:
-        _warn_local()
-        from agentgraph.graph.fetch import fetch_entity
-        try:
-            result = _run_local(fetch_entity(platform, resource_id))
-        except ValueError as exc:
-            console.print(f"[red]{exc}[/red]")
-            return
-
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -345,15 +275,6 @@ def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
             detail = str(exc)
         console.print(f"[red]{detail}[/red]")
         return
-    if result is None:
-        _warn_local()
-        from agentgraph.graph.fetch import fetch_entity_by_id
-        try:
-            result = _run_local(fetch_entity_by_id(entity_id))
-        except ValueError as exc:
-            console.print(f"[red]{exc}[/red]")
-            return
-
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -365,17 +286,17 @@ def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
 
 
 def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None:
-    async def _download() -> dict[str, Any]:
-        from agentgraph.core.runtime import backend_context
-        from agentgraph.graph.download import download_entity
-
-        async with backend_context():
-            return await download_entity(entity_id, output_path)
-
     try:
-        result = _run(_download())
-    except ValueError as exc:
-        console.print(f"[red]{exc}[/red]")
+        params: dict[str, Any] = {"entity_id": entity_id}
+        if output_path is not None:
+            params["output_path"] = output_path
+        result = _post("/download", params=params)
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = exc.response.json().get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        console.print(f"[red]{detail}[/red]")
         return
 
     if as_json:
@@ -396,27 +317,8 @@ def cmd_bookmark(target: str, bookmarked: bool, as_json: bool) -> None:
             detail = exc.response.json().get("detail", str(exc))
         except Exception:
             detail = str(exc)
-        if exc.response.status_code == 404 and detail == "Not Found":
-            result = None
-        else:
-            console.print(f"[red]{detail}[/red]")
-            return
-    if result is None:
-        _warn_local()
-        from agentgraph.core.runtime import backend_context
-        from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
-
-        async def _bookmark() -> dict[str, Any]:
-            async with backend_context():
-                if bookmarked:
-                    return await bookmark_target(target)
-                return await set_entity_bookmark(target, False)
-
-        try:
-            result = _run(_bookmark())
-        except ValueError as exc:
-            console.print(f"[red]{exc}[/red]")
-            return
+        console.print(f"[red]{detail}[/red]")
+        return
 
     if as_json:
         console.print_json(json.dumps(result, default=str))
@@ -435,25 +337,8 @@ def cmd_delete(target: str, as_json: bool) -> None:
             detail = exc.response.json().get("detail", str(exc))
         except Exception:
             detail = str(exc)
-        if exc.response.status_code == 404 and detail == "Not Found":
-            result = None
-        else:
-            console.print(f"[red]{detail}[/red]")
-            return
-    if result is None:
-        _warn_local()
-        from agentgraph.core.runtime import backend_context
-        from agentgraph.graph.delete import delete_entity
-
-        async def _delete() -> dict[str, Any]:
-            async with backend_context():
-                return await delete_entity(target)
-
-        try:
-            result = _run(_delete())
-        except ValueError as exc:
-            console.print(f"[red]{exc}[/red]")
-            return
+        console.print(f"[red]{detail}[/red]")
+        return
 
     if as_json:
         console.print_json(json.dumps(result, default=str))
@@ -481,16 +366,6 @@ def cmd_unify_persons(
             detail = str(exc)
         console.print(f"[red]{detail}[/red]")
         return
-    if result is None:
-        _warn_local()
-        from agentgraph.graph.person import unify_persons
-
-        try:
-            result = _run_local(unify_persons(primary_entity_id, duplicate_entity_ids))
-        except ValueError as exc:
-            console.print(f"[red]{exc}[/red]")
-            return
-
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -526,20 +401,6 @@ def cmd_query(
         params["has_attachments"] = True
 
     results = _get("/query", params)
-    if results is None:
-        _warn_local()
-        from agentgraph.graph.query import query_by_filter
-        results = _run_local(
-            query_by_filter(
-                entity_type,
-                filters=filters,
-                limit=limit,
-                order_by=order_by,
-                since=since,
-                authored_by_me=authored_by_me,
-                has_attachments=has_attachments,
-            )
-        )
 
     if as_json:
         console.print_json(json.dumps(results, default=str))
@@ -574,10 +435,6 @@ def cmd_poll(source: str | None, as_json: bool) -> None:
             detail = str(exc)
         console.print(f"[red]{detail}[/red]")
         return
-    if result is None:
-        console.print("[red]Server not available. Start with: agentgraph serve[/red]")
-        return
-
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -599,10 +456,6 @@ def cmd_ingest(source: str, as_json: bool) -> None:
             detail = str(exc)
         console.print(f"[red]{detail}[/red]")
         return
-    if result is None:
-        console.print("[red]Server not available. Start with: agentgraph serve[/red]")
-        return
-
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return

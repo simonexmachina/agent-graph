@@ -305,6 +305,20 @@ async def cli_fetch(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/download")
+async def cli_download(
+    entity_id: str = Query(...),
+    output_path: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Download an entity's source file using connector auth."""
+    from agentgraph.graph.download import download_entity
+
+    try:
+        return await download_entity(entity_id, output_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/bookmark")
 async def cli_bookmark(
     target: str | None = Query(default=None),

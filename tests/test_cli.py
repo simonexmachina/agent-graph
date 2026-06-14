@@ -86,28 +86,18 @@ def test_get_url_uses_entity_by_url_endpoint() -> None:
     get.assert_called_once_with("/entity-by-url", {"url": "https://example.com/page"})
 
 
-def test_get_url_falls_back_when_running_server_lacks_endpoint() -> None:
+def test_get_url_reports_not_found_from_server() -> None:
     from agentgraph.cli_query import cmd_get
 
     response = httpx.Response(
         404,
-        json={"detail": "Not Found"},
+        json={"detail": "Entity not found"},
         request=httpx.Request("GET", "http://127.0.0.1:8765/api/cli/entity-by-url"),
     )
-    entity: EntityResult = {
-        "id": "entity-12345678",
-        "entity_type": "Document",
-        "platform": "web",
-        "title": "Page",
-        "metadata": {},
-    }
     error = httpx.HTTPStatusError("not found", request=response.request, response=response)
 
-    with patch("agentgraph.cli_query._get", side_effect=error), \
-         patch("agentgraph.graph.query.get_entity_by_url", new=AsyncMock(return_value=entity)) as get_by_url:
+    with patch("agentgraph.cli_query._get", side_effect=error):
         cmd_get("https://example.com/page", as_json=True)
-
-    get_by_url.assert_awaited_once_with("https://example.com/page")
 
 
 def test_get_prints_raw_content_without_rich_markup_errors() -> None:
@@ -126,14 +116,9 @@ def test_get_prints_raw_content_without_rich_markup_errors() -> None:
         cmd_get("entity-12345678", as_json=False)
 
 
-def test_bookmark_falls_back_when_running_server_lacks_endpoint() -> None:
+def test_bookmark_uses_server_endpoint() -> None:
     from agentgraph.cli_query import cmd_bookmark
 
-    response = httpx.Response(
-        404,
-        json={"detail": "Not Found"},
-        request=httpx.Request("POST", "http://127.0.0.1:8765/api/cli/bookmark"),
-    )
     entity = {
         "id": "entity-12345678",
         "title": "Bookmarked",
@@ -141,55 +126,18 @@ def test_bookmark_falls_back_when_running_server_lacks_endpoint() -> None:
         "bookmarked": True,
     }
 
-    error = httpx.HTTPStatusError("not found", request=response.request, response=response)
-
-    with patch("agentgraph.cli_query._post", side_effect=error), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch(
-             "agentgraph.graph.bookmark.bookmark_target",
-             new=AsyncMock(return_value=entity),
-         ) as bookmark_target:
+    with patch("agentgraph.cli_query._post", return_value=entity) as post:
         cmd_bookmark("https://example.com/page", bookmarked=True, as_json=True)
 
-    bookmark_target.assert_awaited_once_with("https://example.com/page")
-
-
-def test_bookmark_remove_falls_back_when_running_server_lacks_endpoint() -> None:
-    from agentgraph.cli_query import cmd_bookmark
-
-    response = httpx.Response(
-        404,
-        json={"detail": "Not Found"},
-        request=httpx.Request("POST", "http://127.0.0.1:8765/api/cli/bookmark"),
+    post.assert_called_once_with(
+        "/bookmark",
+        params={"target": "https://example.com/page", "bookmarked": True},
     )
-    entity = {
-        "id": "entity-12345678",
-        "title": "Unbookmarked",
-        "platform_entity_id": "ref",
-        "bookmarked": False,
-    }
-
-    error = httpx.HTTPStatusError("not found", request=response.request, response=response)
-
-    with patch("agentgraph.cli_query._post", side_effect=error), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch(
-             "agentgraph.graph.bookmark.set_entity_bookmark",
-             new=AsyncMock(return_value=entity),
-         ) as set_entity_bookmark:
-        cmd_bookmark("abc123", bookmarked=False, as_json=True)
-
-    set_entity_bookmark.assert_awaited_once_with("abc123", False)
 
 
-def test_delete_falls_back_when_running_server_lacks_endpoint() -> None:
+def test_delete_uses_server_endpoint() -> None:
     from agentgraph.cli_query import cmd_delete
 
-    response = httpx.Response(
-        404,
-        json={"detail": "Not Found"},
-        request=httpx.Request("POST", "http://127.0.0.1:8765/api/cli/delete"),
-    )
     result = {
         "deleted": True,
         "entity": {
@@ -199,91 +147,76 @@ def test_delete_falls_back_when_running_server_lacks_endpoint() -> None:
         },
     }
 
-    error = httpx.HTTPStatusError("not found", request=response.request, response=response)
-
-    with patch("agentgraph.cli_query._post", side_effect=error), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch(
-             "agentgraph.graph.delete.delete_entity",
-             new=AsyncMock(return_value=result),
-         ) as delete_entity:
+    with patch("agentgraph.cli_query._post", return_value=result) as post:
         cmd_delete("abc123", as_json=True)
 
-    delete_entity.assert_awaited_once_with("abc123")
+    post.assert_called_once_with("/delete", params={"target": "abc123"})
 
 
-def test_query_fallback_initializes_local_backend() -> None:
+def test_query_exits_when_server_unavailable() -> None:
     from agentgraph.cli_query import cmd_query
 
-    entered: list[bool] = []
-    results: list[EntityResult] = [
-        {
-            "id": "entity-12345678",
-            "entity_type": "Thread",
-            "platform": "gmail",
-            "title": "Fallback result",
-            "metadata": {},
-        }
-    ]
+    with patch("agentgraph.cli_query._get", side_effect=SystemExit(1)):
+        with pytest.raises(SystemExit):
+            cmd_query(
+                entity_type="Thread",
+                filters={},
+                limit=5,
+                order_by="updated_at",
+                since=None,
+                authored_by_me=False,
+                as_json=True,
+            )
 
-    @asynccontextmanager
-    async def tracking_backend_context() -> AsyncGenerator[Any, None]:
-        entered.append(True)
-        yield MagicMock()
 
-    with patch("agentgraph.cli_query._get", return_value=None), \
-         patch("agentgraph.connectors.registry.bootstrap") as bootstrap, \
-         patch("agentgraph.core.runtime.backend_context", tracking_backend_context), \
-         patch(
-             "agentgraph.graph.query.query_by_filter",
-             new=AsyncMock(return_value=results),
-         ) as query_by_filter:
-        cmd_query(
-            entity_type="Thread",
-            filters={},
-            limit=5,
-            order_by="updated_at",
-            since=None,
-            authored_by_me=False,
-            as_json=True,
-        )
+def test_download_uses_server_endpoint() -> None:
+    from agentgraph.cli_query import cmd_download
 
-    assert entered == [True]
-    bootstrap.assert_called_once_with()
-    query_by_filter.assert_awaited_once_with(
-        "Thread",
-        filters={},
-        limit=5,
-        order_by="updated_at",
-        since=None,
-        authored_by_me=False,
-        has_attachments=False,
+    result = {
+        "filename": "sheet.xlsx",
+        "bytes": 123,
+        "path": "/tmp/sheet.xlsx",
+    }
+
+    with patch("agentgraph.cli_query._post", return_value=result) as post:
+        cmd_download("gsheets/sheet-id", output_path="/tmp", as_json=True)
+
+    post.assert_called_once_with(
+        "/download",
+        params={"entity_id": "gsheets/sheet-id", "output_path": "/tmp"},
     )
 
 
-def test_fetch_fallback_initializes_backend_and_connectors() -> None:
+def test_fetch_uses_server_endpoint() -> None:
     from agentgraph.cli_query import cmd_fetch
 
-    entered: list[bool] = []
     fetch_result = {"entities": 1, "persons": 0, "edges": 0}
 
-    @asynccontextmanager
-    async def tracking_backend_context() -> AsyncGenerator[Any, None]:
-        entered.append(True)
-        yield MagicMock()
-
-    with patch("agentgraph.cli_query._post", return_value=None), \
-         patch("agentgraph.connectors.registry.bootstrap") as bootstrap, \
-         patch("agentgraph.core.runtime.backend_context", tracking_backend_context), \
-         patch(
-             "agentgraph.graph.fetch.fetch_entity",
-             new=AsyncMock(return_value=fetch_result),
-         ) as fetch_entity:
+    with patch("agentgraph.cli_query._post", return_value=fetch_result) as post:
         cmd_fetch("gsheets", "sheet-id", as_json=True)
 
-    assert entered == [True]
-    bootstrap.assert_called_once_with()
-    fetch_entity.assert_awaited_once_with("gsheets", "sheet-id")
+    post.assert_called_once_with(
+        "/fetch",
+        params={"platform": "gsheets", "resource_id": "sheet-id"},
+    )
+
+
+def test_server_unavailable_exits_nonzero() -> None:
+    from agentgraph.cli_query import cmd_query
+
+    with patch("httpx.get", side_effect=httpx.ConnectError("offline")):
+        with pytest.raises(SystemExit) as exc:
+            cmd_query(
+                entity_type="Thread",
+                filters={},
+                limit=5,
+                order_by="updated_at",
+                since=None,
+                authored_by_me=False,
+                as_json=True,
+            )
+
+    assert exc.value.code == 1
 
 
 def test_auth_help() -> None:

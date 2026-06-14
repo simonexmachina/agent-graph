@@ -371,6 +371,22 @@ async def test_cli_bookmark_can_clear_bookmark() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cli_download_downloads_entity() -> None:
+    from agentgraph.server.cli_api import cli_download
+
+    fake_result: dict[str, Any] = {"path": "/tmp/file.pdf", "bytes": 7, "filename": "file.pdf"}
+
+    with patch(
+        "agentgraph.graph.download.download_entity",
+        new=AsyncMock(return_value=fake_result),
+    ) as download_entity:
+        result = await cli_download(entity_id="abc123", output_path="/tmp")
+
+    assert result == fake_result
+    download_entity.assert_awaited_once_with("abc123", "/tmp")
+
+
+@pytest.mark.asyncio
 async def test_bookmark_entity_missing_raises_value_error() -> None:
     from agentgraph.graph.bookmark import bookmark_entity
 

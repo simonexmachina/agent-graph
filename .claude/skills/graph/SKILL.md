@@ -111,7 +111,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 
 ## Notes
 
-- The CLI automatically falls back to local DB if the server isn't running (prints a dim warning)
+- Graph data commands require the AgentGraph server. If a command reports the server is unavailable, run `agentgraph serve`.
 - Use `--json` when you need to parse results programmatically
 - Bookmark targets accept: full UUID, UUID prefix, platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`), or HTTP(S) URL
 - `agentgraph bookmark --remove <entity-id|platform/ref|url>` clears bookmark protection for existing graph entities
