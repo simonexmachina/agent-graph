@@ -59,7 +59,7 @@ agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--json] #
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
 
 # Show auth provider state (dedupes shared providers like Google)
-agentgraph auth status [--json] # provider, connectors[], auth_status/auth_detail, accounts[]
+agentgraph auth [--json] status # provider, connectors[], auth_status/auth_detail, accounts[]
 
 # Authenticate connectors/providers
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
@@ -79,7 +79,7 @@ When using AgentGraph through MCP instead of the CLI, use these equivalent tools
 
 ```text
 agentgraph connectors              -> list_connectors_tool()
-agentgraph auth status             -> list_auth_providers_tool()
+agentgraph auth [--json] status    -> list_auth_providers_tool()
 agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
 agentgraph search ...              -> search_entities_tool(...)
 agentgraph get ...                 -> get_entity_tool(entity_id)
@@ -129,7 +129,7 @@ An entity is a **stub** when it has no title and no content — it was reference
 
 When the user asks about graph data:
 1. Run `agentgraph connectors --json` to verify the relevant connector is installed and to inspect its last sync state
-2. Run `agentgraph auth status --json` to inspect provider-level authentication, especially for shared auth like Google
+2. Run `agentgraph auth --json status` to inspect provider-level authentication, especially for shared auth like Google
 3. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
 4. Run the appropriate `agentgraph` command with `--json` to get structured output
 5. Use `edges` or `traverse` to follow relationships when needed
