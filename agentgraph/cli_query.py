@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable
 from typing import Any
 
 import httpx
@@ -59,6 +60,18 @@ def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
+def _run_local(coro: Awaitable[Any]) -> Any:
+    async def _with_backend() -> Any:
+        from agentgraph.connectors.registry import bootstrap
+        from agentgraph.core.runtime import backend_context
+
+        bootstrap()
+        async with backend_context():
+            return await coro
+
+    return _run(_with_backend())
+
+
 def _warn_local() -> None:
     console.print(
         "[dim]Server not running — using local DB (embedding model will load)[/dim]"
@@ -87,7 +100,7 @@ def cmd_search(
     if results is None:
         _warn_local()
         from agentgraph.graph.query import search_entities
-        results = _run(search_entities(
+        results = _run_local(search_entities(
             query, entity_types=entity_types or None, limit=limit, min_score=min_score, platform=platform
         ))
 
@@ -146,7 +159,7 @@ def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
         _warn_local()
         from agentgraph.graph.query import get_entity, get_entity_by_url
 
-        entity = _run(get_entity_by_url(entity_id) if target_is_url else get_entity(entity_id))
+        entity = _run_local(get_entity_by_url(entity_id) if target_is_url else get_entity(entity_id))
 
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
@@ -154,9 +167,17 @@ def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
 
     if resolve and _is_stub(entity):
         console.print("[dim]Stub entity — fetching from source…[/dim]")
-        _post("/fetch-entity", params={"entity_id": entity["id"]})
-        # Re-fetch after resolution attempt
-        refreshed = _get(f"/entity/{entity['id']}")
+        fetch_result = _post("/fetch-entity", params={"entity_id": entity["id"]})
+        refreshed = _get(f"/entity/{entity['id']}") if fetch_result is not None else None
+        if refreshed is None:
+            from agentgraph.graph.fetch import fetch_entity_by_id
+            from agentgraph.graph.query import get_entity
+
+            try:
+                _run_local(fetch_entity_by_id(entity["id"]))
+                refreshed = _run_local(get_entity(entity["id"]))
+            except ValueError as exc:
+                console.print(f"[red]{exc}[/red]")
         if refreshed is not None:
             entity = refreshed
 
@@ -190,11 +211,11 @@ def cmd_edges(
     if edges is None:
         _warn_local()
         from agentgraph.graph.query import get_edges, get_entity
-        entity = _run(get_entity(entity_id))
+        entity = _run_local(get_entity(entity_id))
         if entity is None:
             console.print(f"[red]Entity {entity_id!r} not found.[/red]")
             return
-        edges = _run(get_edges(entity["id"], edge_type=edge_type, direction=direction))
+        edges = _run_local(get_edges(entity["id"], edge_type=edge_type, direction=direction))
 
     if as_json:
         console.print_json(json.dumps(edges, default=str))
@@ -231,20 +252,32 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool, resolve: bool = 
     if result is None:
         _warn_local()
         from agentgraph.graph.query import get_entity, traverse_graph
-        entity = _run(get_entity(entity_id))
+        entity = _run_local(get_entity(entity_id))
         if entity is None:
             console.print(f"[red]Entity {entity_id!r} not found.[/red]")
             return
-        result = _run(traverse_graph(entity["id"], max_depth=max_depth))
+        result = _run_local(traverse_graph(entity["id"], max_depth=max_depth))
 
     if resolve and result:
         stubs = [n for n in result.get("nodes", []) if _is_stub(n)]
         if stubs:
             console.print(f"[dim]Resolving {len(stubs)} stub node(s)…[/dim]")
             for stub in stubs:
-                _post("/fetch-entity", params={"entity_id": stub["id"]})
-            # Re-traverse so node data reflects newly fetched content
+                fetch_result = _post("/fetch-entity", params={"entity_id": stub["id"]})
+                if fetch_result is None:
+                    from agentgraph.graph.fetch import fetch_entity_by_id
+
+                    try:
+                        _run_local(fetch_entity_by_id(stub["id"]))
+                    except ValueError as exc:
+                        console.print(f"[red]{exc}[/red]")
             refreshed = _get(f"/traverse/{entity_id}", {"depth": max_depth})
+            if refreshed is None:
+                from agentgraph.graph.query import get_entity, traverse_graph
+
+                entity = _run_local(get_entity(entity_id))
+                if entity is not None:
+                    refreshed = _run_local(traverse_graph(entity["id"], max_depth=max_depth))
             if refreshed is not None:
                 result = refreshed
 
@@ -287,7 +320,7 @@ def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
         _warn_local()
         from agentgraph.graph.fetch import fetch_entity
         try:
-            result = _run(fetch_entity(platform, resource_id))
+            result = _run_local(fetch_entity(platform, resource_id))
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             return
@@ -316,7 +349,7 @@ def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
         _warn_local()
         from agentgraph.graph.fetch import fetch_entity_by_id
         try:
-            result = _run(fetch_entity_by_id(entity_id))
+            result = _run_local(fetch_entity_by_id(entity_id))
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             return
@@ -453,7 +486,7 @@ def cmd_unify_persons(
         from agentgraph.graph.person import unify_persons
 
         try:
-            result = _run(unify_persons(primary_entity_id, duplicate_entity_ids))
+            result = _run_local(unify_persons(primary_entity_id, duplicate_entity_ids))
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             return
@@ -496,7 +529,7 @@ def cmd_query(
     if results is None:
         _warn_local()
         from agentgraph.graph.query import query_by_filter
-        results = _run(
+        results = _run_local(
             query_by_filter(
                 entity_type,
                 filters=filters,

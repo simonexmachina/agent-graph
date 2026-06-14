@@ -212,6 +212,80 @@ def test_delete_falls_back_when_running_server_lacks_endpoint() -> None:
     delete_entity.assert_awaited_once_with("abc123")
 
 
+def test_query_fallback_initializes_local_backend() -> None:
+    from agentgraph.cli_query import cmd_query
+
+    entered: list[bool] = []
+    results: list[EntityResult] = [
+        {
+            "id": "entity-12345678",
+            "entity_type": "Thread",
+            "platform": "gmail",
+            "title": "Fallback result",
+            "metadata": {},
+        }
+    ]
+
+    @asynccontextmanager
+    async def tracking_backend_context() -> AsyncGenerator[Any, None]:
+        entered.append(True)
+        yield MagicMock()
+
+    with patch("agentgraph.cli_query._get", return_value=None), \
+         patch("agentgraph.connectors.registry.bootstrap") as bootstrap, \
+         patch("agentgraph.core.runtime.backend_context", tracking_backend_context), \
+         patch(
+             "agentgraph.graph.query.query_by_filter",
+             new=AsyncMock(return_value=results),
+         ) as query_by_filter:
+        cmd_query(
+            entity_type="Thread",
+            filters={},
+            limit=5,
+            order_by="updated_at",
+            since=None,
+            authored_by_me=False,
+            as_json=True,
+        )
+
+    assert entered == [True]
+    bootstrap.assert_called_once_with()
+    query_by_filter.assert_awaited_once_with(
+        "Thread",
+        filters={},
+        limit=5,
+        order_by="updated_at",
+        since=None,
+        authored_by_me=False,
+        has_attachments=False,
+    )
+
+
+def test_fetch_fallback_initializes_backend_and_connectors() -> None:
+    from agentgraph.cli_query import cmd_fetch
+
+    entered: list[bool] = []
+    fetch_result = {"entities": 1, "persons": 0, "edges": 0}
+
+    @asynccontextmanager
+    async def tracking_backend_context() -> AsyncGenerator[Any, None]:
+        entered.append(True)
+        yield MagicMock()
+
+    with patch("agentgraph.cli_query._post", return_value=None), \
+         patch("agentgraph.connectors.registry.bootstrap") as bootstrap, \
+         patch("agentgraph.core.runtime.backend_context", tracking_backend_context), \
+         patch(
+             "agentgraph.graph.fetch.fetch_entity",
+             new=AsyncMock(return_value=fetch_result),
+         ) as fetch_entity:
+        cmd_fetch("gsheets", "sheet-id", as_json=True)
+
+    assert entered == [True]
+    bootstrap.assert_called_once_with()
+    fetch_entity.assert_awaited_once_with("gsheets", "sheet-id")
+
+
 def test_auth_help() -> None:
     result = runner.invoke(app, ["auth", "--help"])
     assert result.exit_code == 0
