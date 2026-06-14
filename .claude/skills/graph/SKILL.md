@@ -66,7 +66,7 @@ agentgraph auth [--json] status # provider, connectors[], auth_status/auth_detai
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
 agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
-agentgraph auth rss [--add] [--account <account-id>]      # RSS/Atom feed URLs interactively
+agentgraph auth rss                                       # RSS/Atom feed URLs interactively
 
 # Server
 agentgraph serve [--reload]

@@ -27,7 +27,6 @@ from agentgraph.core.context import get_backend
 from agentgraph_connector_rss.auth import (
     add_feed_urls,
     import_opml_feeds,
-    list_rss_accounts,
     load_rss_creds,
     preview_feed,
     remove_feed_urls,
@@ -59,22 +58,11 @@ class RssConnector(BaseConnector):
             creds = load_rss_creds()
         except RuntimeError:
             return None
-        return creds.label or "RSS"
+        return "RSS" if creds.feed_urls else None
 
     @classmethod
     def list_accounts(cls) -> list[ConnectorAccount]:
-        return [
-            ConnectorAccount(
-                account_id=str(account["account_id"]),
-                label=str(account["label"]),
-                auth_group=cls.auth_label or cls.source,
-                source=cls.source,
-                metadata={
-                    "feed_count": str(account.get("feed_count") or "0"),
-                },
-            )
-            for account in list_rss_accounts()
-        ]
+        return []
 
     @classmethod
     async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
@@ -86,23 +74,21 @@ class RssConnector(BaseConnector):
             raise ValueError(_rss_usage())
         command, *rest = args
         if command == "add":
-            account_id, sources = _parse_account_option(rest)
+            sources = _parse_feed_url_args(rest, command="add")
             feed_urls = resolve_feed_sources(sources)
-            creds = add_feed_urls(feed_urls, account_id=account_id, validate=False)
+            creds = add_feed_urls(feed_urls, validate=False)
             return {
                 "status": "ok",
                 "source": cls.source,
-                "account_id": creds.account_id,
                 "feed_urls": creds.feed_urls,
                 "added": feed_urls,
             }
         if command == "remove":
-            account_id, feed_urls = _parse_account_option(rest)
-            creds, removed_feed_urls = remove_feed_urls(feed_urls, account_id=account_id)
+            feed_urls = _parse_feed_url_args(rest, command="remove")
+            creds, removed_feed_urls = remove_feed_urls(feed_urls)
             return {
                 "status": "ok",
                 "source": cls.source,
-                "account_id": creds.account_id,
                 "feed_urls": creds.feed_urls,
                 "removed": removed_feed_urls,
             }
@@ -113,7 +99,6 @@ class RssConnector(BaseConnector):
             return {
                 "status": "ok",
                 "source": cls.source,
-                "account_id": creds.account_id,
                 "feed_urls": creds.feed_urls,
                 "imported_feed_count": len(feeds),
                 "selected_feed_count": len(selected_feeds),
@@ -228,9 +213,9 @@ async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> Enti
 
 def _rss_usage() -> str:
     return (
-        "Usage: agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--account <account-id>]\n"
-        "   or: agentgraph connector rss remove <feed-url> [feed-url...] [--account <account-id>]\n"
-        "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>] [--account <account-id>]"
+        "Usage: agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...]\n"
+        "   or: agentgraph connector rss remove <feed-url> [feed-url...]\n"
+        "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>]"
     )
 
 
@@ -245,12 +230,11 @@ def _rss_help() -> str:
             "  add <feed-or-html-url> [feed-or-html-url...]",
             "      Add one or more RSS/Atom feeds. HTML pages are scanned for RSS/Atom <link> tags.",
             "  remove <feed-url> [feed-url...]",
-            "      Remove one or more exact RSS/Atom feed URLs from the configured account.",
+            "      Remove one or more exact RSS/Atom feed URLs from the configured feed list.",
             "  import-opml <file.opml> [--all | --select <indexes>]",
             "      Import RSS/Atom feed URLs from an OPML file. Omit flags for checkbox selection.",
             "",
             "Options:",
-            "  --account <account-id>  Add/remove feeds in a specific RSS account.",
             "  --all                   Import every feed from the OPML file.",
             "  --select <indexes>      Import selected feed numbers, e.g. 1,3-5.",
             "  --json                  Output command results as JSON.",
@@ -259,7 +243,6 @@ def _rss_help() -> str:
 
 
 def _format_rss_cli_result(result: dict[str, Any]) -> str:
-    account_id = str(result.get("account_id") or "rss")
     added = [str(item) for item in cast(list[object], result.get("added") or [])]
     removed = [str(item) for item in cast(list[object], result.get("removed") or [])]
     feed_urls = cast(list[object], result.get("feed_urls") or [])
@@ -268,12 +251,12 @@ def _format_rss_cli_result(result: dict[str, Any]) -> str:
         imported_count = int(result.get("imported_feed_count") or 0)
         selected_count = int(result.get("selected_feed_count") or len(added))
         lines = [
-            f"Imported {selected_count} of {imported_count} feed(s) into RSS account {account_id}."
+            f"Imported {selected_count} of {imported_count} feed(s)."
         ]
     elif "removed" in result:
-        lines = [f"Removed {len(removed)} feed(s) from RSS account {account_id}."]
+        lines = [f"Removed {len(removed)} feed(s)."]
     else:
-        lines = [f"Added {len(added)} feed(s) to RSS account {account_id}."]
+        lines = [f"Added {len(added)} feed(s)."]
 
     if added:
         lines.append("Added feeds:")
@@ -289,26 +272,15 @@ def _format_rss_cli_result(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _parse_account_option(args: list[str]) -> tuple[str | None, list[str]]:
-    account_id: str | None = None
-    remaining: list[str] = []
-    index = 0
-    while index < len(args):
-        arg = args[index]
-        if arg == "--account":
-            if index + 1 >= len(args):
-                raise ValueError("--account requires a value")
-            account_id = args[index + 1]
-            index += 2
-            continue
-        remaining.append(arg)
-        index += 1
-    return account_id, remaining
+def _parse_feed_url_args(args: list[str], *, command: str) -> list[str]:
+    for arg in args:
+        if arg.startswith("--"):
+            raise ValueError(f"Unknown {command} option: {arg}")
+    return args
 
 
 def _parse_import_opml_args(args: list[str]) -> dict[str, Any]:
     path: str | None = None
-    account_id: str | None = None
     include_all = False
     selection: str | None = None
     index = 0
@@ -324,12 +296,6 @@ def _parse_import_opml_args(args: list[str]) -> dict[str, Any]:
             selection = args[index + 1]
             index += 2
             continue
-        if arg == "--account":
-            if index + 1 >= len(args):
-                raise ValueError("--account requires a value")
-            account_id = args[index + 1]
-            index += 2
-            continue
         if arg.startswith("--"):
             raise ValueError(f"Unknown import-opml option: {arg}")
         if path is not None:
@@ -342,7 +308,6 @@ def _parse_import_opml_args(args: list[str]) -> dict[str, Any]:
         raise ValueError("Use either --all or --select, not both")
     return {
         "path": path,
-        "account_id": account_id,
         "include_all": include_all,
         "selection": selection,
     }
