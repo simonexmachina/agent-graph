@@ -71,8 +71,8 @@ agentgraph-connector-web     = { workspace = true }
 include = ["agentgraph*"]
 
 [tool.setuptools.data-files]
-".agent/skills/graph" = [".agent/skills/graph/SKILL.md"]
-".agent/skills/slack-auth" = [".agent/skills/slack-auth/SKILL.md"]
+".agents/skills/graph" = [".agents/skills/graph/SKILL.md"]
+".agents/skills/slack-auth" = [".agents/skills/slack-auth/SKILL.md"]
 
 [tool.ruff]
 line-length = 100

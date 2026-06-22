@@ -744,7 +744,7 @@ async def test_mcp_list_connectors_tool_returns_json() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_install_skill_tool_installs_to_user_agent_skills(
+async def test_mcp_install_skill_tool_installs_to_user_agents_skills(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -759,7 +759,7 @@ async def test_mcp_install_skill_tool_installs_to_user_agent_skills(
     assert parsed["skill"] == "graph"
     assert parsed["target"] == "user"
     assert parsed["overwritten"] is False
-    assert (home / ".agent" / "skills" / "graph" / "SKILL.md").is_file()
+    assert (home / ".agents" / "skills" / "graph" / "SKILL.md").is_file()
 
 
 @pytest.mark.asyncio

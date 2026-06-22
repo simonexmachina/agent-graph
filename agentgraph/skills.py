@@ -36,8 +36,8 @@ class SkillInstallResult:
 def _bundled_skill_roots() -> list[Path]:
     repo_root = Path(__file__).resolve().parents[1]
     return [
-        repo_root / ".agent" / "skills",
-        Path(sysconfig.get_path("data")) / ".agent" / "skills",
+        repo_root / ".agents" / "skills",
+        Path(sysconfig.get_path("data")) / ".agents" / "skills",
     ]
 
 
@@ -54,9 +54,9 @@ def _find_source_skill(skill: str, source_root: Path | None) -> Path:
 
 def _target_root(target: SkillTarget, project_dir: Path | None) -> Path:
     if target == "user":
-        return Path.home() / ".agent" / "skills"
+        return Path.home() / ".agents" / "skills"
     if target == "project":
-        return (project_dir or Path.cwd()) / ".agent" / "skills"
+        return (project_dir or Path.cwd()) / ".agents" / "skills"
     raise SkillInstallError("Target must be 'user' or 'project'")
 
 

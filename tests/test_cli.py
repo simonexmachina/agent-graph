@@ -235,7 +235,7 @@ def test_mcp_config_includes_chatgpt() -> None:
     assert "https://your-tunnel.example/mcp" in result.output
 
 
-def test_install_skill_defaults_to_user_agent_skills(
+def test_install_skill_defaults_to_user_agents_skills(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -245,7 +245,7 @@ def test_install_skill_defaults_to_user_agent_skills(
     result = runner.invoke(app, ["install-skill"])
 
     assert result.exit_code == 0
-    skill_path = home / ".agent" / "skills" / "graph" / "SKILL.md"
+    skill_path = home / ".agents" / "skills" / "graph" / "SKILL.md"
     assert skill_path.is_file()
     assert "AgentGraph CLI skill" in skill_path.read_text(encoding="utf-8")
     assert str(skill_path.parent) in result.output
@@ -257,7 +257,7 @@ def test_install_skill_refuses_to_overwrite_without_force(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    skill_path = home / ".agent" / "skills" / "graph" / "SKILL.md"
+    skill_path = home / ".agents" / "skills" / "graph" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("custom", encoding="utf-8")
 
@@ -274,7 +274,7 @@ def test_install_skill_force_overwrites_existing_skill(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    skill_path = home / ".agent" / "skills" / "graph" / "SKILL.md"
+    skill_path = home / ".agents" / "skills" / "graph" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("custom", encoding="utf-8")
 
@@ -297,7 +297,7 @@ def test_install_skill_project_target_uses_current_directory(
     result = runner.invoke(app, ["install-skill", "--target", "project"])
 
     assert result.exit_code == 0
-    assert (tmp_path / ".agent" / "skills" / "graph" / "SKILL.md").is_file()
+    assert (tmp_path / ".agents" / "skills" / "graph" / "SKILL.md").is_file()
 
 
 class _FakeConnector:

@@ -147,8 +147,8 @@ async def install_skill_tool(skill: str = "graph", target: str = "user", force: 
 
     Args:
         skill: Bundled skill name. Defaults to "graph".
-        target: "user" installs to ~/.agent/skills. "project" installs to
-            ./.agent/skills relative to the MCP server process.
+        target: "user" installs to ~/.agents/skills. "project" installs to
+            ./.agents/skills relative to the MCP server process.
         force: Overwrite an existing installed skill.
 
     Returns:
