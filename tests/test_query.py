@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -740,6 +741,35 @@ async def test_mcp_list_connectors_tool_returns_json() -> None:
         result = await list_connectors_tool()
 
     assert json.loads(result) == fake_items
+
+
+@pytest.mark.asyncio
+async def test_mcp_install_skill_tool_installs_to_user_agent_skills(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agentgraph.mcp.server import install_skill_tool
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    result = await install_skill_tool()
+
+    parsed = json.loads(result)
+    assert parsed["skill"] == "graph"
+    assert parsed["target"] == "user"
+    assert parsed["overwritten"] is False
+    assert (home / ".agent" / "skills" / "graph" / "SKILL.md").is_file()
+
+
+@pytest.mark.asyncio
+async def test_mcp_install_skill_tool_reports_invalid_target() -> None:
+    from agentgraph.mcp.server import install_skill_tool
+
+    result = await install_skill_tool(target="elsewhere")
+
+    parsed = json.loads(result)
+    assert "error" in parsed
 
 
 @pytest.mark.asyncio

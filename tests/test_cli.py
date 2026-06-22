@@ -156,17 +156,16 @@ def test_delete_uses_server_endpoint() -> None:
 def test_query_exits_when_server_unavailable() -> None:
     from agentgraph.cli_query import cmd_query
 
-    with patch("agentgraph.cli_query._get", side_effect=SystemExit(1)):
-        with pytest.raises(SystemExit):
-            cmd_query(
-                entity_type="Thread",
-                filters={},
-                limit=5,
-                order_by="updated_at",
-                since=None,
-                authored_by_me=False,
-                as_json=True,
-            )
+    with patch("agentgraph.cli_query._get", side_effect=SystemExit(1)), pytest.raises(SystemExit):
+        cmd_query(
+            entity_type="Thread",
+            filters={},
+            limit=5,
+            order_by="updated_at",
+            since=None,
+            authored_by_me=False,
+            as_json=True,
+        )
 
 
 def test_download_uses_server_endpoint() -> None:
@@ -204,17 +203,16 @@ def test_fetch_uses_server_endpoint() -> None:
 def test_server_unavailable_exits_nonzero() -> None:
     from agentgraph.cli_query import cmd_query
 
-    with patch("httpx.get", side_effect=httpx.ConnectError("offline")):
-        with pytest.raises(SystemExit) as exc:
-            cmd_query(
-                entity_type="Thread",
-                filters={},
-                limit=5,
-                order_by="updated_at",
-                since=None,
-                authored_by_me=False,
-                as_json=True,
-            )
+    with patch("httpx.get", side_effect=httpx.ConnectError("offline")), pytest.raises(SystemExit) as exc:
+        cmd_query(
+            entity_type="Thread",
+            filters={},
+            limit=5,
+            order_by="updated_at",
+            since=None,
+            authored_by_me=False,
+            as_json=True,
+        )
 
     assert exc.value.code == 1
 
@@ -235,6 +233,71 @@ def test_mcp_config_includes_chatgpt() -> None:
     assert "do not use the stdio JSON" in result.output
     assert "http://127.0.0.1:8808/mcp" in result.output
     assert "https://your-tunnel.example/mcp" in result.output
+
+
+def test_install_skill_defaults_to_user_agent_skills(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    result = runner.invoke(app, ["install-skill"])
+
+    assert result.exit_code == 0
+    skill_path = home / ".agent" / "skills" / "graph" / "SKILL.md"
+    assert skill_path.is_file()
+    assert "AgentGraph CLI skill" in skill_path.read_text(encoding="utf-8")
+    assert str(skill_path.parent) in result.output
+
+
+def test_install_skill_refuses_to_overwrite_without_force(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    skill_path = home / ".agent" / "skills" / "graph" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("custom", encoding="utf-8")
+
+    result = runner.invoke(app, ["install-skill"])
+
+    assert result.exit_code == 1
+    assert "Use --force" in result.output
+    assert skill_path.read_text(encoding="utf-8") == "custom"
+
+
+def test_install_skill_force_overwrites_existing_skill(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    skill_path = home / ".agent" / "skills" / "graph" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("custom", encoding="utf-8")
+
+    result = runner.invoke(app, ["install-skill", "--force", "--json"])
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert parsed["skill"] == "graph"
+    assert parsed["target"] == "user"
+    assert parsed["overwritten"] is True
+    assert "AgentGraph CLI skill" in skill_path.read_text(encoding="utf-8")
+
+
+def test_install_skill_project_target_uses_current_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["install-skill", "--target", "project"])
+
+    assert result.exit_code == 0
+    assert (tmp_path / ".agent" / "skills" / "graph" / "SKILL.md").is_file()
 
 
 class _FakeConnector:

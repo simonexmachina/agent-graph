@@ -9,6 +9,8 @@ from typing import cast
 import typer
 
 from agentgraph.connectors.base import BaseConnector
+from agentgraph.skills import SkillInstallError
+from agentgraph.skills import install_skill as install_agentgraph_skill
 
 app = typer.Typer(
     name="agentgraph",
@@ -409,6 +411,31 @@ def mcp_config() -> None:
     typer.echo(f"  {binary} mcp-serve --transport sse --port 8808")
     typer.echo("  http://127.0.0.1:8808/sse")
     typer.echo()
+
+
+@app.command()
+def install_skill(
+    skill: str = typer.Argument("graph", help="Bundled skill to install"),
+    target: str = typer.Option("user", "--target", help="Install target: user or project"),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing installed skill"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Install a bundled AgentGraph skill into an agent skill directory."""
+    if target not in ("user", "project"):
+        typer.echo("Target must be 'user' or 'project'", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        result = install_agentgraph_skill(skill, target=target, force=force)
+    except SkillInstallError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    if json:
+        typer.echo(_json.dumps(result.to_dict(), indent=2))
+        return
+
+    typer.echo(f"Installed AgentGraph skill '{result.skill}' to {result.destination}")
 
 
 @app.command()

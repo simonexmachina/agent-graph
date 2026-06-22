@@ -137,6 +137,36 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         return json.dumps({"error": str(exc)})
 
 
+@mcp.tool()
+async def install_skill_tool(skill: str = "graph", target: str = "user", force: bool = False) -> str:
+    """
+    Install a bundled AgentGraph skill.
+
+    This is the MCP equivalent of:
+        agentgraph install-skill <skill> --target <user|project> [--force]
+
+    Args:
+        skill: Bundled skill name. Defaults to "graph".
+        target: "user" installs to ~/.agent/skills. "project" installs to
+            ./.agent/skills relative to the MCP server process.
+        force: Overwrite an existing installed skill.
+
+    Returns:
+        JSON object with skill, target, source, destination, and overwritten,
+        or an error.
+    """
+    from agentgraph.skills import SkillInstallError, install_skill
+
+    if target not in ("user", "project"):
+        return json.dumps({"error": "Target must be 'user' or 'project'"})
+
+    try:
+        result = install_skill(skill, target=target, force=force)
+        return json.dumps(result.to_dict())
+    except SkillInstallError as exc:
+        return json.dumps({"error": str(exc)})
+
+
 async def _enrich_results(results: list[dict[str, Any]]) -> None:
     """Let each owning connector apply result presentation fixes in-place."""
     from agentgraph.connectors.registry import bootstrap, get_connector

@@ -70,6 +70,10 @@ agentgraph-connector-web     = { workspace = true }
 [tool.setuptools.packages.find]
 include = ["agentgraph*"]
 
+[tool.setuptools.data-files]
+".agent/skills/graph" = [".agent/skills/graph/SKILL.md"]
+".agent/skills/slack-auth" = [".agent/skills/slack-auth/SKILL.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

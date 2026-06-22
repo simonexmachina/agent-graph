@@ -72,6 +72,9 @@ agentgraph auth rss                                       # RSS/Atom feed URLs i
 agentgraph serve [--reload]
 agentgraph mcp-serve
 agentgraph mcp-config   # stdio config for Claude Desktop/Claude Code; ChatGPT uses a tunneled HTTPS /mcp endpoint
+
+# Install the bundled AgentGraph skill into ~/.agent/skills or ./.agent/skills
+agentgraph install-skill [graph] [--target user|project] [--force] [--json]
 ```
 
 ## MCP tool equivalents
@@ -95,6 +98,7 @@ agentgraph ingest <source>         -> ingest_connector_tool(source)
 agentgraph bookmark ...            -> bookmark_entity_tool(entity_id, bookmarked)
 agentgraph delete ...              -> delete_entity_tool(entity_id)
 agentgraph unify-persons ...       -> unify_persons_tool(primary_entity_id, duplicate_entity_ids)
+agentgraph install-skill ...       -> install_skill_tool(skill, target, force)
 ```
 
 ## Entity types
