@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from agentgraph.connectors.base import EntityBatch
 from agentgraph.core.context import get_backend
 
 
 async def upsert_batch(batch: EntityBatch) -> None:
     """Persist an EntityBatch to the graph, generating embeddings as needed."""
+    person_embeddings, entity_embeddings = await asyncio.to_thread(_build_embeddings, batch)
+
+    await get_backend().upsert_batch(batch, person_embeddings, entity_embeddings)
+    await _link_references(batch)
+
+
+def _build_embeddings(
+    batch: EntityBatch,
+) -> tuple[dict[str, list[float] | None], dict[str, list[float] | None]]:
     from agentgraph.graph.embeddings import encode_passage
 
-    # Compute embeddings here — backend-agnostic, stays in the graph layer
     person_embeddings: dict[str, list[float] | None] = {}
     for p in batch.persons:
         canonical_key = p.canonical_email or f"{p.platform}:{p.platform_user_id}"
@@ -27,8 +37,7 @@ async def upsert_batch(batch: EntityBatch) -> None:
         else:
             entity_embeddings[e.platform_entity_id] = None
 
-    await get_backend().upsert_batch(batch, person_embeddings, entity_embeddings)
-    await _link_references(batch)
+    return person_embeddings, entity_embeddings
 
 
 async def _link_references(batch: EntityBatch) -> None:

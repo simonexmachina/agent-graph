@@ -44,7 +44,7 @@ async def search_entities(
     """Hybrid search: combines vector similarity with full-text via RRF."""
     from agentgraph.graph.embeddings import encode_query
 
-    embedding = encode_query(query)
+    embedding = await asyncio.to_thread(encode_query, query)
     backend = get_backend()
     results = await backend.search_entities(
         embedding, query, entity_types, limit, min_score, platform=platform

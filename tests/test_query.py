@@ -147,6 +147,26 @@ async def test_search_entities_platform_none_by_default() -> None:
     assert kwargs.get("platform") is None
 
 
+@pytest.mark.asyncio
+async def test_search_entities_offloads_query_embedding() -> None:
+    from agentgraph.graph.query import search_entities
+
+    backend = _mock_backend(search_entities=AsyncMock(return_value=[]))
+    set_backend(backend)
+    calls: list[tuple[Any, tuple[Any, ...]]] = []
+
+    async def fake_to_thread(func: Any, *args: Any) -> Any:
+        calls.append((func, args))
+        return func(*args)
+
+    with patch("agentgraph.graph.embeddings.encode_query", return_value=[0.1] * 384), \
+         patch("agentgraph.graph.query.asyncio.to_thread", new=fake_to_thread):
+        await search_entities("anything")
+
+    assert len(calls) == 1
+    assert calls[0][1] == ("anything",)
+
+
 # ---------------------------------------------------------------------------
 # get_entity
 # ---------------------------------------------------------------------------
