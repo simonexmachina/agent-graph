@@ -803,11 +803,39 @@ async def test_mcp_poll_connectors_tool_starts_poll_tasks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_poll_connectors_tool_uses_source_connector_lookup() -> None:
+    from agentgraph.mcp.server import poll_connectors_tool
+
+    class PollingConnector:
+        source = "rss"
+        poll_interval = object()
+
+    created: list[Any] = []
+
+    def fake_create_task(coro: Any) -> MagicMock:
+        created.append(coro)
+        coro.close()
+        return MagicMock()
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=PollingConnector()) as get_connector, \
+         patch("agentgraph.connectors.registry.get_all_connectors") as get_all_connectors, \
+         patch("agentgraph.server.sync.poll_connector", new=AsyncMock()), \
+         patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task):
+        result = await poll_connectors_tool("rss")
+
+    assert json.loads(result) == {"polled": ["rss"]}
+    get_connector.assert_called_once_with("rss")
+    get_all_connectors.assert_not_called()
+    assert len(created) == 1
+
+
+@pytest.mark.asyncio
 async def test_mcp_poll_connectors_tool_reports_unknown_source() -> None:
     from agentgraph.mcp.server import poll_connectors_tool
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]):
+         patch("agentgraph.connectors.registry.get_connector", return_value=None):
         result = await poll_connectors_tool("missing")
 
     parsed = json.loads(result)
@@ -829,7 +857,7 @@ async def test_mcp_ingest_connector_tool_starts_ingest_task() -> None:
         return MagicMock()
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[Connector()]), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=Connector()), \
          patch("agentgraph.server.sync.run_ingest", new=AsyncMock()), \
          patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task):
         result = await ingest_connector_tool("rss")
@@ -843,7 +871,7 @@ async def test_mcp_ingest_connector_tool_reports_unknown_source() -> None:
     from agentgraph.mcp.server import ingest_connector_tool
 
     with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]):
+         patch("agentgraph.connectors.registry.get_connector", return_value=None):
         result = await ingest_connector_tool("missing")
 
     parsed = json.loads(result)

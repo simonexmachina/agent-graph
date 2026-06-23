@@ -407,15 +407,17 @@ async def poll_connectors_tool(source: str | None = None) -> str:
         JSON object with polled connector sources, or an error if a requested
         connector source is not registered.
     """
-    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors, get_connector
     from agentgraph.server.sync import poll_connector
 
     bootstrap()
-    connectors = get_all_connectors()
     if source is not None:
-        connectors = [connector for connector in connectors if connector.source == source]
-        if not connectors:
+        connector = get_connector(source)
+        if connector is None:
             return json.dumps({"error": f"No connector registered for source {source!r}"})
+        connectors = [connector]
+    else:
+        connectors = get_all_connectors()
 
     polled: list[str] = []
     for connector in connectors:
@@ -446,15 +448,15 @@ async def ingest_connector_tool(source: str) -> str:
         JSON object with source and status, or an error if the connector source
         is not registered.
     """
-    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.registry import bootstrap, get_connector
     from agentgraph.server.sync import run_ingest
 
     bootstrap()
-    connectors = [connector for connector in get_all_connectors() if connector.source == source]
-    if not connectors:
+    connector = get_connector(source)
+    if connector is None:
         return json.dumps({"error": f"No connector registered for source {source!r}"})
 
-    asyncio.create_task(run_ingest(connectors[0]))
+    asyncio.create_task(run_ingest(connector))
     return json.dumps({"source": source, "status": "started"})
 
 
