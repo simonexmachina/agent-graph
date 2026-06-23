@@ -71,6 +71,41 @@ async def test_insert_person_and_entity_and_edge(sqlite_backend: SQLiteBackend) 
     assert count == 0
 
 
+async def test_get_platforms_last_synced_at_groups_platforms(sqlite_backend: SQLiteBackend) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    await conn.executemany(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, synced_at)
+        VALUES (?, 'Document', ?, ?, ?)
+        """,
+        [
+            ["entity-1", "rss", "feed-1", "2026-06-23T10:00:00+00:00"],
+            ["entity-2", "rss", "feed-2", "2026-06-23T12:00:00+00:00"],
+            ["entity-3", "gmail", "thread-1", "2026-06-22T09:00:00+00:00"],
+        ],
+    )
+
+    result = await sqlite_backend.get_platforms_last_synced_at(["rss", "gmail", "slack"])
+
+    rss_synced_at = result["rss"]
+    gmail_synced_at = result["gmail"]
+    assert rss_synced_at is not None
+    assert gmail_synced_at is not None
+    assert rss_synced_at.isoformat() == "2026-06-23T12:00:00+00:00"
+    assert gmail_synced_at.isoformat() == "2026-06-22T09:00:00+00:00"
+    assert result["slack"] is None
+
+
+async def test_schema_has_platform_synced_at_index(sqlite_backend: SQLiteBackend) -> None:
+    rows = await sqlite_backend._fetchall(
+        """
+        SELECT name FROM sqlite_master
+        WHERE type = 'index'
+        """
+    )
+    assert "idx_entities_platform_synced_at" in {row["name"] for row in rows}
+
+
 async def test_existing_database_gets_cumulative_dwell_column(tmp_path: Path) -> None:
     db_path = tmp_path / "old-schema.db"
     conn = sqlite3.connect(db_path)

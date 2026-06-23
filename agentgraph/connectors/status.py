@@ -125,6 +125,10 @@ async def connector_status_items(
         for delegated_source in type(connector).poll_delegates:
             poll_delegators.setdefault(delegated_source, []).append(connector.source)
 
+    last_synced_by_platform = await backend.get_platforms_last_synced_at(
+        [connector.source for connector in connectors]
+    )
+
     items: list[dict[str, object]] = []
     for connector in connectors:
         provider = auth_provider_key(connector)
@@ -133,7 +137,7 @@ async def connector_status_items(
         polls = interval is not None
         polled_by = sorted(poll_delegators.get(connector.source, []))
         poll_delegates = list(type(connector).poll_delegates)
-        last_synced_at = await backend.get_platform_last_synced_at(connector.source)
+        last_synced_at = last_synced_by_platform.get(connector.source)
         items.append({
             "source": connector.source,
             "description": type(connector).auth_description,

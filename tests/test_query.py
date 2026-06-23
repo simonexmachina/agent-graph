@@ -74,6 +74,7 @@ def _mock_backend(**method_overrides: Any) -> Any:
         "list_entities": AsyncMock(return_value=[]),
         "touch_last_accessed_by_ids": AsyncMock(return_value=None),
         "get_platform_last_synced_at": AsyncMock(return_value=None),
+        "get_platforms_last_synced_at": AsyncMock(return_value={}),
         "set_entity_bookmarked": AsyncMock(return_value=_entity(title="Bookmarked Doc")),
         "delete_entity": AsyncMock(return_value=_entity(title="Deleted Doc")),
     }

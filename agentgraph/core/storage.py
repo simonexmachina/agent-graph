@@ -191,6 +191,15 @@ class StorageBackend(ABC):
     @abstractmethod
     async def get_platform_last_synced_at(self, platform: str) -> datetime | None: ...
 
+    async def get_platforms_last_synced_at(
+        self,
+        platforms: list[str],
+    ) -> dict[str, datetime | None]:
+        return {
+            platform: await self.get_platform_last_synced_at(platform)
+            for platform in platforms
+        }
+
     @abstractmethod
     async def reset_synced_at(
         self, platform: str, platform_entity_id: str

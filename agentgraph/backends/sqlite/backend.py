@@ -107,6 +107,9 @@ class SQLiteBackend(StorageBackend):
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_bookmarked ON entities(bookmarked)"
         )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_platform_synced_at ON entities(platform, synced_at)"
+        )
 
     async def _fetchall(self, sql: str, params: list[Any] | None = None) -> list[Any]:
         conn = self._conn_or_raise()
@@ -1070,6 +1073,28 @@ class SQLiteBackend(StorageBackend):
             [platform],
         )
         return datetime.fromisoformat(val) if val else None
+
+    async def get_platforms_last_synced_at(
+        self,
+        platforms: list[str],
+    ) -> dict[str, datetime | None]:
+        if not platforms:
+            return {}
+        placeholders = ",".join("?" for _ in platforms)
+        rows = await self._fetchall(
+            f"""
+            SELECT platform, max(synced_at) AS last_synced_at
+            FROM entities
+            WHERE platform IN ({placeholders})
+            GROUP BY platform
+            """,
+            platforms,
+        )
+        result: dict[str, datetime | None] = dict.fromkeys(platforms, None)
+        for row in rows:
+            val = row["last_synced_at"]
+            result[row["platform"]] = datetime.fromisoformat(val) if val else None
+        return result
 
     async def reset_synced_at(self, platform: str, platform_entity_id: str) -> None:
         await self._execute(

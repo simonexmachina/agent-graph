@@ -480,7 +480,14 @@ async def _fake_backend_context() -> AsyncGenerator[Any, None]:
         }
         return values.get(platform)
 
+    async def _get_platforms_last_synced_at(platforms: list[str]) -> dict[str, datetime | None]:
+        return {
+            platform: await _get_platform_last_synced_at(platform)
+            for platform in platforms
+        }
+
     backend.get_platform_last_synced_at = AsyncMock(side_effect=_get_platform_last_synced_at)
+    backend.get_platforms_last_synced_at = AsyncMock(side_effect=_get_platforms_last_synced_at)
     yield backend
 
 

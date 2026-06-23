@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
 CREATE INDEX IF NOT EXISTS idx_entities_type         ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_platform     ON entities(platform);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_eid ON entities(platform, platform_entity_id);
+CREATE INDEX IF NOT EXISTS idx_entities_platform_synced_at ON entities(platform, synced_at);
 CREATE INDEX IF NOT EXISTS idx_entities_last_accessed ON entities(last_accessed);
 
 -- Edge indexes
