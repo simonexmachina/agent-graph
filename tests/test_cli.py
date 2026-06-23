@@ -577,6 +577,49 @@ def test_connectors_json_reports_delegated_polling() -> None:
     assert parsed[1]["poll_delegates"] == ["gdocs"]
 
 
+def test_connectors_default_uses_local_auth_status_without_live_verify() -> None:
+    class _LocalConnector(_FakeGoogleConnector):
+        verify_called = False
+
+        @classmethod
+        async def verify_auth(cls) -> tuple[str, str | None]:
+            cls.verify_called = True
+            return ("invalid", "live check failed")
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
+         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_LocalConnector()]):
+        result = runner.invoke(app, ["connectors", "--json"])
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert parsed[0]["auth_status"] == "ok"
+    assert parsed[0]["auth_verified"] is False
+    assert _LocalConnector.verify_called is False
+
+
+def test_connectors_verify_runs_live_auth_check() -> None:
+    class _VerifiedConnector(_FakeGoogleConnector):
+        verify_called = False
+
+        @classmethod
+        async def verify_auth(cls) -> tuple[str, str | None]:
+            cls.verify_called = True
+            return ("invalid", "live check failed")
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
+         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_VerifiedConnector()]):
+        result = runner.invoke(app, ["connectors", "--verify", "--json"])
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert parsed[0]["auth_status"] == "invalid"
+    assert parsed[0]["auth_detail"] == "live check failed"
+    assert parsed[0]["auth_verified"] is True
+    assert _VerifiedConnector.verify_called is True
+
+
 def test_auth_status_dedupes_shared_google_provider() -> None:
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch(

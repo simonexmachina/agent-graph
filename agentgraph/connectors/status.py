@@ -46,7 +46,23 @@ def _aggregate_auth_status(statuses: list[tuple[str, str | None]]) -> tuple[str,
     return ("missing", None)
 
 
-async def auth_provider_status_items(connectors: list[BaseConnector]) -> list[dict[str, object]]:
+def _local_auth_status(
+    connector: BaseConnector,
+    accounts: list[object],
+) -> tuple[str, str | None]:
+    if accounts:
+        return ("ok", f"{len(accounts)} account(s)")
+    user = type(connector).get_authenticated_user()
+    if user is not None:
+        return ("ok", user)
+    return ("missing", None)
+
+
+async def auth_provider_status_items(
+    connectors: list[BaseConnector],
+    *,
+    verify: bool = False,
+) -> list[dict[str, object]]:
     """Build JSON-serialisable auth-provider status rows."""
     items: list[dict[str, object]] = []
     for provider, members in auth_provider_connectors(connectors).items():
@@ -56,7 +72,11 @@ async def auth_provider_status_items(connectors: list[BaseConnector]) -> list[di
         statuses: list[tuple[str, str | None]] = []
         for account in accounts:
             account_id = getattr(account, "account_id", None)
-            status, detail = await _verify_auth(representative, account_id)
+            status, detail = (
+                await _verify_auth(representative, account_id)
+                if verify
+                else ("ok", getattr(account, "label", None))
+            )
             account_rows.append({
                 "account_id": getattr(account, "account_id", None),
                 "label": getattr(account, "label", None),
@@ -71,6 +91,8 @@ async def auth_provider_status_items(connectors: list[BaseConnector]) -> list[di
             _aggregate_auth_status(statuses)
             if statuses
             else await _verify_auth(representative)
+            if verify
+            else _local_auth_status(representative, accounts)
         )
         connector_sources = [connector.source for connector in members]
         items.append({
@@ -82,6 +104,7 @@ async def auth_provider_status_items(connectors: list[BaseConnector]) -> list[di
             "shared": len(connector_sources) > 1,
             "auth_status": auth_status,
             "auth_detail": auth_detail,
+            "auth_verified": verify,
             "accounts": account_rows,
         })
     return items
@@ -90,9 +113,11 @@ async def auth_provider_status_items(connectors: list[BaseConnector]) -> list[di
 async def connector_status_items(
     connectors: list[BaseConnector],
     backend: StorageBackend,
+    *,
+    verify: bool = False,
 ) -> list[dict[str, object]]:
     """Build JSON-serialisable connector status rows."""
-    provider_items = await auth_provider_status_items(connectors)
+    provider_items = await auth_provider_status_items(connectors, verify=verify)
     provider_by_key = {str(item["provider"]): item for item in provider_items}
 
     poll_delegators: dict[str, list[str]] = {}
@@ -116,6 +141,7 @@ async def connector_status_items(
             "shared_auth": bool(provider_item["shared"]),
             "auth_status": provider_item["auth_status"],
             "auth_detail": provider_item["auth_detail"],
+            "auth_verified": provider_item["auth_verified"],
             "account_count": len(cast(list[dict[str, object]], provider_item["accounts"])),
             "url_patterns": type(connector).url_patterns,
             "polls": polls,

@@ -40,6 +40,7 @@ def _status_label(status: str) -> str:
 def auth(
     target: str | None = typer.Argument(None, help="Use 'status' or an auth provider such as google, slack, discord, or rss"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
+    verify: bool = typer.Option(False, "--verify", help="Live-check credentials with provider APIs"),
     add: bool = typer.Option(False, "--add", help="Add another authenticated account for this provider"),
     account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
     xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
@@ -73,7 +74,7 @@ def auth(
     from agentgraph.connectors.status import auth_provider_status_items
 
     bootstrap()
-    items = asyncio.run(auth_provider_status_items(get_all_connectors()))
+    items = asyncio.run(auth_provider_status_items(get_all_connectors(), verify=verify))
 
     if json:
         typer.echo(_json.dumps(items, indent=2))
@@ -162,6 +163,7 @@ def connector_command(
 @app.command()
 def connectors(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
+    verify: bool = typer.Option(False, "--verify", help="Live-check connector credentials with provider APIs"),
 ) -> None:
     """List installed connectors and their auth status."""
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
@@ -173,7 +175,7 @@ def connectors(
 
     async def _gather() -> list[dict[str, object]]:
         async with backend_context() as backend:
-            return await connector_status_items(all_connectors, backend)
+            return await connector_status_items(all_connectors, backend, verify=verify)
 
     items = asyncio.run(_gather())
 

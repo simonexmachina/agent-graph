@@ -35,7 +35,7 @@ mcp = FastMCP("AgentGraph")
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def list_connectors_tool() -> str:
+async def list_connectors_tool(verify: bool = False) -> str:
     """
     List all installed connectors and their capabilities.
 
@@ -50,6 +50,7 @@ async def list_connectors_tool() -> str:
           - auth_provider: shared auth provider key (e.g. "google")
           - auth_status: "ok" | "missing" | "invalid"
           - auth_detail: aggregate auth summary or error message; null if missing
+          - auth_verified: true when credentials were live-checked with provider APIs
           - shared_auth: true when multiple connectors share the same auth provider
           - account_count: number of authenticated accounts for that provider
           - url_patterns: URL patterns this connector recognises
@@ -66,12 +67,12 @@ async def list_connectors_tool() -> str:
 
     bootstrap()
     all_connectors = get_all_connectors()
-    result = await connector_status_items(all_connectors, get_backend())
+    result = await connector_status_items(all_connectors, get_backend(), verify=verify)
     return json.dumps(result)
 
 
 @mcp.tool()
-async def list_auth_providers_tool() -> str:
+async def list_auth_providers_tool(verify: bool = False) -> str:
     """
     List authentication providers and their current account/auth state.
 
@@ -83,6 +84,7 @@ async def list_auth_providers_tool() -> str:
           - shared: true when multiple connectors use the same provider
           - auth_status: "ok" | "missing" | "invalid"
           - auth_detail: aggregate auth summary or error message; null if missing
+          - auth_verified: true when credentials were live-checked with provider APIs
           - accounts: authenticated account rows with account_id, label, workspace_id,
             email, auth_status, and auth_detail
     """
@@ -90,7 +92,7 @@ async def list_auth_providers_tool() -> str:
     from agentgraph.connectors.status import auth_provider_status_items
 
     bootstrap()
-    result = await auth_provider_status_items(get_all_connectors())
+    result = await auth_provider_status_items(get_all_connectors(), verify=verify)
     return json.dumps(result)
 
 

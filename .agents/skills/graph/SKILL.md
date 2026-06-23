@@ -49,8 +49,8 @@ agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, rs
 # Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
 agentgraph ingest <source> [--json]   # e.g. gmail, rss
 
-# List installed connectors and their auth/sync status
-agentgraph connectors [--json] # auth_provider, auth_status/auth_detail, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
+# List installed connectors and their auth/sync status; add --verify for live provider API checks
+agentgraph connectors [--verify] [--json] # auth_provider, auth_status/auth_detail, auth_verified, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
 
 # Run a connector-owned command
 agentgraph connector <source> <command> [args...] [--json] # e.g. agentgraph connector rss add https://simonwillison.net/atom/everything/
@@ -59,8 +59,8 @@ agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--json] #
 agentgraph connector rss remove <feed-url> [feed-url...] [--json] # removes exact configured feed URLs
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
 
-# Show auth provider state (dedupes shared providers like Google)
-agentgraph auth [--json] status # provider, connectors[], auth_status/auth_detail, accounts[]
+# Show auth provider state (dedupes shared providers like Google); add --verify for live provider API checks
+agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[]
 
 # Authenticate connectors/providers
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
@@ -82,8 +82,8 @@ agentgraph install-skill [graph] [--target user|project] [--force] [--json]
 When using AgentGraph through MCP instead of the CLI, use these equivalent tools:
 
 ```text
-agentgraph connectors              -> list_connectors_tool()
-agentgraph auth [--json] status    -> list_auth_providers_tool()
+agentgraph connectors              -> list_connectors_tool(verify)
+agentgraph auth [--json] status    -> list_auth_providers_tool(verify)
 agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
 agentgraph search ...              -> search_entities_tool(...)
 agentgraph get ...                 -> get_entity_tool(entity_id)
@@ -143,7 +143,8 @@ An entity is a **stub** when it has no title and no content — it was reference
 
 When the user asks about graph data:
 1. Run `agentgraph connectors --json` to verify the relevant connector is installed and to inspect its last sync state
-2. Run `agentgraph auth --json status` to inspect provider-level authentication, especially for shared auth like Google
-3. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
-4. Run the appropriate `agentgraph` command with `--json` to get structured output
-5. Use `edges` or `traverse` to follow relationships when needed
+2. Run `agentgraph auth --json status` to inspect local provider-level authentication state, especially for shared auth like Google
+3. If credential validity is uncertain, run `agentgraph auth --verify --json status` or `agentgraph connectors --verify --json` to live-check provider APIs
+4. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
+5. Run the appropriate `agentgraph` command with `--json` to get structured output
+6. Use `edges` or `traverse` to follow relationships when needed
