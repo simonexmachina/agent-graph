@@ -22,3 +22,9 @@ download_entity_tool(entity_id, output_path=None) -> JSON string
 - filename
 - platform
 - MIME type
+
+## Notes
+
+- Gmail attachments are represented as Gmail `Document` stubs referenced by the owning `Thread`
+- Fetch or re-fetch the thread first, traverse one hop to discover the attachment document, then call this tool with that document ID
+- Platform refs such as `gmail/document/attachment/<message-id>/<attachment-id>` work after the stub exists in the graph

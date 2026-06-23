@@ -212,18 +212,20 @@ async def search_entities_tool(
     Combines semantic vector similarity and full-text search via
     Reciprocal Rank Fusion for high-quality results.
 
-    IMPORTANT — images and file attachments: photos, images, and uploaded
-    files are stored as attachments on Message entities (in
-    metadata.attachments), NOT as Document entities. If the user asks
-    about images, photos, pictures, or uploaded files, search Message
-    entities or use query_by_filter_tool with has_attachments=True.
-    Do NOT query Document for images — Documents are text documents only.
+    IMPORTANT — attachments: chat photos, images, and uploaded files are
+    stored as attachments on Message entities (in metadata.attachments).
+    Gmail email attachments are represented as Gmail Document stubs referenced
+    by the owning Thread and can be downloaded with download_entity_tool.
+    If the user asks about chat uploads, search Message entities or use
+    query_by_filter_tool with has_attachments=True. If the user asks about
+    Gmail attachments, inspect the Thread's referenced Document stubs.
 
     Args:
         query: Natural-language search query.
         entity_types: Optional list of entity types to restrict results
-            (e.g. ["Message", "Document", "Channel"]). To find images or
-            attachments, pass ["Message"].
+            (e.g. ["Message", "Document", "Channel"]). To find chat images or
+            attachments, pass ["Message"]. To find Gmail attachment stubs, pass
+            ["Document"] and platform="gmail".
         platform: Optional platform name to scope the search to a single
             source (e.g. "slack", "discord", "gdocs", "gmail", "rss"). When
             omitted, all platforms are searched. Use this to avoid
@@ -464,9 +466,10 @@ async def download_entity_tool(entity_id: str, output_path: str | None = None) -
     Download an entity's source file using the connector's stored auth.
 
     Supports entity UUIDs, UUID prefixes, and platform refs such as
-    "gdrive/file-id" when those resolve to a graph entity. The file is written
-    to output_path when supplied, or to the MCP server's current directory using
-    the source filename.
+    "gdrive/file-id" or "gmail/document/attachment/<message-id>/<attachment-id>"
+    when those resolve to a graph entity. The file is written to output_path
+    when supplied, or to the MCP server's current directory using the source
+    filename.
 
     Args:
         entity_id: Entity UUID, UUID prefix, or platform/entity_id reference.
@@ -602,14 +605,15 @@ async def query_by_filter_tool(
     the current user.
 
     Entity types and what they contain:
-      - Message: chat messages from Discord, Slack, Gmail, etc. This is
-          also where image and file uploads live — attachments are stored
+      - Message: chat messages from Discord, Slack, etc. This is
+          where chat image and file uploads live — attachments are stored
           in metadata.attachments as a JSON array with fields: url,
           filename, content_type, width, height. To find images or
           uploaded files, query Message (not Document) and set
           has_attachments=True.
-      - Document: text documents such as Google Docs. Does NOT contain
-          image or file attachments — those are on Message entities.
+      - Document: text documents such as Google Docs, plus Gmail attachment
+          stubs referenced by their owning Thread. Gmail attachment Document
+          stubs can be passed to download_entity_tool.
       - Spreadsheet: Google Sheets or Excel files.
       - Folder: a Google Drive folder containing other entities.
       - Channel: a chat channel or DM thread (Discord, Slack, etc.).
@@ -622,7 +626,8 @@ async def query_by_filter_tool(
 
     Args:
         entity_type: Entity type to query. See above for what each type
-            contains. Use "Message" to find images/attachments.
+            contains. Use "Message" to find chat uploads; use "Document" with
+            platform="gmail" to find Gmail attachment stubs.
         filters: Optional dict of key=value filters. Known columns
             (platform, platform_entity_id) are applied as column filters;
             all other keys are matched against the metadata JSONB field.
@@ -632,8 +637,9 @@ async def query_by_filter_tool(
         authored_by_me: If true, only return entities with an authored
             edge from the current user (resolved from stored credentials).
         has_attachments: If true, only return Message entities that have
-            at least one file or image attachment in metadata.attachments.
-            Ignored for non-Message entity types.
+            at least one chat file or image attachment in metadata.attachments.
+            Ignored for non-Message entity types. Gmail attachments are
+            Document stubs instead.
         limit: Maximum number of results (default 50).
         order_by: Column to sort by descending (default "created_at").
 

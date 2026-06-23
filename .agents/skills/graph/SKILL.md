@@ -31,7 +31,7 @@ agentgraph fetch <platform> <resource-id> [--json]
 # Trigger a connector re-fetch for an entity by its internal UUID
 agentgraph fetch-entity <entity-id> [--json]
 
-# Download an entity's source file using connector auth
+# Download an entity's source file using connector auth, including Gmail attachment Document stubs
 agentgraph download <entity-id|platform/ref> [--output <file-or-dir>] [--json]
 
 # Bookmark an entity or retrieve and bookmark an HTTP(S) URL; use --remove to clear bookmark protection
@@ -105,13 +105,22 @@ agentgraph install-skill ...       -> install_skill_tool(skill, target, force)
 
 | Type | Contains |
 |---|---|
-| `Message` | Chat messages (Discord, Slack, Gmail). **Images and file uploads are attachments on Message entities** — stored in `metadata.attachments` (JSON array with `url`, `filename`, `content_type`, `width`, `height`). Use `--has-attachments` to filter to messages with files. |
-| `Document` | Text documents (Google Docs, etc.). Does NOT contain image attachments. |
+| `Message` | Chat messages (Discord, Slack). **Chat images and file uploads are attachments on Message entities** — stored in `metadata.attachments` (JSON array with `url`, `filename`, `content_type`, `width`, `height`). Use `--has-attachments` to filter to messages with files. |
+| `Document` | Text documents (Google Docs, etc.) and Gmail attachment stubs. Gmail attachment stubs are referenced by their owning `Thread` and can be downloaded with `agentgraph download`. |
 | `Channel` | Chat channels and DM threads. |
 | `Task` | Tasks or to-do items. |
 | `Project` | Project/repository containers. |
 
-To find images uploaded this week: `agentgraph query --type Message --has-attachments --since 7d --json`
+To find chat images uploaded this week: `agentgraph query --type Message --has-attachments --since 7d --json`
+
+To download a Gmail attachment: re-fetch the Gmail thread, traverse one hop to
+find referenced Gmail `Document` stubs, then download the attachment document:
+
+```bash
+agentgraph fetch-entity <gmail-thread-entity-id>
+agentgraph traverse <gmail-thread-entity-id> --depth 1 --json
+agentgraph download <attachment-document-entity-id> --output <file-or-dir>
+```
 
 ## Notes
 
@@ -120,7 +129,7 @@ To find images uploaded this week: `agentgraph query --type Message --has-attach
 - Bookmark targets accept: full UUID, UUID prefix, platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`), or HTTP(S) URL
 - `agentgraph bookmark --remove <entity-id|platform/ref|url>` clears bookmark protection for existing graph entities
 - Delete targets accept: full UUID, UUID prefix, platform ref, or HTTP(S) URL. Connected edges are removed with the entity.
-- Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs or exported Google Docs/Sheets
+- Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs, exported Google Docs/Sheets, or Gmail attachment `Document` stubs
 - Use `agentgraph bookmark` for entities or HTTP(S) URLs that should survive retention-window garbage collection
 - Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep
 - `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
