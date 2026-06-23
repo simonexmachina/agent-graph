@@ -11,18 +11,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from agentgraph.graph.query import (
-    get_edges,
-    get_edges_for_entities,
-    get_entities_by_ids,
-    get_entity,
-    get_entity_by_url,
-    list_entities,
-    query_by_filter,
-    search_entities,
-    traverse_graph,
-)
-
 router = APIRouter(prefix="/api/cli", tags=["cli"])
 
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -109,6 +97,8 @@ async def cli_search(
     min_score: float = Query(default=0.03, ge=0.0, le=1.0),
     platform: str | None = Query(default=None),
 ) -> list[dict[str, Any]]:
+    from agentgraph.graph.query import search_entities
+
     return await search_entities(
         q, entity_types=entity_type or None, limit=limit, min_score=min_score, platform=platform
     )
@@ -116,6 +106,8 @@ async def cli_search(
 
 @router.get("/entity/{entity_id:path}")
 async def cli_get_entity(entity_id: str) -> dict[str, Any]:
+    from agentgraph.graph.query import get_entity
+
     entity = await get_entity(entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -124,6 +116,8 @@ async def cli_get_entity(entity_id: str) -> dict[str, Any]:
 
 @router.get("/entity-by-url")
 async def cli_get_entity_by_url(url: str = Query(...)) -> dict[str, Any]:
+    from agentgraph.graph.query import get_entity_by_url
+
     entity = await get_entity_by_url(url)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -136,6 +130,8 @@ async def cli_get_edges(
     edge_type: str | None = Query(default=None),
     direction: str = Query(default="both"),
 ) -> list[dict[str, Any]]:
+    from agentgraph.graph.query import get_edges, get_entity
+
     entity = await get_entity(entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -147,6 +143,8 @@ async def cli_traverse(
     entity_id: str,
     depth: int = Query(default=2, ge=1, le=4),
 ) -> dict[str, Any]:
+    from agentgraph.graph.query import get_entity, traverse_graph
+
     entity = await get_entity(entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -171,6 +169,15 @@ async def cli_browse(
     - entity_type / platform / since filter all non-focal nodes
     - reachability prune removes nodes with no visible path back to focal
     """
+    from agentgraph.graph.query import (
+        get_edges_for_entities,
+        get_entities_by_ids,
+        get_entity,
+        list_entities,
+        search_entities,
+        traverse_graph,
+    )
+
     # --- Phase 1: neighbourhood (only when node_id given) ---
     focal: dict[str, Any] | None = None
     neighbourhood_ids: set[str] | None = None
@@ -275,6 +282,8 @@ async def cli_query(
     filter: list[str] = Query(default=[]),
 ) -> list[dict[str, Any]]:
     """Query entities by type with optional filters (key=value pairs)."""
+    from agentgraph.graph.query import query_by_filter
+
     filters: dict[str, str] = {}
     for f in filter:
         if "=" in f:

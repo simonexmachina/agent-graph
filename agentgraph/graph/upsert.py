@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from agentgraph.connectors.base import EntityBatch
 from agentgraph.core.context import get_backend
-from agentgraph.graph.embeddings import encode_passage
 
 
 async def upsert_batch(batch: EntityBatch) -> None:
     """Persist an EntityBatch to the graph, generating embeddings as needed."""
+    from agentgraph.graph.embeddings import encode_passage
+
     # Compute embeddings here — backend-agnostic, stays in the graph layer
     person_embeddings: dict[str, list[float] | None] = {}
     for p in batch.persons:
