@@ -385,8 +385,27 @@ def test_gmail_thread_to_items_adds_attachment_document_stubs() -> None:
                         {
                             "filename": "Lot 10 Variation.pdf",
                             "mimeType": "application/pdf",
+                            "headers": [
+                                {
+                                    "name": "Content-Disposition",
+                                    "value": 'attachment; filename="Lot 10 Variation.pdf"',
+                                }
+                            ],
                             "body": {"attachmentId": "ANGjdJ8", "size": 12345},
-                        }
+                        },
+                        {
+                            "filename": "logo.png",
+                            "mimeType": "image/png",
+                            "headers": [
+                                {"name": "Content-Disposition", "value": "inline"},
+                                {"name": "Content-ID", "value": "<logo>"},
+                            ],
+                            "body": {"attachmentId": "INLINE123", "size": 99},
+                        },
+                        {
+                            "mimeType": "application/octet-stream",
+                            "body": {"attachmentId": "UNNAMED123", "size": 42},
+                        },
                     ],
                 },
             }

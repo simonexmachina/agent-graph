@@ -143,6 +143,23 @@ def _filename_with_extension(name: str, mime_type: str) -> str:
     return f"{name}{suffix}"
 
 
+def _part_header(part: dict[str, Any], name: str) -> str:
+    return _get_header(cast(list[dict[str, str]], part.get("headers", [])), name)
+
+
+def _is_downloadable_attachment_part(part: dict[str, Any]) -> bool:
+    body = part.get("body") or {}
+    attachment_id = body.get("attachmentId")
+    filename = str(part.get("filename") or "")
+    if not isinstance(attachment_id, str) or not attachment_id or not filename:
+        return False
+
+    disposition = _part_header(part, "Content-Disposition").lower()
+    if disposition.startswith("inline") or _part_header(part, "Content-ID"):
+        return False
+    return disposition.startswith("attachment") or not disposition
+
+
 def _extract_attachments(
     payload: dict[str, Any],
     message_id: str,
@@ -156,7 +173,7 @@ def _extract_attachments(
         body = part.get("body") or {}
         attachment_id = body.get("attachmentId")
         filename = str(part.get("filename") or "")
-        if isinstance(attachment_id, str) and attachment_id:
+        if _is_downloadable_attachment_part(part) and isinstance(attachment_id, str):
             resource_id = _attachment_resource_id(message_id, attachment_id)
             metadata: dict[str, str | int | float | bool | None] = {
                 "gmail_thread_id": thread_id,
