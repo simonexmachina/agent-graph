@@ -10,6 +10,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr, parsedate_to_datetime
+from pathlib import Path
 from typing import Any, cast
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
@@ -49,6 +50,14 @@ _SUBJECT_PREFIX_RE = re.compile(r"^(Re|Fwd|FW|RE|FWD):\s*", re.IGNORECASE)
 # URL hash fragments (legacy Gmail links) are base64-like and are NOT valid API IDs.
 _GMAIL_THREAD_ID_RE = re.compile(r"[0-9a-f]{16,}")
 _GMAIL_MESSAGE_ID_RE = re.compile(r"[0-9a-f]{16,}")
+_ATTACHMENT_RESOURCE_PREFIX = "attachment"
+_MIME_EXTENSIONS: dict[str, str] = {
+    "application/pdf": ".pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "text/html": ".html",
+    "text/plain": ".txt",
+}
 
 
 def _build_service(account_id: str | None = None) -> Any:
@@ -95,6 +104,89 @@ def _extract_body(payload: dict[str, Any]) -> str:
         h.body_width = 0
         return h.handle("\n".join(html_parts)).strip()
     return "\n".join(text_parts).strip()
+
+
+def _decode_urlsafe_data(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+
+def _attachment_resource_id(message_id: str, attachment_id: str) -> str:
+    return f"{_ATTACHMENT_RESOURCE_PREFIX}/{message_id}/{attachment_id}"
+
+
+def _parse_attachment_resource_id(resource_id: str) -> tuple[str, str] | None:
+    parts = resource_id.split("/", 2)
+    if len(parts) != 3 or parts[0] != _ATTACHMENT_RESOURCE_PREFIX:
+        return None
+    _, message_id, attachment_id = parts
+    if not message_id or not attachment_id:
+        return None
+    return message_id, attachment_id
+
+
+def _resolve_output_path(output_path: str | None, name: str, mime_type: str) -> Path:
+    if output_path is not None:
+        path = Path(output_path).expanduser()
+        if path.exists() and path.is_dir():
+            return path / _filename_with_extension(name, mime_type)
+        if output_path.endswith(("/", "\\")):
+            return path / _filename_with_extension(name, mime_type)
+        return path
+    return Path.cwd() / _filename_with_extension(name, mime_type)
+
+
+def _filename_with_extension(name: str, mime_type: str) -> str:
+    suffix = _MIME_EXTENSIONS.get(mime_type)
+    if suffix is None or Path(name).suffix:
+        return name
+    return f"{name}{suffix}"
+
+
+def _extract_attachments(
+    payload: dict[str, Any],
+    message_id: str,
+    thread_id: str,
+    account_id: str | None = None,
+) -> list[EntityRecord]:
+    """Return Document stubs for Gmail MIME parts with attachment IDs."""
+    attachments: list[EntityRecord] = []
+
+    def _collect(part: dict[str, Any]) -> None:
+        body = part.get("body") or {}
+        attachment_id = body.get("attachmentId")
+        filename = str(part.get("filename") or "")
+        if isinstance(attachment_id, str) and attachment_id:
+            resource_id = _attachment_resource_id(message_id, attachment_id)
+            metadata: dict[str, str | int | float | bool | None] = {
+                "gmail_thread_id": thread_id,
+                "gmail_message_id": message_id,
+                "gmail_attachment_id": attachment_id,
+                "web_url": f"https://mail.google.com/mail/u/0/#all/{thread_id}",
+            }
+            mime_type = part.get("mimeType")
+            if isinstance(mime_type, str) and mime_type:
+                metadata["mime_type"] = mime_type
+            size = body.get("size")
+            if isinstance(size, int):
+                metadata["size"] = size
+            if filename:
+                metadata["filename"] = filename
+            if account_id:
+                metadata["account_id"] = account_id
+            attachments.append(EntityRecord(
+                entity_type="Document",
+                platform="gmail",
+                platform_entity_id=resource_id,
+                title=filename or attachment_id,
+                metadata=metadata,
+                is_stub=True,
+            ))
+        for child in part.get("parts", []):
+            _collect(child)
+
+    _collect(payload)
+    return attachments
 
 
 def _parse_email_addresses(header_value: str) -> list[tuple[str, str]]:
@@ -237,6 +329,65 @@ class GmailConnector(BaseConnector):
         logger.debug("gmail: no usable thread ID in resource_id=%r meta=%r — skipping", resource_id, meta)
         return EntityBatch()
 
+    async def download(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        output_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Download a Gmail attachment Document stub using stored Google auth."""
+        if resource_type != "document":
+            raise NotImplementedError(f"{self.source} only downloads attachment document stubs")
+
+        parsed = _parse_attachment_resource_id(resource_id)
+        if parsed is None:
+            raise NotImplementedError(f"{self.source} can only download attachment document stubs")
+        message_id, attachment_id = parsed
+
+        metadata: dict[str, Any] = {}
+        from agentgraph.core.context import get_backend
+
+        entity = await get_backend().get_entity_by_platform(self.source, resource_id)
+        if entity is not None and isinstance(entity.get("metadata"), dict):
+            metadata = cast(dict[str, Any], entity["metadata"])
+
+        account_id = metadata.get("account_id")
+        selected_account_id = account_id if isinstance(account_id, str) else None
+        filename = metadata.get("filename")
+        name = filename if isinstance(filename, str) and filename else attachment_id
+        mime_value = metadata.get("mime_type")
+        mime_type = mime_value if isinstance(mime_value, str) else "application/octet-stream"
+
+        import asyncio
+
+        loop = asyncio.get_event_loop()
+        service = await loop.run_in_executor(None, _build_service_for, selected_account_id)
+        response: dict[str, Any] = await loop.run_in_executor(
+            None,
+            lambda: service.users().messages().attachments().get(
+                userId="me",
+                messageId=message_id,
+                id=attachment_id,
+            ).execute(),
+        )
+        data = response.get("data")
+        if not isinstance(data, str):
+            raise ValueError(f"Attachment {attachment_id!r} returned no data")
+
+        raw = _decode_urlsafe_data(data)
+        target = _resolve_output_path(output_path, name, mime_type)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+
+        return {
+            "path": str(target),
+            "bytes": len(raw),
+            "platform": "gmail",
+            "platform_entity_id": resource_id,
+            "filename": Path(target).name,
+            "mime_type": mime_type,
+        }
+
     async def poll(
         self,
         cursor: dict[str, Any],
@@ -346,10 +497,10 @@ async def _fetch_thread_by_thread_id(
             userId="me", id=thread_id, format="full"
         ).execute(),
     )
-    entity, persons, edges = _thread_to_items(thread, account_id=account_id)
+    entity, persons, edges, attachment_stubs = _thread_to_items(thread, account_id=account_id)
     if not entity:
         return EntityBatch()
-    batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
+    batch = EntityBatch(entities=[entity, *attachment_stubs], persons=persons, edges=edges)
     batch.add_stubs_from(entity)
     return batch
 
@@ -378,11 +529,11 @@ async def _fetch_thread_by_message_id(
 def _thread_to_items(
     thread: dict[str, Any],
     account_id: str | None = None,
-) -> tuple[EntityRecord | None, list[PersonRecord], list[EdgeRecord]]:
+) -> tuple[EntityRecord | None, list[PersonRecord], list[EdgeRecord], list[EntityRecord]]:
     """Convert a Gmail thread (full format) into graph items."""
     messages: list[dict[str, Any]] = thread.get("messages", [])
     if not messages:
-        return None, [], []
+        return None, [], [], []
 
     thread_id: str = thread["id"]
 
@@ -397,10 +548,12 @@ def _thread_to_items(
     content_blocks: list[str] = []
     persons: list[PersonRecord] = []
     edges: list[EdgeRecord] = []
+    attachment_stubs: list[EntityRecord] = []
     seen_emails: set[str] = set()
     first_sender_email: str | None = None
 
     for msg in messages:
+        message_id = str(msg.get("id") or "")
         payload = msg.get("payload", {})
         headers = payload.get("headers", [])
 
@@ -410,6 +563,21 @@ def _thread_to_items(
         date_header = _get_header(headers, "Date")
 
         body = _extract_body(payload).strip()
+        if message_id:
+            new_attachments = _extract_attachments(
+                payload,
+                message_id=message_id,
+                thread_id=thread_id,
+                account_id=account_id,
+            )
+            attachment_stubs.extend(new_attachments)
+            for attachment in new_attachments:
+                edges.append(EdgeRecord(
+                    edge_type="references",
+                    source_platform_entity_id=thread_id,
+                    target_platform_entity_id=attachment.platform_entity_id,
+                    platform="gmail",
+                ))
 
         block_lines = [f"**From:** {from_header}", f"**Date:** {_format_date(date_header)}"]
         if to_header:
@@ -461,7 +629,7 @@ def _thread_to_items(
             **({"account_id": account_id} if account_id else {}),
         },
     )
-    return entity, persons, edges
+    return entity, persons, edges, attachment_stubs
 
 
 async def _list_threads(

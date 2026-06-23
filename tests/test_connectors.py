@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
-from agentgraph_connector_google.gmail import GmailConnector
+from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
@@ -70,6 +70,59 @@ class _FakeMediaIoBaseDownload:
     def next_chunk(self) -> tuple[None, bool]:
         self._fd.write(self._request.execute())
         return None, True
+
+
+class _FakeGmailRequest:
+    def __init__(self, payload: object) -> None:
+        self._payload = payload
+
+    def execute(self) -> object:
+        return self._payload
+
+
+class _FakeGmailAttachments:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def get(self, *, userId: str, messageId: str, id: str) -> _FakeGmailRequest:  # noqa: N803, A002
+        return _FakeGmailRequest(self._payload)
+
+
+class _FakeGmailMessages:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._attachments = _FakeGmailAttachments(payload)
+
+    def attachments(self) -> _FakeGmailAttachments:
+        return self._attachments
+
+
+class _FakeGmailUsers:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._messages = _FakeGmailMessages(payload)
+
+    def messages(self) -> _FakeGmailMessages:
+        return self._messages
+
+
+class _FakeGmailService:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._users = _FakeGmailUsers(payload)
+
+    def users(self) -> _FakeGmailUsers:
+        return self._users
+
+
+class _FakeBackend:
+    async def get_entity_by_platform(self, platform: str, platform_entity_id: str) -> dict[str, object]:
+        return {
+            "platform": platform,
+            "platform_entity_id": platform_entity_id,
+            "metadata": {
+                "filename": "approval.pdf",
+                "mime_type": "application/pdf",
+                "account_id": "simon@example.com",
+            },
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +365,88 @@ def test_gmail_entity_url_uses_popout_view(gmail_connector: GmailConnector) -> N
         gmail_connector.entity_url("18f0c1d2e3a4b5c6")
         == "https://mail.google.com/mail/u/0/#all/18f0c1d2e3a4b5c6"
     )
+
+
+def test_gmail_thread_to_items_adds_attachment_document_stubs() -> None:
+    thread = {
+        "id": "19ec9bf00171a35e",
+        "messages": [
+            {
+                "id": "19ec9bf00171a35f",
+                "labelIds": ["INBOX"],
+                "payload": {
+                    "headers": [
+                        {"name": "Subject", "value": "Variation Approval"},
+                        {"name": "From", "value": "Stephanie <steph@example.com>"},
+                        {"name": "To", "value": "Simon <simon@example.com>"},
+                        {"name": "Date", "value": "Mon, 15 Jun 2026 15:26:00 +1000"},
+                    ],
+                    "parts": [
+                        {
+                            "filename": "Lot 10 Variation.pdf",
+                            "mimeType": "application/pdf",
+                            "body": {"attachmentId": "ANGjdJ8", "size": 12345},
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+    entity, _persons, edges, attachment_stubs = _thread_to_items(
+        thread,
+        account_id="simon@example.com",
+    )
+
+    assert entity is not None
+    assert len(attachment_stubs) == 1
+    attachment = attachment_stubs[0]
+    assert attachment.entity_type == "Document"
+    assert attachment.platform == "gmail"
+    assert attachment.platform_entity_id == "attachment/19ec9bf00171a35f/ANGjdJ8"
+    assert attachment.title == "Lot 10 Variation.pdf"
+    assert attachment.is_stub is True
+    assert attachment.metadata["gmail_thread_id"] == "19ec9bf00171a35e"
+    assert attachment.metadata["gmail_message_id"] == "19ec9bf00171a35f"
+    assert attachment.metadata["gmail_attachment_id"] == "ANGjdJ8"
+    assert attachment.metadata["mime_type"] == "application/pdf"
+    assert attachment.metadata["filename"] == "Lot 10 Variation.pdf"
+    assert attachment.metadata["account_id"] == "simon@example.com"
+    assert any(
+        edge.edge_type == "references"
+        and edge.source_platform_entity_id == "19ec9bf00171a35e"
+        and edge.target_platform_entity_id == "attachment/19ec9bf00171a35f/ANGjdJ8"
+        and edge.platform == "gmail"
+        for edge in edges
+    )
+
+
+@pytest.mark.asyncio
+async def test_gmail_download_attachment_document_stub(
+    gmail_connector: GmailConnector,
+    tmp_path: Path,
+) -> None:
+    encoded = "YXBwcm92YWw"  # b"approval" without base64 padding
+    with (
+        patch(
+            "agentgraph_connector_google.gmail._build_service_for",
+            return_value=_FakeGmailService({"data": encoded}),
+        ) as build_service,
+        patch("agentgraph.core.context.get_backend", return_value=_FakeBackend()),
+    ):
+        result = await gmail_connector.download(
+            "document",
+            "attachment/19ec9bf00171a35f/ANGjdJ8",
+            str(tmp_path),
+        )
+
+    assert Path(result["path"]).read_bytes() == b"approval"
+    assert result["filename"] == "approval.pdf"
+    assert result["bytes"] == 8
+    assert result["platform"] == "gmail"
+    assert result["platform_entity_id"] == "attachment/19ec9bf00171a35f/ANGjdJ8"
+    assert result["mime_type"] == "application/pdf"
+    build_service.assert_called_once_with("simon@example.com")
 
 
 def test_slack_can_handle(slack_connector: SlackConnector) -> None:
