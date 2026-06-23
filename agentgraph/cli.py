@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import typer
 
-from agentgraph.connectors.base import BaseConnector
-from agentgraph.skills import SkillInstallError
-from agentgraph.skills import install_skill as install_agentgraph_skill
+if TYPE_CHECKING:
+    from agentgraph.connectors.base import BaseConnector
 
 app = typer.Typer(
     name="agentgraph",
@@ -423,6 +422,9 @@ def install_skill(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Install a bundled AgentGraph skill into an agent skill directory."""
+    from agentgraph.skills import SkillInstallError
+    from agentgraph.skills import install_skill as install_agentgraph_skill
+
     if target not in ("user", "project"):
         typer.echo("Target must be 'user' or 'project'", err=True)
         raise typer.Exit(code=1)
