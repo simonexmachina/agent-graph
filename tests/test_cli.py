@@ -217,6 +217,32 @@ def test_server_unavailable_exits_nonzero() -> None:
     assert exc.value.code == 1
 
 
+def test_cli_server_requests_use_short_connect_timeout() -> None:
+    from agentgraph.cli_query import cmd_query
+
+    response = httpx.Response(
+        200,
+        json=[],
+        request=httpx.Request("GET", "http://127.0.0.1:8765/api/cli/query"),
+    )
+
+    with patch("httpx.get", return_value=response) as get:
+        cmd_query(
+            entity_type="Thread",
+            filters={},
+            limit=5,
+            order_by="updated_at",
+            since=None,
+            authored_by_me=False,
+            as_json=True,
+        )
+
+    timeout = get.call_args.kwargs["timeout"]
+    assert isinstance(timeout, httpx.Timeout)
+    assert timeout.connect == 0.5
+    assert timeout.read == 10
+
+
 def test_auth_help() -> None:
     result = runner.invoke(app, ["auth", "--help"])
     assert result.exit_code == 0

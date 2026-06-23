@@ -12,6 +12,8 @@ from rich.table import Table
 from agentgraph.config import get_settings
 
 console = Console()
+GET_TIMEOUT = httpx.Timeout(10, connect=0.5)
+POST_TIMEOUT = httpx.Timeout(30, connect=0.5)
 
 
 def _server_base() -> str:
@@ -33,7 +35,7 @@ def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         resp = httpx.get(
             f"{_server_base()}{path}",
             params=params,
-            timeout=10,
+            timeout=GET_TIMEOUT,
         )
         resp.raise_for_status()
         return resp.json()
@@ -47,7 +49,7 @@ def _post(path: str, params: dict[str, Any] | None = None) -> Any:
         resp = httpx.post(
             f"{_server_base()}{path}",
             params=params,
-            timeout=30,
+            timeout=POST_TIMEOUT,
         )
         resp.raise_for_status()
         return resp.json()
