@@ -653,11 +653,21 @@ class SQLiteBackend(StorageBackend):
             except Exception:
                 pass
 
-            # Vector search
-            vec_ids = await vector_ranked(
-                conn, query_vec, entity_types, limit, self._vector_mode, self._vec_loaded,
-                platform=platform,
-            )
+            # Vector search is the expensive leg. If FTS fills the whole
+            # candidate window, use the lexical candidates directly and avoid
+            # an O(n) vector scan over every embedded entity.
+            candidate_limit = limit * 5
+            if len(fts_ids) >= candidate_limit:
+                vec_ids: list[tuple[str, int]] = []
+                logger.debug(
+                    "search skipped vector scan because FTS returned %d candidates",
+                    len(fts_ids),
+                )
+            else:
+                vec_ids = await vector_ranked(
+                    conn, query_vec, entity_types, limit, self._vector_mode, self._vec_loaded,
+                    platform=platform,
+                )
 
             # RRF fusion (k=60, fulltext weight=2x)
             # Rule: if BM25 found anything, include only results that BM25 also found.

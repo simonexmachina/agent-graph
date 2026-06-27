@@ -5,11 +5,19 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import Any, cast
 from urllib.parse import urlparse
 
 from agentgraph.core.context import get_backend
 from agentgraph.core.storage import EdgeResult, EntityResult
+
+
+@lru_cache(maxsize=256)
+def _cached_query_embedding(query: str) -> tuple[float, ...]:
+    from agentgraph.graph.embeddings import encode_query
+
+    return tuple(encode_query(query))
 
 
 def _enrich_web_url(entities: list[EntityResult]) -> None:
@@ -47,9 +55,7 @@ async def search_entities(
     platform: str | None = None,
 ) -> list[EntityResult]:
     """Hybrid search: combines vector similarity with full-text via RRF."""
-    from agentgraph.graph.embeddings import encode_query
-
-    embedding = await asyncio.to_thread(encode_query, query)
+    embedding = list(await asyncio.to_thread(_cached_query_embedding, query))
     backend = get_backend()
     results = await backend.search_entities(
         embedding, query, entity_types, limit, min_score, platform=platform
