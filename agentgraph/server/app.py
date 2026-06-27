@@ -8,10 +8,11 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -74,6 +75,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="AgentGraph", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def log_request_timing(request: Request, call_next: Any) -> Any:
+    start = perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (perf_counter() - start) * 1000
+    size = response.headers.get("content-length")
+    logger.debug(
+        "request %s %s -> %s in %.1fms%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+        f" bytes={size}" if size else "",
+    )
+    return response
 
 app.include_router(graph_router)
 app.include_router(cli_router)

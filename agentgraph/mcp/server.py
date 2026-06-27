@@ -26,6 +26,7 @@ from agentgraph.graph.query import (
     search_entities,
     traverse_graph,
 )
+from agentgraph.perf import timed
 
 logger = logging.getLogger(__name__)
 mcp = FastMCP("AgentGraph")
@@ -189,7 +190,8 @@ async def _enrich_results(results: list[dict[str, Any]]) -> None:
         if connector is None:
             return
         try:
-            await connector.enrich_results(entities)
+            with timed("mcp.enrich_results", platform=platform, count=len(entities)):
+                await connector.enrich_results(entities)
         except Exception:
             logger.exception("Connector %s failed to enrich MCP results", platform)
 

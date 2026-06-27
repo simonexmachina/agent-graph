@@ -13,6 +13,8 @@ from __future__ import annotations
 import struct
 from typing import Any
 
+from agentgraph.perf import timed
+
 # ---------------------------------------------------------------------------
 # Blob encoding
 # ---------------------------------------------------------------------------
@@ -86,17 +88,18 @@ async def vector_ranked(
     # ---- sqlite-vec path ----
     if mode == "sqlite-vec" and vec_loaded:
         try:
-            cursor = await conn.execute(
-                f"""
-                SELECT id, vec_distance_cosine(content_embedding, ?) AS dist
-                FROM entities
-                WHERE content_embedding IS NOT NULL {type_clause}
-                ORDER BY dist ASC
-                LIMIT ?
-                """,
-                [query_blob, *type_params, candidate_limit],
-            )
-            rows = await cursor.fetchall()
+            with timed("sqlite.vector_ranked.sqlite_vec", limit=limit, platform=platform):
+                cursor = await conn.execute(
+                    f"""
+                    SELECT id, vec_distance_cosine(content_embedding, ?) AS dist
+                    FROM entities
+                    WHERE content_embedding IS NOT NULL {type_clause}
+                    ORDER BY dist ASC
+                    LIMIT ?
+                    """,
+                    [query_blob, *type_params, candidate_limit],
+                )
+                rows = await cursor.fetchall()
             return [(row[0], i + 1) for i, row in enumerate(rows)]
         except Exception:
             pass  # fall through to numpy
@@ -105,33 +108,34 @@ async def vector_ranked(
     try:
         import numpy as np
 
-        cursor = await conn.execute(
-            f"SELECT id, content_embedding FROM entities WHERE content_embedding IS NOT NULL {type_clause}",
-            type_params,
-        )
-        rows = await cursor.fetchall()
-        if not rows:
-            return []
+        with timed("sqlite.vector_ranked.numpy", limit=limit, platform=platform):
+            cursor = await conn.execute(
+                f"SELECT id, content_embedding FROM entities WHERE content_embedding IS NOT NULL {type_clause}",
+                type_params,
+            )
+            rows = await cursor.fetchall()
+            if not rows:
+                return []
 
-        q = np.array(query_vec, dtype=np.float32)
-        q_norm = float(np.linalg.norm(q))
-        if q_norm == 0:
-            return []
-        q = q / q_norm
+            q = np.array(query_vec, dtype=np.float32)
+            q_norm = float(np.linalg.norm(q))
+            if q_norm == 0:
+                return []
+            q = q / q_norm
 
-        scored: list[tuple[str, float]] = []
-        for entity_id, blob in rows:
-            if not blob:
-                continue
-            vec = np.array(unpack_embedding(bytes(blob)), dtype=np.float32)
-            norm = float(np.linalg.norm(vec))
-            if norm == 0:
-                continue
-            sim = float(np.dot(q, vec / norm))
-            scored.append((entity_id, sim))
+            scored: list[tuple[str, float]] = []
+            for entity_id, blob in rows:
+                if not blob:
+                    continue
+                vec = np.array(unpack_embedding(bytes(blob)), dtype=np.float32)
+                norm = float(np.linalg.norm(vec))
+                if norm == 0:
+                    continue
+                sim = float(np.dot(q, vec / norm))
+                scored.append((entity_id, sim))
 
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return [(eid, i + 1) for i, (eid, _) in enumerate(scored[:candidate_limit])]
+            scored.sort(key=lambda x: x[1], reverse=True)
+            return [(eid, i + 1) for i, (eid, _) in enumerate(scored[:candidate_limit])]
 
     except ImportError:
         return []

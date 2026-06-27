@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from time import perf_counter
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 
@@ -22,9 +23,11 @@ def _sync_scope(source: str, account_id: str | None) -> str:
 
 async def poll_connector(connector: BaseConnector) -> None:
     source = connector.source
+    started = perf_counter()
     try:
         backend = get_backend()
         for account_id in connector.poll_account_ids():
+            scope_started = perf_counter()
             scope = _sync_scope(source, account_id)
             cursor = await backend.load_cursor(scope)
             is_first_run = not cursor
@@ -51,15 +54,19 @@ async def poll_connector(connector: BaseConnector) -> None:
                 logger.info("poll %s — no new data", scope)
 
             await backend.save_cursor(scope, new_cursor)
-            logger.info("poll %s — completed", scope)
+            logger.info("poll %s — completed in %.1fs", scope, perf_counter() - scope_started)
     except Exception:
         logger.exception("poll failed for connector %s", source)
+    finally:
+        logger.debug("poll %s total elapsed %.1fs", source, perf_counter() - started)
 
 
 async def run_ingest(connector: BaseConnector) -> None:
     source = connector.source
+    started = perf_counter()
     try:
         for account_id in connector.poll_account_ids():
+            scope_started = perf_counter()
             scope = _sync_scope(source, account_id)
             logger.info("ingest %s — starting", scope)
             batch = await connector.ingest(account_id=account_id)
@@ -69,11 +76,13 @@ async def run_ingest(connector: BaseConnector) -> None:
                     scope, len(batch.entities), len(batch.persons), len(batch.edges),
                 )
                 await upsert_batch(batch)
-                logger.info("ingest %s — complete", scope)
+                logger.info("ingest %s — complete in %.1fs", scope, perf_counter() - scope_started)
             else:
                 logger.info("ingest %s — no data returned", scope)
     except Exception:
         logger.exception("ingest failed for connector %s", source)
+    finally:
+        logger.debug("ingest %s total elapsed %.1fs", source, perf_counter() - started)
 
 
 def setup_sync(scheduler: AsyncIOScheduler) -> None:
