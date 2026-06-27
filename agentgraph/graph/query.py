@@ -16,13 +16,18 @@ def _enrich_web_url(entities: list[EntityResult]) -> None:
     """Populate metadata.web_url from the connector for entities that don't store it."""
     from agentgraph.connectors.registry import get_connector
 
+    connectors: dict[str, Any] = {}
     for entity in entities:
         meta = entity.get("metadata")
         metadata = cast(dict[str, Any], meta) if isinstance(meta, dict) else None
         if metadata is not None and metadata.get("web_url"):
             continue
         platform = entity.get("platform")
-        connector = get_connector(platform if isinstance(platform, str) else "")
+        if not isinstance(platform, str):
+            continue
+        if platform not in connectors:
+            connectors[platform] = get_connector(platform)
+        connector = connectors[platform]
         if connector is None:
             continue
         platform_entity_id = entity.get("platform_entity_id")

@@ -222,6 +222,7 @@ async def search_entities_tool(
     platform: str | None = None,
     limit: int = 10,
     min_score: float = 0.03,
+    refresh: bool = False,
 ) -> str:
     """
     Search the knowledge graph using a natural-language query.
@@ -250,6 +251,9 @@ async def search_entities_tool(
         limit: Maximum number of results to return (default 10).
         min_score: Minimum relevance score threshold (0–1, default 0.02).
             Results below this score are suppressed as noise.
+        refresh: If true, let connectors refresh or enrich connector-owned
+            presentation metadata before returning. Defaults to false to keep
+            search responsive.
 
     Returns:
         JSON array of matching entities with id, title, content snippet,
@@ -261,7 +265,8 @@ async def search_entities_tool(
     )
     for r in results:
         _truncate_content(r)
-    await _enrich_results(results)
+    if refresh:
+        await _enrich_results(results)
     return json.dumps(results, default=str)
 
 
@@ -614,6 +619,7 @@ async def query_by_filter_tool(
     has_attachments: bool = False,
     limit: int = 50,
     order_by: str = "created_at",
+    refresh: bool = False,
 ) -> str:
     """
     Query entities by type with optional filters.
@@ -660,6 +666,9 @@ async def query_by_filter_tool(
             Document stubs instead.
         limit: Maximum number of results (default 50).
         order_by: Column to sort by descending (default "created_at").
+        refresh: If true, let connectors refresh or enrich connector-owned
+            presentation metadata before returning. Defaults to false to keep
+            queries responsive.
 
     Returns:
         JSON array of matching entities. For Message entities with
@@ -675,5 +684,6 @@ async def query_by_filter_tool(
     )
     for result in results:
         _truncate_content(result)
-    await _enrich_results(results)
+    if refresh:
+        await _enrich_results(results)
     return json.dumps(results, default=str)

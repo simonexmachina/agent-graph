@@ -127,6 +127,7 @@ agentgraph download <attachment-document-entity-id> --output <file-or-dir>
 - Graph data commands require the AgentGraph server. If a command reports the server is unavailable, run `agentgraph serve`.
 - Use `--json` when you need to parse results programmatically
 - List-style commands (`search`, `query`, and graph viewer/browse results) return bounded content snippets with `content_truncated` when applicable. Use `agentgraph get <entity-id> --json` for full entity content.
+- MCP `search_entities_tool` and `query_by_filter_tool` default to `refresh=false` so connector-owned network enrichment does not slow normal reads. Set `refresh=true` only when fresh connector-owned presentation metadata is needed.
 - Bookmark targets accept: full UUID, UUID prefix, platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`), or HTTP(S) URL
 - `agentgraph bookmark --remove <entity-id|platform/ref|url>` clears bookmark protection for existing graph entities
 - Delete targets accept: full UUID, UUID prefix, platform ref, or HTTP(S) URL. Connected edges are removed with the entity.
