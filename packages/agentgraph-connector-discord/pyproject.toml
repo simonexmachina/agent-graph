@@ -5,7 +5,6 @@ description = "Discord connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
     "agentgraph",
-    "agentgraph-connector-slack",
     "httpx>=0.28.1",
 ]
 
@@ -17,4 +16,3 @@ package = true
 
 [tool.uv.sources]
 agentgraph = { workspace = true }
-agentgraph-connector-slack = { workspace = true }

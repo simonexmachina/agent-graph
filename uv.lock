@@ -118,14 +118,12 @@ version = "0.1.0"
 source = { editable = "packages/agentgraph-connector-discord" }
 dependencies = [
     { name = "agentgraph" },
-    { name = "agentgraph-connector-slack" },
     { name = "httpx" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "agentgraph", editable = "." },
-    { name = "agentgraph-connector-slack", editable = "packages/agentgraph-connector-slack" },
     { name = "httpx", specifier = ">=0.28.1" },
 ]
 
