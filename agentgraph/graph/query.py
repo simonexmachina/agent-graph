@@ -20,6 +20,10 @@ def _cached_query_embedding(query: str) -> tuple[float, ...]:
     return tuple(encode_query(query))
 
 
+def clear_query_embedding_cache() -> None:
+    _cached_query_embedding.cache_clear()
+
+
 def _enrich_web_url(entities: list[EntityResult]) -> None:
     """Populate metadata.web_url from the connector for entities that don't store it."""
     from agentgraph.connectors.registry import get_connector

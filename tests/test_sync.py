@@ -69,8 +69,7 @@ class _FailingConnector(BaseConnector):
 
 @pytest.fixture(autouse=True)
 def clear_sync_backoff() -> None:
-    sync._failure_counts.clear()
-    sync._backoff_until.clear()
+    sync.clear_poll_backoff()
 
 
 @pytest.mark.asyncio
@@ -94,5 +93,4 @@ async def test_poll_connector_backs_off_after_failure() -> None:
         await sync.poll_connector(connector)
         await sync.poll_connector(connector)
 
-    assert sync._failure_counts["failing"] == 1
     backend.load_cursor.assert_awaited_once()

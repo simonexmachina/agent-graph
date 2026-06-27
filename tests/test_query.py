@@ -149,12 +149,12 @@ async def test_search_entities_platform_none_by_default() -> None:
 
 @pytest.mark.asyncio
 async def test_search_entities_offloads_query_embedding() -> None:
-    from agentgraph.graph.query import _cached_query_embedding, search_entities
+    from agentgraph.graph.query import clear_query_embedding_cache, search_entities
 
     backend = _mock_backend(search_entities=AsyncMock(return_value=[]))
     set_backend(backend)
     calls: list[tuple[Any, tuple[Any, ...]]] = []
-    _cached_query_embedding.cache_clear()
+    clear_query_embedding_cache()
 
     async def fake_to_thread(func: Any, *args: Any) -> Any:
         calls.append((func, args))
@@ -170,11 +170,11 @@ async def test_search_entities_offloads_query_embedding() -> None:
 
 @pytest.mark.asyncio
 async def test_search_entities_caches_query_embedding() -> None:
-    from agentgraph.graph.query import _cached_query_embedding, search_entities
+    from agentgraph.graph.query import clear_query_embedding_cache, search_entities
 
     backend = _mock_backend(search_entities=AsyncMock(return_value=[]))
     set_backend(backend)
-    _cached_query_embedding.cache_clear()
+    clear_query_embedding_cache()
 
     with patch("agentgraph.graph.embeddings.encode_query", return_value=[0.1] * 384) as encode_query:
         await search_entities("repeat")
@@ -186,24 +186,25 @@ async def test_search_entities_caches_query_embedding() -> None:
 @pytest.mark.asyncio
 async def test_sqlite_search_skips_vector_when_fts_fills_candidate_window() -> None:
     from agentgraph.backends.sqlite.backend import SQLiteBackend
+    from agentgraph.connectors.base import EntityBatch, EntityRecord
 
     backend = SQLiteBackend(":memory:")
     await backend.initialize()
     try:
-        conn = backend._conn_or_raise()
-        for index in range(5):
-            entity_id = f"entity-{index}"
-            await conn.execute(
-                """
-                INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, content)
-                VALUES (?, 'Document', 'web', ?, ?, ?)
-                """,
-                [entity_id, f"doc-{index}", f"Alpha {index}", "alpha content"],
-            )
-            await conn.execute(
-                "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)",
-                [entity_id, f"Alpha {index}", "alpha content"],
-            )
+        await backend.upsert_batch(
+            EntityBatch(entities=[
+                EntityRecord(
+                    entity_type="Document",
+                    platform="web",
+                    platform_entity_id=f"doc-{index}",
+                    title=f"Alpha {index}",
+                    content="alpha content",
+                )
+                for index in range(5)
+            ]),
+            person_embeddings={},
+            entity_embeddings={},
+        )
 
         with patch("agentgraph.backends.sqlite.backend.vector_ranked", new=AsyncMock(return_value=[])) as vector_ranked:
             results = await backend.search_entities([0.0] * 384, "alpha", None, 1, 0.0)

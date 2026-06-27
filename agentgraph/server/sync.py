@@ -22,6 +22,11 @@ _failure_counts: dict[str, int] = {}
 _backoff_until: dict[str, datetime] = {}
 
 
+def clear_poll_backoff() -> None:
+    _failure_counts.clear()
+    _backoff_until.clear()
+
+
 def _sync_scope(source: str, account_id: str | None) -> str:
     return source if account_id is None else f"{source}:{account_id}"
 
