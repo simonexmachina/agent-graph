@@ -14,6 +14,8 @@ from agentgraph.auth.credentials import (
     load_platform,
     load_platform_account,
     load_platform_accounts,
+    remove_platform,
+    remove_platform_account,
     save_platform,
     upsert_platform_account,
 )
@@ -55,9 +57,23 @@ def test_save_merges_platforms(tmp_creds: Path) -> None:
     assert load_platform("discord") == {"bot_token": "bot"}
 
 
+def test_remove_platform_deletes_only_requested_platform(tmp_creds: Path) -> None:
+    save_platform("slack", {"xoxc_token": "tok"})
+    save_platform("discord", {"bot_token": "bot"})
+
+    assert remove_platform("slack") is True
+    assert load_platform("slack") is None
+    assert load_platform("discord") == {"bot_token": "bot"}
+    assert remove_platform("slack") is False
+
+
 def test_upsert_platform_account_preserves_multiple_accounts(tmp_creds: Path) -> None:
-    upsert_platform_account("google", "user-one@example.com", {"user_email": "user-one@example.com"})
-    upsert_platform_account("google", "user-two@example.com", {"user_email": "user-two@example.com"})
+    upsert_platform_account(
+        "google", "user-one@example.com", {"user_email": "user-one@example.com"}
+    )
+    upsert_platform_account(
+        "google", "user-two@example.com", {"user_email": "user-two@example.com"}
+    )
 
     accounts = load_platform_accounts("google")
 
@@ -76,6 +92,32 @@ def test_load_platform_account_reads_legacy_single_account(tmp_creds: Path) -> N
 
     assert load_platform_account("slack") == {"xoxc_token": "tok", "d_cookie": "cookie"}
     assert load_platform_accounts("slack") == [{"xoxc_token": "tok", "d_cookie": "cookie"}]
+
+
+def test_remove_platform_account_updates_default(tmp_creds: Path) -> None:
+    upsert_platform_account(
+        "google", "user-one@example.com", {"user_email": "user-one@example.com"}
+    )
+    upsert_platform_account(
+        "google", "user-two@example.com", {"user_email": "user-two@example.com"}, make_default=True
+    )
+
+    assert remove_platform_account("google", "user-two@example.com") is True
+
+    accounts = load_platform_accounts("google")
+    assert [account["account_id"] for account in accounts] == ["user-one@example.com"]
+    assert load_platform_account("google") == {
+        "account_id": "user-one@example.com",
+        "user_email": "user-one@example.com",
+    }
+    assert remove_platform_account("google", "missing@example.com") is False
+
+
+def test_remove_platform_account_deletes_final_account(tmp_creds: Path) -> None:
+    upsert_platform_account("google", "user@example.com", {"user_email": "user@example.com"})
+
+    assert remove_platform_account("google", "user@example.com") is True
+    assert load_platform("google") is None
 
 
 def test_google_credentials_model() -> None:
@@ -106,6 +148,7 @@ def test_save_model_instance(tmp_creds: Path) -> None:
 # ---------------------------------------------------------------------------
 # Google auth verification
 # ---------------------------------------------------------------------------
+
 
 class _FakeGoogleAuthCredentials:
     def __init__(self, *, valid: bool) -> None:
@@ -189,6 +232,7 @@ def test_verify_google_auth_valid_returns_email(
 # ---------------------------------------------------------------------------
 # Connector credential loaders
 # ---------------------------------------------------------------------------
+
 
 def test_load_slack_creds_raises_when_missing(tmp_creds: Path) -> None:
     with pytest.raises(RuntimeError, match="agentgraph auth slack"):

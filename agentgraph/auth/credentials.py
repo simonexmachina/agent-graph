@@ -100,6 +100,19 @@ def save_platform(platform: str, data: Any) -> None:
     _write_all_credentials(raw)
 
 
+def remove_platform(platform: str) -> bool:
+    """Remove all stored credentials for a platform.
+
+    Returns true when credentials were present and removed.
+    """
+    raw = _load_all_credentials()
+    if platform not in raw:
+        return False
+    del raw[platform]
+    _write_all_credentials(raw)
+    return True
+
+
 def save_platform_accounts(
     platform: str,
     accounts: list[Any],
@@ -150,3 +163,48 @@ def upsert_platform_account(
             raw_default_id = current_data.get("default_account_id")
             default_id = raw_default_id if isinstance(raw_default_id, str) else None
     save_platform_accounts(platform, existing, default_account_id=default_id or account_id)
+
+
+def remove_platform_account(platform: str, account_id: str) -> bool:
+    """Remove one stored account for a platform.
+
+    Legacy single-account credentials are only removed when their stored
+    account_id matches the requested account_id. Multi-account credentials
+    drop the platform key entirely when the final account is removed.
+    """
+    raw = _load_all_credentials()
+    val = raw.get(platform)
+    if not isinstance(val, dict):
+        return False
+    data_val = cast(dict[str, Any], val)
+
+    if "accounts" not in data_val:
+        if data_val.get("account_id") != account_id:
+            return False
+        del raw[platform]
+        _write_all_credentials(raw)
+        return True
+
+    try:
+        data = PlatformAccounts.model_validate(data_val)
+    except Exception:
+        return False
+
+    remaining = [account for account in data.accounts if account.get("account_id") != account_id]
+    if len(remaining) == len(data.accounts):
+        return False
+    if not remaining:
+        del raw[platform]
+        _write_all_credentials(raw)
+        return True
+
+    default_account_id = data.default_account_id
+    if default_account_id == account_id:
+        raw_next_default = remaining[0].get("account_id")
+        default_account_id = raw_next_default if isinstance(raw_next_default, str) else None
+    raw[platform] = PlatformAccounts(
+        accounts=remaining,
+        default_account_id=default_account_id,
+    ).model_dump(mode="json")
+    _write_all_credentials(raw)
+    return True

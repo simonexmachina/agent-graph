@@ -20,6 +20,7 @@ auth_app = typer.Typer(
     help="Show auth provider state or manage connector authentication.",
     invoke_without_command=True,
     no_args_is_help=False,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 app.add_typer(auth_app, name="auth")
 
@@ -32,20 +33,181 @@ def _run_auth_flow(connector_cls: type[BaseConnector], account_id: str | None, a
 
 
 def _status_label(status: str) -> str:
-    return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(status, status)
+    return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(
+        status, status
+    )
+
+
+def _remove_auth_credentials(provider: str, account_id: str | None) -> dict[str, object]:
+    from agentgraph.auth.credentials import remove_platform, remove_platform_account
+
+    removed = (
+        remove_platform_account(provider, account_id)
+        if account_id is not None
+        else remove_platform(provider)
+    )
+    result: dict[str, object] = {
+        "provider": provider,
+        "removed": removed,
+    }
+    if account_id is not None:
+        result["account_id"] = account_id
+    return result
+
+
+def _parse_auth_args(
+    args: list[str],
+    *,
+    account: str | None,
+    json: bool,
+    verify: bool,
+    add: bool,
+    xoxc_token: str | None,
+    d_cookie: str | None,
+) -> tuple[list[str], str | None, bool, bool, bool, str | None, str | None, str | None]:
+    positionals: list[str] = []
+    parsed_account = account
+    parsed_json = json
+    parsed_verify = verify
+    parsed_add = add
+    parsed_xoxc_token = xoxc_token
+    parsed_d_cookie = d_cookie
+    error: str | None = None
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--json":
+            parsed_json = True
+        elif arg == "--verify":
+            parsed_verify = True
+        elif arg == "--add":
+            parsed_add = True
+        elif arg == "--account":
+            if i + 1 >= len(args):
+                error = "--account requires an account ID"
+                break
+            parsed_account = args[i + 1]
+            i += 1
+        elif arg.startswith("--account="):
+            parsed_account = arg.split("=", 1)[1]
+        elif arg == "--xoxc-token":
+            if i + 1 >= len(args):
+                error = "--xoxc-token requires a token"
+                break
+            parsed_xoxc_token = args[i + 1]
+            i += 1
+        elif arg.startswith("--xoxc-token="):
+            parsed_xoxc_token = arg.split("=", 1)[1]
+        elif arg == "--d-cookie":
+            if i + 1 >= len(args):
+                error = "--d-cookie requires a cookie value"
+                break
+            parsed_d_cookie = args[i + 1]
+            i += 1
+        elif arg.startswith("--d-cookie="):
+            parsed_d_cookie = arg.split("=", 1)[1]
+        elif arg.startswith("-"):
+            error = f"Unknown option for auth: {arg}"
+            break
+        else:
+            positionals.append(arg)
+        i += 1
+    return (
+        positionals,
+        parsed_account,
+        parsed_json,
+        parsed_verify,
+        parsed_add,
+        parsed_xoxc_token,
+        parsed_d_cookie,
+        error,
+    )
 
 
 @auth_app.callback()
 def auth(
-    target: str | None = typer.Argument(None, help="Use 'status' or an auth provider such as google, slack, or discord"),
+    auth_args: list[str] | None = typer.Argument(
+        None,
+        help="Use 'status', 'remove <provider>', or an auth provider such as google, slack, or discord",
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
-    verify: bool = typer.Option(False, "--verify", help="Live-check credentials with provider APIs"),
-    add: bool = typer.Option(False, "--add", help="Add another authenticated account for this provider"),
-    account: str | None = typer.Option(None, "--account", help="Re-authenticate a specific account ID"),
-    xoxc_token: str | None = typer.Option(None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"),
-    d_cookie: str | None = typer.Option(None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"),
+    verify: bool = typer.Option(
+        False, "--verify", help="Live-check credentials with provider APIs"
+    ),
+    add: bool = typer.Option(
+        False, "--add", help="Add another authenticated account for this provider"
+    ),
+    account: str | None = typer.Option(
+        None, "--account", help="Re-authenticate a specific account ID"
+    ),
+    xoxc_token: str | None = typer.Option(
+        None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"
+    ),
+    d_cookie: str | None = typer.Option(
+        None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"
+    ),
 ) -> None:
     """Show auth status or authenticate a provider."""
+    (
+        args,
+        parsed_account,
+        parsed_json,
+        parsed_verify,
+        parsed_add,
+        parsed_xoxc_token,
+        parsed_d_cookie,
+        parse_error,
+    ) = _parse_auth_args(
+        auth_args or [],
+        account=account,
+        json=json,
+        verify=verify,
+        add=add,
+        xoxc_token=xoxc_token,
+        d_cookie=d_cookie,
+    )
+    if parse_error is not None:
+        typer.echo(parse_error, err=True)
+        raise typer.Exit(code=1)
+
+    target = args[0] if args else None
+    if target == "remove":
+        if len(args) > 2:
+            typer.echo(f"Unexpected argument for auth remove: {args[2]}", err=True)
+            raise typer.Exit(code=1)
+        if len(args) < 2:
+            typer.echo(
+                "Usage: agentgraph auth remove <provider> [--account <account-id>] [--json]",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        provider = args[1]
+        result = _remove_auth_credentials(provider, parsed_account)
+
+        if parsed_json:
+            typer.echo(_json.dumps(result, indent=2))
+            return
+
+        if result["removed"]:
+            if parsed_account is None:
+                typer.echo(f"Removed stored credentials for {provider}.")
+            else:
+                typer.echo(f"Removed stored credentials for {provider} account {parsed_account}.")
+            return
+
+        if parsed_account is None:
+            typer.echo(f"No stored credentials found for {provider}.", err=True)
+        else:
+            typer.echo(
+                f"No stored credentials found for {provider} account {parsed_account}.",
+                err=True,
+            )
+        raise typer.Exit(code=1)
+
+    if len(args) > 1:
+        typer.echo(f"Unexpected argument for auth: {args[1]}", err=True)
+        raise typer.Exit(code=1)
+
     if target not in (None, "status"):
         from agentgraph.connectors.registry import bootstrap, get_all_connectors
         from agentgraph.connectors.status import auth_provider_connectors
@@ -59,23 +221,29 @@ def auth(
             typer.echo(f"Unknown auth target '{target}'. Available: {available}", err=True)
             raise typer.Exit(code=1)
 
-        if target == "slack" and (xoxc_token is not None or d_cookie is not None):
+        if target == "slack" and (parsed_xoxc_token is not None or parsed_d_cookie is not None):
             from agentgraph_connector_slack.auth import (
                 run_cookie_flow,  # type: ignore[import-not-found]
             )
-            run_cookie_flow(account_id=account, add=add, xoxc_token=xoxc_token, d_cookie=d_cookie)
+
+            run_cookie_flow(
+                account_id=parsed_account,
+                add=parsed_add,
+                xoxc_token=parsed_xoxc_token,
+                d_cookie=parsed_d_cookie,
+            )
             return
 
-        _run_auth_flow(type(seen[target]), account, add)
+        _run_auth_flow(type(seen[target]), parsed_account, parsed_add)
         return
 
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
     from agentgraph.connectors.status import auth_provider_status_items
 
     bootstrap()
-    items = asyncio.run(auth_provider_status_items(get_all_connectors(), verify=verify))
+    items = asyncio.run(auth_provider_status_items(get_all_connectors(), verify=parsed_verify))
 
-    if json:
+    if parsed_json:
         typer.echo(_json.dumps(items, indent=2))
         return
 
@@ -85,13 +253,9 @@ def auth(
         auth_state = _status_label(status)
         if detail:
             auth_state = (
-                f"{auth_state} ({detail})"
-                if status != "ok"
-                else f"{auth_state} as {detail}"
+                f"{auth_state} ({detail})" if status != "ok" else f"{auth_state} as {detail}"
             )
-        connectors = ", ".join(
-            str(source) for source in cast(list[object], item["connectors"])
-        )
+        connectors = ", ".join(str(source) for source in cast(list[object], item["connectors"]))
         typer.echo(f"  {item['provider']:<12}  {item['description']}")
         typer.echo(f"  {'':<12}  auth: {auth_state}  |  connectors: {connectors}")
         accounts = cast(list[dict[str, object]], item.get("accounts") or [])
@@ -162,7 +326,9 @@ def connector_command(
 @app.command()
 def connectors(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
-    verify: bool = typer.Option(False, "--verify", help="Live-check connector credentials with provider APIs"),
+    verify: bool = typer.Option(
+        False, "--verify", help="Live-check connector credentials with provider APIs"
+    ),
 ) -> None:
     """List installed connectors and their sync status."""
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
@@ -196,7 +362,9 @@ def connectors(
         auth = _status_label(status_label)
         if detail:
             auth = f"{auth} ({detail})" if status_label != "ok" else f"{auth} as {detail}"
-        typer.echo(f"  {'':<12}  auth: {auth} via {item['auth_provider']}  |  sync: {sync}  |  last sync: {last_sync}")
+        typer.echo(
+            f"  {'':<12}  auth: {auth} via {item['auth_provider']}  |  sync: {sync}  |  last sync: {last_sync}"
+        )
 
 
 @app.command()
@@ -223,7 +391,9 @@ def serve(
 def search(
     query: str = typer.Argument(..., help="Search query"),
     type: list[str] = typer.Option([], "--type", "-t", help="Filter by entity type"),
-    platform: str | None = typer.Option(None, "--platform", "-p", help="Scope to a single platform (e.g. slack, discord)"),
+    platform: str | None = typer.Option(
+        None, "--platform", "-p", help="Scope to a single platform (e.g. slack, discord)"
+    ),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results"),
     min_score: float = typer.Option(0.03, "--min-score", help="Minimum relevance score (0–1)"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -231,13 +401,22 @@ def search(
     """Search the knowledge graph."""
     from agentgraph.cli_query import cmd_search
 
-    cmd_search(query=query, entity_types=type, platform=platform, limit=limit, min_score=min_score, as_json=json)
+    cmd_search(
+        query=query,
+        entity_types=type,
+        platform=platform,
+        limit=limit,
+        min_score=min_score,
+        as_json=json,
+    )
 
 
 @app.command()
 def get(
     entity_id: str = typer.Argument(..., help="Entity ID, platform ref, or URL"),
-    resolve: bool = typer.Option(False, "--resolve", "-r", help="Fetch from source if entity is a stub (no content)"),
+    resolve: bool = typer.Option(
+        False, "--resolve", "-r", help="Fetch from source if entity is a stub (no content)"
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Fetch full details for an existing entity."""
@@ -263,7 +442,9 @@ def edges(
 def traverse(
     entity_id: str = typer.Argument(..., help="Start entity ID"),
     depth: int = typer.Option(2, "--depth", "-d", help="Maximum traversal depth"),
-    resolve: bool = typer.Option(False, "--resolve", "-r", help="Fetch stub nodes from source before returning"),
+    resolve: bool = typer.Option(
+        False, "--resolve", "-r", help="Fetch stub nodes from source before returning"
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Traverse the graph from an entity."""
@@ -310,7 +491,9 @@ def download(
 @app.command()
 def bookmark(
     target: str = typer.Argument(..., help="Entity ID, UUID prefix, platform ref, or URL"),
-    remove: bool = typer.Option(False, "--remove", help="Remove bookmark protection instead of adding it"),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove bookmark protection instead of adding it"
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Set or remove bookmark protection for an entity or URL."""
@@ -333,7 +516,9 @@ def delete_cmd(
 @app.command("unify-persons")
 def unify_persons_cmd(
     primary_entity_id: str = typer.Argument(..., help="Person entity to keep"),
-    duplicate_entity_ids: list[str] = typer.Argument(..., help="Duplicate Person entities to merge into the primary"),
+    duplicate_entity_ids: list[str] = typer.Argument(
+        ..., help="Duplicate Person entities to merge into the primary"
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Merge duplicate Person entities that refer to the same human."""
@@ -446,9 +631,13 @@ def install_skill(
 
 @app.command()
 def mcp_serve(
-    transport: str = typer.Option("stdio", "--transport", help="Transport: stdio, sse, or streamable-http"),
+    transport: str = typer.Option(
+        "stdio", "--transport", help="Transport: stdio, sse, or streamable-http"
+    ),
     port: int = typer.Option(8808, "--port", help="Port for sse / streamable-http transports"),
-    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind for sse / streamable-http transports"),
+    host: str = typer.Option(
+        "127.0.0.1", "--host", help="Host to bind for sse / streamable-http transports"
+    ),
 ) -> None:
     """Start the AgentGraph MCP server."""
     import asyncio
@@ -474,7 +663,9 @@ def mcp_serve(
 
 @app.command()
 def poll(
-    source: str | None = typer.Argument(None, help="Connector source to poll (e.g. slack, gmail, rss). Omit to poll all."),
+    source: str | None = typer.Argument(
+        None, help="Connector source to poll (e.g. slack, gmail, rss). Omit to poll all."
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Trigger a background poll for one or all connectors."""
@@ -497,16 +688,39 @@ def ingest(
 @app.command()
 def query(
     entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
-    filter: list[str] = typer.Option([], "--filter", "-f", help="key=value filters (column or metadata)"),
-    since: str | None = typer.Option(None, "--since", "-s", help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)"),
+    filter: list[str] = typer.Option(
+        [], "--filter", "-f", help="key=value filters (column or metadata)"
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        "-s",
+        help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)",
+    ),
     mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
-    has_attachments: bool = typer.Option(False, "--has-attachments", help="Only Message entities that have file/image attachments"),
+    has_attachments: bool = typer.Option(
+        False, "--has-attachments", help="Only Message entities that have file/image attachments"
+    ),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results"),
-    order_by: str = typer.Option("created_at", "--order-by", "-o", help="Column to sort by (created_at, updated_at, last_accessed)"),
+    order_by: str = typer.Option(
+        "created_at",
+        "--order-by",
+        "-o",
+        help="Column to sort by (created_at, updated_at, last_accessed)",
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Query entities by type and filters."""
     from agentgraph.cli_query import cmd_query
 
     parsed_filters = dict(f.split("=", 1) for f in filter if "=" in f)
-    cmd_query(entity_type=entity_type, filters=parsed_filters, limit=limit, order_by=order_by, since=since, authored_by_me=mine, has_attachments=has_attachments, as_json=json)
+    cmd_query(
+        entity_type=entity_type,
+        filters=parsed_filters,
+        limit=limit,
+        order_by=order_by,
+        since=since,
+        authored_by_me=mine,
+        has_attachments=has_attachments,
+        as_json=json,
+    )

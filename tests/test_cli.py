@@ -17,7 +17,14 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-from agentgraph.auth.credentials import GoogleCredentials, load_platform, save_platform
+from agentgraph.auth.credentials import (
+    GoogleCredentials,
+    load_platform,
+    load_platform_account,
+    load_platform_accounts,
+    save_platform,
+    upsert_platform_account,
+)
 from agentgraph.cli import app
 from agentgraph.connectors.base import ConnectorAccount
 from agentgraph.core.storage import EntityResult
@@ -203,7 +210,10 @@ def test_fetch_uses_server_endpoint() -> None:
 def test_server_unavailable_exits_nonzero() -> None:
     from agentgraph.cli_query import cmd_query
 
-    with patch("httpx.get", side_effect=httpx.ConnectError("offline")), pytest.raises(SystemExit) as exc:
+    with (
+        patch("httpx.get", side_effect=httpx.ConnectError("offline")),
+        pytest.raises(SystemExit) as exc,
+    ):
         cmd_query(
             entity_type="Thread",
             filters={},
@@ -474,6 +484,7 @@ def _fake_webbrowser_open(url: str) -> bool:
 @asynccontextmanager
 async def _fake_backend_context() -> AsyncGenerator[Any, None]:
     backend = MagicMock()
+
     async def _get_platform_last_synced_at(platform: str) -> datetime | None:
         values = {
             "gdocs": datetime(2026, 5, 25, 1, 2, 3, tzinfo=UTC),
@@ -482,10 +493,7 @@ async def _fake_backend_context() -> AsyncGenerator[Any, None]:
         return values.get(platform)
 
     async def _get_platforms_last_synced_at(platforms: list[str]) -> dict[str, datetime | None]:
-        return {
-            platform: await _get_platform_last_synced_at(platform)
-            for platform in platforms
-        }
+        return {platform: await _get_platform_last_synced_at(platform) for platform in platforms}
 
     backend.get_platform_last_synced_at = AsyncMock(side_effect=_get_platform_last_synced_at)
     backend.get_platforms_last_synced_at = AsyncMock(side_effect=_get_platforms_last_synced_at)
@@ -493,8 +501,10 @@ async def _fake_backend_context() -> AsyncGenerator[Any, None]:
 
 
 def test_auth_unknown_target_exits_nonzero() -> None:
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+    ):
         result = runner.invoke(app, ["auth", "notaplatform"])
     assert result.exit_code != 0
     assert "notaplatform" in result.output
@@ -502,11 +512,97 @@ def test_auth_unknown_target_exits_nonzero() -> None:
 
 def test_auth_provider_dispatches_to_connector() -> None:
     _FakeConnector.auth_called = False
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+    ):
         result = runner.invoke(app, ["auth", "slack"])
     assert result.exit_code == 0
     assert _FakeConnector.auth_called
+
+
+def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_cookie_flow(
+        *,
+        account_id: str | None,
+        add: bool,
+        xoxc_token: str | None,
+        d_cookie: str | None,
+    ) -> None:
+        captured.update(
+            account_id=account_id,
+            add=add,
+            xoxc_token=xoxc_token,
+            d_cookie=d_cookie,
+        )
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+        patch("agentgraph_connector_slack.auth.run_cookie_flow", side_effect=fake_cookie_flow),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "auth",
+                "slack",
+                "--xoxc-token",
+                "xoxc-test",
+                "--d-cookie",
+                "cookie",
+                "--account",
+                "slack:T1:U1",
+                "--add",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "account_id": "slack:T1:U1",
+        "add": True,
+        "xoxc_token": "xoxc-test",
+        "d_cookie": "cookie",
+    }
+
+
+def test_auth_remove_deletes_provider_credentials(tmp_creds: Path) -> None:
+    save_platform("slack", {"xoxc_token": "xoxc-test", "d_cookie": "cookie"})
+
+    result = runner.invoke(app, ["auth", "remove", "slack"])
+
+    assert result.exit_code == 0
+    assert result.output == "Removed stored credentials for slack.\n"
+    assert load_platform("slack") is None
+
+
+def test_auth_remove_account_outputs_json(tmp_creds: Path) -> None:
+    upsert_platform_account("google", "one@example.com", {"user_email": "one@example.com"})
+    upsert_platform_account("google", "two@example.com", {"user_email": "two@example.com"})
+
+    result = runner.invoke(
+        app, ["auth", "remove", "google", "--account", "one@example.com", "--json"]
+    )
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert parsed == {
+        "provider": "google",
+        "removed": True,
+        "account_id": "one@example.com",
+    }
+    assert [account["account_id"] for account in load_platform_accounts("google")] == [
+        "two@example.com"
+    ]
+    assert load_platform_account("google", "two@example.com") is not None
+
+
+def test_auth_remove_missing_provider_exits_nonzero() -> None:
+    result = runner.invoke(app, ["auth", "remove", "slack"])
+
+    assert result.exit_code != 0
+    assert "No stored credentials found for slack." in result.output
 
 
 def test_connector_command_dispatches_to_connector() -> None:
@@ -518,9 +614,13 @@ def test_connector_command_dispatches_to_connector() -> None:
             captured["args"] = args
             return {"status": "ok", "args": args}
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=_DispatchRssConnector()):
-        result = runner.invoke(app, ["connector", "rss", "add", "https://simonwillison.net/atom/everything/"])
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=_DispatchRssConnector()),
+    ):
+        result = runner.invoke(
+            app, ["connector", "rss", "add", "https://simonwillison.net/atom/everything/"]
+        )
 
     assert result.exit_code == 0
     assert captured == {"args": ["add", "https://simonwillison.net/atom/everything/"]}
@@ -533,9 +633,13 @@ def test_connector_command_json_outputs_raw_result() -> None:
         def run_cli_command(cls, args: list[str]) -> dict[str, object]:
             return {"status": "ok", "args": args}
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=_JsonRssConnector()):
-        result = runner.invoke(app, ["connector", "rss", "add", "https://example.com/feed.xml", "--json"])
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=_JsonRssConnector()),
+    ):
+        result = runner.invoke(
+            app, ["connector", "rss", "add", "https://example.com/feed.xml", "--json"]
+        )
 
     assert result.exit_code == 0
     assert '"status": "ok"' in result.output
@@ -543,8 +647,10 @@ def test_connector_command_json_outputs_raw_result() -> None:
 
 
 def test_connector_command_dispatches_help_to_connector() -> None:
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=_FakeRssConnector()):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=_FakeRssConnector()),
+    ):
         result = runner.invoke(app, ["connector", "rss", "--help"])
 
     assert result.exit_code == 0
@@ -552,12 +658,14 @@ def test_connector_command_dispatches_help_to_connector() -> None:
 
 
 def test_connectors_reports_delegated_polling() -> None:
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch(
-             "agentgraph.connectors.registry.get_all_connectors",
-             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
-         ):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
+        ),
+    ):
         result = runner.invoke(app, ["connectors"])
 
     assert result.exit_code == 0
@@ -569,12 +677,14 @@ def test_connectors_reports_delegated_polling() -> None:
 
 
 def test_connectors_json_reports_delegated_polling() -> None:
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch(
-             "agentgraph.connectors.registry.get_all_connectors",
-             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
-         ):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
+        ),
+    ):
         result = runner.invoke(app, ["connectors", "--json"])
 
     assert result.exit_code == 0
@@ -594,9 +704,13 @@ def test_connectors_default_uses_local_auth_status_without_live_verify() -> None
             cls.verify_called = True
             return ("invalid", "live check failed")
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_LocalConnector()]):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors", return_value=[_LocalConnector()]
+        ),
+    ):
         result = runner.invoke(app, ["connectors", "--json"])
 
     assert result.exit_code == 0
@@ -615,9 +729,13 @@ def test_connectors_verify_runs_live_auth_check() -> None:
             cls.verify_called = True
             return ("invalid", "live check failed")
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_VerifiedConnector()]):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors", return_value=[_VerifiedConnector()]
+        ),
+    ):
         result = runner.invoke(app, ["connectors", "--verify", "--json"])
 
     assert result.exit_code == 0
@@ -637,9 +755,14 @@ def test_connectors_omits_auth_status_for_non_auth_connectors() -> None:
             cls.verify_called = True
             return ("ok", "should not be called")
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_NonAuthRssConnector()]):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_NonAuthRssConnector()],
+        ),
+    ):
         json_result = runner.invoke(app, ["connectors", "--verify", "--json"])
         text_result = runner.invoke(app, ["connectors", "--verify"])
 
@@ -659,11 +782,13 @@ def test_connectors_omits_auth_status_for_non_auth_connectors() -> None:
 
 
 def test_auth_status_dedupes_shared_google_provider() -> None:
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch(
-             "agentgraph.connectors.registry.get_all_connectors",
-             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
-         ):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
+        ),
+    ):
         result = runner.invoke(app, ["auth", "status"])
 
     assert result.exit_code == 0
@@ -681,11 +806,13 @@ def test_auth_status_excludes_non_auth_connectors() -> None:
         poll_delegates: list[str] = []
         url_patterns: list[str] = []
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch(
-             "agentgraph.connectors.registry.get_all_connectors",
-             return_value=[_FakeGoogleConnector(), _FakeRssConnector(), _FakeWebConnector()],
-         ):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector(), _FakeRssConnector(), _FakeWebConnector()],
+        ),
+    ):
         result = runner.invoke(app, ["auth", "--json", "status"])
 
     assert result.exit_code == 0
@@ -721,14 +848,24 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
 
     monkeypatch.setattr(
         "agentgraph.auth.google_provider.verify_google_auth",
-        lambda: ("invalid", "Google refresh token was rejected (RefreshError) - run: agentgraph auth google"),
+        lambda: (
+            "invalid",
+            "Google refresh token was rejected (RefreshError) - run: agentgraph auth google",
+        ),
     )
     monkeypatch.setattr("agentgraph_connector_google.auth._find_free_port", lambda: 9999)
-    monkeypatch.setattr("agentgraph_connector_google.auth._wait_for_callback", _fake_wait_for_callback)
+    monkeypatch.setattr(
+        "agentgraph_connector_google.auth._wait_for_callback", _fake_wait_for_callback
+    )
     monkeypatch.setattr("webbrowser.open", _fake_webbrowser_open)
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector()],
+        ),
+    ):
         result = runner.invoke(app, ["auth", "google"])
 
     assert result.exit_code == 0
@@ -765,8 +902,13 @@ def test_auth_google_valid_credentials_can_skip_reauth(
         lambda: ("ok", "user@example.com"),
     )
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeGoogleConnector()]):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector()],
+        ),
+    ):
         result = runner.invoke(app, ["auth", "google"], input="n\n")
 
     assert result.exit_code == 0

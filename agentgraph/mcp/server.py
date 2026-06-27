@@ -40,9 +40,11 @@ def _truncate_content(entity: dict[str, Any], limit: int = 500) -> None:
     else:
         entity["content_truncated"] = False
 
+
 # ---------------------------------------------------------------------------
 # list_connectors — connector discovery for agents
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def list_connectors_tool(verify: bool = False) -> str:
@@ -111,6 +113,41 @@ async def list_auth_providers_tool(verify: bool = False) -> str:
 
 
 @mcp.tool()
+async def remove_auth_provider_tool(provider: str, account_id: str | None = None) -> str:
+    """
+    Remove stored credentials for an authentication provider.
+
+    This is the MCP equivalent of:
+        agentgraph auth remove <provider> [--account <account-id>]
+
+    Removing credentials stops authenticated connector operations such as
+    background polling, but does not delete already indexed graph data.
+
+    Args:
+        provider: Auth provider key such as "google", "slack", or "discord".
+        account_id: Optional account ID. When omitted, all credentials for the
+            provider are removed.
+
+    Returns:
+        JSON object with provider, removed, and account_id when supplied.
+    """
+    from agentgraph.auth.credentials import remove_platform, remove_platform_account
+
+    removed = (
+        remove_platform_account(provider, account_id)
+        if account_id is not None
+        else remove_platform(provider)
+    )
+    result: dict[str, object] = {
+        "provider": provider,
+        "removed": removed,
+    }
+    if account_id is not None:
+        result["account_id"] = account_id
+    return json.dumps(result)
+
+
+@mcp.tool()
 async def run_connector_command_tool(source: str, args: list[str]) -> str:
     """
     Run a connector-owned command.
@@ -154,7 +191,9 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
 
 
 @mcp.tool()
-async def install_skill_tool(skill: str = "graph", target: str = "user", force: bool = False) -> str:
+async def install_skill_tool(
+    skill: str = "graph", target: str = "user", force: bool = False
+) -> str:
     """
     Install a bundled AgentGraph skill.
 
@@ -205,15 +244,15 @@ async def _enrich_results(results: list[dict[str, Any]]) -> None:
             logger.exception("Connector %s failed to enrich MCP results", platform)
 
     if by_platform:
-        await asyncio.gather(*(
-            _enrich_one(platform, entities)
-            for platform, entities in by_platform.items()
-        ))
+        await asyncio.gather(
+            *(_enrich_one(platform, entities) for platform, entities in by_platform.items())
+        )
 
 
 # ---------------------------------------------------------------------------
 # search_entities — hybrid vector + full-text, RRF fused
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def search_entities_tool(
@@ -274,6 +313,7 @@ async def search_entities_tool(
 # get_entity — full entity by UUID
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def get_entity_tool(entity_id: str) -> str:
     """
@@ -287,7 +327,11 @@ async def get_entity_tool(entity_id: str) -> str:
     """
     from agentgraph.graph.query import get_entity_by_url, is_http_url
 
-    entity = await get_entity_by_url(entity_id) if is_http_url(entity_id) else await get_entity(entity_id)
+    entity = (
+        await get_entity_by_url(entity_id)
+        if is_http_url(entity_id)
+        else await get_entity(entity_id)
+    )
     if entity is None:
         return json.dumps({"error": f"Entity {entity_id!r} not found"})
     return json.dumps(entity, default=str)
@@ -296,6 +340,7 @@ async def get_entity_tool(entity_id: str) -> str:
 # ---------------------------------------------------------------------------
 # get_edges — edges connected to an entity
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def get_edges_tool(
@@ -322,6 +367,7 @@ async def get_edges_tool(
 # ---------------------------------------------------------------------------
 # traverse_graph — BFS neighbourhood
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def traverse_graph_tool(
@@ -354,6 +400,7 @@ async def traverse_graph_tool(
 # fetch_entity — trigger connector re-ingestion
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def fetch_entity_tool(platform: str, resource_id: str) -> str:
     """
@@ -382,6 +429,7 @@ async def fetch_entity_tool(platform: str, resource_id: str) -> str:
 # fetch_entity_by_id — re-ingest by internal UUID
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def fetch_entity_by_id_tool(entity_id: str) -> str:
     """
@@ -409,6 +457,7 @@ async def fetch_entity_by_id_tool(entity_id: str) -> str:
 # ---------------------------------------------------------------------------
 # poll_connectors — trigger background connector polling
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def poll_connectors_tool(source: str | None = None) -> str:
@@ -452,6 +501,7 @@ async def poll_connectors_tool(source: str | None = None) -> str:
 # ingest_connector — trigger background bulk ingest
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def ingest_connector_tool(source: str) -> str:
     """
@@ -482,6 +532,7 @@ async def ingest_connector_tool(source: str) -> str:
 # ---------------------------------------------------------------------------
 # download_entity — authenticated source-file download
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def download_entity_tool(entity_id: str, output_path: str | None = None) -> str:
@@ -515,6 +566,7 @@ async def download_entity_tool(entity_id: str, output_path: str | None = None) -
 # bookmark_entity — protect an entity from garbage collection
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def bookmark_entity_tool(entity_id: str, bookmarked: bool = True) -> str:
     """
@@ -536,7 +588,11 @@ async def bookmark_entity_tool(entity_id: str, bookmarked: bool = True) -> str:
     from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
 
     try:
-        result = await bookmark_target(entity_id) if bookmarked else await set_entity_bookmark(entity_id, False)
+        result = (
+            await bookmark_target(entity_id)
+            if bookmarked
+            else await set_entity_bookmark(entity_id, False)
+        )
         return json.dumps(result, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -545,6 +601,7 @@ async def bookmark_entity_tool(entity_id: str, bookmarked: bool = True) -> str:
 # ---------------------------------------------------------------------------
 # delete_entity — remove an entity
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def delete_entity_tool(entity_id: str) -> str:
@@ -574,6 +631,7 @@ async def delete_entity_tool(entity_id: str) -> str:
 # ---------------------------------------------------------------------------
 # unify_persons — manually merge duplicate Person entities
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def unify_persons_tool(
@@ -609,6 +667,7 @@ async def unify_persons_tool(
 # ---------------------------------------------------------------------------
 # query_by_filter — type + metadata filters
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def query_by_filter_tool(
@@ -679,8 +738,13 @@ async def query_by_filter_tool(
     """
     str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
     results = await query_by_filter(
-        entity_type, filters=str_filters, limit=limit, order_by=order_by,
-        since=since, authored_by_me=authored_by_me, has_attachments=has_attachments,
+        entity_type,
+        filters=str_filters,
+        limit=limit,
+        order_by=order_by,
+        since=since,
+        authored_by_me=authored_by_me,
+        has_attachments=has_attachments,
     )
     for result in results:
         _truncate_content(result)

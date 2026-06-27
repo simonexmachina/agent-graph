@@ -66,6 +66,7 @@ agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
 agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
+agentgraph auth remove <provider> [--account <account-id>] [--json] # remove stored credentials; does not delete graph data
 agentgraph connector rss add <feed-or-html-url>           # RSS/Atom feed URLs are connector configuration, not auth
 
 # Server
@@ -84,6 +85,7 @@ When using AgentGraph through MCP instead of the CLI, use these equivalent tools
 ```text
 agentgraph connectors              -> list_connectors_tool(verify)
 agentgraph auth [--json] status    -> list_auth_providers_tool(verify) # credential-backed providers only
+agentgraph auth remove ...         -> remove_auth_provider_tool(provider, account_id)
 agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
 agentgraph search ...              -> search_entities_tool(...)
 agentgraph get ...                 -> get_entity_tool(entity_id)

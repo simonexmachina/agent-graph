@@ -16,6 +16,7 @@ from agentgraph.core.context import set_backend
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _entity(
     *,
     entity_type: str = "Document",
@@ -86,6 +87,7 @@ def _mock_backend(**method_overrides: Any) -> Any:
 # ---------------------------------------------------------------------------
 # search_entities
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_search_entities_returns_results() -> None:
@@ -160,8 +162,10 @@ async def test_search_entities_offloads_query_embedding() -> None:
         calls.append((func, args))
         return func(*args)
 
-    with patch("agentgraph.graph.embeddings.encode_query", return_value=[0.1] * 384), \
-         patch("agentgraph.graph.query.asyncio.to_thread", new=fake_to_thread):
+    with (
+        patch("agentgraph.graph.embeddings.encode_query", return_value=[0.1] * 384),
+        patch("agentgraph.graph.query.asyncio.to_thread", new=fake_to_thread),
+    ):
         await search_entities("anything")
 
     assert len(calls) == 1
@@ -176,7 +180,9 @@ async def test_search_entities_caches_query_embedding() -> None:
     set_backend(backend)
     clear_query_embedding_cache()
 
-    with patch("agentgraph.graph.embeddings.encode_query", return_value=[0.1] * 384) as encode_query:
+    with patch(
+        "agentgraph.graph.embeddings.encode_query", return_value=[0.1] * 384
+    ) as encode_query:
         await search_entities("repeat")
         await search_entities("repeat")
 
@@ -192,21 +198,25 @@ async def test_sqlite_search_skips_vector_when_fts_fills_candidate_window() -> N
     await backend.initialize()
     try:
         await backend.upsert_batch(
-            EntityBatch(entities=[
-                EntityRecord(
-                    entity_type="Document",
-                    platform="web",
-                    platform_entity_id=f"doc-{index}",
-                    title=f"Alpha {index}",
-                    content="alpha content",
-                )
-                for index in range(5)
-            ]),
+            EntityBatch(
+                entities=[
+                    EntityRecord(
+                        entity_type="Document",
+                        platform="web",
+                        platform_entity_id=f"doc-{index}",
+                        title=f"Alpha {index}",
+                        content="alpha content",
+                    )
+                    for index in range(5)
+                ]
+            ),
             person_embeddings={},
             entity_embeddings={},
         )
 
-        with patch("agentgraph.backends.sqlite.backend.vector_ranked", new=AsyncMock(return_value=[])) as vector_ranked:
+        with patch(
+            "agentgraph.backends.sqlite.backend.vector_ranked", new=AsyncMock(return_value=[])
+        ) as vector_ranked:
             results = await backend.search_entities([0.0] * 384, "alpha", None, 1, 0.0)
 
         assert len(results) == 1
@@ -230,7 +240,9 @@ async def test_query_by_filter_reuses_connector_for_web_url_enrichment() -> None
         def entity_url(self, platform_entity_id: str) -> str:
             return f"https://example.com/{platform_entity_id}"
 
-    with patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()) as get_connector:
+    with patch(
+        "agentgraph.connectors.registry.get_connector", return_value=FakeConnector()
+    ) as get_connector:
         result = await query_by_filter("Document", {})
 
     assert result[0]["metadata"]["web_url"].startswith("https://example.com/")
@@ -240,6 +252,7 @@ async def test_query_by_filter_reuses_connector_for_web_url_enrichment() -> None
 # ---------------------------------------------------------------------------
 # get_entity
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_entity_found() -> None:
@@ -276,11 +289,13 @@ async def test_get_entity_by_url_uses_owning_connector() -> None:
     backend = _mock_backend(get_entity_by_platform=AsyncMock(return_value=entity))
     set_backend(backend)
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch(
-             "agentgraph.server.router.classify_url",
-             return_value=SourceReference("gdocs", "document", "doc-1"),
-         ):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.server.router.classify_url",
+            return_value=SourceReference("gdocs", "document", "doc-1"),
+        ),
+    ):
         result = await get_entity_by_url("https://docs.google.com/document/d/doc-1/edit")
 
     assert result is entity
@@ -303,9 +318,11 @@ async def test_get_entity_by_url_uses_web_canonical_url() -> None:
         def entity_url(self, platform_entity_id: str) -> str:
             return platform_entity_id
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.server.router.classify_url", return_value=None), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.server.router.classify_url", return_value=None),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()),
+    ):
         result = await get_entity_by_url("https://example.com/page#section")
 
     assert result is entity
@@ -331,9 +348,11 @@ async def test_get_entity_by_url_falls_back_to_web_metadata_urls() -> None:
         def entity_url(self, platform_entity_id: str) -> str:
             return platform_entity_id
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.server.router.classify_url", return_value=None), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.server.router.classify_url", return_value=None),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()),
+    ):
         result = await get_entity_by_url("https://example.com/original")
 
     assert result is entity
@@ -371,10 +390,12 @@ async def test_get_entity_by_url_missing_does_not_fetch_or_upsert() -> None:
         def resolve_url(self, url: str) -> SourceReference | None:
             return SourceReference("web", "document", url)
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.server.router.classify_url", return_value=None), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()), \
-         patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert_batch:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.server.router.classify_url", return_value=None),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()),
+        patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert_batch,
+    ):
         result = await get_entity_by_url("https://example.com/missing")
 
     assert result is None
@@ -385,6 +406,7 @@ async def test_get_entity_by_url_missing_does_not_fetch_or_upsert() -> None:
 # ---------------------------------------------------------------------------
 # get_edges
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_edges_returns_edges() -> None:
@@ -403,6 +425,7 @@ async def test_get_edges_returns_edges() -> None:
 # ---------------------------------------------------------------------------
 # bookmark_entity
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_bookmark_entity_resolves_id_and_sets_bookmark() -> None:
@@ -513,12 +536,14 @@ async def test_bookmark_url_uses_owning_connector() -> None:
             assert resource_id == "doc-1"
             return EntityBatch()
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()), \
-         patch(
-             "agentgraph.server.router.classify_url",
-             return_value=SourceReference("gdocs", "document", "doc-1"),
-         ):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()),
+        patch(
+            "agentgraph.server.router.classify_url",
+            return_value=SourceReference("gdocs", "document", "doc-1"),
+        ),
+    ):
         result = await bookmark_target("https://docs.google.com/document/d/doc-1/edit")
 
     assert result["bookmarked"] is True
@@ -547,20 +572,24 @@ async def test_bookmark_url_falls_back_to_web_connector() -> None:
         ) -> EntityBatch:
             assert resource_type == "document"
             assert resource_id == "https://example.com/page"
-            return EntityBatch(entities=[
-                EntityRecord(
-                    entity_type="Document",
-                    platform="web",
-                    platform_entity_id="https://example.com/page",
-                    title="Fetched Page",
-                    content="Body",
-                )
-            ])
+            return EntityBatch(
+                entities=[
+                    EntityRecord(
+                        entity_type="Document",
+                        platform="web",
+                        platform_entity_id="https://example.com/page",
+                        title="Fetched Page",
+                        content="Body",
+                    )
+                ]
+            )
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()), \
-         patch("agentgraph.server.router.classify_url", return_value=None), \
-         patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()),
+        patch("agentgraph.server.router.classify_url", return_value=None),
+        patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()),
+    ):
         result = await bookmark_target("https://example.com/page")
 
     assert result["bookmarked"] is True
@@ -570,6 +599,7 @@ async def test_bookmark_url_falls_back_to_web_connector() -> None:
 # ---------------------------------------------------------------------------
 # delete_entity
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_delete_entity_resolves_id_and_deletes() -> None:
@@ -646,6 +676,7 @@ async def test_cli_query_summarizes_long_content() -> None:
 # MCP tool wrappers
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_mcp_search_entities_tool_returns_json() -> None:
     from agentgraph.mcp.server import search_entities_tool
@@ -667,9 +698,11 @@ async def test_mcp_search_entities_tool_skips_connector_enrichment_by_default() 
         async def enrich_results(self, entities: list[dict[str, Any]]) -> None:
             entities[0]["metadata"]["enriched"] = True
 
-    with patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[entity])), \
-         patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()):
+    with (
+        patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[entity])),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()),
+    ):
         result = await search_entities_tool("test")
 
     parsed = json.loads(result)
@@ -686,9 +719,11 @@ async def test_mcp_search_entities_tool_enriches_results_via_connector_when_refr
         async def enrich_results(self, entities: list[dict[str, Any]]) -> None:
             entities[0]["metadata"]["enriched"] = True
 
-    with patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[entity])), \
-         patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()):
+    with (
+        patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[entity])),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()),
+    ):
         result = await search_entities_tool("test", refresh=True)
 
     parsed = json.loads(result)
@@ -777,9 +812,11 @@ async def test_mcp_query_by_filter_tool_truncates_long_content() -> None:
 
     entity = _entity(content="x" * 700)
 
-    with patch("agentgraph.mcp.server.query_by_filter", new=AsyncMock(return_value=[entity])), \
-         patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=None):
+    with (
+        patch("agentgraph.mcp.server.query_by_filter", new=AsyncMock(return_value=[entity])),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=None),
+    ):
         result = await query_by_filter_tool("Message")
 
     parsed = json.loads(result)
@@ -792,7 +829,9 @@ async def test_mcp_download_entity_tool() -> None:
     from agentgraph.mcp.server import download_entity_tool
 
     fake_result = {"path": "/tmp/file.pdf", "bytes": 7, "filename": "file.pdf"}
-    with patch("agentgraph.graph.download.download_entity", new=AsyncMock(return_value=fake_result)):
+    with patch(
+        "agentgraph.graph.download.download_entity", new=AsyncMock(return_value=fake_result)
+    ):
         result = await download_entity_tool("abc123", "/tmp")
 
     assert json.loads(result) == fake_result
@@ -804,7 +843,9 @@ async def test_mcp_bookmark_entity_tool() -> None:
 
     fake_result = _entity(title="My Doc")
     fake_result["bookmarked"] = True
-    with patch("agentgraph.graph.bookmark.bookmark_target", new=AsyncMock(return_value=fake_result)):
+    with patch(
+        "agentgraph.graph.bookmark.bookmark_target", new=AsyncMock(return_value=fake_result)
+    ):
         result = await bookmark_entity_tool("abc123")
 
     parsed = json.loads(result)
@@ -817,7 +858,9 @@ async def test_mcp_bookmark_entity_tool_can_remove_bookmark() -> None:
 
     fake_result = _entity(title="My Doc")
     fake_result["bookmarked"] = False
-    with patch("agentgraph.graph.bookmark.set_entity_bookmark", new=AsyncMock(return_value=fake_result)) as set_bookmark:
+    with patch(
+        "agentgraph.graph.bookmark.set_entity_bookmark", new=AsyncMock(return_value=fake_result)
+    ) as set_bookmark:
         result = await bookmark_entity_tool("abc123", bookmarked=False)
 
     parsed = json.loads(result)
@@ -853,12 +896,37 @@ async def test_mcp_list_auth_providers_tool_returns_json() -> None:
         }
     ]
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]), \
-         patch("agentgraph.connectors.status.auth_provider_status_items", new=AsyncMock(return_value=fake_items)):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]),
+        patch(
+            "agentgraph.connectors.status.auth_provider_status_items",
+            new=AsyncMock(return_value=fake_items),
+        ),
+    ):
         result = await list_auth_providers_tool()
 
     assert json.loads(result) == fake_items
+
+
+@pytest.mark.asyncio
+async def test_mcp_remove_auth_provider_tool_removes_credentials(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agentgraph.auth.credentials import load_platform, save_platform
+    from agentgraph.mcp.server import remove_auth_provider_tool
+
+    creds_file = tmp_path / "credentials.json"
+    monkeypatch.setattr("agentgraph.auth.credentials.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.auth.credentials.CREDENTIALS_FILE", creds_file)
+    save_platform("slack", {"xoxc_token": "xoxc-test", "d_cookie": "cookie"})
+
+    result = await remove_auth_provider_tool("slack")
+
+    parsed = json.loads(result)
+    assert parsed == {"provider": "slack", "removed": True}
+    assert load_platform("slack") is None
 
 
 @pytest.mark.asyncio
@@ -887,9 +955,14 @@ async def test_mcp_list_connectors_tool_returns_json() -> None:
     ]
     set_backend(_mock_backend(get_platform_last_synced_at=AsyncMock(return_value=None)))
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]), \
-         patch("agentgraph.connectors.status.connector_status_items", new=AsyncMock(return_value=fake_items)):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[]),
+        patch(
+            "agentgraph.connectors.status.connector_status_items",
+            new=AsyncMock(return_value=fake_items),
+        ),
+    ):
         result = await list_connectors_tool()
 
     assert json.loads(result) == fake_items
@@ -943,10 +1016,15 @@ async def test_mcp_poll_connectors_tool_starts_poll_tasks() -> None:
         coro.close()
         return MagicMock()
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[PollingConnector(), PassiveConnector()]), \
-         patch("agentgraph.server.sync.poll_connector", new=AsyncMock()), \
-         patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[PollingConnector(), PassiveConnector()],
+        ),
+        patch("agentgraph.server.sync.poll_connector", new=AsyncMock()),
+        patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task),
+    ):
         result = await poll_connectors_tool()
 
     assert json.loads(result) == {"polled": ["rss"]}
@@ -968,11 +1046,15 @@ async def test_mcp_poll_connectors_tool_uses_source_connector_lookup() -> None:
         coro.close()
         return MagicMock()
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=PollingConnector()) as get_connector, \
-         patch("agentgraph.connectors.registry.get_all_connectors") as get_all_connectors, \
-         patch("agentgraph.server.sync.poll_connector", new=AsyncMock()), \
-         patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_connector", return_value=PollingConnector()
+        ) as get_connector,
+        patch("agentgraph.connectors.registry.get_all_connectors") as get_all_connectors,
+        patch("agentgraph.server.sync.poll_connector", new=AsyncMock()),
+        patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task),
+    ):
         result = await poll_connectors_tool("rss")
 
     assert json.loads(result) == {"polled": ["rss"]}
@@ -985,8 +1067,10 @@ async def test_mcp_poll_connectors_tool_uses_source_connector_lookup() -> None:
 async def test_mcp_poll_connectors_tool_reports_unknown_source() -> None:
     from agentgraph.mcp.server import poll_connectors_tool
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=None):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=None),
+    ):
         result = await poll_connectors_tool("missing")
 
     parsed = json.loads(result)
@@ -1007,10 +1091,12 @@ async def test_mcp_ingest_connector_tool_starts_ingest_task() -> None:
         coro.close()
         return MagicMock()
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=Connector()), \
-         patch("agentgraph.server.sync.run_ingest", new=AsyncMock()), \
-         patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch("agentgraph.server.sync.run_ingest", new=AsyncMock()),
+        patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task),
+    ):
         result = await ingest_connector_tool("rss")
 
     assert json.loads(result) == {"source": "rss", "status": "started"}
@@ -1021,8 +1107,10 @@ async def test_mcp_ingest_connector_tool_starts_ingest_task() -> None:
 async def test_mcp_ingest_connector_tool_reports_unknown_source() -> None:
     from agentgraph.mcp.server import ingest_connector_tool
 
-    with patch("agentgraph.connectors.registry.bootstrap"), \
-         patch("agentgraph.connectors.registry.get_connector", return_value=None):
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=None),
+    ):
         result = await ingest_connector_tool("missing")
 
     parsed = json.loads(result)
