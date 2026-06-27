@@ -546,6 +546,32 @@ async def test_cli_delete_deletes_entity() -> None:
     delete_entity.assert_awaited_once_with("abc123")
 
 
+@pytest.mark.asyncio
+async def test_cli_search_summarizes_long_content() -> None:
+    from agentgraph.server.cli_api import cli_search
+
+    entity = _entity(content="x" * 700)
+
+    with patch("agentgraph.server.cli_api.search_entities", new=AsyncMock(return_value=[entity])):
+        result = await cli_search(q="x")
+
+    assert len(result[0]["content"]) == 500
+    assert result[0]["content_truncated"] is True
+
+
+@pytest.mark.asyncio
+async def test_cli_query_summarizes_long_content() -> None:
+    from agentgraph.server.cli_api import cli_query
+
+    entity = _entity(content="x" * 700)
+
+    with patch("agentgraph.server.cli_api.query_by_filter", new=AsyncMock(return_value=[entity])):
+        result = await cli_query(entity_type="Message", filter=[])
+
+    assert len(result[0]["content"]) == 500
+    assert result[0]["content_truncated"] is True
+
+
 # ---------------------------------------------------------------------------
 # MCP tool wrappers
 # ---------------------------------------------------------------------------
@@ -654,6 +680,22 @@ async def test_mcp_query_by_filter_tool() -> None:
 
     parsed = json.loads(result)
     assert isinstance(parsed, list)
+
+
+@pytest.mark.asyncio
+async def test_mcp_query_by_filter_tool_truncates_long_content() -> None:
+    from agentgraph.mcp.server import query_by_filter_tool
+
+    entity = _entity(content="x" * 700)
+
+    with patch("agentgraph.mcp.server.query_by_filter", new=AsyncMock(return_value=[entity])), \
+         patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.connectors.registry.get_connector", return_value=None):
+        result = await query_by_filter_tool("Message")
+
+    parsed = json.loads(result)
+    assert len(parsed[0]["content"]) == 501
+    assert parsed[0]["content_truncated"] is True
 
 
 @pytest.mark.asyncio

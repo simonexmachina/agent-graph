@@ -126,6 +126,7 @@ agentgraph download <attachment-document-entity-id> --output <file-or-dir>
 
 - Graph data commands require the AgentGraph server. If a command reports the server is unavailable, run `agentgraph serve`.
 - Use `--json` when you need to parse results programmatically
+- List-style commands (`search`, `query`, and graph viewer/browse results) return bounded content snippets with `content_truncated` when applicable. Use `agentgraph get <entity-id> --json` for full entity content.
 - Bookmark targets accept: full UUID, UUID prefix, platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`), or HTTP(S) URL
 - `agentgraph bookmark --remove <entity-id|platform/ref|url>` clears bookmark protection for existing graph entities
 - Delete targets accept: full UUID, UUID prefix, platform ref, or HTTP(S) URL. Connected edges are removed with the entity.

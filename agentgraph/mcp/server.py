@@ -31,6 +31,15 @@ from agentgraph.perf import timed
 logger = logging.getLogger(__name__)
 mcp = FastMCP("AgentGraph")
 
+
+def _truncate_content(entity: dict[str, Any], limit: int = 500) -> None:
+    content = entity.get("content")
+    if isinstance(content, str) and len(content) > limit:
+        entity["content"] = content[:limit] + "…"
+        entity["content_truncated"] = True
+    else:
+        entity["content_truncated"] = False
+
 # ---------------------------------------------------------------------------
 # list_connectors — connector discovery for agents
 # ---------------------------------------------------------------------------
@@ -251,8 +260,7 @@ async def search_entities_tool(
         query, entity_types=entity_types, limit=limit, min_score=min_score, platform=platform
     )
     for r in results:
-        if r.get("content") and len(str(r["content"])) > 500:
-            r["content"] = str(r["content"])[:500] + "…"
+        _truncate_content(r)
     await _enrich_results(results)
     return json.dumps(results, default=str)
 
@@ -665,5 +673,7 @@ async def query_by_filter_tool(
         entity_type, filters=str_filters, limit=limit, order_by=order_by,
         since=since, authored_by_me=authored_by_me, has_attachments=has_attachments,
     )
+    for result in results:
+        _truncate_content(result)
     await _enrich_results(results)
     return json.dumps(results, default=str)

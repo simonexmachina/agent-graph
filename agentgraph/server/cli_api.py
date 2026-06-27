@@ -150,6 +150,25 @@ def _with_display_names(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [_with_display_name(entity) for entity in entities]
 
 
+def _summarize_entity(entity: dict[str, Any], *, content_limit: int = 500) -> dict[str, Any]:
+    summarized = dict(entity)
+    content = summarized.get("content")
+    if isinstance(content, str) and len(content) > content_limit:
+        summarized["content"] = _truncate_text(content, content_limit)
+        summarized["content_truncated"] = True
+    else:
+        summarized["content_truncated"] = False
+    return summarized
+
+
+def _summarize_entities(
+    entities: list[dict[str, Any]],
+    *,
+    content_limit: int = 500,
+) -> list[dict[str, Any]]:
+    return [_summarize_entity(entity, content_limit=content_limit) for entity in entities]
+
+
 @router.get("/meta")
 async def cli_meta() -> dict[str, Any]:
     """Return registered connector sources, URL patterns, and known entity types."""
@@ -182,9 +201,10 @@ async def cli_search(
     min_score: float = Query(default=0.03, ge=0.0, le=1.0),
     platform: str | None = Query(default=None),
 ) -> list[dict[str, Any]]:
-    return await search_entities(
+    results = await search_entities(
         q, entity_types=entity_type or None, limit=limit, min_score=min_score, platform=platform
     )
+    return _summarize_entities(results)
 
 
 @router.get("/entity/{entity_id:path}")
@@ -334,7 +354,7 @@ async def cli_browse(
                 visible_ids = {n["id"] for n in nodes}
                 edges = await get_edges_for_entities(list(visible_ids))
 
-    return {"nodes": _with_display_names(nodes), "edges": edges}
+    return {"nodes": _with_display_names(_summarize_entities(nodes, content_limit=300)), "edges": edges}
 
 
 @router.get("/query")
@@ -353,7 +373,7 @@ async def cli_query(
         if "=" in f:
             k, _, v = f.partition("=")
             filters[k.strip()] = v.strip()
-    return await query_by_filter(
+    results = await query_by_filter(
         entity_type,
         filters=filters,
         limit=limit,
@@ -362,6 +382,7 @@ async def cli_query(
         authored_by_me=mine,
         has_attachments=has_attachments,
     )
+    return _summarize_entities(results)
 
 
 @router.post("/fetch")
