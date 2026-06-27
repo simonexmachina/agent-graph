@@ -6,24 +6,69 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 
 from agentgraph.connectors.base import BaseConnector
+from agentgraph.connectors.status import connector_uses_auth
 from agentgraph.core.context import get_backend
 from agentgraph.graph.upsert import upsert_batch
 
 logger = logging.getLogger(__name__)
+
+_failure_counts: dict[str, int] = {}
+_backoff_until: dict[str, datetime] = {}
 
 
 def _sync_scope(source: str, account_id: str | None) -> str:
     return source if account_id is None else f"{source}:{account_id}"
 
 
+def _has_local_auth(connector: BaseConnector) -> bool:
+    if not connector_uses_auth(connector):
+        return True
+    accounts = type(connector).list_accounts()
+    if accounts:
+        return True
+    return type(connector).get_authenticated_user() is not None
+
+
+def _backoff_remaining(source: str) -> timedelta | None:
+    until = _backoff_until.get(source)
+    if until is None:
+        return None
+    remaining = until - datetime.now(UTC)
+    if remaining <= timedelta(0):
+        _backoff_until.pop(source, None)
+        return None
+    return remaining
+
+
+def _record_success(source: str) -> None:
+    _failure_counts.pop(source, None)
+    _backoff_until.pop(source, None)
+
+
+def _record_failure(source: str) -> None:
+    count = _failure_counts.get(source, 0) + 1
+    _failure_counts[source] = count
+    delay = min(60 * (2 ** (count - 1)), 3600)
+    _backoff_until[source] = datetime.now(UTC) + timedelta(seconds=delay)
+    logger.warning("poll %s — backing off for %ds after %d failure(s)", source, delay, count)
+
+
 async def poll_connector(connector: BaseConnector) -> None:
     source = connector.source
     started = perf_counter()
+    remaining = _backoff_remaining(source)
+    if remaining is not None:
+        logger.info("poll %s — skipped during failure backoff (%.0fs remaining)", source, remaining.total_seconds())
+        return
+    if not _has_local_auth(connector):
+        logger.info("poll %s — skipped because authentication is not configured", source)
+        return
     try:
         backend = get_backend()
         for account_id in connector.poll_account_ids():
@@ -55,7 +100,9 @@ async def poll_connector(connector: BaseConnector) -> None:
 
             await backend.save_cursor(scope, new_cursor)
             logger.info("poll %s — completed in %.1fs", scope, perf_counter() - scope_started)
+        _record_success(source)
     except Exception:
+        _record_failure(source)
         logger.exception("poll failed for connector %s", source)
     finally:
         logger.debug("poll %s total elapsed %.1fs", source, perf_counter() - started)
