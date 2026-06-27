@@ -103,7 +103,21 @@ async def test_schema_has_platform_synced_at_index(sqlite_backend: SQLiteBackend
         WHERE type = 'index'
         """
     )
-    assert "idx_entities_platform_synced_at" in {row["name"] for row in rows}
+    names = {row["name"] for row in rows}
+    assert "idx_entities_platform_synced_at" in names
+    assert "idx_entities_type_last_accessed" in names
+    assert "idx_entities_type_created_at" in names
+    assert "idx_entities_type_updated_at" in names
+    assert "idx_entities_platform_type_last_accessed" in names
+
+
+async def test_file_database_uses_separate_read_connection(tmp_path: Path) -> None:
+    backend = SQLiteBackend(str(tmp_path / "graph.db"))
+    await backend.initialize()
+    try:
+        assert backend._read_conn is not backend._conn
+    finally:
+        await backend.close()
 
 
 async def test_existing_database_gets_cumulative_dwell_column(tmp_path: Path) -> None:

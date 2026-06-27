@@ -53,6 +53,7 @@ class SQLiteBackend(StorageBackend):
         self._db_path = str(Path(db_path).expanduser()) if db_path != ":memory:" else db_path
         self._vector_mode = vector_mode
         self._conn: aiosqlite.Connection | None = None
+        self._read_conn: aiosqlite.Connection | None = None
         self._vec_loaded = False
         # Serialises concurrent write transactions — SQLite only supports one writer at a time
         # and we use explicit BEGIN/COMMIT, so concurrent polls would deadlock without this.
@@ -66,6 +67,8 @@ class SQLiteBackend(StorageBackend):
 
         self._conn = await aiosqlite.connect(self._db_path, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
+        if self._db_path == ":memory:":
+            self._read_conn = self._conn
 
         if self._db_path != ":memory:":
             await self._conn.execute("PRAGMA journal_mode=WAL")
@@ -74,22 +77,37 @@ class SQLiteBackend(StorageBackend):
 
         await self._run_migrations()
 
+        if self._db_path != ":memory:":
+            self._read_conn = await aiosqlite.connect(self._db_path, isolation_level=None)
+            self._read_conn.row_factory = sqlite3.Row
+            await self._read_conn.execute("PRAGMA foreign_keys=ON")
+
         if self._vector_mode == "sqlite-vec":
-            self._vec_loaded = await load_sqlite_vec(self._conn)
+            assert self._read_conn is not None
+            self._vec_loaded = await load_sqlite_vec(self._read_conn)
             if self._vec_loaded:
                 logger.info("sqlite-vec extension loaded")
             else:
                 logger.info("sqlite-vec not available, falling back to numpy")
 
     async def close(self) -> None:
+        if self._read_conn is not None and self._read_conn is not self._conn:
+            await self._read_conn.close()
+            self._read_conn = None
         if self._conn is not None:
             await self._conn.close()
             self._conn = None
+        self._read_conn = None
 
     def _conn_or_raise(self) -> aiosqlite.Connection:
         if self._conn is None:
             raise RuntimeError("SQLiteBackend not initialized — call initialize() first")
         return self._conn
+
+    def _read_conn_or_raise(self) -> aiosqlite.Connection:
+        if self._read_conn is None:
+            raise RuntimeError("SQLiteBackend not initialized — call initialize() first")
+        return self._read_conn
 
     # --- Internal helpers ---
 
@@ -111,15 +129,27 @@ class SQLiteBackend(StorageBackend):
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_synced_at ON entities(platform, synced_at)"
         )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_type_last_accessed ON entities(entity_type, last_accessed DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_type_created_at ON entities(entity_type, created_at DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_type_updated_at ON entities(entity_type, updated_at DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_last_accessed ON entities(platform, entity_type, last_accessed DESC)"
+        )
 
     async def _fetchall(self, sql: str, params: list[Any] | None = None) -> list[Any]:
-        conn = self._conn_or_raise()
+        conn = self._read_conn_or_raise()
         with timed("sqlite.fetchall"):
             cursor = await conn.execute(sql, params or [])
             return list(await cursor.fetchall())
 
     async def _fetchone(self, sql: str, params: list[Any] | None = None) -> Any:
-        conn = self._conn_or_raise()
+        conn = self._read_conn_or_raise()
         with timed("sqlite.fetchone"):
             cursor = await conn.execute(sql, params or [])
             return await cursor.fetchone()
@@ -591,7 +621,7 @@ class SQLiteBackend(StorageBackend):
         min_score: float,
         platform: str | None = None,
     ) -> list[EntityResult]:
-        conn = self._conn_or_raise()
+        conn = self._read_conn_or_raise()
 
         with timed("sqlite.search_entities", limit=limit, platform=platform):
             # BM25 via FTS5
@@ -895,7 +925,7 @@ class SQLiteBackend(StorageBackend):
         return [_row_to_edge(row) for row in rows]
 
     async def traverse_graph(self, entity_id: str, max_depth: int) -> dict[str, Any]:
-        conn = self._conn_or_raise()
+        conn = self._read_conn_or_raise()
         visited: set[str] = set()
         frontier: list[str] = [entity_id]
         all_nodes: list[EntityResult] = []

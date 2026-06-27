@@ -56,6 +56,10 @@ CREATE INDEX IF NOT EXISTS idx_entities_platform     ON entities(platform);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_eid ON entities(platform, platform_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_synced_at ON entities(platform, synced_at);
 CREATE INDEX IF NOT EXISTS idx_entities_last_accessed ON entities(last_accessed);
+CREATE INDEX IF NOT EXISTS idx_entities_type_last_accessed ON entities(entity_type, last_accessed DESC);
+CREATE INDEX IF NOT EXISTS idx_entities_type_created_at ON entities(entity_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entities_type_updated_at ON entities(entity_type, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entities_platform_type_last_accessed ON entities(platform, entity_type, last_accessed DESC);
 
 -- Edge indexes
 CREATE INDEX IF NOT EXISTS idx_edges_source  ON edges(source_entity_id);
