@@ -13,6 +13,10 @@ def auth_provider_key(connector: BaseConnector) -> str:
     return getattr(connector, "auth_label", None) or connector.source
 
 
+def connector_uses_auth(connector: BaseConnector) -> bool:
+    return getattr(type(connector), "appears_in_auth_status", True)
+
+
 def auth_provider_connectors(
     connectors: list[BaseConnector],
     *,
@@ -20,7 +24,7 @@ def auth_provider_connectors(
 ) -> dict[str, list[BaseConnector]]:
     grouped: dict[str, list[BaseConnector]] = {}
     for connector in connectors:
-        if not include_non_auth and not getattr(type(connector), "appears_in_auth_status", True):
+        if not include_non_auth and not connector_uses_auth(connector):
             continue
         grouped.setdefault(auth_provider_key(connector), []).append(connector)
     return grouped
@@ -127,11 +131,7 @@ async def connector_status_items(
     verify: bool = False,
 ) -> list[dict[str, object]]:
     """Build JSON-serialisable connector status rows."""
-    provider_items = await auth_provider_status_items(
-        connectors,
-        verify=verify,
-        include_non_auth=True,
-    )
+    provider_items = await auth_provider_status_items(connectors, verify=verify)
     provider_by_key = {str(item["provider"]): item for item in provider_items}
 
     poll_delegators: dict[str, list[str]] = {}
@@ -145,8 +145,9 @@ async def connector_status_items(
 
     items: list[dict[str, object]] = []
     for connector in connectors:
-        provider = auth_provider_key(connector)
-        provider_item = provider_by_key[provider]
+        uses_auth = connector_uses_auth(connector)
+        provider = auth_provider_key(connector) if uses_auth else None
+        provider_item = provider_by_key[str(provider)] if provider is not None else None
         interval = connector.poll_interval
         polls = interval is not None
         polled_by = sorted(poll_delegators.get(connector.source, []))
@@ -156,11 +157,13 @@ async def connector_status_items(
             "source": connector.source,
             "description": type(connector).auth_description,
             "auth_provider": provider,
-            "shared_auth": bool(provider_item["shared"]),
-            "auth_status": provider_item["auth_status"],
-            "auth_detail": provider_item["auth_detail"],
-            "auth_verified": provider_item["auth_verified"],
-            "account_count": len(cast(list[dict[str, object]], provider_item["accounts"])),
+            "shared_auth": bool(provider_item["shared"]) if provider_item is not None else False,
+            "auth_status": provider_item["auth_status"] if provider_item is not None else None,
+            "auth_detail": provider_item["auth_detail"] if provider_item is not None else None,
+            "auth_verified": provider_item["auth_verified"] if provider_item is not None else False,
+            "account_count": len(cast(list[dict[str, object]], provider_item["accounts"]))
+            if provider_item is not None
+            else 0,
             "url_patterns": type(connector).url_patterns,
             "polls": polls,
             "poll_interval_seconds": int(interval.total_seconds()) if interval is not None else None,

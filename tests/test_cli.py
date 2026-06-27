@@ -628,6 +628,36 @@ def test_connectors_verify_runs_live_auth_check() -> None:
     assert _VerifiedConnector.verify_called is True
 
 
+def test_connectors_omits_auth_status_for_non_auth_connectors() -> None:
+    class _NonAuthRssConnector(_FakeRssConnector):
+        verify_called = False
+
+        @classmethod
+        async def verify_auth(cls) -> tuple[str, str | None]:
+            cls.verify_called = True
+            return ("ok", "should not be called")
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch("agentgraph.core.runtime.backend_context", _fake_backend_context), \
+         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_NonAuthRssConnector()]):
+        json_result = runner.invoke(app, ["connectors", "--verify", "--json"])
+        text_result = runner.invoke(app, ["connectors", "--verify"])
+
+    assert json_result.exit_code == 0
+    parsed = json.loads(json_result.output)
+    assert parsed[0]["source"] == "rss"
+    assert parsed[0]["auth_provider"] is None
+    assert parsed[0]["auth_status"] is None
+    assert parsed[0]["auth_detail"] is None
+    assert parsed[0]["auth_verified"] is False
+    assert parsed[0]["account_count"] == 0
+    assert text_result.exit_code == 0
+    assert "rss" in text_result.output
+    assert "auth:" not in text_result.output
+    assert "sync:" in text_result.output
+    assert _NonAuthRssConnector.verify_called is False
+
+
 def test_auth_status_dedupes_shared_google_provider() -> None:
     with patch("agentgraph.connectors.registry.bootstrap"), \
          patch(

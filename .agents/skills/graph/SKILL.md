@@ -49,8 +49,8 @@ agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, rs
 # Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
 agentgraph ingest <source> [--json]   # e.g. gmail, rss
 
-# List installed connectors and their auth/sync status; add --verify for live provider API checks
-agentgraph connectors [--verify] [--json] # auth_provider, auth_status/auth_detail, auth_verified, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
+# List installed connectors and their sync status; credential fields are null for connectors like RSS/web
+agentgraph connectors [--verify] [--json] # auth_provider, auth_status/auth_detail when applicable, auth_verified, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
 
 # Run a connector-owned command
 agentgraph connector <source> <command> [args...] [--json] # e.g. agentgraph connector rss add https://simonwillison.net/atom/everything/
@@ -144,7 +144,7 @@ An entity is a **stub** when it has no title and no content — it was reference
 When the user asks about graph data:
 1. Run `agentgraph connectors --json` to verify the relevant connector is installed and to inspect its last sync state
 2. Run `agentgraph auth --json status` to inspect local provider-level authentication state, especially for shared auth like Google
-3. If credential validity is uncertain, run `agentgraph auth --verify --json status` or `agentgraph connectors --verify --json` to live-check provider APIs
+3. If credential validity is uncertain, run `agentgraph auth --verify --json status` or `agentgraph connectors --verify --json` to live-check provider APIs for credential-backed connectors
 4. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
 5. Run the appropriate `agentgraph` command with `--json` to get structured output
 6. Use `edges` or `traverse` to follow relationships when needed

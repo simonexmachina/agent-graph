@@ -4,7 +4,7 @@ description = "CLI reference for agentgraph connectors."
 nav_title = "connectors"
 section = "Reference"
 order = 19
-summary = "`agentgraph connectors` is the operator view of installed connectors, auth state, URL ownership, and sync behavior."
+summary = "`agentgraph connectors` is the operator view of installed connectors, credential state where applicable, URL ownership, and sync behavior."
 output = "commands/connectors.html"
 source_path = "docs-src/commands/connectors.md"
 +++
@@ -38,3 +38,6 @@ RSS `remove` removes exact configured feed URLs without fetching or validating t
 
 For RSS OPML imports, omit `--all` and `--select` in an interactive terminal to choose
 feeds with a checkbox prompt.
+
+Connectors that do not use credentials, such as RSS and generic web, omit auth
+status in the human output and report `null` auth fields in JSON.

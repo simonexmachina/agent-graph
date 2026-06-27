@@ -164,7 +164,7 @@ def connectors(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
     verify: bool = typer.Option(False, "--verify", help="Live-check connector credentials with provider APIs"),
 ) -> None:
-    """List installed connectors and their auth status."""
+    """List installed connectors and their sync status."""
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
     from agentgraph.connectors.status import connector_status_items
     from agentgraph.core.runtime import backend_context
@@ -186,15 +186,17 @@ def connectors(
         sync = str(item["sync"])
         last_sync = str(item["last_sync"])
         desc = item["description"] or item["source"]
-        status = str(item["auth_status"])
-        detail = item["auth_detail"]
-        auth = _status_label(status)
-        if detail:
-            auth = f"{auth} ({detail})" if status != "ok" else f"{auth} as {detail}"
         typer.echo(f"  {item['source']:<12}  {desc}")
-        typer.echo(
-            f"  {'':<12}  auth: {auth} via {item['auth_provider']}  |  sync: {sync}  |  last sync: {last_sync}"
-        )
+        status = item["auth_status"]
+        if status is None:
+            typer.echo(f"  {'':<12}  sync: {sync}  |  last sync: {last_sync}")
+            continue
+        status_label = str(status)
+        detail = item["auth_detail"]
+        auth = _status_label(status_label)
+        if detail:
+            auth = f"{auth} ({detail})" if status_label != "ok" else f"{auth} as {detail}"
+        typer.echo(f"  {'':<12}  auth: {auth} via {item['auth_provider']}  |  sync: {sync}  |  last sync: {last_sync}")
 
 
 @app.command()

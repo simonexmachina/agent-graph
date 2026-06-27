@@ -47,8 +47,9 @@ async def list_connectors_tool(verify: bool = False) -> str:
         JSON array of connector objects, each with:
           - source: platform name to pass as the platform= argument
           - description: what this connector ingests
-          - auth_provider: shared auth provider key (e.g. "google")
-          - auth_status: "ok" | "missing" | "invalid"
+          - auth_provider: shared auth provider key (e.g. "google"), or null
+            for connectors that do not use credentials
+          - auth_status: "ok" | "missing" | "invalid", or null when no auth is used
           - auth_detail: aggregate auth summary or error message; null if missing
           - auth_verified: true when credentials were live-checked with provider APIs
           - shared_auth: true when multiple connectors share the same auth provider
