@@ -5,6 +5,7 @@ from __future__ import annotations
 # pyright: reportPrivateUsage=false
 # pyright: reportOptionalMemberAccess=false
 # pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false
+import logging
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -715,6 +716,45 @@ async def test_fetch_feed_hydrates_existing_entries_with_cache_validators(
     assert entry.content == "Cached body"
     assert entry.metadata["status_code"] == 304
     assert entry.metadata["http_etag"] == '"cached"'
+
+
+@pytest.mark.asyncio
+async def test_fetch_feed_keeps_entry_when_hydration_fails_without_error_log(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class _Parsed:
+        bozo = False
+        feed = {"title": "Example Feed"}
+        entries = [
+            {
+                "id": "post-1",
+                "title": "First Post",
+                "link": "https://missing.example/first",
+                "summary": "A short summary",
+            }
+        ]
+
+    monkeypatch.setattr(feedparser, "parse", lambda _feed_url: _Parsed())
+    backend = MagicMock()
+    backend.get_entity_by_platform = AsyncMock(return_value=None)
+    set_backend(backend)
+    caplog.set_level(logging.WARNING, logger="agentgraph_connector_rss")
+
+    with patch(
+        "agentgraph_connector_rss._fetch_http_document",
+        new=AsyncMock(side_effect=RuntimeError("DNS lookup failed")),
+    ):
+        batch = await _fetch_feed("https://example.com/feed.xml", hydrate_documents=True)
+
+    entry = batch.entities[1]
+    assert entry.platform == "rss"
+    assert entry.title == "First Post"
+    assert entry.content and "A short summary" in entry.content
+    assert entry.metadata["web_url"] == "https://missing.example/first"
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert "Skipping RSS article hydration for" in caplog.text
+    assert "RuntimeError: DNS lookup failed" in caplog.text
 
 
 @pytest.mark.asyncio

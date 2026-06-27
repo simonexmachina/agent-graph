@@ -389,8 +389,14 @@ async def _hydrate_entry_document(entity: EntityRecord) -> EntityRecord:
             entity.metadata,
             fallback=entity,
         )
-    except Exception:
-        logger.exception("Failed to hydrate RSS entry document %s", entity.platform_entity_id)
+    except Exception as exc:
+        logger.warning(
+            "Skipping RSS article hydration for %s (%s: %s)",
+            entity.platform_entity_id,
+            type(exc).__name__,
+            exc,
+        )
+        logger.debug("RSS article hydration failure", exc_info=True)
         return entity
 
 
