@@ -399,6 +399,7 @@ class _FakeRssConnector:
     source = "rss"
     auth_label = "rss"
     auth_description = "RSS"
+    appears_in_auth_status = False
     poll_interval = None
     poll_delegates: list[str] = []
     url_patterns: list[str] = []
@@ -638,6 +639,28 @@ def test_auth_status_dedupes_shared_google_provider() -> None:
     assert result.exit_code == 0
     assert result.output.count("account: User Example [acct-google]") == 1
     assert "connectors: gdocs, gdrive" in result.output
+
+
+def test_auth_status_excludes_non_auth_connectors() -> None:
+    class _FakeWebConnector:
+        source = "web"
+        auth_label = None
+        auth_description = "Web"
+        appears_in_auth_status = False
+        poll_interval = None
+        poll_delegates: list[str] = []
+        url_patterns: list[str] = []
+
+    with patch("agentgraph.connectors.registry.bootstrap"), \
+         patch(
+             "agentgraph.connectors.registry.get_all_connectors",
+             return_value=[_FakeGoogleConnector(), _FakeRssConnector(), _FakeWebConnector()],
+         ):
+        result = runner.invoke(app, ["auth", "--json", "status"])
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert [item["provider"] for item in parsed] == ["google"]
 
 
 def test_auth_google_invalid_existing_credentials_reuses_client_config(

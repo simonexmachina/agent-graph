@@ -219,6 +219,12 @@ class BaseConnector(ABC):
     auth_label: ClassVar[str | None] = None
     auth_description: ClassVar[str | None] = None
     onboard_prompt: ClassVar[str | None] = None
+    appears_in_auth_status: ClassVar[bool] = True
+    """True for connectors backed by user/provider credentials.
+
+    Connectors that only need configuration, or no setup at all, should leave
+    `agentgraph auth status` to real authentication providers.
+    """
 
     @classmethod
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:

@@ -13,9 +13,15 @@ def auth_provider_key(connector: BaseConnector) -> str:
     return getattr(connector, "auth_label", None) or connector.source
 
 
-def auth_provider_connectors(connectors: list[BaseConnector]) -> dict[str, list[BaseConnector]]:
+def auth_provider_connectors(
+    connectors: list[BaseConnector],
+    *,
+    include_non_auth: bool = False,
+) -> dict[str, list[BaseConnector]]:
     grouped: dict[str, list[BaseConnector]] = {}
     for connector in connectors:
+        if not include_non_auth and not getattr(type(connector), "appears_in_auth_status", True):
+            continue
         grouped.setdefault(auth_provider_key(connector), []).append(connector)
     return grouped
 
@@ -62,10 +68,14 @@ async def auth_provider_status_items(
     connectors: list[BaseConnector],
     *,
     verify: bool = False,
+    include_non_auth: bool = False,
 ) -> list[dict[str, object]]:
     """Build JSON-serialisable auth-provider status rows."""
     items: list[dict[str, object]] = []
-    for provider, members in auth_provider_connectors(connectors).items():
+    for provider, members in auth_provider_connectors(
+        connectors,
+        include_non_auth=include_non_auth,
+    ).items():
         representative = members[0]
         accounts = _list_accounts(representative)
         account_rows: list[dict[str, object]] = []
@@ -117,7 +127,11 @@ async def connector_status_items(
     verify: bool = False,
 ) -> list[dict[str, object]]:
     """Build JSON-serialisable connector status rows."""
-    provider_items = await auth_provider_status_items(connectors, verify=verify)
+    provider_items = await auth_provider_status_items(
+        connectors,
+        verify=verify,
+        include_non_auth=True,
+    )
     provider_by_key = {str(item["provider"]): item for item in provider_items}
 
     poll_delegators: dict[str, list[str]] = {}

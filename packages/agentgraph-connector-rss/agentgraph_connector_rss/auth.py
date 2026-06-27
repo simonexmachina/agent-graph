@@ -62,7 +62,7 @@ def load_rss_settings(account_id: str | None = None) -> RssConfig:
     _ = account_id
     data = load_rss_config()
     if data is None:
-        raise RuntimeError("RSS feeds not configured. Run: agentgraph auth rss")
+        raise RuntimeError("RSS feeds not configured. Run: agentgraph connector rss add <feed-url>")
     return RssConfig(**data)
 
 
@@ -578,7 +578,7 @@ def run_rss_flow(
 
     typer.echo(
         "\n"
-        "RSS authentication does not need an API key. Provide one or more RSS/Atom feed URLs,\n"
+        "RSS setup does not need authentication. Provide one or more RSS/Atom feed URLs,\n"
         "and AgentGraph will fetch those feeds directly.\n"
     )
     raw_feeds: str = typer.prompt("RSS/Atom feed URLs (comma-separated)").strip()

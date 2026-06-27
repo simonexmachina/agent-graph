@@ -74,7 +74,10 @@ async def list_connectors_tool(verify: bool = False) -> str:
 @mcp.tool()
 async def list_auth_providers_tool(verify: bool = False) -> str:
     """
-    List authentication providers and their current account/auth state.
+    List credential-backed authentication providers and their current account/auth state.
+
+    Connectors that require only configuration, or no setup at all, are omitted.
+    Use list_connectors_tool to inspect all installed connectors.
 
     Returns:
         JSON array of auth provider objects, each with:

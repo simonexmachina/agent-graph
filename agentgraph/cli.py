@@ -37,7 +37,7 @@ def _status_label(status: str) -> str:
 
 @auth_app.callback()
 def auth(
-    target: str | None = typer.Argument(None, help="Use 'status' or an auth provider such as google, slack, discord, or rss"),
+    target: str | None = typer.Argument(None, help="Use 'status' or an auth provider such as google, slack, or discord"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
     verify: bool = typer.Option(False, "--verify", help="Live-check credentials with provider APIs"),
     add: bool = typer.Option(False, "--add", help="Add another authenticated account for this provider"),

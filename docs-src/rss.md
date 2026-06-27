@@ -43,12 +43,6 @@ You can also pass an HTML page or local HTML file. AgentGraph validates the page
 agentgraph connector rss add https://example.com/
 ```
 
-For an interactive setup prompt, use:
-
-```bash
-agentgraph auth rss
-```
-
 ## Remove feeds
 
 Remove one or more exact configured feed URLs:

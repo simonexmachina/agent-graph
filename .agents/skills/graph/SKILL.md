@@ -59,14 +59,14 @@ agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--json] #
 agentgraph connector rss remove <feed-url> [feed-url...] [--json] # removes exact configured feed URLs
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
 
-# Show auth provider state (dedupes shared providers like Google); add --verify for live provider API checks
+# Show credential-backed auth provider state (dedupes shared providers like Google); add --verify for live provider API checks
 agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[]
 
 # Authenticate connectors/providers
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
 agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
-agentgraph auth rss                                       # RSS/Atom feed URLs interactively
+agentgraph connector rss add <feed-or-html-url>           # RSS/Atom feed URLs are connector configuration, not auth
 
 # Server
 agentgraph serve [--reload]
@@ -83,7 +83,7 @@ When using AgentGraph through MCP instead of the CLI, use these equivalent tools
 
 ```text
 agentgraph connectors              -> list_connectors_tool(verify)
-agentgraph auth [--json] status    -> list_auth_providers_tool(verify)
+agentgraph auth [--json] status    -> list_auth_providers_tool(verify) # credential-backed providers only
 agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
 agentgraph search ...              -> search_entities_tool(...)
 agentgraph get ...                 -> get_entity_tool(entity_id)

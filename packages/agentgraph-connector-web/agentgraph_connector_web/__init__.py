@@ -45,6 +45,7 @@ class WebConnector(BaseConnector):
     is_generic_url_fallback = True
     url_patterns: ClassVar[list[str]] = []
     auth_description = "Generic web pages: HTML, Markdown, JSON, plain text, and XML/RSS/Atom documents fetched directly over HTTP."
+    appears_in_auth_status = False
 
     def can_handle(self, url: str) -> bool:
         return self.resolve_url(url) is not None

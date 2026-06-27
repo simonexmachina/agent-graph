@@ -47,6 +47,7 @@ class RssConnector(BaseConnector):
     auth_label = "rss"
     auth_description = "RSS/Atom feeds: feed URLs are fetched directly and entries are indexed as Document entities."
     onboard_prompt = "Set up RSS feeds?"
+    appears_in_auth_status = False
 
     @classmethod
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
