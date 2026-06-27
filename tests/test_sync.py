@@ -67,6 +67,24 @@ class _FailingConnector(BaseConnector):
         raise RuntimeError("boom")
 
 
+class _ScheduledConnector(BaseConnector):
+    source: ClassVar[str] = "scheduled"
+    fetch_policy: ClassVar[FetchPolicy] = FetchPolicy(stale_after_seconds=60)
+    poll_interval: ClassVar[timedelta | None] = timedelta(seconds=30)
+
+    def can_handle(self, url: str) -> bool:
+        return False
+
+    async def fetch(
+        self,
+        resource_type: ResourceType,
+        resource_id: str,
+        meta: dict[str, str] | None = None,
+        account_id: str | None = None,
+    ) -> EntityBatch:
+        return EntityBatch()
+
+
 @pytest.fixture(autouse=True)
 def clear_sync_backoff() -> None:
     sync.clear_poll_backoff()
@@ -94,3 +112,15 @@ async def test_poll_connector_backs_off_after_failure() -> None:
         await sync.poll_connector(connector)
 
     backend.load_cursor.assert_awaited_once()
+
+
+def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:
+    scheduler = MagicMock()
+
+    with patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_ScheduledConnector()]):
+        sync.setup_sync(scheduler)
+
+    scheduler.add_job.assert_called_once()
+    _, _, kwargs = scheduler.add_job.mock_calls[0]
+    assert kwargs["id"] == "sync_scheduled"
+    assert kwargs["name"] == "poll connector scheduled"

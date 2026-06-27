@@ -152,6 +152,7 @@ def setup_sync(scheduler: AsyncIOScheduler) -> None:
             seconds=total_seconds,
             args=[connector],
             id=f"sync_{connector.source}",
+            name=f"poll connector {connector.source}",
             max_instances=1,
             coalesce=True,
         )
