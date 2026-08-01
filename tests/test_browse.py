@@ -224,6 +224,14 @@ def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     assert "focusNode(node.data('id'));" in viewer_html
 
 
+def test_viewer_spinner_does_not_block_list_double_clicks() -> None:
+    """The detail-loading indicator must not intercept a row's second click."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "#spinner {" in viewer_html
+    assert "pointer-events: none;" in viewer_html
+
+
 def test_viewer_omits_redundant_all_type_filter() -> None:
     """The default all-types view should use the database's global sort index."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
