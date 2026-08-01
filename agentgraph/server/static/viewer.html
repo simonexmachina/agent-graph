@@ -716,7 +716,6 @@
 
   // ── Zoom-invariant sizing ─────────────────────────────────────────────────
   const Z = { nodeSize: 28, nodeFont: 12, textMaxWidth: 150, textMarginY: 4, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
-  const DEFAULT_MIN_READABLE_ZOOM = 1;
   const DEFAULT_LAYOUT_PADDING = 60;
   const READABLE_GRID_CELL_WIDTH = 165;
   const READABLE_GRID_CELL_HEIGHT = 90;
@@ -748,10 +747,10 @@
 
   cy.on('zoom', applyZoomStyles);
 
-  function ensureReadableDefaultZoom() {
-    if (cy.nodes().length === 0 || cy.zoom() >= DEFAULT_MIN_READABLE_ZOOM) return;
-    cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
-    cy.center(cy.elements());
+  function fitGraphToViewport() {
+    if (cy.nodes().length === 0) return;
+    cy.fit(cy.nodes(), DEFAULT_LAYOUT_PADDING);
+    applyZoomStyles();
   }
 
   function readableGridPositionFor(index, count) {
@@ -973,9 +972,7 @@
         positions: readableGridPositions(),
       });
       layout.one('layoutstop', () => {
-        cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
-        cy.pan({ x: 0, y: 0 });
-        applyZoomStyles();
+        fitGraphToViewport();
       });
       layout.run();
       return;
@@ -996,8 +993,7 @@
       padding: DEFAULT_LAYOUT_PADDING,
     });
     layout.one('layoutstop', () => {
-      ensureReadableDefaultZoom();
-      applyZoomStyles();
+      fitGraphToViewport();
     });
     layout.run();
   }
@@ -1257,8 +1253,7 @@
     markSearchInputSubmitted();
     markLookupInputSubmitted();
     history.replaceState(null, '', window.location.pathname);
-    cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
-    cy.pan({ x: 0, y: 0 });
+    fitGraphToViewport();
     refreshGraph();
   });
 

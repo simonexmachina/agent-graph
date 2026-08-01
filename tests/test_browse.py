@@ -99,15 +99,15 @@ def test_viewer_renders_standard_web_url_links() -> None:
     assert "detailBody.appendChild(row('Link', linkHtml))" in viewer_html
 
 
-def test_viewer_defaults_prioritize_readable_node_labels() -> None:
-    """The graph's initial layout leaves room for node labels."""
+def test_viewer_initial_layout_contains_all_nodes() -> None:
+    """The graph's initial layout fits every node and its label in the viewport."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
-    assert "const DEFAULT_MIN_READABLE_ZOOM = 1;" in viewer_html
     assert "const DEFAULT_LAYOUT_PADDING = 60;" in viewer_html
     assert "const READABLE_GRID_CELL_WIDTH = 165;" in viewer_html
     assert "const READABLE_GRID_CELL_HEIGHT = 90;" in viewer_html
-    assert "function ensureReadableDefaultZoom()" in viewer_html
+    assert "function fitGraphToViewport()" in viewer_html
+    assert "cy.fit(cy.nodes(), DEFAULT_LAYOUT_PADDING);" in viewer_html
     assert "function readableGridPositionFor(index, count)" in viewer_html
     assert "function readableGridPositions()" in viewer_html
     assert "window.__agentGraphViewer = { cy };" in viewer_html
@@ -117,8 +117,8 @@ def test_viewer_defaults_prioritize_readable_node_labels() -> None:
     assert "nodeRepulsion: () => 800000" in viewer_html
     assert "idealEdgeLength: () => 180" in viewer_html
     assert "nodeOverlap: 30" in viewer_html
-    assert "ensureReadableDefaultZoom();" in viewer_html
-    assert "cy.zoom(DEFAULT_MIN_READABLE_ZOOM);" in viewer_html
+    assert viewer_html.count("fitGraphToViewport();") == 3
+    assert "ensureReadableDefaultZoom" not in viewer_html
 
 
 def test_viewer_has_remote_list_mode() -> None:
