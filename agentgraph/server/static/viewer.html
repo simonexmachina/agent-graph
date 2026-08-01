@@ -755,7 +755,6 @@
   }
 
   // ── State ─────────────────────────────────────────────────────────────────
-  let debounceTimer = null;
   const spinner = document.getElementById('spinner');
   const emptyState = document.getElementById('empty-state');
   const hoverCard = document.getElementById('hover-card');
@@ -1154,10 +1153,33 @@
   }
 
   // ── Event wiring ──────────────────────────────────────────────────────────
-  searchInput.addEventListener('input', () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => refreshView(collectParams({}, true)), 400);
-  });
+  function wireTextInputSubmission(input, submit) {
+    let lastSubmittedValue = input.value.trim();
+
+    function submitIfChanged() {
+      const value = input.value.trim();
+      if (value === lastSubmittedValue) return;
+      lastSubmittedValue = value;
+      submit();
+    }
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      submitIfChanged();
+    });
+    input.addEventListener('blur', submitIfChanged);
+
+    return () => {
+      lastSubmittedValue = input.value.trim();
+    };
+  }
+
+  const markSearchInputSubmitted = wireTextInputSubmission(
+    searchInput,
+    () => refreshView(collectParams({}, true)),
+  );
+  const markLookupInputSubmitted = wireTextInputSubmission(lookupInput, () => doLookup());
 
   platformSel.addEventListener('change', () => refreshGraph());
   sinceSel.addEventListener('change', () => refreshGraph());
@@ -1178,6 +1200,8 @@
     limitSlider.value = 50;
     limitDisplay.textContent = '50';
     document.querySelectorAll('.type-filter').forEach(c => c.checked = true);
+    markSearchInputSubmitted();
+    markLookupInputSubmitted();
     history.replaceState(null, '', window.location.pathname);
     cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
     cy.pan({ x: 0, y: 0 });
@@ -1225,7 +1249,10 @@
   }
 
   lookupInput.addEventListener('input', syncDepthEnabled);
-  lookupBtn.addEventListener('click', doLookup);
+  lookupBtn.addEventListener('click', () => {
+    markLookupInputSubmitted();
+    doLookup();
+  });
   focusResetBtn.addEventListener('click', () => {
     lookupInput.value = '';
     depthInput.value = 1;
@@ -1233,8 +1260,6 @@
     syncDepthEnabled();
     refreshGraph({ node_id: null, depth: 1 });
   });
-  lookupInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLookup(); });
-
   // ── Detail panel ──────────────────────────────────────────────────────────
   function closeDetail() {
     detail.classList.remove('open');
@@ -1664,6 +1689,8 @@
   loadMeta().then(async () => {
     const _initial = readUrlState();
     applyUrlState(_initial);
+    markSearchInputSubmitted();
+    markLookupInputSubmitted();
     syncDepthEnabled();
     initListTable();
     await refreshView(collectParams({}, true));

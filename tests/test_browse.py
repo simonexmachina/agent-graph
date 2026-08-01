@@ -151,6 +151,19 @@ def test_viewer_has_focus_node_reset_control() -> None:
     assert "lookupError.style.display = 'none';" in viewer_html
 
 
+def test_viewer_text_inputs_submit_on_enter_or_blur() -> None:
+    """Text queries wait for an explicit Enter or focus-loss submission."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "function wireTextInputSubmission(input, submit)" in viewer_html
+    assert "input.addEventListener('keydown'" in viewer_html
+    assert "input.addEventListener('blur', submitIfChanged)" in viewer_html
+    assert "wireTextInputSubmission(\n    searchInput" in viewer_html
+    assert "wireTextInputSubmission(lookupInput" in viewer_html
+    assert "searchInput.addEventListener('input'" not in viewer_html
+    assert "lookupInput.addEventListener('keydown'" not in viewer_html
+
+
 # ---------------------------------------------------------------------------
 # Rule: focal node always shown regardless of filters
 # ---------------------------------------------------------------------------
