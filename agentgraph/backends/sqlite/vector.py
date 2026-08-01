@@ -64,6 +64,7 @@ async def vector_ranked(
     mode: str,
     vec_loaded: bool,
     platform: str | None = None,
+    candidate_limit: int | None = None,
 ) -> list[tuple[str, int]]:
     """Return (entity_id, rank) pairs with rank starting at 1 (best).
 
@@ -83,7 +84,7 @@ async def vector_ranked(
         type_params.append(platform)
 
     query_blob = pack_embedding(query_vec)
-    candidate_limit = limit * 5
+    candidate_limit = candidate_limit if candidate_limit is not None else limit * 5
 
     # ---- sqlite-vec path ----
     if mode == "sqlite-vec" and vec_loaded:

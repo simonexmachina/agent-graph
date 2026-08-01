@@ -633,6 +633,9 @@ class SQLiteBackend(StorageBackend):
         conn = self._read_conn_or_raise()
 
         with timed("sqlite.search_entities", limit=limit, platform=platform):
+            initial_candidate_limit = limit * 2
+            max_candidate_limit = limit * 5
+
             # BM25 via FTS5
             fts_ids: list[tuple[str, int]] = []
             try:
@@ -655,18 +658,19 @@ class SQLiteBackend(StorageBackend):
                     ORDER BY f.rank
                     LIMIT ?
                     """,
-                    [_fts5_query(query_text), *fts_extra_params, limit * 5],
+                    [_fts5_query(query_text), *fts_extra_params, initial_candidate_limit],
                 )
                 rows = await cursor.fetchall()
                 fts_ids = [(row[0], i + 1) for i, row in enumerate(rows)]
             except Exception:
                 pass
 
-            # Vector search is the expensive leg. If FTS fills the whole
-            # candidate window, use the lexical candidates directly and avoid
-            # an O(n) vector scan over every embedded entity.
-            candidate_limit = limit * 5
-            if len(fts_ids) >= candidate_limit:
+            # Vector search is the expensive leg. A saturated initial FTS
+            # window already has enough lexical candidates for the requested
+            # result count, so avoid the O(n) vector scan in that common case.
+            # Sparse FTS queries use the larger window to preserve the existing
+            # hybrid-search recall.
+            if len(fts_ids) >= initial_candidate_limit:
                 vec_ids: list[tuple[str, int]] = []
                 logger.debug(
                     "search skipped vector scan because FTS returned %d candidates",
@@ -674,8 +678,14 @@ class SQLiteBackend(StorageBackend):
                 )
             else:
                 vec_ids = await vector_ranked(
-                    conn, query_vec, entity_types, limit, self._vector_mode, self._vec_loaded,
+                    conn,
+                    query_vec,
+                    entity_types,
+                    limit,
+                    self._vector_mode,
+                    self._vec_loaded,
                     platform=platform,
+                    candidate_limit=max_candidate_limit,
                 )
 
             # RRF fusion (k=60, fulltext weight=2x)

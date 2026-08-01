@@ -226,6 +226,41 @@ async def test_sqlite_search_skips_vector_when_fts_fills_candidate_window() -> N
 
 
 @pytest.mark.asyncio
+async def test_sqlite_search_uses_large_vector_window_for_sparse_fts() -> None:
+    from agentgraph.backends.sqlite.backend import SQLiteBackend
+    from agentgraph.connectors.base import EntityBatch, EntityRecord
+
+    backend = SQLiteBackend(":memory:")
+    await backend.initialize()
+    try:
+        await backend.upsert_batch(
+            EntityBatch(
+                entities=[
+                    EntityRecord(
+                        entity_type="Document",
+                        platform="web",
+                        platform_entity_id="doc-0",
+                        title="Alpha",
+                        content="alpha content",
+                    )
+                ]
+            ),
+            person_embeddings={},
+            entity_embeddings={},
+        )
+
+        with patch(
+            "agentgraph.backends.sqlite.backend.vector_ranked", new=AsyncMock(return_value=[])
+        ) as vector_ranked:
+            await backend.search_entities([0.0] * 384, "alpha", None, 1, 0.0)
+
+        vector_ranked.assert_awaited_once()
+        assert vector_ranked.call_args.kwargs["candidate_limit"] == 5
+    finally:
+        await backend.close()
+
+
+@pytest.mark.asyncio
 async def test_query_by_filter_reuses_connector_for_web_url_enrichment() -> None:
     from agentgraph.graph.query import query_by_filter
 
