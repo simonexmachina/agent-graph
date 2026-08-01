@@ -131,6 +131,7 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "function renderCachedGraph(params)" in viewer_html
     assert "function renderCachedList(params)" in viewer_html
     assert "renderCachedList(params)" in viewer_html
+    assert "cy.resize();" in viewer_html
     assert ".tabulator:has(.tabulator-alert) .tabulator-placeholder" in viewer_html
 
 

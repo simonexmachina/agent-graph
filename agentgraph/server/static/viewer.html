@@ -905,6 +905,8 @@
     const nodes = data.nodes || [];
     const edges = data.edges || [];
 
+    // Cytoscape is hidden while list mode is active, so refresh its viewport before positioning nodes.
+    cy.resize();
     cy.elements().remove();
 
     const elements = [
@@ -1050,6 +1052,7 @@
     const isList = view === 'list';
     listView.style.display = isList ? 'block' : 'none';
     document.getElementById('cy').style.display = isList ? 'none' : 'block';
+    if (!isList) cy.resize();
     document.getElementById('hover-card').style.display = 'none';
     graphTab.classList.toggle('active', !isList);
     graphTab.setAttribute('aria-selected', String(!isList));
