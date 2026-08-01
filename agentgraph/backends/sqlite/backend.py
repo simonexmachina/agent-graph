@@ -37,6 +37,21 @@ def _fts5_query(text: str) -> str:
     """Strip FTS5 syntax characters so arbitrary user text doesn't cause parse errors."""
     return _FTS5_SPECIAL.sub(" ", text).strip()
 _VALID_ORDER_BY = {"created_at", "updated_at", "last_accessed", "synced_at"}
+_LIST_PAGE_ORDER_BY = {
+    **{field: field for field in _VALID_ORDER_BY},
+    "display_name": """
+        COALESCE(
+            NULLIF(TRIM(title), ''),
+            NULLIF(TRIM(json_extract(metadata, '$.display_name')), ''),
+            NULLIF(TRIM(json_extract(metadata, '$.canonical_email')), ''),
+            NULLIF(TRIM(content), ''),
+            platform_entity_id,
+            id
+        ) COLLATE NOCASE
+    """,
+    "entity_type": "entity_type COLLATE NOCASE",
+    "platform": "platform COLLATE NOCASE",
+}
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 
 
@@ -837,8 +852,7 @@ class SQLiteBackend(StorageBackend):
         order_by: str,
         order_dir: str,
     ) -> tuple[list[EntityResult], int]:
-        if order_by not in _VALID_ORDER_BY:
-            order_by = "last_accessed"
+        order_by_sql = _LIST_PAGE_ORDER_BY.get(order_by, "last_accessed")
         if order_dir.upper() not in {"ASC", "DESC"}:
             order_dir = "DESC"
 
@@ -864,7 +878,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities
             {where}
-            ORDER BY {order_by} {order_dir}, id ASC
+            ORDER BY {order_by_sql} {order_dir}, id ASC
             LIMIT ? OFFSET ?
             """,
             [*params, limit, offset],

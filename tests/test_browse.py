@@ -757,6 +757,33 @@ async def test_browse_nodes_checks_one_extra_search_result() -> None:
 
 
 @pytest.mark.asyncio
+async def test_browse_nodes_sorts_search_results_by_display_name() -> None:
+    """Sorting a list header also orders search-backed result sets."""
+    from agentgraph.server.cli_api import cli_browse_nodes
+
+    zulu = _entity(title="Zulu")
+    alpha = _entity(title="Alpha")
+    with patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[zulu, alpha])), patch(
+        "agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])
+    ):
+        result = await cli_browse_nodes(
+            search="letter",
+            entity_type=[],
+            platform=None,
+            since=None,
+            node_id=None,
+            depth=2,
+            limit=50,
+            page=1,
+            size=50,
+            sort="display_name",
+            sort_dir="asc",
+        )
+
+    assert [node["display_name"] for node in result["data"]] == ["Alpha", "Zulu"]
+
+
+@pytest.mark.asyncio
 async def test_browse_edges_accepts_comma_separated_node_ids() -> None:
     """Edge lookup deduplicates node IDs and omits edges outside the visible set."""
     from agentgraph.server.cli_api import cli_browse_edges

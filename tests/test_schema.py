@@ -114,6 +114,39 @@ async def test_schema_has_platform_synced_at_index(sqlite_backend: SQLiteBackend
     assert "idx_entities_platform_last_accessed_id" in names
 
 
+async def test_list_entities_page_orders_by_visible_table_columns(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    """Server-side list ordering accepts the table's non-timestamp columns."""
+    conn = sqlite_backend._conn_or_raise()
+    await conn.executemany(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, title, metadata
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ["entity-1", "Document", "zeta", "doc-1", "Zulu", "{}"],
+            ["entity-2", "Message", "alpha", "message-1", "", '{"display_name":"Alpha"}'],
+            ["entity-3", "Channel", "middle", "channel-1", "Middle", "{}"],
+        ],
+    )
+
+    by_name, _ = await sqlite_backend.list_entities_page(
+        None, None, None, 10, 0, "display_name", "asc"
+    )
+    by_type, _ = await sqlite_backend.list_entities_page(
+        None, None, None, 10, 0, "entity_type", "asc"
+    )
+    by_platform, _ = await sqlite_backend.list_entities_page(
+        None, None, None, 10, 0, "platform", "asc"
+    )
+
+    assert [entity["id"] for entity in by_name] == ["entity-2", "entity-3", "entity-1"]
+    assert [entity["id"] for entity in by_type] == ["entity-3", "entity-1", "entity-2"]
+    assert [entity["id"] for entity in by_platform] == ["entity-2", "entity-3", "entity-1"]
+
+
 async def test_file_database_uses_separate_read_connection(tmp_path: Path) -> None:
     backend = SQLiteBackend(str(tmp_path / "graph.db"))
     await backend.initialize()

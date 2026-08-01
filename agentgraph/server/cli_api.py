@@ -262,10 +262,20 @@ async def cli_traverse(
 
 _VIEWER_ORDER_FIELDS = {
     "created_at",
+    "display_name",
+    "entity_type",
+    "platform",
     "updated_at",
     "last_accessed",
     "synced_at",
 }
+
+
+def _viewer_sort_value(node: dict[str, Any], order_by: str) -> str:
+    if order_by == "display_name":
+        return _entity_display_name(node).casefold()
+    value = node.get(order_by)
+    return value.casefold() if isinstance(value, str) else ""
 
 
 def _page_entities(
@@ -273,7 +283,7 @@ def _page_entities(
 ) -> tuple[list[dict[str, Any]], int]:
     reverse = order_dir.lower() != "asc"
     if order_by in _VIEWER_ORDER_FIELDS:
-        nodes = sorted(nodes, key=lambda node: (node.get(order_by) or ""), reverse=reverse)
+        nodes = sorted(nodes, key=lambda node: _viewer_sort_value(node, order_by), reverse=reverse)
     total = len(nodes)
     start = (page - 1) * page_size
     return nodes[start : start + page_size], total
