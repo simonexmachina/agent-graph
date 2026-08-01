@@ -817,9 +817,43 @@
 
   let _lastBrowseUrl = null;
   let listTable = null;
+  let viewerCache = null;
+
+  function viewerScopeKey(params) {
+    return buildUrl('/api/cli/browse/nodes', {
+      search: params.search,
+      entity_type: params.entity_type,
+      platform: params.platform,
+      since: params.since,
+      node_id: params.node_id,
+      depth: params.depth,
+      limit: params.limit,
+    });
+  }
+
+  function rawNodesToGraphNodes(rawNodes) {
+    return rawNodes.map(entityToNode);
+  }
+
+  function renderCachedGraph(params) {
+    if (!viewerCache || viewerCache.key !== viewerScopeKey(params)) return false;
+    renderGraph({
+      nodes: rawNodesToGraphNodes(viewerCache.rawNodes),
+      edges: viewerCache.edges,
+    });
+    return true;
+  }
+
+  function renderCachedList(params) {
+    if (!listTable || !viewerCache || viewerCache.key !== viewerScopeKey(params)) return false;
+    listTable.setPageSize(params.limit);
+    listTable.setData(viewerCache.rawNodes);
+    return true;
+  }
 
   function invalidateGraphCache() {
     _lastBrowseUrl = null;
+    viewerCache = null;
   }
 
   async function loadGraph(params) {
@@ -838,6 +872,7 @@
       if (!edgesRes.ok) throw new Error(`HTTP ${edgesRes.status}`);
       const edgeData = await edgesRes.json();
       const edges = (edgeData.edges || []).map(e => edgeToCyto(e, nodeIdSet)).filter(Boolean);
+      viewerCache = { key: viewerScopeKey(params), rawNodes: data.data || [], edges };
       renderGraph({ nodes, edges });
     } catch (err) {
       console.error('loadGraph error:', err);
@@ -1000,7 +1035,11 @@
     graphTab.setAttribute('aria-selected', String(!isList));
     listTab.classList.toggle('active', isList);
     listTab.setAttribute('aria-selected', String(isList));
-    if (refresh) refreshView(collectParams({ view }, true));
+    if (refresh) {
+      const params = collectParams({ view }, true);
+      if ((isList && renderCachedList(params)) || (!isList && renderCachedGraph(params))) return;
+      refreshView(params);
+    }
   }
 
   function refreshView(params) {
@@ -1040,6 +1079,36 @@
           sort: sorter ? sorter.field : 'last_accessed',
           sort_dir: sorter ? sorter.dir : 'desc',
         });
+      },
+      ajaxResponse(url, _params, response) {
+        const parsedUrl = new URL(url, window.location.href);
+        const rawNodes = response.data || [];
+        const cacheParams = {
+          search: parsedUrl.searchParams.get('search') || undefined,
+          entity_type: parsedUrl.searchParams.getAll('entity_type'),
+          platform: parsedUrl.searchParams.get('platform') || undefined,
+          since: parsedUrl.searchParams.get('since') || undefined,
+          node_id: parsedUrl.searchParams.get('node_id') || undefined,
+          depth: Number(parsedUrl.searchParams.get('depth') || 1),
+          limit: Number(parsedUrl.searchParams.get('limit') || limitSlider.value),
+        };
+        const key = viewerScopeKey(cacheParams);
+        viewerCache = { key, rawNodes, edges: [] };
+        const nodeIds = rawNodes.map(node => node.id).join(',');
+        if (nodeIds) {
+          fetch(buildUrl('/api/cli/browse/edges', { node_ids: nodeIds }))
+            .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+            .then(edgeData => {
+              if (!viewerCache || viewerCache.key !== key) return;
+              const nodeIdSet = new Set(rawNodes.map(node => node.id));
+              viewerCache.edges = (edgeData.edges || [])
+                .map(edge => edgeToCyto(edge, nodeIdSet))
+                .filter(Boolean);
+              if (currentView() === 'graph') renderCachedGraph(cacheParams);
+            })
+            .catch(err => console.error('preload viewer edges error:', err));
+        }
+        return response;
       },
       pagination: true,
       paginationMode: 'remote',
