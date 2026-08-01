@@ -97,9 +97,9 @@ def test_viewer_defaults_prioritize_readable_node_labels() -> None:
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "const DEFAULT_MIN_READABLE_ZOOM = 1;" in viewer_html
-    assert "const DEFAULT_LAYOUT_PADDING = 80;" in viewer_html
-    assert "const READABLE_GRID_CELL_WIDTH = 190;" in viewer_html
-    assert "const READABLE_GRID_CELL_HEIGHT = 112;" in viewer_html
+    assert "const DEFAULT_LAYOUT_PADDING = 60;" in viewer_html
+    assert "const READABLE_GRID_CELL_WIDTH = 165;" in viewer_html
+    assert "const READABLE_GRID_CELL_HEIGHT = 90;" in viewer_html
     assert "function ensureReadableDefaultZoom()" in viewer_html
     assert "function readableGridPositionFor(index, count)" in viewer_html
     assert "function readableGridPositions()" in viewer_html
