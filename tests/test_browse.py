@@ -131,6 +131,7 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "function renderCachedGraph(params)" in viewer_html
     assert "function renderCachedList(params)" in viewer_html
     assert "renderCachedList(params)" in viewer_html
+    assert ".tabulator:has(.tabulator-alert) .tabulator-placeholder" in viewer_html
 
 
 def test_viewer_omits_redundant_all_type_filter() -> None:
