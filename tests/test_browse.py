@@ -114,6 +114,19 @@ def test_viewer_defaults_prioritize_readable_node_labels() -> None:
     assert "cy.zoom(DEFAULT_MIN_READABLE_ZOOM);" in viewer_html
 
 
+def test_viewer_has_remote_list_mode() -> None:
+    """The viewer uses the node and edge endpoints independently in list/graph modes."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert 'id="graph-tab"' in viewer_html
+    assert 'id="list-tab"' in viewer_html
+    assert "tabulator-tables@6.3.1" in viewer_html
+    assert "/api/cli/browse/nodes" in viewer_html
+    assert "/api/cli/browse/edges" in viewer_html
+    assert "paginationMode: 'remote'" in viewer_html
+    assert "sortMode: 'remote'" in viewer_html
+
+
 # ---------------------------------------------------------------------------
 # Rule: focal node always shown regardless of filters
 # ---------------------------------------------------------------------------
@@ -505,3 +518,59 @@ async def test_browse_404_when_node_id_not_found() -> None:
         )
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_browse_nodes_returns_paginated_node_page() -> None:
+    """The list endpoint exposes Tabulator-compatible pagination metadata."""
+    from agentgraph.server.cli_api import cli_browse_nodes
+
+    entities = [_entity(title="First"), _entity(title="Second")]
+    mock_page = AsyncMock(return_value=(entities, 7))
+
+    with patch("agentgraph.server.cli_api.list_entities_page", mock_page):
+        result = await cli_browse_nodes(
+            search=None,
+            entity_type=[],
+            platform=None,
+            since=None,
+            node_id=None,
+            depth=2,
+            limit=100,
+            page=2,
+            size=2,
+            sort="updated_at",
+            sort_dir="asc",
+        )
+
+    assert [node["display_name"] for node in result["data"]] == ["First", "Second"]
+    assert result["total"] == 7
+    assert result["last_page"] == 4
+    mock_page.assert_awaited_once_with(
+        entity_types=None,
+        platform=None,
+        since=None,
+        limit=2,
+        offset=2,
+        order_by="updated_at",
+        order_dir="asc",
+    )
+
+
+@pytest.mark.asyncio
+async def test_browse_edges_accepts_comma_separated_node_ids() -> None:
+    """Edge lookup deduplicates node IDs and omits edges outside the visible set."""
+    from agentgraph.server.cli_api import cli_browse_edges
+
+    first = _entity()
+    second = _entity()
+    outside = _entity()
+    visible_edge = _edge(first["id"], second["id"])
+    hidden_edge = _edge(first["id"], outside["id"])
+    mock_edges = AsyncMock(return_value=[visible_edge, hidden_edge])
+
+    with patch("agentgraph.server.cli_api.get_edges_for_entities", mock_edges):
+        result = await cli_browse_edges(f" {first['id']}, {second['id']}, {first['id']} ")
+
+    assert result == {"edges": [visible_edge]}
+    mock_edges.assert_awaited_once_with([first["id"], second["id"]])
