@@ -831,6 +831,22 @@ async def test_mcp_traverse_caps_depth() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_traverse_allows_depth_zero() -> None:
+    from agentgraph.mcp.server import traverse_graph_tool
+
+    captured: dict[str, Any] = {}
+
+    async def fake_traverse(entity_id: str, max_depth: int) -> dict[str, Any]:
+        captured["depth"] = max_depth
+        return {"nodes": [], "edges": []}
+
+    with patch("agentgraph.mcp.server.traverse_graph", new=fake_traverse):
+        await traverse_graph_tool(str(uuid4()), max_depth=0)
+
+    assert captured["depth"] == 0
+
+
+@pytest.mark.asyncio
 async def test_mcp_query_by_filter_tool() -> None:
     from agentgraph.mcp.server import query_by_filter_tool
 

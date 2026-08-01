@@ -252,7 +252,7 @@ async def cli_get_edges(
 @router.get("/traverse/{entity_id:path}")
 async def cli_traverse(
     entity_id: str,
-    depth: int = Query(default=2, ge=1, le=4),
+    depth: int = Query(default=2, ge=0, le=4),
 ) -> dict[str, Any]:
     entity = await get_entity(entity_id)
     if entity is None:
@@ -431,7 +431,7 @@ async def cli_browse_nodes(
     platform: str | None = Query(default=None),
     since: str | None = Query(default=None),
     node_id: str | None = Query(default=None),
-    depth: int = Query(default=2, ge=1, le=4),
+    depth: int = Query(default=2, ge=0, le=4),
     limit: int = Query(default=50, ge=1, le=1000),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=1000),
@@ -474,7 +474,7 @@ async def cli_browse(
     platform: str | None = Query(default=None),
     since: str | None = Query(default=None),
     node_id: str | None = Query(default=None),
-    depth: int = Query(default=2, ge=1, le=4),
+    depth: int = Query(default=2, ge=0, le=4),
     limit: int = Query(default=50, ge=1, le=1000),
 ) -> dict[str, Any]:
     """Compatibility graph response, composed from the shared node-set resolver."""

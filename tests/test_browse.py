@@ -80,6 +80,15 @@ def test_viewer_uses_bookmark_symbol_without_status_row() -> None:
     assert "/api/cli/delete" in viewer_html
 
 
+def test_viewer_supports_zero_depth_for_a_node_only_view() -> None:
+    """The viewer must retain zero instead of treating it as an absent depth."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert 'id="depth-input" min="0" max="4"' in viewer_html
+    assert "params.depth !== undefined && params.depth !== 1" in viewer_html
+    assert "depthInput.value === '' ? undefined : Number(depthInput.value)" in viewer_html
+
+
 def test_viewer_unifies_people_and_shows_the_canonical_person() -> None:
     """Merging from a Person panel returns focus and detail to the canonical record."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
@@ -428,6 +437,34 @@ async def test_traverse_called_with_depth_when_node_id_given() -> None:
         )
 
     mock_traverse.assert_called_once_with(focal["id"], max_depth=3)
+
+
+@pytest.mark.asyncio
+async def test_browse_allows_zero_depth_for_a_node_only_view() -> None:
+    """A focused browse request passes depth zero through to traversal."""
+    from agentgraph.server.cli_api import cli_browse
+
+    focal = _entity(entity_type="Person")
+    mock_traverse = AsyncMock(return_value={"nodes": [focal], "edges": []})
+
+    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=focal)), \
+         patch("agentgraph.server.cli_api.traverse_graph", mock_traverse), \
+         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+        result = await cli_browse(
+            node_id=focal["id"],
+            entity_type=[],
+            search=None,
+            platform=None,
+            since=None,
+            depth=0,
+            limit=50,
+        )
+
+    assert [node["id"] for node in result["nodes"]] == [focal["id"]]
+    mock_traverse.assert_called_once_with(focal["id"], max_depth=0)
 
 
 # ---------------------------------------------------------------------------

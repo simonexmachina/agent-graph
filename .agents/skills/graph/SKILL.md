@@ -78,6 +78,8 @@ agentgraph mcp-config   # stdio config for Claude Desktop/Claude Code; ChatGPT u
 agentgraph install-skill [graph] [--target user|project] [--force] [--json]
 ```
 
+`--depth 0` returns only the requested entity; depths 1 through 4 include that many relationship hops.
+
 ## MCP tool equivalents
 
 When using AgentGraph through MCP instead of the CLI, use these equivalent tools:

@@ -71,6 +71,34 @@ async def test_insert_person_and_entity_and_edge(sqlite_backend: SQLiteBackend) 
     assert count == 0
 
 
+async def test_traverse_depth_zero_returns_only_the_starting_entity(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    """Depth zero includes the focal node without expanding any relationships."""
+    conn = sqlite_backend._conn_or_raise()
+    await conn.executemany(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title)
+        VALUES (?, 'Document', 'web', ?, ?)
+        """,
+        [
+            ["entity-1", "document-1", "Starting entity"],
+            ["entity-2", "document-2", "Neighbour"],
+        ],
+    )
+    await conn.execute(
+        """
+        INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id)
+        VALUES ('edge-1', 'references', 'entity-1', 'entity-2')
+        """
+    )
+
+    result = await sqlite_backend.traverse_graph("entity-1", max_depth=0)
+
+    assert [node["id"] for node in result["nodes"]] == ["entity-1"]
+    assert result["edges"] == []
+
+
 async def test_get_platforms_last_synced_at_groups_platforms(sqlite_backend: SQLiteBackend) -> None:
     conn = sqlite_backend._conn_or_raise()
     await conn.executemany(

@@ -17,4 +17,4 @@ traverse_graph_tool(entity_id, max_depth=2) -> JSON string
 
 ## Note
 
-- depth is clamped between 1 and 4
+- depth is clamped between 0 and 4; depth 0 returns only the starting entity

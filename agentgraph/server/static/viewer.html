@@ -786,7 +786,7 @@
       <label class="group-label">Focus Node</label>
       <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
         <label style="font-size:11px; color:#94a3b8; white-space:nowrap;">Depth</label>
-        <input type="number" id="depth-input" min="1" max="4" value="2"
+        <input type="number" id="depth-input" min="0" max="4" value="2"
                style="width:52px; padding:2px 6px; background:#1e293b; border:1px solid #334155;
                       border-radius:4px; color:#e2e8f0; font-size:12px;" />
       </div>
@@ -1305,7 +1305,7 @@
     if (params.since)     q.set('since', params.since);
     if (params.limit && params.limit !== 50) q.set('limit', params.limit);
     if (params.node_id) q.set('node_id', params.node_id);
-    if (params.depth && params.depth !== 1) q.set('depth', params.depth);
+    if (params.depth !== undefined && params.depth !== 1) q.set('depth', params.depth);
     if (params.view === 'list') q.set('view', 'list');
     if (params.sort && params.sort !== DEFAULT_LIST_SORT) q.set('sort', params.sort);
     if (params.sort_dir && params.sort_dir !== DEFAULT_LIST_SORT_DIR) {
@@ -1333,7 +1333,7 @@
       since:       sinceSel.value || undefined,
       limit:       Number(limitSlider.value),
       node_id:   lookupInput.value.trim() || undefined,
-      depth:       Number(depthInput.value) || undefined,
+      depth:       depthInput.value === '' ? undefined : Number(depthInput.value),
       view:        currentView(),
       sort:        current.sort,
       sort_dir:    current.sort_dir,

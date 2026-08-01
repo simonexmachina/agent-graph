@@ -383,11 +383,12 @@ async def traverse_graph_tool(
     Args:
         entity_id: UUID of the starting entity.
         max_depth: Maximum number of hops to traverse (default 2, max 4).
+            A depth of 0 returns only the starting entity.
 
     Returns:
         JSON object with "nodes" (entities) and "edges" lists.
     """
-    depth = min(max(max_depth, 1), 4)
+    depth = min(max(max_depth, 0), 4)
     result = await traverse_graph(entity_id, max_depth=depth)
     # Trim content on nodes to keep response size manageable
     for node in result.get("nodes", []):

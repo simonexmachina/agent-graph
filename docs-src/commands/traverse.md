@@ -20,4 +20,7 @@ agentgraph traverse ENTITY_ID [--depth N] [--resolve] [--json]
 ```bash
 agentgraph traverse abc123ef --depth 2
 agentgraph traverse abc123ef --depth 3 --resolve --json
+agentgraph traverse abc123ef --depth 0 --json
 ```
+
+`--depth 0` returns only the starting entity. Depths 1 through 4 include that many relationship hops.
