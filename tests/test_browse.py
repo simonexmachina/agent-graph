@@ -135,6 +135,7 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "paginationSize: Number(limitSlider.value)" in viewer_html
     assert "listTable.setPageSize(params.limit)" in viewer_html
     assert "paginationSizeSelector" not in viewer_html
+    assert '.tabulator-page[data-page="first"] { display: none; }' in viewer_html
     assert "function renderCachedGraph(params)" in viewer_html
     assert "function renderCachedList(params)" in viewer_html
     assert "renderCachedList(params)" in viewer_html
