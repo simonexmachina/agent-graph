@@ -12,6 +12,11 @@ def set_backend(backend: StorageBackend) -> None:
     _backend = backend
 
 
+def clear_backend() -> None:
+    global _backend
+    _backend = None
+
+
 def get_backend() -> StorageBackend:
     if _backend is None:
         raise RuntimeError(

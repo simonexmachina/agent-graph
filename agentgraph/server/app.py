@@ -17,11 +17,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agentgraph.core.context import set_backend
+from agentgraph.core.context import clear_backend, set_backend
 from agentgraph.graph.gc import run_gc
 from agentgraph.server.cli_api import router as cli_router
 from agentgraph.server.graph_api import router as graph_router
-from agentgraph.server.sync import setup_sync
+from agentgraph.server.sync import setup_sync, shutdown_poll_tasks
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -70,7 +70,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if _scheduler:
         _scheduler.shutdown(wait=False)
-    await backend.close()
+    try:
+        await shutdown_poll_tasks()
+    finally:
+        await backend.close()
+        clear_backend()
     logger.info("AgentGraph server stopped")
 
 

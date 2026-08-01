@@ -24,7 +24,7 @@ def create_backend() -> StorageBackend:
 @asynccontextmanager
 async def backend_context() -> AsyncGenerator[StorageBackend, None]:
     """Initialise the configured backend, set graph context, and close it."""
-    from agentgraph.core.context import set_backend
+    from agentgraph.core.context import clear_backend, set_backend
 
     backend = create_backend()
     await backend.initialize()
@@ -33,3 +33,4 @@ async def backend_context() -> AsyncGenerator[StorageBackend, None]:
         yield backend
     finally:
         await backend.close()
+        clear_backend()

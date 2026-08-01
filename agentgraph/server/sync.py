@@ -9,7 +9,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 _failure_counts: dict[str, int] = {}
 _backoff_until: dict[str, datetime] = {}
 _manual_poll_tasks: dict[str, asyncio.Task[None]] = {}
+_active_poll_tasks: dict[str, set[asyncio.Task[None]]] = {}
 
 
 PollScheduleStatus = Literal["queued", "already_running", "skipped"]
@@ -38,6 +39,27 @@ def clear_poll_backoff() -> None:
     _failure_counts.clear()
     _backoff_until.clear()
     _manual_poll_tasks.clear()
+    _active_poll_tasks.clear()
+
+
+async def shutdown_poll_tasks(*, timeout: float = 10.0) -> None:
+    """Cancel in-flight poll tasks and wait briefly for their cleanup handlers."""
+    active_tasks = [task for tasks in _active_poll_tasks.values() for task in tasks]
+    tasks = {task for task in [*_manual_poll_tasks.values(), *active_tasks] if not task.done()}
+    if not tasks:
+        _manual_poll_tasks.clear()
+        _active_poll_tasks.clear()
+        return
+
+    for task in tasks:
+        task.cancel()
+    try:
+        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=timeout)
+    except TimeoutError:
+        logger.warning("timed out waiting for %d poll task(s) to stop", len(tasks))
+    finally:
+        _manual_poll_tasks.clear()
+        _active_poll_tasks.clear()
 
 
 async def schedule_poll_connector(connector: BaseConnector) -> PollScheduleResult:
@@ -119,15 +141,18 @@ def _record_failure(source: str) -> None:
 
 async def poll_connector(connector: BaseConnector) -> None:
     source = connector.source
+    task = cast(asyncio.Task[None] | None, asyncio.current_task())
+    if task is not None:
+        _active_poll_tasks.setdefault(source, set()).add(task)
     started = perf_counter()
-    remaining = _backoff_remaining(source)
-    if remaining is not None:
-        logger.info("poll %s — skipped during failure backoff (%.0fs remaining)", source, remaining.total_seconds())
-        return
-    if not _has_local_auth(connector):
-        logger.info("poll %s — skipped because authentication is not configured", source)
-        return
     try:
+        remaining = _backoff_remaining(source)
+        if remaining is not None:
+            logger.info("poll %s — skipped during failure backoff (%.0fs remaining)", source, remaining.total_seconds())
+            return
+        if not _has_local_auth(connector):
+            logger.info("poll %s — skipped because authentication is not configured", source)
+            return
         backend = get_backend()
         for account_id in connector.poll_account_ids():
             scope_started = perf_counter()
@@ -163,6 +188,12 @@ async def poll_connector(connector: BaseConnector) -> None:
         _record_failure(source)
         logger.exception("poll failed for connector %s", source)
     finally:
+        if task is not None:
+            tasks = _active_poll_tasks.get(source)
+            if tasks is not None:
+                tasks.discard(task)
+                if not tasks:
+                    _active_poll_tasks.pop(source, None)
         logger.debug("poll %s total elapsed %.1fs", source, perf_counter() - started)
 
 

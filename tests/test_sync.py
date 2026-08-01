@@ -87,6 +87,27 @@ class _ScheduledConnector(BaseConnector):
         return EntityBatch()
 
 
+class _BlockingConnector(_ScheduledConnector):
+    source: ClassVar[str] = "blocking"
+
+    def __init__(self, started: asyncio.Event, cancelled: asyncio.Event) -> None:
+        self._started = started
+        self._cancelled = cancelled
+
+    async def poll(
+        self,
+        cursor: dict[str, Any],
+        account_id: str | None = None,
+    ) -> tuple[EntityBatch, dict[str, Any]]:
+        _ = (cursor, account_id)
+        self._started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            self._cancelled.set()
+        raise AssertionError("blocking poll should be cancelled")
+
+
 class _InvalidAuthConnector(_MissingAuthConnector):
     source: ClassVar[str] = "invalid"
 
@@ -158,6 +179,27 @@ async def test_schedule_poll_connector_skips_when_already_running() -> None:
         await asyncio.sleep(0)
 
     assert poll.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_shutdown_poll_tasks_cancels_active_poll() -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+    backend = MagicMock()
+    backend.load_cursor = AsyncMock(return_value={})
+    backend.save_cursor = AsyncMock()
+
+    connector = _BlockingConnector(started, cancelled)
+    with patch("agentgraph.server.sync.get_backend", return_value=backend):
+        task = asyncio.create_task(sync.poll_connector(connector))
+        await started.wait()
+
+        await sync.shutdown_poll_tasks(timeout=1)
+
+    await cancelled.wait()
+    assert task.done()
+    assert task.cancelled()
+    backend.save_cursor.assert_not_awaited()
 
 
 @pytest.mark.asyncio
