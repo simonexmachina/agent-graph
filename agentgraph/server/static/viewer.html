@@ -56,12 +56,18 @@
     gap: 16px;
   }
 
-  #sidebar h1 {
+  #sidebar h1 a {
+    display: block;
     font-size: 14px;
     font-weight: 700;
     color: var(--accent);
     letter-spacing: 0.04em;
+    text-decoration: none;
     text-transform: uppercase;
+  }
+
+  #sidebar h1 a:hover {
+    color: var(--text);
   }
 
   .control-group {
@@ -483,7 +489,7 @@
 
   <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
   <aside id="sidebar">
-    <h1>AgentGraph</h1>
+    <h1><a href="/viewer">AgentGraph</a></h1>
 
     <div class="control-group">
       <label class="group-label">Search</label>

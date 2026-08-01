@@ -80,6 +80,13 @@ def test_viewer_uses_bookmark_symbol_with_status() -> None:
     assert "/api/cli/delete" in viewer_html
 
 
+def test_viewer_heading_links_to_empty_viewer_state() -> None:
+    """The top-level product link clears all URL-backed viewer state."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert '<h1><a href="/viewer">AgentGraph</a></h1>' in viewer_html
+
+
 def test_viewer_renders_standard_web_url_links() -> None:
     """Graph entities expose source links through the standard web_url metadata field."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
