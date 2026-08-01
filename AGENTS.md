@@ -14,6 +14,10 @@ Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli
 
 - Treat `/tmp/agentgraph.log` as the default server log file location when inspecting runtime errors for this repo.
 
+## Server Lifecycle
+
+- `agentgraph serve` is managed by the macOS LaunchAgent `com.agentgraph.server`. Do not start or stop it directly; use `launchctl kickstart` when a restart is required.
+
 ## Connector / Core Boundary
 
 Connector-specific logic must live in the connector package (`packages/agentgraph-connector-*/`), not in the main `agentgraph/` package. Violations to watch for:
