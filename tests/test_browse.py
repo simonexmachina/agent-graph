@@ -171,28 +171,26 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     assert "ensureReadableDefaultZoom" not in viewer_html
 
 
-def test_viewer_has_remote_list_mode() -> None:
-    """The viewer uses the node and edge endpoints independently in list/graph modes."""
+def test_viewer_has_native_remote_list_mode() -> None:
+    """The native list uses the node and edge endpoints independently of graph mode."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert 'id="graph-tab"' in viewer_html
     assert 'id="list-tab"' in viewer_html
-    assert "tabulator-tables@6.3.1" in viewer_html
+    assert "tabulator" not in viewer_html.lower()
+    assert '<table id="node-list" aria-label="Entities">' in viewer_html
+    assert 'id="node-list-body"' in viewer_html
     assert "/api/cli/browse/nodes" in viewer_html
     assert "/api/cli/browse/edges" in viewer_html
-    assert "paginationMode: 'remote'" in viewer_html
-    assert "sortMode: 'remote'" in viewer_html
-    assert "paginationSize: Number(limitSlider.value)" in viewer_html
-    assert "listTable.setPageSize(params.limit)" in viewer_html
-    assert "paginationSizeSelector" not in viewer_html
-    assert '.tabulator-page[data-page="first"] { display: none; }' in viewer_html
+    assert "function loadList(params)" in viewer_html
+    assert "function renderList(rawNodes, params)" in viewer_html
+    assert "page: 1, size: params.limit" in viewer_html
+    assert "row.addEventListener('dblclick', () => focusNode(entity.id));" in viewer_html
     assert "function renderCachedGraph(params)" in viewer_html
     assert "function renderCachedList(params)" in viewer_html
     assert "renderCachedList(params)" in viewer_html
     assert "cy.resize();" in viewer_html
-    assert ".tabulator:has(.tabulator-alert) .tabulator-placeholder" in viewer_html
-    assert "return currentView() === 'list';" in viewer_html
-    assert "if (listTable.getPageSize() !== params.limit) return false;" in viewer_html
+    assert "nodeTable.scrollTop + nodeTable.clientHeight" in viewer_html
 
 
 def test_viewer_persists_list_sort_in_url_state() -> None:
@@ -203,9 +201,9 @@ def test_viewer_persists_list_sort_in_url_state() -> None:
     assert "sort_dir:    p.get('sort_dir') === 'asc' ? 'asc' : DEFAULT_LIST_SORT_DIR" in viewer_html
     assert "if (params.sort && params.sort !== DEFAULT_LIST_SORT) q.set('sort', params.sort);" in viewer_html
     assert "q.set('sort_dir', params.sort_dir);" in viewer_html
-    assert "initialSort: [{ column: initialState.sort, dir: initialState.sort_dir }]" in viewer_html
-    assert "listTable.setSort([{ column: params.sort, dir: params.sort_dir }]);" in viewer_html
-    assert "const sorter = (request.sort && request.sort[0])" in viewer_html
+    assert "function updateListSortHeaders(params)" in viewer_html
+    assert "button.dataset.direction = direction;" in viewer_html
+    assert "const sortDir = current.sort === sort && current.sort_dir === 'asc' ? 'desc' : 'asc';" in viewer_html
 
 
 def test_viewer_offers_more_results_when_limit_is_reached() -> None:
@@ -214,7 +212,7 @@ def test_viewer_offers_more_results_when_limit_is_reached() -> None:
 
     assert 'id="more-btn"' in viewer_html
     assert "setMoreAvailable(viewerCache.hasMore);" in viewer_html
-    assert "hasMore: Boolean(response.has_more)" in viewer_html
+    assert "hasMore: Boolean(data.has_more)" in viewer_html
     assert "Math.min(currentLimit * 2, Number(limitSlider.max))" in viewer_html
     assert "refreshGraph();" in viewer_html
 
@@ -226,7 +224,7 @@ def test_viewer_overscroll_activates_more_results_in_list_view() -> None:
     assert "function activateMoreResults()" in viewer_html
     assert "getComputedStyle(moreBtn).display === 'none'" in viewer_html
     assert "function listIsAtEnd()" in viewer_html
-    assert "listView.querySelector('.tabulator-tableholder')" in viewer_html
+    assert "nodeTable.scrollTop + nodeTable.clientHeight" in viewer_html
     assert "listView.addEventListener('wheel'" in viewer_html
     assert "event.deltaY <= 0 || currentView() !== 'list' || !listIsAtEnd()" in viewer_html
     assert "activateMoreResults();" in viewer_html
@@ -236,11 +234,9 @@ def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     """List row clicks open details and double clicks focus the selected node."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
-    assert "element.dataset.entityId = entityId;" in viewer_html
-    assert "element.addEventListener('click', () => {" in viewer_html
-    assert "element.addEventListener('dblclick', () => {" in viewer_html
-    assert "if (currentEntityId) showEntityDetail(currentEntityId);" in viewer_html
-    assert "if (currentEntityId) focusNode(currentEntityId);" in viewer_html
+    assert "row.dataset.entityId = entity.id;" in viewer_html
+    assert "row.addEventListener('click', () => showEntityDetail(entity.id));" in viewer_html
+    assert "row.addEventListener('dblclick', () => focusNode(entity.id));" in viewer_html
     assert "function focusNode(entityId)" in viewer_html
     assert "refreshGraph({ node_id: entityId });" in viewer_html
     assert "focusNode(node.data('id'));" in viewer_html

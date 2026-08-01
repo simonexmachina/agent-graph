@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AgentGraph Viewer</title>
 <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
-<link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_midnight.min.css" rel="stylesheet" />
-<script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
 <script src="https://unpkg.com/@mozilla/readability@0.5.0/Readability.js"></script>
 <script src="https://unpkg.com/dompurify@3.2.6/dist/purify.min.js"></script>
 <style>
@@ -204,7 +202,72 @@
     padding: 52px 12px 12px;
   }
 
-  #node-table { height: 100%; }
+  #node-table {
+    height: 100%;
+    overflow: auto;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  #node-list {
+    width: 100%;
+    min-width: 1120px;
+    border-collapse: collapse;
+    color: var(--text);
+  }
+
+  #node-list th,
+  #node-list td {
+    padding: 7px 9px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  #node-list th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  #node-list tbody tr { cursor: pointer; }
+  #node-list tbody tr:nth-child(even) { background: #11141c; }
+  #node-list tbody tr:hover,
+  #node-list tbody tr:focus-visible { background: var(--surface2); outline: none; }
+  #node-list td:nth-child(1) { min-width: 240px; width: 30%; }
+  #node-list td:nth-child(2),
+  #node-list td:nth-child(3) { width: 110px; }
+  #node-list td:nth-child(4),
+  #node-list td:nth-child(5),
+  #node-list td:nth-child(6) { width: 175px; white-space: nowrap; }
+  #node-list td:nth-child(7) { width: 80px; text-align: right; }
+  #node-list td:nth-child(8) { min-width: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+
+  .list-sort {
+    width: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+
+  .list-sort:hover { border: 0; color: var(--accent); }
+  .list-sort[data-direction="asc"]::after { content: " ↑"; }
+  .list-sort[data-direction="desc"]::after { content: " ↓"; }
+
+  #list-empty {
+    padding: 24px;
+    color: var(--text-muted);
+    text-align: center;
+  }
 
   #more-btn {
     display: none;
@@ -219,16 +282,6 @@
     border-color: var(--accent-dim);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   }
-
-  .tabulator { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
-  .tabulator .tabulator-header { background: var(--surface2); border-bottom-color: var(--border); }
-  .tabulator .tabulator-header .tabulator-col { background: var(--surface2); border-right-color: var(--border); }
-  .tabulator .tabulator-row { background: var(--surface); border-bottom-color: var(--border); }
-  .tabulator .tabulator-row.tabulator-row-even { background: #11141c; }
-  .tabulator .tabulator-row:hover { background: var(--surface2); }
-  .tabulator .tabulator-footer { background: var(--surface2); border-top-color: var(--border); }
-  .tabulator .tabulator-page[data-page="first"] { display: none; }
-  .tabulator:has(.tabulator-alert) .tabulator-placeholder { display: none; }
 
   #cy {
     width: 100%;
@@ -758,7 +811,26 @@
       <button class="view-tab" id="list-tab" role="tab" aria-selected="false">List</button>
     </div>
     <div id="cy"></div>
-    <div id="list-view"><div id="node-table"></div></div>
+    <div id="list-view">
+      <div id="node-table">
+        <table id="node-list" aria-label="Entities">
+          <thead>
+            <tr>
+              <th scope="col"><button class="list-sort" type="button" data-sort="display_name">Name</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="entity_type">Type</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="platform">Platform</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="updated_at">Updated</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="last_accessed">Last accessed</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="created_at">Created</button></th>
+              <th scope="col">Dwell</th>
+              <th scope="col">ID</th>
+            </tr>
+          </thead>
+          <tbody id="node-list-body"></tbody>
+        </table>
+        <div id="list-empty" hidden>No entities to display</div>
+      </div>
+    </div>
     <button id="more-btn" type="button">More</button>
     <div id="hover-card">
       <div id="hover-card-type"></div>
@@ -1002,6 +1074,9 @@
   const graphTab      = document.getElementById('graph-tab');
   const listTab       = document.getElementById('list-tab');
   const listView      = document.getElementById('list-view');
+  const nodeTable     = document.getElementById('node-table');
+  const listBody      = document.getElementById('node-list-body');
+  const listEmpty     = document.getElementById('list-empty');
   const moreBtn       = document.getElementById('more-btn');
 
   // ── Fetch helpers ─────────────────────────────────────────────────────────
@@ -1046,7 +1121,7 @@
   }
 
   let _lastBrowseUrl = null;
-  let listTable = null;
+  let _lastListUrl = null;
   let viewerCache = null;
 
   function setMoreAvailable(hasMore) {
@@ -1063,6 +1138,8 @@
       node_id: params.node_id,
       depth: params.depth,
       limit: params.limit,
+      sort: params.sort,
+      sort_dir: params.sort_dir,
     });
   }
 
@@ -1081,18 +1158,15 @@
   }
 
   function renderCachedList(params) {
-    if (!listTable || !viewerCache || viewerCache.key !== viewerScopeKey(params)) return false;
-    // Changing the page size resets remote pagination and starts another request.
-    // A graph cache already contains exactly the requested page, so only use it
-    // when the table's page size is still aligned with that cache.
-    if (listTable.getPageSize() !== params.limit) return false;
+    if (!viewerCache || viewerCache.key !== viewerScopeKey(params)) return false;
     setMoreAvailable(viewerCache.hasMore);
-    listTable.setData(viewerCache.rawNodes);
+    renderList(viewerCache.rawNodes, params);
     return true;
   }
 
   function invalidateGraphCache() {
     _lastBrowseUrl = null;
+    _lastListUrl = null;
     viewerCache = null;
   }
 
@@ -1302,122 +1376,117 @@
   function refreshView(params) {
     setMoreAvailable(false);
     if (params.view === 'list') {
-      if (listTable) {
-        const sorter = listTable.getSorters()[0];
-        const sortChanged = !sorter
-          || sorter.field !== params.sort
-          || sorter.dir !== params.sort_dir;
-        if (sortChanged) {
-          listTable.setSort([{ column: params.sort, dir: params.sort_dir }]);
-          return;
-        }
-        const pageSizeChanged = listTable.getPageSize() !== params.limit;
-        listTable.setPageSize(params.limit);
-        if (!pageSizeChanged) listTable.setData();
-      }
-      return;
+      return loadList(params);
     }
     return loadGraph(params);
   }
 
-  function formatDate(cell) {
-    const value = cell.getValue();
+  function formatDate(value) {
     return value ? new Date(value).toLocaleString() : '—';
   }
 
-  function formatDwell(cell) {
-    const ms = Number(cell.getValue() || 0);
+  function formatDwell(value) {
+    const ms = Number(value || 0);
     if (ms < 1000) return '—';
     if (ms < 60000) return `${Math.round(ms / 1000)}s`;
     return `${Math.round(ms / 60000)}m`;
   }
 
-  function initListTable() {
-    const initialState = readUrlState();
-    listTable = new Tabulator('#node-table', {
-      ajaxURL: '/api/cli/browse/nodes',
-      ajaxURLGenerator(url, _config, request) {
-        const sorter = (request.sort && request.sort[0])
-          || (request.sorters && request.sorters[0]);
-        const params = collectParams({
-          sort: sorter ? sorter.field : readUrlState().sort,
-          sort_dir: sorter ? sorter.dir : readUrlState().sort_dir,
-        }, true);
-        return buildUrl(url, {
-          ...params,
-          page: request.page || 1,
-          size: request.size || 50,
-          sort: params.sort,
-          sort_dir: params.sort_dir,
-        });
-      },
-      ajaxRequesting() {
-        return currentView() === 'list';
-      },
-      ajaxResponse(url, _params, response) {
-        const parsedUrl = new URL(url, window.location.href);
-        const rawNodes = response.data || [];
-        const cacheParams = {
-          search: parsedUrl.searchParams.get('search') || undefined,
-          entity_type: parsedUrl.searchParams.getAll('entity_type'),
-          platform: parsedUrl.searchParams.get('platform') || undefined,
-          since: parsedUrl.searchParams.get('since') || undefined,
-          node_id: parsedUrl.searchParams.get('node_id') || undefined,
-          depth: Number(parsedUrl.searchParams.get('depth') || 1),
-          limit: Number(parsedUrl.searchParams.get('limit') || limitSlider.value),
-        };
-        const key = viewerScopeKey(cacheParams);
-        viewerCache = { key, rawNodes, edges: [], hasMore: Boolean(response.has_more) };
-        setMoreAvailable(viewerCache.hasMore);
-        const nodeIds = rawNodes.map(node => node.id).join(',');
-        if (nodeIds) {
-          fetch(buildUrl('/api/cli/browse/edges', { node_ids: nodeIds }))
-            .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
-            .then(edgeData => {
-              if (!viewerCache || viewerCache.key !== key) return;
-              const nodeIdSet = new Set(rawNodes.map(node => node.id));
-              viewerCache.edges = (edgeData.edges || [])
-                .map(edge => edgeToCyto(edge, nodeIdSet))
-                .filter(Boolean);
-              if (currentView() === 'graph') renderCachedGraph(cacheParams);
-            })
-            .catch(err => console.error('preload viewer edges error:', err));
-        }
-        return response;
-      },
-      pagination: true,
-      paginationMode: 'remote',
-      paginationSize: Number(limitSlider.value),
-      initialSort: [{ column: initialState.sort, dir: initialState.sort_dir }],
-      sortMode: 'remote',
-      layout: 'fitColumns',
-      placeholder: 'No entities to display',
-      rowFormatter(row) {
-        const element = row.getElement();
-        const entityId = row.getData().id;
-        element.dataset.entityId = entityId;
-        if (element.dataset.interactionsWired === 'true') return;
-        element.addEventListener('click', () => {
-          const currentEntityId = element.dataset.entityId;
-          if (currentEntityId) showEntityDetail(currentEntityId);
-        });
-        element.addEventListener('dblclick', () => {
-          const currentEntityId = element.dataset.entityId;
-          if (currentEntityId) focusNode(currentEntityId);
-        });
-        element.dataset.interactionsWired = 'true';
-      },
-      columns: [
-        { title: 'Name', field: 'display_name', minWidth: 240, widthGrow: 3 },
-        { title: 'Type', field: 'entity_type', width: 110 },
-        { title: 'Platform', field: 'platform', width: 110 },
-        { title: 'Updated', field: 'updated_at', width: 175, sorter: 'string', formatter: formatDate },
-        { title: 'Last accessed', field: 'last_accessed', width: 175, sorter: 'string', formatter: formatDate },
-        { title: 'Created', field: 'created_at', width: 175, sorter: 'string', formatter: formatDate },
-        { title: 'Dwell', field: 'cumulative_dwell_ms', width: 80, hozAlign: 'right', headerSort: false, formatter: formatDwell },
-        { title: 'ID', field: 'id', minWidth: 180, widthGrow: 1, headerSort: false },
-      ],
+  function updateListSortHeaders(params) {
+    document.querySelectorAll('.list-sort').forEach(button => {
+      const isActive = button.dataset.sort === params.sort;
+      const direction = isActive ? params.sort_dir : '';
+      button.dataset.direction = direction;
+      button.closest('th').setAttribute(
+        'aria-sort',
+        isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none',
+      );
     });
+  }
+
+  function addListCell(row, value) {
+    const cell = document.createElement('td');
+    cell.textContent = value;
+    row.appendChild(cell);
+  }
+
+  function renderList(rawNodes, params) {
+    listBody.replaceChildren();
+    listEmpty.hidden = rawNodes.length > 0;
+    updateListSortHeaders(params);
+
+    rawNodes.forEach(entity => {
+      const row = document.createElement('tr');
+      row.tabIndex = 0;
+      row.dataset.entityId = entity.id;
+      addListCell(row, entity.display_name || entity.viewer_label || entity.title || entity.platform_entity_id || entity.id);
+      addListCell(row, entity.entity_type || '—');
+      addListCell(row, entity.platform || '—');
+      addListCell(row, formatDate(entity.updated_at));
+      addListCell(row, formatDate(entity.last_accessed));
+      addListCell(row, formatDate(entity.created_at));
+      addListCell(row, formatDwell(entity.cumulative_dwell_ms));
+      addListCell(row, entity.id);
+      row.addEventListener('click', () => showEntityDetail(entity.id));
+      row.addEventListener('dblclick', () => focusNode(entity.id));
+      row.addEventListener('keydown', event => {
+        if (event.key === 'Enter') showEntityDetail(entity.id);
+      });
+      listBody.appendChild(row);
+    });
+  }
+
+  function cacheListData(data, params) {
+    const rawNodes = data.data || [];
+    const key = viewerScopeKey(params);
+    viewerCache = { key, rawNodes, edges: [], hasMore: Boolean(data.has_more) };
+    setMoreAvailable(viewerCache.hasMore);
+
+    const nodeIds = rawNodes.map(node => node.id).join(',');
+    if (!nodeIds) return;
+    fetch(buildUrl('/api/cli/browse/edges', { node_ids: nodeIds }))
+      .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+      .then(edgeData => {
+        if (!viewerCache || viewerCache.key !== key) return;
+        const nodeIdSet = new Set(rawNodes.map(node => node.id));
+        viewerCache.edges = (edgeData.edges || [])
+          .map(edge => edgeToCyto(edge, nodeIdSet))
+          .filter(Boolean);
+        if (currentView() === 'graph') renderCachedGraph(params);
+      })
+      .catch(err => console.error('preload viewer edges error:', err));
+  }
+
+  async function loadList(params) {
+    const url = buildUrl('/api/cli/browse/nodes', { ...params, page: 1, size: params.limit });
+    if (url === _lastListUrl) return;
+    _lastListUrl = url;
+    setMoreAvailable(false);
+    showSpinner();
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      cacheListData(data, params);
+      renderList(data.data || [], params);
+    } catch (err) {
+      console.error('loadList error:', err);
+    } finally {
+      hideSpinner();
+    }
+  }
+
+  function initList() {
+    document.querySelectorAll('.list-sort').forEach(button => {
+      button.addEventListener('click', () => {
+        const sort = button.dataset.sort;
+        if (!sort) return;
+        const current = readUrlState();
+        const sortDir = current.sort === sort && current.sort_dir === 'asc' ? 'desc' : 'asc';
+        refreshView(collectParams({ view: 'list', sort, sort_dir: sortDir }, true));
+      });
+    });
+    updateListSortHeaders(readUrlState());
   }
 
   // ── Event wiring ──────────────────────────────────────────────────────────
@@ -1469,9 +1538,7 @@
   }
 
   function listIsAtEnd() {
-    const tableHolder = listView.querySelector('.tabulator-tableholder');
-    if (!tableHolder) return false;
-    return Math.ceil(tableHolder.scrollTop + tableHolder.clientHeight) >= tableHolder.scrollHeight;
+    return Math.ceil(nodeTable.scrollTop + nodeTable.clientHeight) >= nodeTable.scrollHeight;
   }
 
   moreBtn.addEventListener('click', activateMoreResults);
@@ -2242,7 +2309,7 @@
     markSearchInputSubmitted();
     markLookupInputSubmitted();
     syncDepthEnabled();
-    initListTable();
+    initList();
     await refreshView(collectParams({}, true));
     if (_initial.node_id) showEntityDetail(_initial.node_id);
   });
