@@ -754,6 +754,12 @@
   // ── UI refs ───────────────────────────────────────────────────────────────
   const searchInput   = document.getElementById('search-input');
   const typeFilters   = () => [...document.querySelectorAll('.type-filter')].filter(c => c.checked).map(c => c.value);
+  function activeEntityTypes() {
+    const selected = typeFilters();
+    const allTypesSelected = selected.length === ALL_TYPES.length
+      && ALL_TYPES.every(type => selected.includes(type));
+    return allTypesSelected ? undefined : selected;
+  }
   const platformSel   = document.getElementById('platform-filter');
   const sinceSel      = document.getElementById('since-filter');
   const limitSlider   = document.getElementById('limit-slider');
@@ -1000,7 +1006,7 @@
     const current = readUrlState();
     const params = {
       search:      searchInput.value.trim() || undefined,
-      entity_type: typeFilters(),
+      entity_type: activeEntityTypes(),
       platform:    platformSel.value || undefined,
       since:       sinceSel.value || undefined,
       limit:       Number(limitSlider.value),

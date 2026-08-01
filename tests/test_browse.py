@@ -133,6 +133,14 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "renderCachedList(params)" in viewer_html
 
 
+def test_viewer_omits_redundant_all_type_filter() -> None:
+    """The default all-types view should use the database's global sort index."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+    assert "function activeEntityTypes()" in viewer_html
+    assert "return allTypesSelected ? undefined : selected;" in viewer_html
+    assert "entity_type: activeEntityTypes()," in viewer_html
+
+
 # ---------------------------------------------------------------------------
 # Rule: focal node always shown regardless of filters
 # ---------------------------------------------------------------------------
