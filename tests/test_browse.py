@@ -163,6 +163,13 @@ def test_viewer_has_focus_node_reset_control() -> None:
     assert "lookupError.style.display = 'none';" in viewer_html
 
 
+def test_viewer_focus_node_placeholder_describes_supported_identifiers() -> None:
+    """The Focus Node hint describes each connector-neutral lookup format."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert 'placeholder="Entity UUID, prefix, or platform reference"' in viewer_html
+
+
 def test_viewer_text_inputs_submit_on_enter_or_blur() -> None:
     """Text queries wait for an explicit Enter or focus-loss submission."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
