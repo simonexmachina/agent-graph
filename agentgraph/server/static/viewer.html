@@ -1232,14 +1232,27 @@
   });
   limitSlider.addEventListener('change', () => refreshGraph());
 
-  moreBtn.addEventListener('click', () => {
+  function activateMoreResults() {
+    if (getComputedStyle(moreBtn).display === 'none') return;
     const currentLimit = Number(limitSlider.value);
     const nextLimit = Math.min(currentLimit * 2, Number(limitSlider.max));
     if (nextLimit <= currentLimit) return;
     limitSlider.value = String(nextLimit);
     limitDisplay.textContent = String(nextLimit);
     refreshGraph();
-  });
+  }
+
+  function listIsAtEnd() {
+    const tableHolder = listView.querySelector('.tabulator-tableholder');
+    if (!tableHolder) return false;
+    return Math.ceil(tableHolder.scrollTop + tableHolder.clientHeight) >= tableHolder.scrollHeight;
+  }
+
+  moreBtn.addEventListener('click', activateMoreResults);
+  listView.addEventListener('wheel', (event) => {
+    if (event.deltaY <= 0 || currentView() !== 'list' || !listIsAtEnd()) return;
+    activateMoreResults();
+  }, { passive: true });
 
   resetBtn.addEventListener('click', () => {
     searchInput.value = '';

@@ -156,6 +156,19 @@ def test_viewer_offers_more_results_when_limit_is_reached() -> None:
     assert "refreshGraph();" in viewer_html
 
 
+def test_viewer_overscroll_activates_more_results_in_list_view() -> None:
+    """Scrolling down at the end of the list increases the active result limit."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "function activateMoreResults()" in viewer_html
+    assert "getComputedStyle(moreBtn).display === 'none'" in viewer_html
+    assert "function listIsAtEnd()" in viewer_html
+    assert "listView.querySelector('.tabulator-tableholder')" in viewer_html
+    assert "listView.addEventListener('wheel'" in viewer_html
+    assert "event.deltaY <= 0 || currentView() !== 'list' || !listIsAtEnd()" in viewer_html
+    assert "activateMoreResults();" in viewer_html
+
+
 def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     """List row clicks open details and double clicks focus the selected node."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
