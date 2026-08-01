@@ -865,7 +865,10 @@
 
   function renderCachedList(params) {
     if (!listTable || !viewerCache || viewerCache.key !== viewerScopeKey(params)) return false;
-    listTable.setPageSize(params.limit);
+    // Changing the page size resets remote pagination and starts another request.
+    // A graph cache already contains exactly the requested page, so only use it
+    // when the table's page size is still aligned with that cache.
+    if (listTable.getPageSize() !== params.limit) return false;
     listTable.setData(viewerCache.rawNodes);
     return true;
   }
