@@ -43,8 +43,8 @@ agentgraph delete <entity-id|platform/ref|url> [--json]
 # Merge duplicate Person entities that refer to the same human
 agentgraph unify-persons <primary-person-id> <duplicate-person-id>... [--json]
 
-# Trigger a background poll for one or all connectors
-agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, rss — omit for all
+# Queue a background poll for one or all connectors
+agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, rss — omit for all; reports already_running when a poll is in progress
 
 # Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
 agentgraph ingest <source> [--json]   # e.g. gmail, rss
@@ -95,7 +95,7 @@ agentgraph query ...               -> query_by_filter_tool(...)
 agentgraph fetch ...               -> fetch_entity_tool(platform, resource_id)
 agentgraph fetch-entity ...        -> fetch_entity_by_id_tool(entity_id)
 agentgraph download ...            -> download_entity_tool(entity_id, output_path)
-agentgraph poll [source]           -> poll_connectors_tool(source)
+agentgraph poll [source]           -> poll_connectors_tool(source) # returns polled and already_running lists
 agentgraph ingest <source>         -> ingest_connector_tool(source)
 agentgraph bookmark ...            -> bookmark_entity_tool(entity_id, bookmarked)
 agentgraph delete ...              -> delete_entity_tool(entity_id)

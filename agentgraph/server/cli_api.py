@@ -466,7 +466,7 @@ async def cli_poll(
 ) -> dict[str, Any]:
     """Trigger a background poll for one connector (by source) or all connectors."""
     from agentgraph.connectors.registry import get_all_connectors, get_connector
-    from agentgraph.server.sync import poll_connector
+    from agentgraph.server.sync import schedule_poll_connector
 
     if source is not None:
         connector = get_connector(source)
@@ -477,13 +477,16 @@ async def cli_poll(
         connectors = get_all_connectors()
 
     polled: list[str] = []
+    already_running: list[str] = []
     for connector in connectors:
         if connector.poll_interval is None:
             continue
-        asyncio.create_task(poll_connector(connector))
-        polled.append(connector.source)
+        if schedule_poll_connector(connector):
+            polled.append(connector.source)
+        else:
+            already_running.append(connector.source)
 
-    return {"polled": polled}
+    return {"polled": polled, "already_running": already_running}
 
 
 @router.post("/ingest")

@@ -1009,26 +1009,18 @@ async def test_mcp_poll_connectors_tool_starts_poll_tasks() -> None:
         source = "gdocs"
         poll_interval = None
 
-    created: list[Any] = []
-
-    def fake_create_task(coro: Any) -> MagicMock:
-        created.append(coro)
-        coro.close()
-        return MagicMock()
-
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch(
             "agentgraph.connectors.registry.get_all_connectors",
             return_value=[PollingConnector(), PassiveConnector()],
         ),
-        patch("agentgraph.server.sync.poll_connector", new=AsyncMock()),
-        patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task),
+        patch("agentgraph.server.sync.schedule_poll_connector", return_value=True) as schedule_poll,
     ):
         result = await poll_connectors_tool()
 
-    assert json.loads(result) == {"polled": ["rss"]}
-    assert len(created) == 1
+    assert json.loads(result) == {"polled": ["rss"], "already_running": []}
+    schedule_poll.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1039,28 +1031,38 @@ async def test_mcp_poll_connectors_tool_uses_source_connector_lookup() -> None:
         source = "rss"
         poll_interval = object()
 
-    created: list[Any] = []
-
-    def fake_create_task(coro: Any) -> MagicMock:
-        created.append(coro)
-        coro.close()
-        return MagicMock()
-
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch(
             "agentgraph.connectors.registry.get_connector", return_value=PollingConnector()
         ) as get_connector,
         patch("agentgraph.connectors.registry.get_all_connectors") as get_all_connectors,
-        patch("agentgraph.server.sync.poll_connector", new=AsyncMock()),
-        patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task),
+        patch("agentgraph.server.sync.schedule_poll_connector", return_value=True) as schedule_poll,
     ):
         result = await poll_connectors_tool("rss")
 
-    assert json.loads(result) == {"polled": ["rss"]}
+    assert json.loads(result) == {"polled": ["rss"], "already_running": []}
     get_connector.assert_called_once_with("rss")
     get_all_connectors.assert_not_called()
-    assert len(created) == 1
+    schedule_poll.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_mcp_poll_connectors_tool_reports_already_running() -> None:
+    from agentgraph.mcp.server import poll_connectors_tool
+
+    class PollingConnector:
+        source = "rss"
+        poll_interval = object()
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[PollingConnector()]),
+        patch("agentgraph.server.sync.schedule_poll_connector", return_value=False),
+    ):
+        result = await poll_connectors_tool()
+
+    assert json.loads(result) == {"polled": [], "already_running": ["rss"]}
 
 
 @pytest.mark.asyncio

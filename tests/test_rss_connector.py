@@ -29,7 +29,7 @@ from agentgraph_connector_rss.auth import (
     verify_rss_auth,
 )
 
-from agentgraph.connectors.base import EntityRecord
+from agentgraph.connectors.base import EntityBatch, EntityRecord
 from agentgraph.core.context import set_backend
 
 
@@ -580,11 +580,11 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
             }
         ]
 
-    def fake_parse(feed_url: str) -> _Parsed:
+    async def fake_parse_feed(feed_url: str) -> _Parsed:
         assert feed_url == "https://example.com/feed.xml"
         return _Parsed()
 
-    monkeypatch.setattr(feedparser, "parse", fake_parse)
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", fake_parse_feed)
 
     batch = await _fetch_feed("https://example.com/feed.xml")
 
@@ -620,7 +620,7 @@ async def test_fetch_feed_hydrates_entry_documents_when_requested(
             }
         ]
 
-    monkeypatch.setattr(feedparser, "parse", lambda _feed_url: _Parsed())
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", AsyncMock(return_value=_Parsed()))
     backend = MagicMock()
     backend.get_entity_by_platform = AsyncMock(return_value=None)
     set_backend(backend)
@@ -672,7 +672,7 @@ async def test_fetch_feed_hydrates_existing_entries_with_cache_validators(
             }
         ]
 
-    monkeypatch.setattr(feedparser, "parse", lambda _feed_url: _Parsed())
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", AsyncMock(return_value=_Parsed()))
     existing = {
         "entity_type": "Document",
         "platform": "rss",
@@ -735,7 +735,7 @@ async def test_fetch_feed_keeps_entry_when_hydration_fails_without_error_log(
             }
         ]
 
-    monkeypatch.setattr(feedparser, "parse", lambda _feed_url: _Parsed())
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", AsyncMock(return_value=_Parsed()))
     backend = MagicMock()
     backend.get_entity_by_platform = AsyncMock(return_value=None)
     set_backend(backend)
@@ -755,6 +755,41 @@ async def test_fetch_feed_keeps_entry_when_hydration_fails_without_error_log(
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
     assert "Skipping RSS article hydration for" in caplog.text
     assert "RuntimeError: DNS lookup failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_rss_ingest_skips_failed_feed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    entity = EntityRecord(
+        entity_type="Folder",
+        platform="rss",
+        platform_entity_id="feed/ok",
+        title="OK feed",
+        content="RSS feed: OK feed",
+    )
+    fetch_feed = AsyncMock(
+        side_effect=[
+            RuntimeError("timeout"),
+            EntityBatch(entities=[entity]),
+        ]
+    )
+    caplog.set_level(logging.WARNING, logger="agentgraph_connector_rss")
+
+    with (
+        patch(
+            "agentgraph_connector_rss.load_rss_settings",
+            return_value=RssConfig(
+                feed_urls=["https://example.com/bad.xml", "https://example.com/ok.xml"]
+            ),
+        ),
+        patch("agentgraph_connector_rss._fetch_feed", new=fetch_feed),
+    ):
+        batch = await RssConnector().ingest()
+
+    assert batch.entities == [entity]
+    assert fetch_feed.await_count == 2
+    assert "Skipping RSS feed https://example.com/bad.xml" in caplog.text
 
 
 @pytest.mark.asyncio

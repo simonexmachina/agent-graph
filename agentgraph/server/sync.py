@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
@@ -20,11 +21,27 @@ logger = logging.getLogger(__name__)
 
 _failure_counts: dict[str, int] = {}
 _backoff_until: dict[str, datetime] = {}
+_manual_poll_tasks: dict[str, asyncio.Task[None]] = {}
 
 
 def clear_poll_backoff() -> None:
     _failure_counts.clear()
     _backoff_until.clear()
+    _manual_poll_tasks.clear()
+
+
+def schedule_poll_connector(connector: BaseConnector) -> bool:
+    """Start a manual background poll unless one is already running."""
+    source = connector.source
+    existing = _manual_poll_tasks.get(source)
+    if existing is not None and not existing.done():
+        logger.info("poll %s — manual trigger skipped because a poll is already running", source)
+        return False
+
+    task = asyncio.create_task(poll_connector(connector))
+    _manual_poll_tasks[source] = task
+    task.add_done_callback(lambda done_task: _manual_poll_tasks.pop(source, None))
+    return True
 
 
 def _sync_scope(source: str, account_id: str | None) -> str:

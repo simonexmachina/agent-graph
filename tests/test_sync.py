@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -112,6 +113,29 @@ async def test_poll_connector_backs_off_after_failure() -> None:
         await sync.poll_connector(connector)
 
     backend.load_cursor.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_schedule_poll_connector_skips_when_already_running() -> None:
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def fake_poll_connector(connector: BaseConnector) -> None:
+        _ = connector
+        first_started.set()
+        await release_first.wait()
+
+    connector = _ScheduledConnector()
+    with patch("agentgraph.server.sync.poll_connector", side_effect=fake_poll_connector) as poll:
+        assert sync.schedule_poll_connector(connector) is True
+        await first_started.wait()
+
+        assert sync.schedule_poll_connector(connector) is False
+
+        release_first.set()
+        await asyncio.sleep(0)
+
+    assert poll.await_count == 1
 
 
 def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:

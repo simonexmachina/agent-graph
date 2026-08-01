@@ -13,6 +13,8 @@ from email.utils import parsedate_to_datetime
 from importlib import import_module
 from typing import Any, cast
 
+import httpx
+
 from agentgraph.connectors.base import (
     BaseConnector,
     ConnectorAccount,
@@ -36,6 +38,8 @@ from agentgraph_connector_rss.auth import (
 )
 
 _STALE_AFTER = 30 * 60
+_FEED_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+_MAX_FEED_BYTES = 5_000_000
 logger = logging.getLogger(__name__)
 
 
@@ -135,7 +139,17 @@ class RssConnector(BaseConnector):
         settings = load_rss_settings(account_id)
         combined = EntityBatch()
         for feed_url in settings.feed_urls:
-            batch = await _fetch_feed(feed_url, hydrate_documents=True)
+            try:
+                batch = await _fetch_feed(feed_url, hydrate_documents=True)
+            except Exception as exc:
+                logger.warning(
+                    "Skipping RSS feed %s (%s: %s)",
+                    feed_url,
+                    type(exc).__name__,
+                    exc,
+                )
+                logger.debug("RSS feed fetch failure", exc_info=True)
+                continue
             combined.entities.extend(batch.entities)
             combined.edges.extend(batch.edges)
             combined.persons.extend(batch.persons)
@@ -170,11 +184,7 @@ class RssConnector(BaseConnector):
 
 
 async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> EntityBatch:
-    import asyncio
-
-    import feedparser  # type: ignore[import-untyped]
-
-    parsed: Any = await asyncio.to_thread(feedparser.parse, feed_url)
+    parsed = await _parse_feed(feed_url)
     feed_title = str(cast(dict[str, Any], parsed.feed).get("title") or feed_url)
     feed_id = _feed_id(feed_url)
     feed_entity_id = f"feed/{feed_id}"
@@ -210,6 +220,25 @@ async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> Enti
     batch.entities = [*entities, *batch.entities]
     batch.edges = [*edges, *batch.edges]
     return batch
+
+
+async def _parse_feed(feed_url: str) -> Any:
+    import asyncio
+
+    import feedparser  # type: ignore[import-untyped]
+
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        max_redirects=5,
+        timeout=_FEED_TIMEOUT,
+        headers={"Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"},
+    ) as client:
+        response = await client.get(feed_url)
+        response.raise_for_status()
+        content = response.content
+        if len(content) > _MAX_FEED_BYTES:
+            raise ValueError(f"RSS feed response too large: limit is {_MAX_FEED_BYTES} bytes")
+        return await asyncio.to_thread(feedparser.parse, content)
 
 
 def _rss_usage() -> str:

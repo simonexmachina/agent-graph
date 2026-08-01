@@ -442,9 +442,12 @@ def cmd_poll(source: str | None, as_json: bool) -> None:
         return
 
     polled: list[str] = result.get("polled", [])
+    already_running: list[str] = result.get("already_running", [])
     if polled:
-        console.print(f"[green]Polled:[/green] {', '.join(polled)}")
-    else:
+        console.print(f"[green]Queued poll:[/green] {', '.join(polled)}")
+    if already_running:
+        console.print(f"[yellow]Already running:[/yellow] {', '.join(already_running)}")
+    if not polled and not already_running:
         console.print("[dim]No connectors polled (none matched or none have poll_interval set).[/dim]")
 
 
