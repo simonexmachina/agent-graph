@@ -203,6 +203,8 @@ def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     assert "rowClick(_event, row) { showEntityDetail(row.getData().id); }" in viewer_html
     assert "rowDblClick(_event, row) { focusNode(row.getData().id); }" in viewer_html
     assert "function focusNode(entityId)" in viewer_html
+    assert "if (currentView() !== 'graph') {" in viewer_html
+    assert "setView('graph');" in viewer_html
     assert "focusNode(node.data('id'));" in viewer_html
 
 
