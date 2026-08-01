@@ -1160,6 +1160,8 @@
   // ── URL state ─────────────────────────────────────────────────────────────
   let ALL_TYPES = ['Channel', 'Document', 'Folder', 'Message', 'Person', 'Spreadsheet', 'Thread'];
   let FETCHABLE_PLATFORMS = new Set();
+  const DEFAULT_LIST_SORT = 'last_accessed';
+  const DEFAULT_LIST_SORT_DIR = 'desc';
 
   function readUrlState() {
     const p = new URLSearchParams(window.location.search);
@@ -1171,6 +1173,8 @@
       node_id:   p.get('node_id') || null,
       depth:       p.has('depth')    ? Number(p.get('depth')) : 1,
       view:        p.get('view') === 'list' ? 'list' : 'graph',
+      sort:        p.get('sort') || DEFAULT_LIST_SORT,
+      sort_dir:    p.get('sort_dir') === 'asc' ? 'asc' : DEFAULT_LIST_SORT_DIR,
       entity_type: p.has('entity_type') ? p.getAll('entity_type') : ALL_TYPES,
     };
   }
@@ -1198,6 +1202,10 @@
     if (params.node_id) q.set('node_id', params.node_id);
     if (params.depth && params.depth !== 1) q.set('depth', params.depth);
     if (params.view === 'list') q.set('view', 'list');
+    if (params.sort && params.sort !== DEFAULT_LIST_SORT) q.set('sort', params.sort);
+    if (params.sort_dir && params.sort_dir !== DEFAULT_LIST_SORT_DIR) {
+      q.set('sort_dir', params.sort_dir);
+    }
     const types = params.entity_type || [];
     if (types.length && types.length < ALL_TYPES.length) {
       types.forEach(t => q.append('entity_type', t));
@@ -1222,6 +1230,8 @@
       node_id:   lookupInput.value.trim() || undefined,
       depth:       Number(depthInput.value) || undefined,
       view:        currentView(),
+      sort:        current.sort,
+      sort_dir:    current.sort_dir,
       ...override,
     };
     pushUrlState(params, replace);
@@ -1262,6 +1272,14 @@
     setMoreAvailable(false);
     if (params.view === 'list') {
       if (listTable) {
+        const sorter = listTable.getSorters()[0];
+        const sortChanged = !sorter
+          || sorter.field !== params.sort
+          || sorter.dir !== params.sort_dir;
+        if (sortChanged) {
+          listTable.setSort([{ column: params.sort, dir: params.sort_dir }]);
+          return;
+        }
         const pageSizeChanged = listTable.getPageSize() !== params.limit;
         listTable.setPageSize(params.limit);
         if (!pageSizeChanged) listTable.setData();
@@ -1284,17 +1302,21 @@
   }
 
   function initListTable() {
+    const initialState = readUrlState();
     listTable = new Tabulator('#node-table', {
       ajaxURL: '/api/cli/browse/nodes',
       ajaxURLGenerator(url, _config, request) {
         const sorter = request.sorters && request.sorters[0];
-        const params = collectParams({}, true);
+        const params = collectParams({
+          sort: sorter ? sorter.field : readUrlState().sort,
+          sort_dir: sorter ? sorter.dir : readUrlState().sort_dir,
+        }, true);
         return buildUrl(url, {
           ...params,
           page: request.page || 1,
           size: request.size || 50,
-          sort: sorter ? sorter.field : 'last_accessed',
-          sort_dir: sorter ? sorter.dir : 'desc',
+          sort: params.sort,
+          sort_dir: params.sort_dir,
         });
       },
       ajaxRequesting() {
@@ -1334,6 +1356,7 @@
       pagination: true,
       paginationMode: 'remote',
       paginationSize: Number(limitSlider.value),
+      initialSort: [{ column: initialState.sort, dir: initialState.sort_dir }],
       sortMode: 'remote',
       layout: 'fitColumns',
       placeholder: 'No entities to display',

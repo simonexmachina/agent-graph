@@ -172,6 +172,18 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "if (listTable.getPageSize() !== params.limit) return false;" in viewer_html
 
 
+def test_viewer_persists_list_sort_in_url_state() -> None:
+    """List ordering is restored from and written to the browser query string."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "sort:        p.get('sort') || DEFAULT_LIST_SORT" in viewer_html
+    assert "sort_dir:    p.get('sort_dir') === 'asc' ? 'asc' : DEFAULT_LIST_SORT_DIR" in viewer_html
+    assert "if (params.sort && params.sort !== DEFAULT_LIST_SORT) q.set('sort', params.sort);" in viewer_html
+    assert "q.set('sort_dir', params.sort_dir);" in viewer_html
+    assert "initialSort: [{ column: initialState.sort, dir: initialState.sort_dir }]" in viewer_html
+    assert "listTable.setSort([{ column: params.sort, dir: params.sort_dir }]);" in viewer_html
+
+
 def test_viewer_offers_more_results_when_limit_is_reached() -> None:
     """The viewer can increase its active result limit from the result area."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
