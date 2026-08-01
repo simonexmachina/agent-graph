@@ -65,15 +65,15 @@ def _mock_backend(**overrides: Any) -> Any:
     return backend
 
 
-def test_viewer_uses_bookmark_symbol_with_status() -> None:
-    """The web viewer presents bookmark state with a compact symbol control."""
+def test_viewer_uses_bookmark_symbol_without_status_row() -> None:
+    """The web viewer presents bookmark state only through the symbol control."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert 'id="detail-bookmark"' in viewer_html
     assert 'id="detail-delete"' in viewer_html
     assert 'class="bookmark-glyph"' in viewer_html
     assert 'class="delete-glyph"' in viewer_html
-    assert "Bookmark status" in viewer_html
+    assert "Bookmark status" not in viewer_html
     assert "aria-pressed" in viewer_html
     assert "applyZoomStyles();" in viewer_html
     assert "cy.style().update();" in viewer_html
