@@ -135,6 +135,16 @@ def test_viewer_has_remote_list_mode() -> None:
     assert ".tabulator:has(.tabulator-alert) .tabulator-placeholder" in viewer_html
 
 
+def test_viewer_list_rows_match_graph_click_behaviour() -> None:
+    """List row clicks open details and double clicks focus the selected node."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "rowClick(_event, row) { showEntityDetail(row.getData().id); }" in viewer_html
+    assert "rowDblClick(_event, row) { focusNode(row.getData().id); }" in viewer_html
+    assert "function focusNode(entityId)" in viewer_html
+    assert "focusNode(node.data('id'));" in viewer_html
+
+
 def test_viewer_omits_redundant_all_type_filter() -> None:
     """The default all-types view should use the database's global sort index."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
