@@ -219,8 +219,7 @@ def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     assert "if (currentEntityId) showEntityDetail(currentEntityId);" in viewer_html
     assert "if (currentEntityId) focusNode(currentEntityId);" in viewer_html
     assert "function focusNode(entityId)" in viewer_html
-    assert "if (currentView() !== 'graph') {" in viewer_html
-    assert "setView('graph');" in viewer_html
+    assert "refreshGraph({ node_id: entityId });" in viewer_html
     assert "focusNode(node.data('id'));" in viewer_html
 
 

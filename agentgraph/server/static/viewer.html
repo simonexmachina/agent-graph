@@ -1999,10 +1999,6 @@
   function focusNode(entityId) {
     lookupInput.value = entityId;
     syncDepthEnabled();
-    if (currentView() !== 'graph') {
-      setView('graph');
-      return;
-    }
     refreshGraph({ node_id: entityId });
   }
 
