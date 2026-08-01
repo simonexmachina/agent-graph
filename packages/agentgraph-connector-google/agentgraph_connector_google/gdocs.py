@@ -65,6 +65,8 @@ def _metadata(doc_id: str, account_id: str | None = None) -> dict[str, str | int
     meta: dict[str, str | int | float | bool | None] = {
         "web_url": _web_url(doc_id),
         "download_url": _download_url(doc_id),
+        # The export is HTML, but _export_as_markdown stores Markdown in content.
+        "content_type": "text/markdown",
         "mime_type": "text/html",
     }
     if account_id:

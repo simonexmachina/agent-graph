@@ -7,6 +7,8 @@
 <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
 <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator_midnight.min.css" rel="stylesheet" />
 <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
+<script src="https://unpkg.com/@mozilla/readability@0.5.0/Readability.js"></script>
+<script src="https://unpkg.com/dompurify@3.2.6/dist/purify.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -444,6 +446,145 @@
     font-size: 12px;
     line-height: 1.5;
     word-break: break-word;
+  }
+
+  .content-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .content-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .content-format {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .content-tabs {
+    display: flex;
+    gap: 3px;
+  }
+
+  .content-tab {
+    width: auto;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .content-tab[aria-selected="true"] {
+    border-color: var(--border-bright);
+    color: var(--text);
+    background: var(--surface2);
+  }
+
+  .content-preview,
+  .content-source {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #10131b;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.65;
+    overflow: auto;
+  }
+
+  .content-preview {
+    padding: 14px 16px;
+  }
+
+  .content-preview > :first-child { margin-top: 0; }
+  .content-preview > :last-child { margin-bottom: 0; }
+  .content-preview h1,
+  .content-preview h2,
+  .content-preview h3,
+  .content-preview h4 {
+    color: var(--text);
+    line-height: 1.3;
+    margin: 1.2em 0 0.45em;
+  }
+  .content-preview h1 { font-size: 20px; }
+  .content-preview h2 { font-size: 17px; }
+  .content-preview h3 { font-size: 15px; }
+  .content-preview h4 { font-size: 13px; }
+  .content-preview p,
+  .content-preview ul,
+  .content-preview ol,
+  .content-preview blockquote,
+  .content-preview pre,
+  .content-preview table {
+    margin: 0.75em 0;
+  }
+  .content-preview ul,
+  .content-preview ol { padding-left: 1.4em; }
+  .content-preview blockquote {
+    border-left: 3px solid var(--accent-dim);
+    color: var(--text-muted);
+    padding-left: 10px;
+  }
+  .content-preview a {
+    color: var(--blue);
+    overflow-wrap: anywhere;
+  }
+  .content-preview code,
+  .content-preview pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .content-preview code {
+    background: var(--surface2);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 0.9em;
+  }
+  .content-preview pre {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: auto;
+    padding: 10px;
+  }
+  .content-preview pre code {
+    background: transparent;
+    padding: 0;
+  }
+  .content-preview table {
+    border-collapse: collapse;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .content-preview th,
+  .content-preview td {
+    border: 1px solid var(--border-bright);
+    padding: 4px 7px;
+    text-align: left;
+  }
+
+  .content-source {
+    display: block;
+    margin: 0;
+    padding: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .content-preview[hidden],
+  .content-source[hidden] {
+    display: none;
   }
 
   .tag {
@@ -1375,6 +1516,122 @@
     }
   }
 
+  function entityContentType(entity) {
+    const metadata = entity && entity.metadata;
+    const declared = metadata && typeof metadata.content_type === 'string'
+      ? metadata.content_type.split(';', 1)[0].trim().toLowerCase()
+      : '';
+    if (declared) return declared;
+    // Older entities predate content_type. Only opt into HTML for an obvious
+    // document signature; unknown content remains escaped plain text.
+    if (/^\s*<!doctype\s+html\b/i.test(entity.content || '')
+      || /^\s*<html(?:\s|>)/i.test(entity.content || '')) {
+      return 'text/html';
+    }
+    return 'text/plain';
+  }
+
+  function safeHtmlPreview(source) {
+    const preview = document.createElement('article');
+    preview.className = 'content-preview';
+
+    function fallbackText() {
+      preview.textContent = source.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      return preview;
+    }
+
+    // If either dependency is unavailable, fail closed and show readable text.
+    if (typeof window.DOMParser !== 'function'
+      || typeof window.Readability !== 'function'
+      || !window.DOMPurify
+      || typeof window.DOMPurify.sanitize !== 'function') {
+      return fallbackText();
+    }
+
+    try {
+      const documentNode = new DOMParser().parseFromString(source, 'text/html');
+      const parsed = new window.Readability(documentNode).parse();
+      const candidate = parsed && parsed.content ? parsed.content : documentNode.body.innerHTML;
+      const clean = window.DOMPurify.sanitize(candidate, {
+        ALLOWED_TAGS: [
+          'a', 'abbr', 'article', 'b', 'blockquote', 'br', 'code', 'del', 'div',
+          'em', 'figcaption', 'figure', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
+          'i', 'li', 'main', 'mark', 'ol', 'p', 'pre', 'q', 's', 'section', 'small',
+          'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th',
+          'thead', 'tr', 'u', 'ul',
+        ],
+        ALLOWED_ATTR: ['colspan', 'href', 'rel', 'rowspan', 'scope', 'target', 'title'],
+        FORBID_TAGS: ['form', 'iframe', 'input', 'object', 'script', 'style', 'svg', 'video'],
+        FORBID_ATTR: ['style', 'src', 'srcset'],
+        ALLOW_DATA_ATTR: false,
+      });
+      preview.innerHTML = clean;
+    } catch (_) {
+      return fallbackText();
+    }
+    preview.querySelectorAll('a').forEach(link => {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
+    });
+    if (!preview.textContent.trim()) preview.textContent = 'No readable content';
+    return preview;
+  }
+
+  function renderContent(entity) {
+    const source = String(entity.content || '');
+    const contentType = entityContentType(entity);
+    const isHtml = contentType === 'text/html' || contentType === 'application/xhtml+xml';
+    const block = document.createElement('div');
+    block.className = 'content-block';
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'content-toolbar';
+    const format = document.createElement('div');
+    format.className = 'content-format';
+    format.textContent = contentType;
+    toolbar.appendChild(format);
+
+    const tabs = document.createElement('div');
+    tabs.className = 'content-tabs';
+    const previewTab = document.createElement('button');
+    previewTab.className = 'content-tab';
+    previewTab.type = 'button';
+    previewTab.textContent = 'Preview';
+    const sourceTab = document.createElement('button');
+    sourceTab.className = 'content-tab';
+    sourceTab.type = 'button';
+    sourceTab.textContent = 'Source';
+    tabs.append(previewTab, sourceTab);
+    toolbar.appendChild(tabs);
+    block.appendChild(toolbar);
+
+    const preview = isHtml
+      ? safeHtmlPreview(source)
+      : document.createElement('pre');
+    if (contentType !== 'text/html') {
+      preview.className = 'content-source';
+      preview.textContent = source;
+    }
+    const sourceView = document.createElement('pre');
+    sourceView.className = 'content-source';
+    sourceView.textContent = source;
+    sourceView.hidden = true;
+    block.append(preview, sourceView);
+
+    function selectContentMode(mode) {
+      const showingPreview = mode === 'preview';
+      preview.hidden = !showingPreview;
+      sourceView.hidden = showingPreview;
+      previewTab.setAttribute('aria-selected', showingPreview ? 'true' : 'false');
+      sourceTab.setAttribute('aria-selected', showingPreview ? 'false' : 'true');
+    }
+    previewTab.setAttribute('aria-selected', 'true');
+    sourceTab.setAttribute('aria-selected', 'false');
+    previewTab.addEventListener('click', () => selectContentMode('preview'));
+    sourceTab.addEventListener('click', () => selectContentMode('source'));
+    return block;
+  }
+
   function renderDetail(entity) {
     detailTitle.textContent = entity.title || entity.display_name || entity.id;
     detailBody.innerHTML = '';
@@ -1465,7 +1722,7 @@
     detailBody.appendChild(row('ID', `<span style="font-family:monospace;font-size:11px">${escHtml(entity.id)}</span>`));
 
     if (entity.platform) {
-      detailBody.appendChild(row('Platform', entity.platform));
+      detailBody.appendChild(row('Platform', escHtml(entity.platform)));
     }
 
     const platformUrl = getPlatformUrl(entity);
@@ -1476,11 +1733,11 @@
 
     const email = (entity.metadata && entity.metadata.canonical_email) || entity.content;
     if (entity.entity_type === 'Person' && email) {
-      detailBody.appendChild(row('Email', email));
+      detailBody.appendChild(row('Email', escHtml(email)));
     }
 
     if (entity.content) {
-      detailBody.appendChild(row('Content', escHtml(entity.content)));
+      detailBody.appendChild(renderContent(entity));
     }
 
     if (entity.created_at) {

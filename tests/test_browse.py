@@ -99,6 +99,19 @@ def test_viewer_renders_standard_web_url_links() -> None:
     assert "detailBody.appendChild(row('Link', linkHtml))" in viewer_html
 
 
+def test_viewer_renders_html_content_through_a_safe_reader() -> None:
+    """Stored HTML uses the reader pipeline and has an escaped source fallback."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "function safeHtmlPreview(source)" in viewer_html
+    assert "new window.Readability(documentNode).parse()" in viewer_html
+    assert "window.DOMPurify.sanitize(candidate" in viewer_html
+    assert "FORBID_TAGS: ['form', 'iframe', 'input', 'object', 'script', 'style', 'svg', 'video']" in viewer_html
+    assert "sourceView.textContent = source" in viewer_html
+    assert "detailBody.appendChild(renderContent(entity))" in viewer_html
+    assert "metadata.content_type" in viewer_html
+
+
 def test_viewer_initial_layout_contains_all_nodes() -> None:
     """The graph's initial layout fits every node and its label in the viewport."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()

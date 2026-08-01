@@ -214,6 +214,7 @@ async def test_gdocs_fetch_doc_adds_download_metadata(monkeypatch: pytest.Monkey
 
     assert batch.entities
     entity = batch.entities[0]
+    assert entity.metadata["content_type"] == "text/markdown"
     assert entity.metadata["mime_type"] == "text/html"
     download_url = entity.metadata["download_url"]
     assert isinstance(download_url, str)
