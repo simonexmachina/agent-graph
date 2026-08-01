@@ -631,11 +631,14 @@
     userZoomingEnabled: true,
     userPanningEnabled: true,
   });
+  window.__agentGraphViewer = { cy };
 
   // ── Zoom-invariant sizing ─────────────────────────────────────────────────
   const Z = { nodeSize: 28, nodeFont: 12, textMaxWidth: 150, textMarginY: 4, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
-  const DEFAULT_MIN_READABLE_ZOOM = 0.72;
+  const DEFAULT_MIN_READABLE_ZOOM = 1;
   const DEFAULT_LAYOUT_PADDING = 80;
+  const READABLE_GRID_CELL_WIDTH = 190;
+  const READABLE_GRID_CELL_HEIGHT = 112;
 
   function applyZoomStyles() {
     const z = cy.zoom();
@@ -668,6 +671,27 @@
     if (cy.nodes().length === 0 || cy.zoom() >= DEFAULT_MIN_READABLE_ZOOM) return;
     cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
     cy.center(cy.elements());
+  }
+
+  function readableGridPositionFor(index, count) {
+    const usableWidth = Math.max(cy.width() - (DEFAULT_LAYOUT_PADDING * 2), READABLE_GRID_CELL_WIDTH);
+    const columns = Math.max(1, Math.floor(usableWidth / READABLE_GRID_CELL_WIDTH));
+    const totalWidth = ((Math.min(count, columns) - 1) * READABLE_GRID_CELL_WIDTH);
+    const xOffset = Math.max(DEFAULT_LAYOUT_PADDING, (cy.width() - totalWidth) / 2);
+
+    return {
+      x: xOffset + ((index % columns) * READABLE_GRID_CELL_WIDTH),
+      y: DEFAULT_LAYOUT_PADDING + (Math.floor(index / columns) * READABLE_GRID_CELL_HEIGHT),
+    };
+  }
+
+  function readableGridPositions() {
+    const nodes = cy.nodes();
+    const positions = {};
+    nodes.forEach((node, index) => {
+      positions[node.id()] = readableGridPositionFor(index, nodes.length);
+    });
+    return positions;
   }
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -791,6 +815,22 @@
   }
 
   function runLayout() {
+    if (cy.edges().length === 0) {
+      const layout = cy.layout({
+        name: 'preset',
+        animate: false,
+        fit: false,
+        positions: readableGridPositions(),
+      });
+      layout.one('layoutstop', () => {
+        cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
+        cy.pan({ x: 0, y: 0 });
+        applyZoomStyles();
+      });
+      layout.run();
+      return;
+    }
+
     const layout = cy.layout({
       name: 'cose',
       animate: false,
@@ -802,7 +842,7 @@
       gravity: 0.18,
       numIter: 1000,
       refresh: 20,
-      fit: true,
+      fit: false,
       padding: DEFAULT_LAYOUT_PADDING,
     });
     layout.one('layoutstop', () => {
@@ -914,7 +954,8 @@
     limitDisplay.textContent = '50';
     document.querySelectorAll('.type-filter').forEach(c => c.checked = true);
     history.replaceState(null, '', window.location.pathname);
-    cy.fit(undefined, 40);
+    cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
+    cy.pan({ x: 0, y: 0 });
     refreshGraph();
   });
 

@@ -96,14 +96,22 @@ def test_viewer_defaults_prioritize_readable_node_labels() -> None:
     """The graph's initial layout leaves room for node labels."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
-    assert "const DEFAULT_MIN_READABLE_ZOOM = 0.72;" in viewer_html
+    assert "const DEFAULT_MIN_READABLE_ZOOM = 1;" in viewer_html
     assert "const DEFAULT_LAYOUT_PADDING = 80;" in viewer_html
+    assert "const READABLE_GRID_CELL_WIDTH = 190;" in viewer_html
+    assert "const READABLE_GRID_CELL_HEIGHT = 112;" in viewer_html
     assert "function ensureReadableDefaultZoom()" in viewer_html
+    assert "function readableGridPositionFor(index, count)" in viewer_html
+    assert "function readableGridPositions()" in viewer_html
+    assert "window.__agentGraphViewer = { cy };" in viewer_html
+    assert "name: 'preset'" in viewer_html
+    assert "positions: readableGridPositions()" in viewer_html
     assert "nodeDimensionsIncludeLabels: true" in viewer_html
     assert "nodeRepulsion: () => 800000" in viewer_html
     assert "idealEdgeLength: () => 180" in viewer_html
     assert "nodeOverlap: 30" in viewer_html
     assert "ensureReadableDefaultZoom();" in viewer_html
+    assert "cy.zoom(DEFAULT_MIN_READABLE_ZOOM);" in viewer_html
 
 
 # ---------------------------------------------------------------------------
