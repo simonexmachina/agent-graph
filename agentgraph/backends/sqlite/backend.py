@@ -130,6 +130,9 @@ class SQLiteBackend(StorageBackend):
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_synced_at ON entities(platform, synced_at)"
         )
         await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_last_accessed_id ON entities(last_accessed DESC, id ASC)"
+        )
+        await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_type_last_accessed ON entities(entity_type, last_accessed DESC)"
         )
         await conn.execute(

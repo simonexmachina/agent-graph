@@ -109,6 +109,7 @@ async def test_schema_has_platform_synced_at_index(sqlite_backend: SQLiteBackend
     assert "idx_entities_type_created_at" in names
     assert "idx_entities_type_updated_at" in names
     assert "idx_entities_platform_type_last_accessed" in names
+    assert "idx_entities_last_accessed_id" in names
 
 
 async def test_file_database_uses_separate_read_connection(tmp_path: Path) -> None:
