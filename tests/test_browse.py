@@ -182,6 +182,7 @@ def test_viewer_persists_list_sort_in_url_state() -> None:
     assert "q.set('sort_dir', params.sort_dir);" in viewer_html
     assert "initialSort: [{ column: initialState.sort, dir: initialState.sort_dir }]" in viewer_html
     assert "listTable.setSort([{ column: params.sort, dir: params.sort_dir }]);" in viewer_html
+    assert "const sorter = (request.sort && request.sort[0])" in viewer_html
 
 
 def test_viewer_offers_more_results_when_limit_is_reached() -> None:

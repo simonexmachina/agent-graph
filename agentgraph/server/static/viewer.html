@@ -1306,7 +1306,8 @@
     listTable = new Tabulator('#node-table', {
       ajaxURL: '/api/cli/browse/nodes',
       ajaxURLGenerator(url, _config, request) {
-        const sorter = request.sorters && request.sorters[0];
+        const sorter = (request.sort && request.sort[0])
+          || (request.sorters && request.sorters[0]);
         const params = collectParams({
           sort: sorter ? sorter.field : readUrlState().sort,
           sort_dir: sorter ? sorter.dir : readUrlState().sort_dir,
