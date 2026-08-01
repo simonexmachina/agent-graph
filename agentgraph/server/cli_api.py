@@ -79,6 +79,20 @@ async def list_entities(
     return await impl(entity_types, platform, since, limit)
 
 
+async def list_entities_page(
+    entity_types: list[str] | None = None,
+    platform: str | None = None,
+    since: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    order_by: str = "last_accessed",
+    order_dir: str = "desc",
+) -> tuple[list[dict[str, Any]], int]:
+    from agentgraph.graph.query import list_entities_page as impl
+
+    return await impl(entity_types, platform, since, limit, offset, order_by, order_dir)
+
+
 async def query_by_filter(
     entity_type: str,
     filters: dict[str, str],
@@ -246,24 +260,40 @@ async def cli_traverse(
     return await traverse_graph(entity["id"], max_depth=depth)
 
 
-@router.get("/browse")
-async def cli_browse(
-    search: str | None = Query(default=None),
-    entity_type: list[str] = Query(default=[]),
-    platform: str | None = Query(default=None),
-    since: str | None = Query(default=None),
-    node_id: str | None = Query(default=None),
-    depth: int = Query(default=2, ge=1, le=4),
-    limit: int = Query(default=50, ge=1, le=1000),
-) -> dict[str, Any]:
-    """Return graph nodes and edges for the viewer.
+_VIEWER_ORDER_FIELDS = {
+    "created_at",
+    "updated_at",
+    "last_accessed",
+    "synced_at",
+}
 
-    Rules:
-    - depth only applies when node_id is provided (neighbourhood traversal)
-    - focal node (node_id) is always included regardless of other filters
-    - entity_type / platform / since filter all non-focal nodes
-    - reachability prune removes nodes with no visible path back to focal
-    """
+
+def _page_entities(
+    nodes: list[dict[str, Any]], page: int, page_size: int, order_by: str, order_dir: str
+) -> tuple[list[dict[str, Any]], int]:
+    reverse = order_dir.lower() != "asc"
+    if order_by in _VIEWER_ORDER_FIELDS:
+        nodes = sorted(nodes, key=lambda node: (node.get(order_by) or ""), reverse=reverse)
+    total = len(nodes)
+    start = (page - 1) * page_size
+    return nodes[start : start + page_size], total
+
+
+async def _resolve_viewer_node_set(
+    search: str | None,
+    entity_type: list[str],
+    platform: str | None,
+    since: str | None,
+    node_id: str | None,
+    depth: int,
+    limit: int,
+    *,
+    page: int | None = None,
+    page_size: int | None = None,
+    order_by: str = "last_accessed",
+    order_dir: str = "desc",
+) -> tuple[list[dict[str, Any]], int]:
+    """Resolve the filtered viewer node set; traversal edges are only used for pruning."""
     # --- Phase 1: neighbourhood (only when node_id given) ---
     focal: dict[str, Any] | None = None
     neighbourhood_ids: set[str] | None = None
@@ -288,6 +318,18 @@ async def cli_browse(
         if entity_type:
             allowed_types = set(entity_type)
             nodes = [n for n in nodes if n["entity_type"] in allowed_types]
+    elif page is not None and page_size is not None:
+        offset = (page - 1) * page_size
+        nodes, total = await list_entities_page(
+            entity_types=entity_type or None,
+            platform=platform,
+            since=since,
+            limit=min(page_size, max(limit - offset, 0)),
+            offset=offset,
+            order_by=order_by,
+            order_dir=order_dir,
+        )
+        return nodes, min(total, limit)
     else:
         nodes = await list_entities(
             entity_types=entity_type or None,
@@ -351,10 +393,85 @@ async def cli_browse(
                 neighbours = await get_entities_by_ids(list(neighbour_ids))
                 neighbours = [n for n in neighbours if n["entity_type"] in allowed]
                 nodes = (nodes + neighbours)[:limit]
-                visible_ids = {n["id"] for n in nodes}
-                edges = await get_edges_for_entities(list(visible_ids))
 
-    return {"nodes": _with_display_names(_summarize_entities(nodes, content_limit=300)), "edges": edges}
+    if page is not None and page_size is not None:
+        nodes, total = _page_entities(nodes, page, page_size, order_by, order_dir)
+    else:
+        total = len(nodes)
+    return nodes, total
+
+
+async def _viewer_edges(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    visible_ids = {node["id"] for node in nodes}
+    if not visible_ids:
+        return []
+    edges = await get_edges_for_entities(list(visible_ids))
+    return [
+        edge for edge in edges
+        if edge["source_entity_id"] in visible_ids and edge["target_entity_id"] in visible_ids
+    ]
+
+
+@router.get("/browse/nodes")
+async def cli_browse_nodes(
+    search: str | None = Query(default=None),
+    entity_type: list[str] = Query(default=[]),
+    platform: str | None = Query(default=None),
+    since: str | None = Query(default=None),
+    node_id: str | None = Query(default=None),
+    depth: int = Query(default=2, ge=1, le=4),
+    limit: int = Query(default=50, ge=1, le=1000),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=50, ge=1, le=200),
+    sort: str = Query(default="last_accessed"),
+    sort_dir: str = Query(default="desc"),
+) -> dict[str, Any]:
+    """Return one ordered page from the viewer node set."""
+    nodes, total = await _resolve_viewer_node_set(
+        search, entity_type, platform, since, node_id, depth, limit,
+        page=page, page_size=size, order_by=sort, order_dir=sort_dir,
+    )
+    return {
+        "data": _with_display_names(_summarize_entities(nodes, content_limit=300)),
+        "last_page": max(1, (total + size - 1) // size),
+        "total": total,
+    }
+
+
+@router.get("/browse/edges")
+async def cli_browse_edges(node_ids: str = Query(default="")) -> dict[str, Any]:
+    """Return edges whose endpoints are both in comma-separated node_ids."""
+    ids = list(dict.fromkeys(node_id.strip() for node_id in node_ids.split(",") if node_id.strip()))
+    if len(ids) > 1000:
+        raise HTTPException(status_code=422, detail="At most 1000 node_ids are allowed")
+    edges = await get_edges_for_entities(ids)
+    visible_ids = set(ids)
+    return {
+        "edges": [
+            edge for edge in edges
+            if edge["source_entity_id"] in visible_ids and edge["target_entity_id"] in visible_ids
+        ]
+    }
+
+
+@router.get("/browse")
+async def cli_browse(
+    search: str | None = Query(default=None),
+    entity_type: list[str] = Query(default=[]),
+    platform: str | None = Query(default=None),
+    since: str | None = Query(default=None),
+    node_id: str | None = Query(default=None),
+    depth: int = Query(default=2, ge=1, le=4),
+    limit: int = Query(default=50, ge=1, le=1000),
+) -> dict[str, Any]:
+    """Compatibility graph response, composed from the shared node-set resolver."""
+    nodes, _ = await _resolve_viewer_node_set(
+        search, entity_type, platform, since, node_id, depth, limit
+    )
+    return {
+        "nodes": _with_display_names(_summarize_entities(nodes, content_limit=300)),
+        "edges": await _viewer_edges(nodes),
+    }
 
 
 @router.get("/query")

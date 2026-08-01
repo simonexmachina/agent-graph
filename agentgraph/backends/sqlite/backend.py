@@ -808,6 +808,50 @@ class SQLiteBackend(StorageBackend):
         )
         return [_row_to_entity(row) for row in rows]
 
+    async def list_entities_page(
+        self,
+        entity_types: list[str] | None,
+        platform: str | None,
+        since: datetime | None,
+        limit: int,
+        offset: int,
+        order_by: str,
+        order_dir: str,
+    ) -> tuple[list[EntityResult], int]:
+        if order_by not in _VALID_ORDER_BY:
+            order_by = "last_accessed"
+        if order_dir.upper() not in {"ASC", "DESC"}:
+            order_dir = "DESC"
+
+        clauses: list[str] = []
+        params: list[Any] = []
+        if entity_types:
+            placeholders = ",".join("?" * len(entity_types))
+            clauses.append(f"entity_type IN ({placeholders})")
+            params.extend(entity_types)
+        if platform:
+            clauses.append("platform = ?")
+            params.append(platform)
+        if since:
+            clauses.append("updated_at >= ?")
+            params.append(since.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        count_row = await self._fetchone(f"SELECT COUNT(*) AS count FROM entities {where}", params)
+        total = int(count_row["count"]) if count_row else 0
+        rows = await self._fetchall(
+            f"""
+            SELECT id, entity_type, platform, platform_entity_id,
+                   title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
+            FROM entities
+            {where}
+            ORDER BY {order_by} {order_dir}, id ASC
+            LIMIT ? OFFSET ?
+            """,
+            [*params, limit, offset],
+        )
+        return [_row_to_entity(row) for row in rows], total
+
     async def query_by_filter(
         self,
         entity_type: str,

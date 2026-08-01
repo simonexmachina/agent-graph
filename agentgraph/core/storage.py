@@ -112,6 +112,20 @@ class StorageBackend(ABC):
     ) -> list[EntityResult]: ...
 
     @abstractmethod
+    async def list_entities_page(
+        self,
+        entity_types: list[str] | None,
+        platform: str | None,
+        since: datetime | None,
+        limit: int,
+        offset: int,
+        order_by: str,
+        order_dir: str,
+    ) -> tuple[list[EntityResult], int]:
+        """Return an ordered entity page and the total matching entity count."""
+        ...
+
+    @abstractmethod
     async def query_by_filter(
         self,
         entity_type: str,

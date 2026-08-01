@@ -175,6 +175,23 @@ async def list_entities(
     return results
 
 
+async def list_entities_page(
+    entity_types: list[str] | None = None,
+    platform: str | None = None,
+    since: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    order_by: str = "last_accessed",
+    order_dir: str = "desc",
+) -> tuple[list[EntityResult], int]:
+    since_dt = _parse_since(since) if since else None
+    results, total = await get_backend().list_entities_page(
+        entity_types, platform, since_dt, limit, offset, order_by, order_dir
+    )
+    _enrich_web_url(results)
+    return results, total
+
+
 async def get_edges_for_entities(entity_ids: list[str]) -> list[EdgeResult]:
     return await get_backend().get_edges_for_entities(entity_ids)
 
