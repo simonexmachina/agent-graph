@@ -251,12 +251,12 @@ def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     assert "focusNode(node.data('id'));" in viewer_html
 
 
-def test_viewer_truncates_list_names_at_200_characters() -> None:
+def test_viewer_truncates_list_names_at_100_characters() -> None:
     """List names stay within a fixed, readable character limit."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "function truncateListName(value)" in viewer_html
-    assert "const maxLength = 200;" in viewer_html
+    assert "const maxLength = 100;" in viewer_html
     assert "value.slice(0, maxLength - 3)" in viewer_html
     assert "addListCell(row, truncateListName(name));" in viewer_html
 
