@@ -93,6 +93,16 @@ def test_viewer_unifies_people_and_shows_the_canonical_person() -> None:
     assert "await showEntityDetail(primary.id);" in viewer_html
 
 
+def test_viewer_shows_merged_people_on_canonical_person() -> None:
+    """Merged person identities are visible from the canonical Person detail panel."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "function renderMergedPeople(metadata)" in viewer_html
+    assert "metadata.merged_people" in viewer_html
+    assert "Merged people (${people.length})" in viewer_html
+    assert "detailBody.appendChild(mergedPeople);" in viewer_html
+
+
 def test_viewer_heading_links_to_empty_viewer_state() -> None:
     """The top-level product link clears all URL-backed viewer state."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()

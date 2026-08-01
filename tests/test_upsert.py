@@ -267,6 +267,18 @@ async def test_unify_persons_merges_edges_and_identity_metadata_sqlite(
     assert primary is not None
     assert primary["metadata"]["slack_user_id"] == "T1/U1"
     assert primary["metadata"]["discord_user_id"] == "D1"
+    assert primary["metadata"]["merged_people"] == [
+        {
+            "id": slack_id,
+            "title": "Simon",
+            "platform_entity_id": "slack:T1/U1",
+        },
+        {
+            "id": discord_id,
+            "title": "simon",
+            "platform_entity_id": "discord:D1",
+        },
+    ]
 
     source_count = await sqlite_backend._fetchval(
         """
@@ -314,3 +326,28 @@ async def test_unify_persons_merges_edges_and_identity_metadata_sqlite(
     refreshed_primary = await sqlite_backend.get_entity_by_id(primary_id)
     assert refreshed_primary is not None
     assert refreshed_primary["metadata"]["slack_user_id"] == "T1/U1"
+
+    await upsert_batch(
+        EntityBatch(
+            persons=[
+                PersonRecord(
+                    platform="slack",
+                    platform_user_id="T1/U2",
+                    platform_username="simon.wade.alt",
+                    display_name="Simon Wade (alternate)",
+                )
+            ]
+        )
+    )
+    alternate_id = await sqlite_backend._fetchval(
+        "SELECT id FROM entities WHERE platform_entity_id = ?",
+        ["slack:T1/U2"],
+    )
+    await unify_persons(primary_id, [alternate_id])
+    merged_primary = await sqlite_backend.get_entity_by_id(primary_id)
+    assert merged_primary is not None
+    assert [person["id"] for person in merged_primary["metadata"]["merged_people"]] == [
+        slack_id,
+        discord_id,
+        alternate_id,
+    ]

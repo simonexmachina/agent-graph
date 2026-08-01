@@ -22,6 +22,6 @@ unify_persons_tool(primary_entity_id, duplicate_entity_ids) -> JSON string
 
 ## Returns
 
-- updated canonical Person, including identity metadata merged from duplicates
+- updated canonical Person, including identity metadata and the merged Person identities
 - duplicate IDs that were merged
 - an error message if an entity is missing or is not a Person

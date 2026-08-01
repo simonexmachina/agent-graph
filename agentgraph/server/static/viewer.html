@@ -456,6 +456,29 @@
     display: none;
   }
 
+  .merged-people-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .merged-person-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text-dim);
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 6px 8px;
+    word-break: break-word;
+  }
+
+  .merged-person-item strong {
+    color: var(--text);
+    display: block;
+    font-weight: 600;
+  }
+
   .content-block {
     display: flex;
     flex-direction: column;
@@ -1830,6 +1853,10 @@
     if (entity.entity_type === 'Person' && email) {
       detailBody.appendChild(row('Email', escHtml(email)));
     }
+    if (entity.entity_type === 'Person') {
+      const mergedPeople = renderMergedPeople(entity.metadata);
+      if (mergedPeople) detailBody.appendChild(mergedPeople);
+    }
 
     if (entity.content) {
       detailBody.appendChild(renderContent(entity));
@@ -1931,6 +1958,35 @@
     }
 
     detail.classList.add('open');
+  }
+
+  function renderMergedPeople(metadata) {
+    const people = Array.isArray(metadata && metadata.merged_people)
+      ? metadata.merged_people.filter(person => person && typeof person === 'object')
+      : [];
+    if (people.length === 0) return null;
+
+    const section = document.createElement('div');
+    section.className = 'detail-row';
+    const label = document.createElement('div');
+    label.className = 'detail-label';
+    label.textContent = `Merged people (${people.length})`;
+    section.appendChild(label);
+
+    const list = document.createElement('div');
+    list.className = 'merged-people-list';
+    people.forEach(person => {
+      const item = document.createElement('div');
+      item.className = 'merged-person-item';
+      const title = document.createElement('strong');
+      title.textContent = person.title || person.platform_entity_id || person.id || 'Person';
+      item.appendChild(title);
+      const reference = person.platform_entity_id || person.id;
+      if (reference) item.appendChild(document.createTextNode(reference));
+      list.appendChild(item);
+    });
+    section.appendChild(list);
+    return section;
   }
 
   function renderPersonUnificationControls(entity) {

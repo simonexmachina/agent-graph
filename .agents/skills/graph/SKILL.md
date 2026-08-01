@@ -135,7 +135,7 @@ agentgraph download <attachment-document-entity-id> --output <file-or-dir>
 - Delete targets accept: full UUID, UUID prefix, platform ref, or HTTP(S) URL. Connected edges are removed with the entity.
 - Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs, exported Google Docs/Sheets, or Gmail attachment `Document` stubs
 - Use `agentgraph bookmark` for entities or HTTP(S) URLs that should survive retention-window garbage collection
-- Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep. Without `--json`, the command displays the updated canonical Person, including merged identity metadata.
+- Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep. Without `--json`, the command displays the updated canonical Person, including merged identity metadata and duplicate identities.
 - `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
 - Server logs go to stdout unless the process manager redirects them elsewhere
 

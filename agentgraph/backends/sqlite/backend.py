@@ -63,6 +63,38 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _append_merged_people(
+    metadata: dict[str, Any],
+    merged_people: list[dict[str, str]],
+    merged_person_ids: set[str],
+) -> None:
+    """Append valid, previously merged Person summaries without duplication."""
+    existing_merged_people = metadata.get("merged_people", [])
+    if not isinstance(existing_merged_people, list):
+        return
+    for existing_person in existing_merged_people:
+        if not isinstance(existing_person, dict):
+            continue
+        existing_id = existing_person.get("id")
+        existing_title = existing_person.get("title")
+        existing_ref = existing_person.get("platform_entity_id")
+        if (
+            not isinstance(existing_id, str)
+            or not isinstance(existing_title, str)
+            or not isinstance(existing_ref, str)
+            or existing_id in merged_person_ids
+        ):
+            continue
+        merged_people.append(
+            {
+                "id": existing_id,
+                "title": existing_title,
+                "platform_entity_id": existing_ref,
+            }
+        )
+        merged_person_ids.add(existing_id)
+
+
 class SQLiteBackend(StorageBackend):
     def __init__(self, db_path: str = "~/.agentgraph/agentgraph.db", vector_mode: str = "sqlite-vec") -> None:
         self._db_path = str(Path(db_path).expanduser()) if db_path != ":memory:" else db_path
@@ -506,10 +538,37 @@ class SQLiteBackend(StorageBackend):
                         raise ValueError(f"Entity {eid!r} is not a Person")
 
                 primary = by_id[primary_entity_id]
+                primary_metadata = json.loads(primary["metadata"] or "{}")
+                merged_people: list[dict[str, str]] = []
+                merged_person_ids: set[str] = set()
+                _append_merged_people(
+                    primary_metadata,
+                    merged_people,
+                    merged_person_ids,
+                )
+                for eid in duplicate_ids:
+                    duplicate = by_id[eid]
+                    duplicate_metadata = json.loads(duplicate["metadata"] or "{}")
+                    _append_merged_people(
+                        duplicate_metadata,
+                        merged_people,
+                        merged_person_ids,
+                    )
+
+                    merged_people.append(
+                        {
+                            "id": eid,
+                            "title": str(duplicate["title"] or duplicate["platform_entity_id"]),
+                            "platform_entity_id": str(duplicate["platform_entity_id"]),
+                        }
+                    )
+                    merged_person_ids.add(eid)
+
                 merged_metadata: dict[str, Any] = {}
                 for eid in duplicate_ids:
                     merged_metadata.update(json.loads(by_id[eid]["metadata"] or "{}"))
-                merged_metadata.update(json.loads(primary["metadata"] or "{}"))
+                merged_metadata.update(primary_metadata)
+                merged_metadata["merged_people"] = merged_people
 
                 title = primary["title"] or next(
                     (by_id[eid]["title"] for eid in duplicate_ids if by_id[eid]["title"]),
