@@ -449,6 +449,13 @@
     word-break: break-word;
   }
 
+  .person-merge-error {
+    color: #fca5a5;
+    font-size: 11px;
+    line-height: 1.4;
+    display: none;
+  }
+
   .content-block {
     display: flex;
     flex-direction: column;
@@ -1245,7 +1252,7 @@
 
   function forceRefreshGraph(override) {
     invalidateGraphCache();
-    refreshGraph(override);
+    return refreshGraph(override);
   }
 
   function currentView() {
@@ -1287,7 +1294,7 @@
       }
       return;
     }
-    loadGraph(params);
+    return loadGraph(params);
   }
 
   function formatDate(cell) {
@@ -1832,6 +1839,10 @@
       detailBody.appendChild(row('Created', new Date(entity.created_at).toLocaleString()));
     }
 
+    if (entity.entity_type === 'Person') {
+      detailBody.appendChild(renderPersonUnificationControls(entity));
+    }
+
     // Fetch button for any entity backed by a connector
     if (FETCHABLE_PLATFORMS.has(entity.platform) && entity.platform_entity_id) {
       const fetchRow = document.createElement('div');
@@ -1920,6 +1931,76 @@
     }
 
     detail.classList.add('open');
+  }
+
+  function renderPersonUnificationControls(entity) {
+    const group = document.createElement('div');
+    group.className = 'control-group';
+
+    const label = document.createElement('label');
+    label.className = 'group-label';
+    label.textContent = 'Merge duplicate people';
+    group.appendChild(label);
+
+    const duplicateInput = document.createElement('input');
+    duplicateInput.type = 'text';
+    duplicateInput.placeholder = 'IDs or platform references';
+    duplicateInput.setAttribute('aria-label', 'Duplicate person IDs or platform references');
+    group.appendChild(duplicateInput);
+
+    const mergeButton = document.createElement('button');
+    mergeButton.type = 'button';
+    mergeButton.textContent = 'Merge into this person';
+    group.appendChild(mergeButton);
+
+    const mergeError = document.createElement('div');
+    mergeError.className = 'person-merge-error';
+    group.appendChild(mergeError);
+
+    mergeButton.addEventListener('click', async () => {
+      const duplicateIds = duplicateInput.value
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean);
+      if (duplicateIds.length === 0) {
+        mergeError.textContent = 'Enter at least one duplicate person ID.';
+        mergeError.style.display = 'block';
+        return;
+      }
+      if (!window.confirm(`Merge ${duplicateIds.length} person(s) into this canonical person?`)) return;
+
+      mergeButton.disabled = true;
+      duplicateInput.disabled = true;
+      mergeButton.textContent = 'Merging…';
+      mergeError.textContent = '';
+      mergeError.style.display = 'none';
+      try {
+        const res = await fetch(
+          buildUrl('/api/cli/unify-persons', { primary: entity.id, duplicate: duplicateIds }),
+          { method: 'POST' },
+        );
+        if (!res.ok) throw new Error(await readErrorDetail(res));
+        const result = await res.json();
+        const primary = result.primary;
+        if (!primary || !primary.id) throw new Error('Server did not return the canonical person.');
+
+        lookupInput.value = primary.id;
+        depthInput.value = '1';
+        syncDepthEnabled();
+        markLookupInputSubmitted();
+        await forceRefreshGraph({ node_id: primary.id, depth: 1 });
+        await showEntityDetail(primary.id);
+      } catch (err) {
+        mergeButton.disabled = false;
+        duplicateInput.disabled = false;
+        mergeButton.textContent = 'Merge into this person';
+        mergeError.textContent = err instanceof Error ? err.message : 'Person merge failed';
+        mergeError.style.display = 'block';
+        console.error('person merge error:', err);
+      }
+    });
+
+    return group;
   }
 
   function escHtml(str) {

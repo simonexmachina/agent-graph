@@ -80,6 +80,19 @@ def test_viewer_uses_bookmark_symbol_without_status_row() -> None:
     assert "/api/cli/delete" in viewer_html
 
 
+def test_viewer_unifies_people_and_shows_the_canonical_person() -> None:
+    """Merging from a Person panel returns focus and detail to the canonical record."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "function renderPersonUnificationControls(entity)" in viewer_html
+    assert "Merge duplicate people" in viewer_html
+    assert "/api/cli/unify-persons" in viewer_html
+    assert "const primary = result.primary;" in viewer_html
+    assert "lookupInput.value = primary.id;" in viewer_html
+    assert "await forceRefreshGraph({ node_id: primary.id, depth: 1 });" in viewer_html
+    assert "await showEntityDetail(primary.id);" in viewer_html
+
+
 def test_viewer_heading_links_to_empty_viewer_state() -> None:
     """The top-level product link clears all URL-backed viewer state."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
