@@ -463,11 +463,20 @@
 
   .content-format {
     color: var(--text-muted);
+    cursor: pointer;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.07em;
     text-transform: uppercase;
   }
+
+  .content-format:hover,
+  .content-format:focus-visible {
+    color: var(--text);
+  }
+
+  .content-format[aria-expanded="false"]::before { content: "+ "; }
+  .content-format[aria-expanded="true"]::before { content: "- "; }
 
   .content-tabs {
     display: flex;
@@ -487,6 +496,14 @@
     border-color: var(--border-bright);
     color: var(--text);
     background: var(--surface2);
+  }
+
+  .content-tab:disabled,
+  .content-tab:disabled:hover {
+    border-color: transparent;
+    color: var(--text-muted);
+    cursor: default;
+    opacity: 0.45;
   }
 
   .content-preview,
@@ -1589,6 +1606,10 @@
     const format = document.createElement('div');
     format.className = 'content-format';
     format.textContent = contentType;
+    format.setAttribute('role', 'button');
+    format.setAttribute('tabindex', '0');
+    format.setAttribute('aria-expanded', 'true');
+    format.title = 'Hide content';
     toolbar.appendChild(format);
 
     const tabs = document.createElement('div');
@@ -1604,6 +1625,13 @@
     tabs.append(previewTab, sourceTab);
     toolbar.appendChild(tabs);
     block.appendChild(toolbar);
+
+    if (!isHtml) {
+      previewTab.disabled = true;
+      sourceTab.disabled = true;
+      previewTab.setAttribute('aria-disabled', 'true');
+      sourceTab.setAttribute('aria-disabled', 'true');
+    }
 
     const preview = isHtml
       ? safeHtmlPreview(source)
@@ -1629,6 +1657,28 @@
     sourceTab.setAttribute('aria-selected', 'false');
     previewTab.addEventListener('click', () => selectContentMode('preview'));
     sourceTab.addEventListener('click', () => selectContentMode('source'));
+
+    function toggleContent() {
+      const isExpanded = format.getAttribute('aria-expanded') === 'true';
+      format.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+      format.title = isExpanded ? 'Show content' : 'Hide content';
+      tabs.hidden = isExpanded;
+      if (isExpanded) {
+        preview.hidden = true;
+        sourceView.hidden = true;
+        return;
+      }
+      const showingPreview = previewTab.getAttribute('aria-selected') === 'true';
+      preview.hidden = !showingPreview;
+      sourceView.hidden = showingPreview;
+    }
+
+    format.addEventListener('click', toggleContent);
+    format.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggleContent();
+    });
     return block;
   }
 

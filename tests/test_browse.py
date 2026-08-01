@@ -112,6 +112,20 @@ def test_viewer_renders_html_content_through_a_safe_reader() -> None:
     assert "metadata.content_type" in viewer_html
 
 
+def test_viewer_disables_unsupported_content_tabs_and_can_collapse_content() -> None:
+    """Non-HTML content has inert tabs and every content block can be collapsed."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "if (!isHtml)" in viewer_html
+    assert "previewTab.disabled = true;" in viewer_html
+    assert "sourceTab.disabled = true;" in viewer_html
+    assert "format.setAttribute('role', 'button');" in viewer_html
+    assert "format.setAttribute('aria-expanded', 'true');" in viewer_html
+    assert "format.addEventListener('keydown', (event) =>" in viewer_html
+    assert "tabs.hidden = isExpanded;" in viewer_html
+    assert "format.title = isExpanded ? 'Show content' : 'Hide content';" in viewer_html
+
+
 def test_viewer_initial_layout_contains_all_nodes() -> None:
     """The graph's initial layout fits every node and its label in the viewport."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
