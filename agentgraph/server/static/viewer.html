@@ -1392,6 +1392,11 @@
     return `${Math.round(ms / 60000)}m`;
   }
 
+  function truncateListName(value) {
+    const maxLength = 200;
+    return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
+  }
+
   function updateListSortHeaders(params) {
     document.querySelectorAll('.list-sort').forEach(button => {
       const isActive = button.dataset.sort === params.sort;
@@ -1419,7 +1424,8 @@
       const row = document.createElement('tr');
       row.tabIndex = 0;
       row.dataset.entityId = entity.id;
-      addListCell(row, entity.display_name || entity.viewer_label || entity.title || entity.platform_entity_id || entity.id);
+      const name = entity.display_name || entity.viewer_label || entity.title || entity.platform_entity_id || entity.id;
+      addListCell(row, truncateListName(name));
       addListCell(row, entity.entity_type || '—');
       addListCell(row, entity.platform || '—');
       addListCell(row, formatDate(entity.updated_at));
