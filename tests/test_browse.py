@@ -864,7 +864,9 @@ async def test_browse_nodes_checks_one_extra_search_result() -> None:
     assert len(result["data"]) == 2
     assert result["total"] == 2
     assert result["has_more"] is True
-    mock_search.assert_awaited_once_with("result", entity_types=None, limit=3)
+    mock_search.assert_awaited_once_with(
+        "result", entity_types=None, limit=3, min_score=0.0
+    )
 
 
 @pytest.mark.asyncio

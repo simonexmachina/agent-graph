@@ -320,7 +320,15 @@ async def _resolve_viewer_node_set(
     # --- Phase 2: candidate nodes ---
     if search:
         search_limit = limit + 1 if neighbourhood_ids is None else max(limit + 1, 500)
-        nodes = await search_entities(search, entity_types=entity_type or None, limit=search_limit)
+        # The viewer needs every lexical match up to its active limit so it can
+        # reliably expose the More control. Hybrid RRF scores naturally fall
+        # below the default cutoff for lower-ranked exact text matches.
+        nodes = await search_entities(
+            search,
+            entity_types=entity_type or None,
+            limit=search_limit,
+            min_score=0.0,
+        )
         if neighbourhood_ids is not None:
             nodes = [n for n in nodes if n["id"] in neighbourhood_ids]
     elif neighbourhood_ids is not None:
