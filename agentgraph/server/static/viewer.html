@@ -1102,6 +1102,9 @@
           sort_dir: sorter ? sorter.dir : 'desc',
         });
       },
+      ajaxRequesting() {
+        return currentView() === 'list';
+      },
       ajaxResponse(url, _params, response) {
         const parsedUrl = new URL(url, window.location.href);
         const rawNodes = response.data || [];

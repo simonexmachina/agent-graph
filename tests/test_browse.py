@@ -133,6 +133,7 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "renderCachedList(params)" in viewer_html
     assert "cy.resize();" in viewer_html
     assert ".tabulator:has(.tabulator-alert) .tabulator-placeholder" in viewer_html
+    assert "return currentView() === 'list';" in viewer_html
 
 
 def test_viewer_list_rows_match_graph_click_behaviour() -> None:
