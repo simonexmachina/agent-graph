@@ -160,6 +160,37 @@ def test_delete_uses_server_endpoint() -> None:
     post.assert_called_once_with("/delete", params={"target": "abc123"})
 
 
+def test_unify_persons_shows_the_canonical_person(capsys: pytest.CaptureFixture[str]) -> None:
+    from agentgraph.cli_query import cmd_unify_persons
+
+    result: dict[str, Any] = {
+        "merged_count": 2,
+        "merged_ids": ["duplicate-1", "duplicate-2"],
+        "primary": {
+            "id": "canonical-person-123",
+            "entity_type": "Person",
+            "platform": "canonical",
+            "platform_entity_id": "simon.wade@gmail.com",
+            "title": "Simon Wade",
+            "content": "simon.wade@gmail.com",
+            "metadata": {"slack_user_id": "T1/U1", "discord_user_id": "D1"},
+        },
+    }
+
+    with patch("agentgraph.cli_query._post", return_value=result) as post:
+        cmd_unify_persons("canonical", ["duplicate-1", "duplicate-2"], as_json=False)
+
+    post.assert_called_once_with(
+        "/unify-persons",
+        params={"primary": "canonical", "duplicate": ["duplicate-1", "duplicate-2"]},
+    )
+    output = capsys.readouterr().out
+    assert "Unified: 2 duplicate person(s). Canonical person:" in output
+    assert "Person — canonical" in output
+    assert "Simon Wade" in output
+    assert "slack_user_id" in output
+
+
 def test_query_exits_when_server_unavailable() -> None:
     from agentgraph.cli_query import cmd_query
 

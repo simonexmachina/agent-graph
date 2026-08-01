@@ -114,6 +114,19 @@ def _print_field(label: str, value: object) -> None:
     console.print(str(value), markup=False, highlight=False)
 
 
+def _print_entity(entity: dict[str, Any]) -> None:
+    """Render an entity in the same detail format used by ``agentgraph get``."""
+    console.print(f"[bold]{entity['entity_type']}[/bold] — {entity['platform']}")
+    console.print(f"[dim]{entity['id']}[/dim]")
+    if entity.get("title"):
+        _print_field("Title", entity["title"])
+    if entity.get("content"):
+        console.print("\n[bold]Content:[/bold]")
+        console.print(str(entity["content"]), markup=False, highlight=False)
+    if entity.get("metadata"):
+        _print_field("Metadata", entity["metadata"])
+
+
 def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
     from agentgraph.graph.query import is_http_url
 
@@ -143,15 +156,7 @@ def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
         console.print_json(json.dumps(entity, default=str))
         return
 
-    console.print(f"[bold]{entity['entity_type']}[/bold] — {entity['platform']}")
-    console.print(f"[dim]{entity['id']}[/dim]")
-    if entity.get("title"):
-        _print_field("Title", entity["title"])
-    if entity.get("content"):
-        console.print("\n[bold]Content:[/bold]")
-        console.print(str(entity["content"]), markup=False, highlight=False)
-    if entity.get("metadata"):
-        _print_field("Metadata", entity["metadata"])
+    _print_entity(entity)
 
 
 # ---------------------------------------------------------------------------
@@ -372,11 +377,11 @@ def cmd_unify_persons(
         console.print_json(json.dumps(result, default=str))
         return
 
-    primary = result["primary"]
     console.print(
-        f"[green]Unified:[/green] {result['merged_count']} duplicate person(s) into "
-        f"{primary.get('title') or primary['platform_entity_id']} [{primary['id'][:8]}]"
+        f"[green]Unified:[/green] {result['merged_count']} duplicate person(s). "
+        "Canonical person:"
     )
+    _print_entity(result["primary"])
 
 
 def cmd_query(
