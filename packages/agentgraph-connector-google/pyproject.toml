@@ -8,8 +8,6 @@ dependencies = [
     "google-api-python-client>=2.193.0",
     "google-auth>=2.49.1",
     "google-auth-oauthlib>=1.3.0",
-    "markdownify>=1.2.2",
-    "html2text>=2025.4.15",
 ]
 
 [project.entry-points."agentgraph.connectors"]

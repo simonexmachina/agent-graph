@@ -10,6 +10,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr, parsedate_to_datetime
+from html import escape
 from pathlib import Path
 from typing import Any, cast
 
@@ -77,9 +78,8 @@ def _get_header(headers: list[dict[str, str]], name: str) -> str:
     return ""
 
 
-def _extract_body(payload: dict[str, Any]) -> str:
-    """Recursively extract body from a MIME payload, preferring HTML (via html2text)."""
-    import html2text  # type: ignore[import-untyped]
+def _extract_body(payload: dict[str, Any]) -> tuple[str, str]:
+    """Recursively extract a MIME body, preferring the original HTML part."""
 
     def _decode(data: str) -> str:
         return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
@@ -99,11 +99,8 @@ def _extract_body(payload: dict[str, Any]) -> str:
     _collect(payload, html_parts, text_parts)
 
     if html_parts:
-        h = html2text.HTML2Text()
-        h.ignore_images = True
-        h.body_width = 0
-        return h.handle("\n".join(html_parts)).strip()
-    return "\n".join(text_parts).strip()
+        return "\n".join(html_parts).strip(), "text/html"
+    return "\n".join(text_parts).strip(), "text/plain"
 
 
 def _decode_urlsafe_data(data: str) -> bytes:
@@ -191,14 +188,16 @@ def _extract_attachments(
                 metadata["filename"] = filename
             if account_id:
                 metadata["account_id"] = account_id
-            attachments.append(EntityRecord(
-                entity_type="Document",
-                platform="gmail",
-                platform_entity_id=resource_id,
-                title=filename or attachment_id,
-                metadata=metadata,
-                is_stub=True,
-            ))
+            attachments.append(
+                EntityRecord(
+                    entity_type="Document",
+                    platform="gmail",
+                    platform_entity_id=resource_id,
+                    title=filename or attachment_id,
+                    metadata=metadata,
+                    is_stub=True,
+                )
+            )
         for child in part.get("parts", []):
             _collect(child)
 
@@ -241,6 +240,7 @@ class GmailConnector(BaseConnector):
     @classmethod
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         from agentgraph_connector_google.auth import run_oauth_flow
+
         run_oauth_flow(account_id=account_id, add=add)
 
     @classmethod
@@ -264,6 +264,7 @@ class GmailConnector(BaseConnector):
     @classmethod
     async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         import asyncio
+
         return await asyncio.to_thread(verify_google_auth, account_id)
 
     @classmethod
@@ -291,7 +292,9 @@ class GmailConnector(BaseConnector):
 
         loop = asyncio.get_event_loop()
         service = await loop.run_in_executor(None, _build_service_for, account_id)
-        after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime("%Y/%m/%d")
+        after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime(
+            "%Y/%m/%d"
+        )
         q = f"after:{after_date} -in:spam -in:trash"
         logger.info("gmail ingest: fetching all threads (query: %s)", q)
         batch = await _list_threads(service, loop, q, account_id=account_id)
@@ -343,7 +346,9 @@ class GmailConnector(BaseConnector):
             await upsert_batch(batch)
             return batch
 
-        logger.debug("gmail: no usable thread ID in resource_id=%r meta=%r — skipping", resource_id, meta)
+        logger.debug(
+            "gmail: no usable thread ID in resource_id=%r meta=%r — skipping", resource_id, meta
+        )
         return EntityBatch()
 
     async def download(
@@ -381,11 +386,17 @@ class GmailConnector(BaseConnector):
         service = await loop.run_in_executor(None, _build_service_for, selected_account_id)
         response: dict[str, Any] = await loop.run_in_executor(
             None,
-            lambda: service.users().messages().attachments().get(
-                userId="me",
-                messageId=message_id,
-                id=attachment_id,
-            ).execute(),
+            lambda: (
+                service.users()
+                .messages()
+                .attachments()
+                .get(
+                    userId="me",
+                    messageId=message_id,
+                    id=attachment_id,
+                )
+                .execute()
+            ),
         )
         data = response.get("data")
         if not isinstance(data, str):
@@ -423,10 +434,16 @@ class GmailConnector(BaseConnector):
                 lambda: service.users().getProfile(userId="me").execute(),
             )
             history_id: str = profile["historyId"]
-            logger.info("gmail poll: initialised cursor at historyId %s; starting bulk ingest", history_id)
+            logger.info(
+                "gmail poll: initialised cursor at historyId %s; starting bulk ingest", history_id
+            )
 
-            after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime("%Y/%m/%d")
-            bulk_batch = await _list_threads(service, loop, f"in:inbox after:{after_date}", account_id=account_id)
+            after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime(
+                "%Y/%m/%d"
+            )
+            bulk_batch = await _list_threads(
+                service, loop, f"in:inbox after:{after_date}", account_id=account_id
+            )
             logger.info("gmail poll: bulk ingest fetched %d thread(s)", len(bulk_batch.entities))
             return bulk_batch, {"history_id": history_id}
 
@@ -483,7 +500,8 @@ class GmailConnector(BaseConnector):
 
         logger.info(
             "gmail poll: %d inbox + %d known non-inbox thread(s)",
-            len(inbox_thread_ids), len(known_thread_ids),
+            len(inbox_thread_ids),
+            len(known_thread_ids),
         )
         combined = EntityBatch()
         for tid in thread_ids:
@@ -510,9 +528,7 @@ async def _fetch_thread_by_thread_id(
 
     thread: dict[str, Any] = await loop.run_in_executor(
         None,
-        lambda: service.users().threads().get(
-            userId="me", id=thread_id, format="full"
-        ).execute(),
+        lambda: service.users().threads().get(userId="me", id=thread_id, format="full").execute(),
     )
     entity, persons, edges, attachment_stubs = _thread_to_items(thread, account_id=account_id)
     if not entity:
@@ -535,9 +551,9 @@ async def _fetch_thread_by_message_id(
     # Resolve message → thread ID
     msg: dict[str, Any] = await loop.run_in_executor(
         None,
-        lambda: service.users().messages().get(
-            userId="me", id=message_id, format="minimal"
-        ).execute(),
+        lambda: (
+            service.users().messages().get(userId="me", id=message_id, format="minimal").execute()
+        ),
     )
     thread_id: str = msg["threadId"]
     return await _fetch_thread_by_thread_id(thread_id, account_id=account_id)
@@ -559,6 +575,7 @@ def _thread_to_items(
 
     thread_created_at: datetime | None = None
     import contextlib
+
     with contextlib.suppress(Exception):
         thread_created_at = parsedate_to_datetime(_get_header(first_headers, "Date"))
 
@@ -575,11 +592,11 @@ def _thread_to_items(
         headers = payload.get("headers", [])
 
         from_header = _get_header(headers, "From")
-        to_header   = _get_header(headers, "To")
-        cc_header   = _get_header(headers, "Cc")
+        to_header = _get_header(headers, "To")
+        cc_header = _get_header(headers, "Cc")
         date_header = _get_header(headers, "Date")
 
-        body = _extract_body(payload).strip()
+        body, body_content_type = _extract_body(payload)
         if message_id:
             new_attachments = _extract_attachments(
                 payload,
@@ -589,46 +606,58 @@ def _thread_to_items(
             )
             attachment_stubs.extend(new_attachments)
             for attachment in new_attachments:
-                edges.append(EdgeRecord(
-                    edge_type="references",
-                    source_platform_entity_id=thread_id,
-                    target_platform_entity_id=attachment.platform_entity_id,
-                    platform="gmail",
-                ))
+                edges.append(
+                    EdgeRecord(
+                        edge_type="references",
+                        source_platform_entity_id=thread_id,
+                        target_platform_entity_id=attachment.platform_entity_id,
+                        platform="gmail",
+                    )
+                )
 
-        block_lines = [f"**From:** {from_header}", f"**Date:** {_format_date(date_header)}"]
+        block_lines = [
+            "<p>",
+            f"<strong>From:</strong> {escape(from_header)}<br>",
+            f"<strong>Date:</strong> {escape(_format_date(date_header))}",
+        ]
         if to_header:
-            block_lines.append(f"**To:** {to_header}")
-        block_lines.extend(["", body or "*(empty)*"])
+            block_lines.append(f"<br><strong>To:</strong> {escape(to_header)}")
+        block_lines.append("</p>")
+        if body_content_type == "text/html":
+            block_lines.append(body or "<p><em>(empty)</em></p>")
+        else:
+            block_lines.append(f"<pre>{escape(body or '(empty)')}</pre>")
         content_blocks.append("\n".join(block_lines))
 
-        for display_name, email in _parse_email_addresses(
-            f"{from_header},{to_header},{cc_header}"
-        ):
+        for display_name, email in _parse_email_addresses(f"{from_header},{to_header},{cc_header}"):
             if email in seen_emails:
                 continue
             seen_emails.add(email)
-            persons.append(PersonRecord(
-                platform="gmail",
-                platform_user_id=email,
-                canonical_email=email,
-                display_name=display_name or None,
-            ))
+            persons.append(
+                PersonRecord(
+                    platform="gmail",
+                    platform_user_id=email,
+                    canonical_email=email,
+                    display_name=display_name or None,
+                )
+            )
             if first_sender_email is None:
                 _, sender_addr = parseaddr(from_header)
                 if sender_addr.lower() == email:
                     first_sender_email = email
 
-    content = "\n\n---\n\n".join(content_blocks)
+    content = "\n<hr>\n".join(content_blocks)
 
     for email in seen_emails:
         edge_type = "authored" if email == first_sender_email else "participated_in"
-        edges.append(EdgeRecord(
-            edge_type=edge_type,
-            source_platform_user_id=email,
-            target_platform_entity_id=thread_id,
-            platform="gmail",
-        ))
+        edges.append(
+            EdgeRecord(
+                edge_type=edge_type,
+                source_platform_user_id=email,
+                target_platform_entity_id=thread_id,
+                platform="gmail",
+            )
+        )
 
     label_ids: list[str] = messages[0].get("labelIds", [])
     entity = EntityRecord(
@@ -643,6 +672,7 @@ def _thread_to_items(
             "message_count": len(messages),
             "snippet": thread.get("snippet", ""),
             "label_ids": ",".join(label_ids),
+            "content_type": "text/html",
             **({"account_id": account_id} if account_id else {}),
         },
     )

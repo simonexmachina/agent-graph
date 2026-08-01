@@ -21,13 +21,16 @@ from agentgraph.connectors.base import EntityBatch
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _recent_dt() -> datetime:
     from datetime import timedelta
+
     return datetime.now(UTC) - timedelta(seconds=60)
 
 
 def _stale_dt() -> datetime:
     from datetime import timedelta
+
     return datetime.now(UTC) - timedelta(seconds=3600)
 
 
@@ -113,7 +116,9 @@ class _FakeGmailService:
 
 
 class _FakeBackend:
-    async def get_entity_by_platform(self, platform: str, platform_entity_id: str) -> dict[str, object]:
+    async def get_entity_by_platform(
+        self, platform: str, platform_entity_id: str
+    ) -> dict[str, object]:
         return {
             "platform": platform,
             "platform_entity_id": platform_entity_id,
@@ -128,6 +133,7 @@ class _FakeBackend:
 # ---------------------------------------------------------------------------
 # _parse_mentions
 # ---------------------------------------------------------------------------
+
 
 def test_parse_mentions_empty() -> None:
     assert _parse_mentions("hello world") == []
@@ -150,6 +156,7 @@ def test_parse_mentions_no_false_positives() -> None:
 # GoogleDocsConnector.fetch — FetchPolicy branching (no real Google API)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def gdocs_connector() -> GoogleDocsConnector:
     return GoogleDocsConnector()
@@ -160,7 +167,9 @@ async def test_gdocs_fetch_fresh_returns_empty_batch(gdocs_connector: GoogleDocs
     """When data is fresh, connector returns empty batch and touches last_accessed."""
     with (
         patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
-        patch("agentgraph_connector_google.gdocs._touch_last_accessed", new=AsyncMock()) as mock_touch,
+        patch(
+            "agentgraph_connector_google.gdocs._touch_last_accessed", new=AsyncMock()
+        ) as mock_touch,
     ):
         batch = await gdocs_connector.fetch("document", "doc-abc")
 
@@ -174,7 +183,9 @@ async def test_gdocs_fetch_stale_calls_fetch_doc(gdocs_connector: GoogleDocsConn
     fake_batch = EntityBatch()
     with (
         patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=_stale_dt())),
-        patch("agentgraph_connector_google.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
+        patch(
+            "agentgraph_connector_google.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)
+        ),
         patch("agentgraph_connector_google.gdocs.upsert_batch", new=AsyncMock()) as mock_upsert,
     ):
         batch = await gdocs_connector.fetch("document", "doc-xyz")
@@ -184,12 +195,16 @@ async def test_gdocs_fetch_stale_calls_fetch_doc(gdocs_connector: GoogleDocsConn
 
 
 @pytest.mark.asyncio
-async def test_gdocs_fetch_first_visit_calls_fetch_doc(gdocs_connector: GoogleDocsConnector) -> None:
+async def test_gdocs_fetch_first_visit_calls_fetch_doc(
+    gdocs_connector: GoogleDocsConnector,
+) -> None:
     """On first visit (no sync), connector calls _fetch_doc."""
     fake_batch = EntityBatch()
     with (
         patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=None)),
-        patch("agentgraph_connector_google.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)),
+        patch(
+            "agentgraph_connector_google.gdocs._fetch_doc", new=AsyncMock(return_value=fake_batch)
+        ),
         patch("agentgraph_connector_google.gdocs.upsert_batch", new=AsyncMock()),
     ):
         batch = await gdocs_connector.fetch("document", "doc-new")
@@ -214,7 +229,8 @@ async def test_gdocs_fetch_doc_adds_download_metadata(monkeypatch: pytest.Monkey
 
     assert batch.entities
     entity = batch.entities[0]
-    assert entity.metadata["content_type"] == "text/markdown"
+    assert entity.content == "<html><body><h1>Tax Return 2025</h1></body></html>"
+    assert entity.metadata["content_type"] == "text/html"
     assert entity.metadata["mime_type"] == "text/html"
     download_url = entity.metadata["download_url"]
     assert isinstance(download_url, str)
@@ -243,7 +259,9 @@ async def test_drive_file_fetch_adds_download_metadata(monkeypatch: pytest.Monke
     entity = batch.entities[0]
     assert entity.platform == "gdrive"
     assert entity.metadata["mime_type"] == "application/pdf"
-    assert entity.metadata["download_url"] == "https://drive.google.com/uc?id=file-123&export=download"
+    assert (
+        entity.metadata["download_url"] == "https://drive.google.com/uc?id=file-123&export=download"
+    )
     assert entity.metadata["web_url"] == "https://drive.google.com/file/d/file-123/view"
 
 
@@ -299,6 +317,7 @@ async def test_gsheets_download_delegates_to_drive(monkeypatch: pytest.MonkeyPat
 # SlackConnector.fetch — FetchPolicy branching (no real Slack API)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def slack_connector() -> SlackConnector:
     return SlackConnector()
@@ -329,22 +348,30 @@ async def test_slack_fetch_stale_calls_fetch_channel(slack_connector: SlackConne
     fake_batch = EntityBatch()
     with (
         patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=stale_time)),
-        patch("agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
+        patch(
+            "agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)
+        ) as mock_fetch,
         patch("agentgraph_connector_slack.upsert_batch", new=AsyncMock()),
     ):
         batch = await slack_connector.fetch("channel", "T123/C12345")
 
     assert batch is fake_batch
-    mock_fetch.assert_awaited_once_with("T123/C12345", oldest=str(stale_time.timestamp()), account_id=None)
+    mock_fetch.assert_awaited_once_with(
+        "T123/C12345", oldest=str(stale_time.timestamp()), account_id=None
+    )
 
 
 @pytest.mark.asyncio
-async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(slack_connector: SlackConnector) -> None:
+async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(
+    slack_connector: SlackConnector,
+) -> None:
     """On first visit, _fetch_channel called with oldest=None."""
     fake_batch = EntityBatch()
     with (
         patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=None)),
-        patch("agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
+        patch(
+            "agentgraph_connector_slack._fetch_channel", new=AsyncMock(return_value=fake_batch)
+        ) as mock_fetch,
         patch("agentgraph_connector_slack.upsert_batch", new=AsyncMock()),
     ):
         await slack_connector.fetch("channel", "T123/C99999")
@@ -356,6 +383,7 @@ async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(slack_conne
 # can_handle routing
 # ---------------------------------------------------------------------------
 
+
 def test_gdocs_can_handle(gdocs_connector: GoogleDocsConnector) -> None:
     assert gdocs_connector.can_handle("https://docs.google.com/document/d/abc123/edit")
     assert not gdocs_connector.can_handle("https://slack.com")
@@ -366,6 +394,42 @@ def test_gmail_entity_url_uses_popout_view(gmail_connector: GmailConnector) -> N
         gmail_connector.entity_url("18f0c1d2e3a4b5c6")
         == "https://mail.google.com/mail/u/0/#all/18f0c1d2e3a4b5c6"
     )
+
+
+def test_gmail_thread_to_items_preserves_html_body() -> None:
+    thread = {
+        "id": "19ec9bf00171a35e",
+        "messages": [
+            {
+                "id": "19ec9bf00171a35f",
+                "labelIds": ["INBOX"],
+                "payload": {
+                    "headers": [
+                        {"name": "Subject", "value": "HTML email"},
+                        {"name": "From", "value": "Sender <sender@example.com>"},
+                        {"name": "To", "value": "Simon <simon@example.com>"},
+                        {"name": "Date", "value": "Mon, 15 Jun 2026 15:26:00 +1000"},
+                    ],
+                    "parts": [
+                        {"mimeType": "text/plain", "body": {"data": "UGxhaW4gPGJvZHk+"}},
+                        {
+                            "mimeType": "text/html",
+                            "body": {"data": "PHA+SGVsbG8gPHN0cm9uZz53b3JsZDwvc3Ryb25nPjwvcD4="},
+                        },
+                    ],
+                },
+            }
+        ],
+    }
+
+    entity, _persons, _edges, _attachment_stubs = _thread_to_items(thread)
+
+    assert entity is not None
+    assert entity.metadata["content_type"] == "text/html"
+    assert entity.content is not None
+    assert "<p>Hello <strong>world</strong></p>" in entity.content
+    assert "Plain &lt;body&gt;" not in entity.content
+    assert "<strong>From:</strong> Sender &lt;sender@example.com&gt;" in entity.content
 
 
 def test_gmail_thread_to_items_adds_attachment_document_stubs() -> None:
@@ -478,7 +542,10 @@ def test_slack_can_handle(slack_connector: SlackConnector) -> None:
 async def test_gmail_fetch_uses_meta_thread_id(gmail_connector: GmailConnector) -> None:
     fake_batch = EntityBatch()
     with (
-        patch("agentgraph_connector_google.gmail._fetch_thread_by_thread_id", new=AsyncMock(return_value=fake_batch)) as mock_fetch,
+        patch(
+            "agentgraph_connector_google.gmail._fetch_thread_by_thread_id",
+            new=AsyncMock(return_value=fake_batch),
+        ) as mock_fetch,
         patch("agentgraph_connector_google.gmail.upsert_batch", new=AsyncMock()) as mock_upsert,
     ):
         batch = await gmail_connector.fetch(

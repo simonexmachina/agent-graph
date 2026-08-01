@@ -10,7 +10,6 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-import markdownify  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
@@ -37,9 +36,7 @@ from agentgraph.graph.upsert import upsert_batch
 
 logger = logging.getLogger(__name__)
 
-_GDOCS_URL_RE = re.compile(
-    r"https://docs\.google\.com/document/d/(?P<doc_id>[a-zA-Z0-9_-]+)"
-)
+_GDOCS_URL_RE = re.compile(r"https://docs\.google\.com/document/d/(?P<doc_id>[a-zA-Z0-9_-]+)")
 
 # Staleness: re-fetch if doc hasn't been synced in the last 15 minutes
 _STALE_AFTER = 15 * 60
@@ -61,12 +58,13 @@ def _download_url(doc_id: str) -> str:
     return f"https://www.googleapis.com/drive/v3/files/{doc_id}/export?mimeType=text/html"
 
 
-def _metadata(doc_id: str, account_id: str | None = None) -> dict[str, str | int | float | bool | None]:
+def _metadata(
+    doc_id: str, account_id: str | None = None
+) -> dict[str, str | int | float | bool | None]:
     meta: dict[str, str | int | float | bool | None] = {
         "web_url": _web_url(doc_id),
         "download_url": _download_url(doc_id),
-        # The export is HTML, but _export_as_markdown stores Markdown in content.
-        "content_type": "text/markdown",
+        "content_type": "text/html",
         "mime_type": "text/html",
     }
     if account_id:
@@ -74,18 +72,17 @@ def _metadata(doc_id: str, account_id: str | None = None) -> dict[str, str | int
     return meta
 
 
-
-def _export_as_markdown(drive_service: Any, doc_id: str) -> str:
-    """Export a Google Doc as HTML via Drive and convert to Markdown."""
-    html: bytes = drive_service.files().export(
-        fileId=doc_id,
-        mimeType="text/html",
-    ).execute()
-    return markdownify.markdownify(  # type: ignore[no-any-return]
-        html.decode("utf-8", errors="replace"),
-        heading_style="ATX",
-        bullets="-",
-    ).strip()
+def _export_as_html(drive_service: Any, doc_id: str) -> str:
+    """Export a Google Doc as HTML via Drive."""
+    html: bytes = (
+        drive_service.files()
+        .export(
+            fileId=doc_id,
+            mimeType="text/html",
+        )
+        .execute()
+    )
+    return html.decode("utf-8", errors="replace")
 
 
 class GoogleDocsConnector(BaseConnector):
@@ -93,12 +90,15 @@ class GoogleDocsConnector(BaseConnector):
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     url_patterns = ["https://docs.google.com/document/*"]
     auth_label = "google"
-    auth_description = "Google Docs: Document entities with full markdown-rendered body content and owner authorship."
+    auth_description = (
+        "Google Docs: Document entities with full HTML body content and owner authorship."
+    )
     onboard_prompt = "Set up Google?"
 
     @classmethod
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         from agentgraph_connector_google.auth import run_oauth_flow
+
         run_oauth_flow(account_id=account_id, add=add)
 
     @classmethod
@@ -122,6 +122,7 @@ class GoogleDocsConnector(BaseConnector):
     @classmethod
     async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         import asyncio
+
         return await asyncio.to_thread(verify_google_auth, account_id)
 
     @classmethod
@@ -191,10 +192,14 @@ async def _fetch_doc(doc_id: str, account_id: str | None = None) -> EntityBatch:
     try:
         file_meta: dict[str, Any] = await loop.run_in_executor(
             None,
-            lambda: drive_service.files().get(
-                fileId=doc_id,
-                fields="name,owners",
-            ).execute(),
+            lambda: (
+                drive_service.files()
+                .get(
+                    fileId=doc_id,
+                    fields="name,owners",
+                )
+                .execute()
+            ),
         )
     except HttpError as exc:
         if exc.resp.status == 404:
@@ -202,7 +207,7 @@ async def _fetch_doc(doc_id: str, account_id: str | None = None) -> EntityBatch:
         raise
 
     title: str = file_meta.get("name", "")
-    content = await loop.run_in_executor(None, _export_as_markdown, drive_service, doc_id)
+    content = await loop.run_in_executor(None, _export_as_html, drive_service, doc_id)
 
     persons: list[PersonRecord] = []
     edges: list[EdgeRecord] = []
@@ -211,18 +216,22 @@ async def _fetch_doc(doc_id: str, account_id: str | None = None) -> EntityBatch:
         email: str = owner.get("emailAddress", "")
         name: str = owner.get("displayName", "")
         if email:
-            persons.append(PersonRecord(
-                platform="gdocs",
-                platform_user_id=email,
-                canonical_email=email,
-                display_name=name or None,
-            ))
-            edges.append(EdgeRecord(
-                edge_type="authored",
-                source_platform_user_id=email,
-                target_platform_entity_id=doc_id,
-                platform="gdocs",
-            ))
+            persons.append(
+                PersonRecord(
+                    platform="gdocs",
+                    platform_user_id=email,
+                    canonical_email=email,
+                    display_name=name or None,
+                )
+            )
+            edges.append(
+                EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id=email,
+                    target_platform_entity_id=doc_id,
+                    platform="gdocs",
+                )
+            )
 
     entity = EntityRecord(
         entity_type="Document",
