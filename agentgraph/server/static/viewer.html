@@ -1979,7 +1979,10 @@
           cb.addEventListener('click', (e) => {
             if (e.altKey) {
               e.preventDefault();
-              document.querySelectorAll('.type-filter').forEach(c => { c.checked = c === cb; });
+              const wasSoleSelected = !cb.checked && typeFilters().length === 0;
+              document.querySelectorAll('.type-filter').forEach(c => {
+                c.checked = wasSoleSelected || c === cb;
+              });
               refreshGraph();
             }
           });

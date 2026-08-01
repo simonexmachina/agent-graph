@@ -200,6 +200,14 @@ def test_viewer_omits_redundant_all_type_filter() -> None:
     assert "entity_type: activeEntityTypes()," in viewer_html
 
 
+def test_viewer_option_clicking_sole_entity_type_restores_all_types() -> None:
+    """Option-clicking the only selected type returns to the all-types view."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "const wasSoleSelected = !cb.checked && typeFilters().length === 0;" in viewer_html
+    assert "c.checked = wasSoleSelected || c === cb;" in viewer_html
+
+
 def test_viewer_has_focus_node_reset_control() -> None:
     """The Focus Node section can be cleared without resetting other filters."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
