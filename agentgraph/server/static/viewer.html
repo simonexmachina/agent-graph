@@ -634,6 +634,8 @@
 
   // ── Zoom-invariant sizing ─────────────────────────────────────────────────
   const Z = { nodeSize: 28, nodeFont: 12, textMaxWidth: 150, textMarginY: 4, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
+  const DEFAULT_MIN_READABLE_ZOOM = 0.72;
+  const DEFAULT_LAYOUT_PADDING = 80;
 
   function applyZoomStyles() {
     const z = cy.zoom();
@@ -661,6 +663,12 @@
   }
 
   cy.on('zoom', applyZoomStyles);
+
+  function ensureReadableDefaultZoom() {
+    if (cy.nodes().length === 0 || cy.zoom() >= DEFAULT_MIN_READABLE_ZOOM) return;
+    cy.zoom(DEFAULT_MIN_READABLE_ZOOM);
+    cy.center(cy.elements());
+  }
 
   // ── State ─────────────────────────────────────────────────────────────────
   let debounceTimer = null;
@@ -783,18 +791,25 @@
   }
 
   function runLayout() {
-    cy.layout({
+    const layout = cy.layout({
       name: 'cose',
       animate: false,
       randomize: false,
-      nodeRepulsion: () => 400000,
-      idealEdgeLength: () => 100,
-      gravity: 0.25,
+      nodeDimensionsIncludeLabels: true,
+      nodeRepulsion: () => 800000,
+      idealEdgeLength: () => 180,
+      nodeOverlap: 30,
+      gravity: 0.18,
       numIter: 1000,
       refresh: 20,
       fit: true,
-      padding: 40,
-    }).run();
+      padding: DEFAULT_LAYOUT_PADDING,
+    });
+    layout.one('layoutstop', () => {
+      ensureReadableDefaultZoom();
+      applyZoomStyles();
+    });
+    layout.run();
   }
 
   // ── URL state ─────────────────────────────────────────────────────────────

@@ -92,6 +92,20 @@ def test_viewer_renders_standard_web_url_links() -> None:
     assert "detailBody.appendChild(row('Link', linkHtml))" in viewer_html
 
 
+def test_viewer_defaults_prioritize_readable_node_labels() -> None:
+    """The graph's initial layout leaves room for node labels."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "const DEFAULT_MIN_READABLE_ZOOM = 0.72;" in viewer_html
+    assert "const DEFAULT_LAYOUT_PADDING = 80;" in viewer_html
+    assert "function ensureReadableDefaultZoom()" in viewer_html
+    assert "nodeDimensionsIncludeLabels: true" in viewer_html
+    assert "nodeRepulsion: () => 800000" in viewer_html
+    assert "idealEdgeLength: () => 180" in viewer_html
+    assert "nodeOverlap: 30" in viewer_html
+    assert "ensureReadableDefaultZoom();" in viewer_html
+
+
 # ---------------------------------------------------------------------------
 # Rule: focal node always shown regardless of filters
 # ---------------------------------------------------------------------------
