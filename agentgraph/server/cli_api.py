@@ -292,7 +292,7 @@ async def _resolve_viewer_node_set(
     page_size: int | None = None,
     order_by: str = "last_accessed",
     order_dir: str = "desc",
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, bool]:
     """Resolve the filtered viewer node set; traversal edges are only used for pruning."""
     # --- Phase 1: neighbourhood (only when node_id given) ---
     focal: dict[str, Any] | None = None
@@ -309,7 +309,7 @@ async def _resolve_viewer_node_set(
 
     # --- Phase 2: candidate nodes ---
     if search:
-        search_limit = limit if neighbourhood_ids is None else max(limit, 500)
+        search_limit = limit + 1 if neighbourhood_ids is None else max(limit + 1, 500)
         nodes = await search_entities(search, entity_types=entity_type or None, limit=search_limit)
         if neighbourhood_ids is not None:
             nodes = [n for n in nodes if n["id"] in neighbourhood_ids]
@@ -329,13 +329,13 @@ async def _resolve_viewer_node_set(
             order_by=order_by,
             order_dir=order_dir,
         )
-        return nodes, min(total, limit)
+        return nodes, min(total, limit), total > limit
     else:
         nodes = await list_entities(
             entity_types=entity_type or None,
             platform=platform,
             since=since,
-            limit=limit,
+            limit=limit + 1,
         )
 
     # Apply platform / since on search and neighbourhood paths (list_entities handles them natively)
@@ -344,6 +344,7 @@ async def _resolve_viewer_node_set(
     if since and (search or neighbourhood_ids is not None):
         nodes = [n for n in nodes if (n.get("updated_at") or "") >= since]
 
+    has_more = len(nodes) > limit
     nodes = nodes[:limit]
 
     # Focal node is always shown, even when it doesn't match the active filters
@@ -392,13 +393,14 @@ async def _resolve_viewer_node_set(
             if neighbour_ids:
                 neighbours = await get_entities_by_ids(list(neighbour_ids))
                 neighbours = [n for n in neighbours if n["entity_type"] in allowed]
+                has_more = has_more or len(nodes) + len(neighbours) > limit
                 nodes = (nodes + neighbours)[:limit]
 
     if page is not None and page_size is not None:
         nodes, total = _page_entities(nodes, page, page_size, order_by, order_dir)
     else:
         total = len(nodes)
-    return nodes, total
+    return nodes, total, has_more
 
 
 async def _viewer_edges(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -427,7 +429,7 @@ async def cli_browse_nodes(
     sort_dir: str = Query(default="desc"),
 ) -> dict[str, Any]:
     """Return one ordered page from the viewer node set."""
-    nodes, total = await _resolve_viewer_node_set(
+    nodes, total, has_more = await _resolve_viewer_node_set(
         search, entity_type, platform, since, node_id, depth, limit,
         page=page, page_size=size, order_by=sort, order_dir=sort_dir,
     )
@@ -435,6 +437,7 @@ async def cli_browse_nodes(
         "data": _with_display_names(_summarize_entities(nodes, content_limit=300)),
         "last_page": max(1, (total + size - 1) // size),
         "total": total,
+        "has_more": has_more,
     }
 
 
@@ -465,7 +468,7 @@ async def cli_browse(
     limit: int = Query(default=50, ge=1, le=1000),
 ) -> dict[str, Any]:
     """Compatibility graph response, composed from the shared node-set resolver."""
-    nodes, _ = await _resolve_viewer_node_set(
+    nodes, _, _ = await _resolve_viewer_node_set(
         search, entity_type, platform, since, node_id, depth, limit
     )
     return {

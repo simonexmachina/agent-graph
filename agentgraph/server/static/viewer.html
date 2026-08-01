@@ -204,6 +204,20 @@
 
   #node-table { height: 100%; }
 
+  #more-btn {
+    display: none;
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    z-index: 7;
+    width: auto;
+    min-width: 72px;
+    color: var(--text);
+    background: var(--surface2);
+    border-color: var(--accent-dim);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  }
+
   .tabulator { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
   .tabulator .tabulator-header { background: var(--surface2); border-bottom-color: var(--border); }
   .tabulator .tabulator-header .tabulator-col { background: var(--surface2); border-right-color: var(--border); }
@@ -555,6 +569,7 @@
     </div>
     <div id="cy"></div>
     <div id="list-view"><div id="node-table"></div></div>
+    <button id="more-btn" type="button">More</button>
     <div id="hover-card">
       <div id="hover-card-type"></div>
       <div id="hover-card-title"></div>
@@ -798,6 +813,7 @@
   const graphTab      = document.getElementById('graph-tab');
   const listTab       = document.getElementById('list-tab');
   const listView      = document.getElementById('list-view');
+  const moreBtn       = document.getElementById('more-btn');
 
   // ── Fetch helpers ─────────────────────────────────────────────────────────
   function showSpinner() { spinner.classList.add('active'); }
@@ -844,6 +860,11 @@
   let listTable = null;
   let viewerCache = null;
 
+  function setMoreAvailable(hasMore) {
+    const limitCanIncrease = Number(limitSlider.value) < Number(limitSlider.max);
+    moreBtn.style.display = hasMore && limitCanIncrease ? 'block' : 'none';
+  }
+
   function viewerScopeKey(params) {
     return buildUrl('/api/cli/browse/nodes', {
       search: params.search,
@@ -862,6 +883,7 @@
 
   function renderCachedGraph(params) {
     if (!viewerCache || viewerCache.key !== viewerScopeKey(params)) return false;
+    setMoreAvailable(viewerCache.hasMore);
     renderGraph({
       nodes: rawNodesToGraphNodes(viewerCache.rawNodes),
       edges: viewerCache.edges,
@@ -875,6 +897,7 @@
     // A graph cache already contains exactly the requested page, so only use it
     // when the table's page size is still aligned with that cache.
     if (listTable.getPageSize() !== params.limit) return false;
+    setMoreAvailable(viewerCache.hasMore);
     listTable.setData(viewerCache.rawNodes);
     return true;
   }
@@ -888,6 +911,7 @@
     const url = buildUrl('/api/cli/browse/nodes', { ...params, page: 1, size: params.limit });
     if (url === _lastBrowseUrl) return;
     _lastBrowseUrl = url;
+    setMoreAvailable(false);
     showSpinner();
     try {
       const res = await fetch(url);
@@ -900,7 +924,13 @@
       if (!edgesRes.ok) throw new Error(`HTTP ${edgesRes.status}`);
       const edgeData = await edgesRes.json();
       const edges = (edgeData.edges || []).map(e => edgeToCyto(e, nodeIdSet)).filter(Boolean);
-      viewerCache = { key: viewerScopeKey(params), rawNodes: data.data || [], edges };
+      viewerCache = {
+        key: viewerScopeKey(params),
+        rawNodes: data.data || [],
+        edges,
+        hasMore: Boolean(data.has_more),
+      };
+      setMoreAvailable(viewerCache.hasMore);
       renderGraph({ nodes, edges });
     } catch (err) {
       console.error('loadGraph error:', err);
@@ -1074,6 +1104,7 @@
   }
 
   function refreshView(params) {
+    setMoreAvailable(false);
     if (params.view === 'list') {
       if (listTable) {
         const pageSizeChanged = listTable.getPageSize() !== params.limit;
@@ -1127,7 +1158,8 @@
           limit: Number(parsedUrl.searchParams.get('limit') || limitSlider.value),
         };
         const key = viewerScopeKey(cacheParams);
-        viewerCache = { key, rawNodes, edges: [] };
+        viewerCache = { key, rawNodes, edges: [], hasMore: Boolean(response.has_more) };
+        setMoreAvailable(viewerCache.hasMore);
         const nodeIds = rawNodes.map(node => node.id).join(',');
         if (nodeIds) {
           fetch(buildUrl('/api/cli/browse/edges', { node_ids: nodeIds }))
@@ -1202,6 +1234,15 @@
     limitDisplay.textContent = limitSlider.value;
   });
   limitSlider.addEventListener('change', () => refreshGraph());
+
+  moreBtn.addEventListener('click', () => {
+    const currentLimit = Number(limitSlider.value);
+    const nextLimit = Math.min(currentLimit * 2, Number(limitSlider.max));
+    if (nextLimit <= currentLimit) return;
+    limitSlider.value = String(nextLimit);
+    limitDisplay.textContent = String(nextLimit);
+    refreshGraph();
+  });
 
   resetBtn.addEventListener('click', () => {
     searchInput.value = '';

@@ -144,6 +144,17 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "if (listTable.getPageSize() !== params.limit) return false;" in viewer_html
 
 
+def test_viewer_offers_more_results_when_limit_is_reached() -> None:
+    """The viewer can increase its active result limit from the result area."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert 'id="more-btn"' in viewer_html
+    assert "setMoreAvailable(viewerCache.hasMore);" in viewer_html
+    assert "hasMore: Boolean(response.has_more)" in viewer_html
+    assert "Math.min(currentLimit * 2, Number(limitSlider.max))" in viewer_html
+    assert "refreshGraph();" in viewer_html
+
+
 def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     """List row clicks open details and double clicks focus the selected node."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
@@ -609,6 +620,7 @@ async def test_browse_nodes_returns_paginated_node_page() -> None:
     assert [node["display_name"] for node in result["data"]] == ["First", "Second"]
     assert result["total"] == 7
     assert result["last_page"] == 4
+    assert result["has_more"] is False
     mock_page.assert_awaited_once_with(
         entity_types=None,
         platform=None,
@@ -618,6 +630,67 @@ async def test_browse_nodes_returns_paginated_node_page() -> None:
         order_by="updated_at",
         order_dir="asc",
     )
+
+
+@pytest.mark.asyncio
+async def test_browse_nodes_reports_results_beyond_limit() -> None:
+    """The list endpoint distinguishes the active cap from the full result count."""
+    from agentgraph.server.cli_api import cli_browse_nodes
+
+    entities = [_entity(title="First"), _entity(title="Second")]
+
+    with patch(
+        "agentgraph.server.cli_api.list_entities_page",
+        AsyncMock(return_value=(entities, 7)),
+    ):
+        result = await cli_browse_nodes(
+            search=None,
+            entity_type=[],
+            platform=None,
+            since=None,
+            node_id=None,
+            depth=2,
+            limit=2,
+            page=1,
+            size=2,
+            sort="updated_at",
+            sort_dir="asc",
+        )
+
+    assert result["total"] == 2
+    assert result["last_page"] == 1
+    assert result["has_more"] is True
+
+
+@pytest.mark.asyncio
+async def test_browse_nodes_checks_one_extra_search_result() -> None:
+    """Search overflow is detected without returning more than the active limit."""
+    from agentgraph.server.cli_api import cli_browse_nodes
+
+    entities = [_entity(title=f"Result {index}") for index in range(3)]
+    mock_search = AsyncMock(return_value=entities)
+
+    with patch("agentgraph.server.cli_api.search_entities", mock_search), patch(
+        "agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])
+    ):
+        result = await cli_browse_nodes(
+            search="result",
+            entity_type=[],
+            platform=None,
+            since=None,
+            node_id=None,
+            depth=2,
+            limit=2,
+            page=1,
+            size=2,
+            sort="updated_at",
+            sort_dir="asc",
+        )
+
+    assert len(result["data"]) == 2
+    assert result["total"] == 2
+    assert result["has_more"] is True
+    mock_search.assert_awaited_once_with("result", entity_types=None, limit=3)
 
 
 @pytest.mark.asyncio
