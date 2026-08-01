@@ -141,6 +141,14 @@ def test_viewer_omits_redundant_all_type_filter() -> None:
     assert "entity_type: activeEntityTypes()," in viewer_html
 
 
+def test_viewer_has_focus_node_reset_control() -> None:
+    """The Focus Node section can be cleared without resetting other filters."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+    assert 'id="focus-reset-btn"' in viewer_html
+    assert "refreshGraph({ node_id: null, depth: 1 });" in viewer_html
+    assert "lookupError.style.display = 'none';" in viewer_html
+
+
 # ---------------------------------------------------------------------------
 # Rule: focal node always shown regardless of filters
 # ---------------------------------------------------------------------------

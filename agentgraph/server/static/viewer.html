@@ -150,6 +150,15 @@
     color: var(--accent);
   }
 
+  .focus-node-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .focus-node-actions button {
+    flex: 1;
+  }
+
   /* ── canvas area ────────────────────────────────────────────────────────── */
   #canvas-wrap {
     flex: 1;
@@ -518,7 +527,10 @@
                       border-radius:4px; color:#e2e8f0; font-size:12px;" />
       </div>
       <input type="text" id="lookup-input" placeholder="discord/dm/123… or UUID" />
-      <button id="lookup-btn">Go</button>
+      <div class="focus-node-actions">
+        <button id="lookup-btn">Go</button>
+        <button id="focus-reset-btn" type="button">Reset</button>
+      </div>
       <div id="lookup-error" style="display:none; color:#f87171; font-size:11px; margin-top:2px;"></div>
     </div>
 
@@ -766,6 +778,7 @@
   const limitDisplay  = document.getElementById('limit-display');
   const lookupInput   = document.getElementById('lookup-input');
   const lookupBtn     = document.getElementById('lookup-btn');
+  const focusResetBtn = document.getElementById('focus-reset-btn');
   const lookupError   = document.getElementById('lookup-error');
   const depthInput    = document.getElementById('depth-input');
   const resetBtn      = document.getElementById('reset-btn');
@@ -1209,6 +1222,13 @@
 
   lookupInput.addEventListener('input', syncDepthEnabled);
   lookupBtn.addEventListener('click', doLookup);
+  focusResetBtn.addEventListener('click', () => {
+    lookupInput.value = '';
+    depthInput.value = 1;
+    lookupError.style.display = 'none';
+    syncDepthEnabled();
+    refreshGraph({ node_id: null, depth: 1 });
+  });
   lookupInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLookup(); });
 
   // ── Detail panel ──────────────────────────────────────────────────────────
