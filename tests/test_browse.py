@@ -724,6 +724,50 @@ async def test_browse_404_when_node_id_not_found() -> None:
     assert exc_info.value.status_code == 404
 
 
+# ---------------------------------------------------------------------------
+# Connector fetch failures
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_fetch_returns_bad_request_for_connector_runtime_error() -> None:
+    """Connector setup errors are surfaced to the viewer instead of as 500s."""
+    from fastapi import HTTPException
+
+    from agentgraph.server.cli_api import cli_fetch
+
+    with (
+        patch(
+            "agentgraph.graph.fetch.fetch_entity",
+            new=AsyncMock(side_effect=RuntimeError("Google credentials not configured. Run: agentgraph auth google")),
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await cli_fetch(platform="gmail", resource_id="thread-id")
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Google credentials not configured. Run: agentgraph auth google"
+
+
+@pytest.mark.asyncio
+async def test_fetch_entity_returns_bad_request_for_connector_runtime_error() -> None:
+    """A re-fetch by UUID must expose connector setup errors without a 500."""
+    from fastapi import HTTPException
+
+    from agentgraph.server.cli_api import cli_fetch_entity
+
+    with (
+        patch(
+            "agentgraph.graph.fetch.fetch_entity_by_id",
+            new=AsyncMock(side_effect=RuntimeError("Google credentials not configured. Run: agentgraph auth google")),
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await cli_fetch_entity(entity_id="01139ce4-550b-4086-8c4c-8f5bae045281")
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Google credentials not configured. Run: agentgraph auth google"
+
+
 @pytest.mark.asyncio
 async def test_browse_nodes_returns_paginated_node_page() -> None:
     """The list endpoint exposes Tabulator-compatible pagination metadata."""

@@ -527,6 +527,8 @@ async def cli_fetch(
         return await fetch_entity(platform, resource_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/download")
@@ -650,3 +652,5 @@ async def cli_fetch_entity(
         return await fetch_entity_by_id(entity_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
