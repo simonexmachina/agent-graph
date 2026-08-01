@@ -125,6 +125,9 @@ def test_viewer_has_remote_list_mode() -> None:
     assert "/api/cli/browse/edges" in viewer_html
     assert "paginationMode: 'remote'" in viewer_html
     assert "sortMode: 'remote'" in viewer_html
+    assert "paginationSize: Number(limitSlider.value)" in viewer_html
+    assert "listTable.setPageSize(params.limit)" in viewer_html
+    assert "paginationSizeSelector" not in viewer_html
 
 
 # ---------------------------------------------------------------------------

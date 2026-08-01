@@ -422,7 +422,7 @@ async def cli_browse_nodes(
     depth: int = Query(default=2, ge=1, le=4),
     limit: int = Query(default=50, ge=1, le=1000),
     page: int = Query(default=1, ge=1),
-    size: int = Query(default=50, ge=1, le=200),
+    size: int = Query(default=50, ge=1, le=1000),
     sort: str = Query(default="last_accessed"),
     sort_dir: str = Query(default="desc"),
 ) -> dict[str, Any]:

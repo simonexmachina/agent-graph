@@ -1005,7 +1005,11 @@
 
   function refreshView(params) {
     if (params.view === 'list') {
-      if (listTable) listTable.setData();
+      if (listTable) {
+        const pageSizeChanged = listTable.getPageSize() !== params.limit;
+        listTable.setPageSize(params.limit);
+        if (!pageSizeChanged) listTable.setData();
+      }
       return;
     }
     loadGraph(params);
@@ -1039,8 +1043,7 @@
       },
       pagination: true,
       paginationMode: 'remote',
-      paginationSize: 50,
-      paginationSizeSelector: [25, 50, 100],
+      paginationSize: Number(limitSlider.value),
       sortMode: 'remote',
       layout: 'fitColumns',
       placeholder: 'No entities to display',
