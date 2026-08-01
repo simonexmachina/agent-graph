@@ -443,11 +443,16 @@ def cmd_poll(source: str | None, as_json: bool) -> None:
 
     polled: list[str] = result.get("polled", [])
     already_running: list[str] = result.get("already_running", [])
+    skipped: list[dict[str, str | None]] = result.get("skipped", [])
     if polled:
         console.print(f"[green]Queued poll:[/green] {', '.join(polled)}")
     if already_running:
         console.print(f"[yellow]Already running:[/yellow] {', '.join(already_running)}")
-    if not polled and not already_running:
+    for item in skipped:
+        source_name = item.get("source") or "unknown"
+        reason = item.get("reason") or "not available"
+        console.print(f"[yellow]Skipped:[/yellow] {source_name} — {reason}")
+    if not polled and not already_running and not skipped:
         console.print("[dim]No connectors polled (none matched or none have poll_interval set).[/dim]")
 
 

@@ -72,6 +72,7 @@ class _ScheduledConnector(BaseConnector):
     source: ClassVar[str] = "scheduled"
     fetch_policy: ClassVar[FetchPolicy] = FetchPolicy(stale_after_seconds=60)
     poll_interval: ClassVar[timedelta | None] = timedelta(seconds=30)
+    appears_in_auth_status: ClassVar[bool] = False
 
     def can_handle(self, url: str) -> bool:
         return False
@@ -84,6 +85,19 @@ class _ScheduledConnector(BaseConnector):
         account_id: str | None = None,
     ) -> EntityBatch:
         return EntityBatch()
+
+
+class _InvalidAuthConnector(_MissingAuthConnector):
+    source: ClassVar[str] = "invalid"
+
+    @classmethod
+    def get_authenticated_user(cls) -> str | None:
+        return "expired@example.com"
+
+    @classmethod
+    async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
+        _ = account_id
+        return ("invalid", "token expired")
 
 
 @pytest.fixture(autouse=True)
@@ -127,15 +141,49 @@ async def test_schedule_poll_connector_skips_when_already_running() -> None:
 
     connector = _ScheduledConnector()
     with patch("agentgraph.server.sync.poll_connector", side_effect=fake_poll_connector) as poll:
-        assert sync.schedule_poll_connector(connector) is True
+        assert await sync.schedule_poll_connector(connector) == {
+            "source": "scheduled",
+            "status": "queued",
+            "reason": None,
+        }
         await first_started.wait()
 
-        assert sync.schedule_poll_connector(connector) is False
+        assert await sync.schedule_poll_connector(connector) == {
+            "source": "scheduled",
+            "status": "already_running",
+            "reason": None,
+        }
 
         release_first.set()
         await asyncio.sleep(0)
 
     assert poll.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_schedule_poll_connector_reports_missing_auth() -> None:
+    with patch("agentgraph.server.sync.poll_connector", new=AsyncMock()) as poll:
+        result = await sync.schedule_poll_connector(_MissingAuthConnector())
+
+    assert result == {
+        "source": "missing",
+        "status": "skipped",
+        "reason": "authentication missing",
+    }
+    poll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_schedule_poll_connector_reports_invalid_auth() -> None:
+    with patch("agentgraph.server.sync.poll_connector", new=AsyncMock()) as poll:
+        result = await sync.schedule_poll_connector(_InvalidAuthConnector())
+
+    assert result == {
+        "source": "invalid",
+        "status": "skipped",
+        "reason": "authentication invalid: token expired",
+    }
+    poll.assert_not_called()
 
 
 def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:

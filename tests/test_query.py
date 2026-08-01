@@ -1015,11 +1015,14 @@ async def test_mcp_poll_connectors_tool_starts_poll_tasks() -> None:
             "agentgraph.connectors.registry.get_all_connectors",
             return_value=[PollingConnector(), PassiveConnector()],
         ),
-        patch("agentgraph.server.sync.schedule_poll_connector", return_value=True) as schedule_poll,
+        patch(
+            "agentgraph.server.sync.schedule_poll_connector",
+            new=AsyncMock(return_value={"source": "rss", "status": "queued", "reason": None}),
+        ) as schedule_poll,
     ):
         result = await poll_connectors_tool()
 
-    assert json.loads(result) == {"polled": ["rss"], "already_running": []}
+    assert json.loads(result) == {"polled": ["rss"], "already_running": [], "skipped": []}
     schedule_poll.assert_called_once()
 
 
@@ -1037,11 +1040,14 @@ async def test_mcp_poll_connectors_tool_uses_source_connector_lookup() -> None:
             "agentgraph.connectors.registry.get_connector", return_value=PollingConnector()
         ) as get_connector,
         patch("agentgraph.connectors.registry.get_all_connectors") as get_all_connectors,
-        patch("agentgraph.server.sync.schedule_poll_connector", return_value=True) as schedule_poll,
+        patch(
+            "agentgraph.server.sync.schedule_poll_connector",
+            new=AsyncMock(return_value={"source": "rss", "status": "queued", "reason": None}),
+        ) as schedule_poll,
     ):
         result = await poll_connectors_tool("rss")
 
-    assert json.loads(result) == {"polled": ["rss"], "already_running": []}
+    assert json.loads(result) == {"polled": ["rss"], "already_running": [], "skipped": []}
     get_connector.assert_called_once_with("rss")
     get_all_connectors.assert_not_called()
     schedule_poll.assert_called_once()
@@ -1058,11 +1064,47 @@ async def test_mcp_poll_connectors_tool_reports_already_running() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[PollingConnector()]),
-        patch("agentgraph.server.sync.schedule_poll_connector", return_value=False),
+        patch(
+            "agentgraph.server.sync.schedule_poll_connector",
+            new=AsyncMock(
+                return_value={"source": "rss", "status": "already_running", "reason": None}
+            ),
+        ),
     ):
         result = await poll_connectors_tool()
 
-    assert json.loads(result) == {"polled": [], "already_running": ["rss"]}
+    assert json.loads(result) == {"polled": [], "already_running": ["rss"], "skipped": []}
+
+
+@pytest.mark.asyncio
+async def test_mcp_poll_connectors_tool_reports_skipped_auth() -> None:
+    from agentgraph.mcp.server import poll_connectors_tool
+
+    class PollingConnector:
+        source = "gmail"
+        poll_interval = object()
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[PollingConnector()]),
+        patch(
+            "agentgraph.server.sync.schedule_poll_connector",
+            new=AsyncMock(
+                return_value={
+                    "source": "gmail",
+                    "status": "skipped",
+                    "reason": "authentication invalid: token expired",
+                }
+            ),
+        ),
+    ):
+        result = await poll_connectors_tool()
+
+    assert json.loads(result) == {
+        "polled": [],
+        "already_running": [],
+        "skipped": [{"source": "gmail", "reason": "authentication invalid: token expired"}],
+    }
 
 
 @pytest.mark.asyncio

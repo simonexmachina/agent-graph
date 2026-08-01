@@ -472,8 +472,8 @@ async def poll_connectors_tool(source: str | None = None) -> str:
             with poll_interval configured are polled.
 
     Returns:
-        JSON object with queued and already-running connector sources, or an
-        error if a requested connector source is not registered.
+        JSON object with queued, already-running, and skipped connector sources,
+        or an error if a requested connector source is not registered.
     """
     from agentgraph.connectors.registry import bootstrap, get_all_connectors, get_connector
     from agentgraph.server.sync import schedule_poll_connector
@@ -489,15 +489,19 @@ async def poll_connectors_tool(source: str | None = None) -> str:
 
     polled: list[str] = []
     already_running: list[str] = []
+    skipped: list[dict[str, str | None]] = []
     for connector in connectors:
         if connector.poll_interval is None:
             continue
-        if schedule_poll_connector(connector):
+        result = await schedule_poll_connector(connector)
+        if result["status"] == "queued":
             polled.append(connector.source)
-        else:
+        elif result["status"] == "already_running":
             already_running.append(connector.source)
+        else:
+            skipped.append({"source": connector.source, "reason": result["reason"]})
 
-    return json.dumps({"polled": polled, "already_running": already_running})
+    return json.dumps({"polled": polled, "already_running": already_running, "skipped": skipped})
 
 
 # ---------------------------------------------------------------------------

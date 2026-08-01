@@ -478,15 +478,19 @@ async def cli_poll(
 
     polled: list[str] = []
     already_running: list[str] = []
+    skipped: list[dict[str, str | None]] = []
     for connector in connectors:
         if connector.poll_interval is None:
             continue
-        if schedule_poll_connector(connector):
+        result = await schedule_poll_connector(connector)
+        if result["status"] == "queued":
             polled.append(connector.source)
-        else:
+        elif result["status"] == "already_running":
             already_running.append(connector.source)
+        else:
+            skipped.append({"source": connector.source, "reason": result["reason"]})
 
-    return {"polled": polled, "already_running": already_running}
+    return {"polled": polled, "already_running": already_running, "skipped": skipped}
 
 
 @router.post("/ingest")

@@ -9,6 +9,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
+from typing import Literal, TypedDict
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 
@@ -24,24 +25,59 @@ _backoff_until: dict[str, datetime] = {}
 _manual_poll_tasks: dict[str, asyncio.Task[None]] = {}
 
 
+PollScheduleStatus = Literal["queued", "already_running", "skipped"]
+
+
+class PollScheduleResult(TypedDict):
+    source: str
+    status: PollScheduleStatus
+    reason: str | None
+
+
 def clear_poll_backoff() -> None:
     _failure_counts.clear()
     _backoff_until.clear()
     _manual_poll_tasks.clear()
 
 
-def schedule_poll_connector(connector: BaseConnector) -> bool:
+async def schedule_poll_connector(connector: BaseConnector) -> PollScheduleResult:
     """Start a manual background poll unless one is already running."""
     source = connector.source
     existing = _manual_poll_tasks.get(source)
     if existing is not None and not existing.done():
         logger.info("poll %s — manual trigger skipped because a poll is already running", source)
-        return False
+        return {"source": source, "status": "already_running", "reason": None}
+
+    auth_skip_reason = await _auth_skip_reason(connector)
+    if auth_skip_reason is not None:
+        logger.info("poll %s — manual trigger skipped: %s", source, auth_skip_reason)
+        return {"source": source, "status": "skipped", "reason": auth_skip_reason}
 
     task = asyncio.create_task(poll_connector(connector))
     _manual_poll_tasks[source] = task
     task.add_done_callback(lambda done_task: _manual_poll_tasks.pop(source, None))
-    return True
+    return {"source": source, "status": "queued", "reason": None}
+
+
+async def _auth_skip_reason(connector: BaseConnector) -> str | None:
+    if not connector_uses_auth(connector):
+        return None
+
+    try:
+        account_ids = connector.poll_account_ids()
+        statuses = [await type(connector).verify_auth(account_id) for account_id in account_ids]
+    except Exception as exc:
+        return f"authentication check failed: {type(exc).__name__}"
+
+    invalid = next(((status, detail) for status, detail in statuses if status == "invalid"), None)
+    if invalid is not None:
+        detail = invalid[1]
+        return f"authentication invalid: {detail}" if detail else "authentication invalid"
+
+    if not any(status == "ok" for status, _ in statuses):
+        return "authentication missing"
+
+    return None
 
 
 def _sync_scope(source: str, account_id: str | None) -> str:
