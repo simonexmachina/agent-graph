@@ -213,8 +213,11 @@ def test_viewer_list_rows_match_graph_click_behaviour() -> None:
     """List row clicks open details and double clicks focus the selected node."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
-    assert "rowClick(_event, row) { showEntityDetail(row.getData().id); }" in viewer_html
-    assert "rowDblClick(_event, row) { focusNode(row.getData().id); }" in viewer_html
+    assert "element.dataset.entityId = entityId;" in viewer_html
+    assert "element.addEventListener('click', () => {" in viewer_html
+    assert "element.addEventListener('dblclick', () => {" in viewer_html
+    assert "if (currentEntityId) showEntityDetail(currentEntityId);" in viewer_html
+    assert "if (currentEntityId) focusNode(currentEntityId);" in viewer_html
     assert "function focusNode(entityId)" in viewer_html
     assert "if (currentView() !== 'graph') {" in viewer_html
     assert "setView('graph');" in viewer_html

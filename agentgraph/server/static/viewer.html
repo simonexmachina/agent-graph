@@ -1361,6 +1361,21 @@
       sortMode: 'remote',
       layout: 'fitColumns',
       placeholder: 'No entities to display',
+      rowFormatter(row) {
+        const element = row.getElement();
+        const entityId = row.getData().id;
+        element.dataset.entityId = entityId;
+        if (element.dataset.interactionsWired === 'true') return;
+        element.addEventListener('click', () => {
+          const currentEntityId = element.dataset.entityId;
+          if (currentEntityId) showEntityDetail(currentEntityId);
+        });
+        element.addEventListener('dblclick', () => {
+          const currentEntityId = element.dataset.entityId;
+          if (currentEntityId) focusNode(currentEntityId);
+        });
+        element.dataset.interactionsWired = 'true';
+      },
       columns: [
         { title: 'Name', field: 'display_name', minWidth: 240, widthGrow: 3 },
         { title: 'Type', field: 'entity_type', width: 110 },
@@ -1371,8 +1386,6 @@
         { title: 'Dwell', field: 'cumulative_dwell_ms', width: 80, hozAlign: 'right', headerSort: false, formatter: formatDwell },
         { title: 'ID', field: 'id', minWidth: 180, widthGrow: 1, headerSort: false },
       ],
-      rowClick(_event, row) { showEntityDetail(row.getData().id); },
-      rowDblClick(_event, row) { focusNode(row.getData().id); },
     });
   }
 
