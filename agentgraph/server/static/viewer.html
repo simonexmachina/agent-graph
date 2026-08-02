@@ -1074,7 +1074,6 @@
   const graphTab      = document.getElementById('graph-tab');
   const listTab       = document.getElementById('list-tab');
   const listView      = document.getElementById('list-view');
-  const nodeTable     = document.getElementById('node-table');
   const listBody      = document.getElementById('node-list-body');
   const listEmpty     = document.getElementById('list-empty');
   const moreBtn       = document.getElementById('more-btn');
@@ -1547,15 +1546,7 @@
     refreshGraph();
   }
 
-  function listIsAtEnd() {
-    return Math.ceil(nodeTable.scrollTop + nodeTable.clientHeight) >= nodeTable.scrollHeight;
-  }
-
   moreBtn.addEventListener('click', activateMoreResults);
-  listView.addEventListener('wheel', (event) => {
-    if (event.deltaY <= 0 || currentView() !== 'list' || !listIsAtEnd()) return;
-    activateMoreResults();
-  }, { passive: true });
 
   resetBtn.addEventListener('click', () => {
     searchInput.value = '';

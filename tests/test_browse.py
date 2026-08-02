@@ -199,7 +199,6 @@ def test_viewer_has_native_remote_list_mode() -> None:
     assert "function renderCachedList(params)" in viewer_html
     assert "renderCachedList(params)" in viewer_html
     assert "cy.resize();" in viewer_html
-    assert "nodeTable.scrollTop + nodeTable.clientHeight" in viewer_html
 
 
 def test_viewer_persists_list_sort_in_url_state() -> None:
@@ -244,17 +243,14 @@ def test_viewer_offers_more_results_when_limit_is_reached() -> None:
     assert "refreshGraph();" in viewer_html
 
 
-def test_viewer_overscroll_activates_more_results_in_list_view() -> None:
-    """Scrolling down at the end of the list increases the active result limit."""
+def test_viewer_list_end_does_not_activate_more_results() -> None:
+    """Only the explicit More results action may increase the active result limit."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "function activateMoreResults()" in viewer_html
     assert "getComputedStyle(moreBtn).display === 'none'" in viewer_html
-    assert "function listIsAtEnd()" in viewer_html
-    assert "nodeTable.scrollTop + nodeTable.clientHeight" in viewer_html
-    assert "listView.addEventListener('wheel'" in viewer_html
-    assert "event.deltaY <= 0 || currentView() !== 'list' || !listIsAtEnd()" in viewer_html
-    assert "activateMoreResults();" in viewer_html
+    assert "function listIsAtEnd()" not in viewer_html
+    assert "listView.addEventListener('wheel'" not in viewer_html
 
 
 def test_viewer_list_rows_match_graph_click_behaviour() -> None:
