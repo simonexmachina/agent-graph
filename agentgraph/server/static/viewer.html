@@ -1123,6 +1123,7 @@
   let _lastBrowseUrl = null;
   let _lastListUrl = null;
   let viewerCache = null;
+  let detailRequestId = 0;
 
   function setMoreAvailable(hasMore) {
     const limitCanIncrease = Number(limitSlider.value) < Number(limitSlider.max);
@@ -1276,6 +1277,7 @@
       since:       p.get('since')    || '',
       limit:       p.has('limit')    ? Number(p.get('limit')) : 50,
       node_id:   p.get('node_id') || null,
+      selected_id: p.get('selected_id') || null,
       depth:       p.has('depth')    ? Number(p.get('depth')) : 1,
       view:        p.get('view') === 'list' ? 'list' : 'graph',
       sort:        p.get('sort') || DEFAULT_LIST_SORT,
@@ -1305,6 +1307,7 @@
     if (params.since)     q.set('since', params.since);
     if (params.limit && params.limit !== 50) q.set('limit', params.limit);
     if (params.node_id) q.set('node_id', params.node_id);
+    if (params.selected_id) q.set('selected_id', params.selected_id);
     if (params.depth !== undefined && params.depth !== 1) q.set('depth', params.depth);
     if (params.view === 'list') q.set('view', 'list');
     if (params.sort && params.sort !== DEFAULT_LIST_SORT) q.set('sort', params.sort);
@@ -1333,6 +1336,7 @@
       since:       sinceSel.value || undefined,
       limit:       Number(limitSlider.value),
       node_id:   lookupInput.value.trim() || undefined,
+      selected_id: current.selected_id || undefined,
       depth:       depthInput.value === '' ? undefined : Number(depthInput.value),
       view:        currentView(),
       sort:        current.sort,
@@ -1566,6 +1570,7 @@
     markSearchInputSubmitted();
     markLookupInputSubmitted();
     history.replaceState(null, '', window.location.pathname);
+    closeDetail(false);
     fitGraphToViewport();
     refreshGraph();
   });
@@ -1623,8 +1628,10 @@
     refreshGraph({ node_id: null, depth: 1 });
   });
   // ── Detail panel ──────────────────────────────────────────────────────────
-  function closeDetail() {
+  function closeDetail(syncUrl = true) {
+    detailRequestId += 1;
     detail.classList.remove('open');
+    if (syncUrl) collectParams({ selected_id: null });
   }
 
   detailClose.addEventListener('click', closeDetail);
@@ -1656,7 +1663,9 @@
     return `HTTP ${res.status}`;
   }
 
-  async function showEntityDetail(entityId) {
+  async function showEntityDetail(entityId, syncUrl = true) {
+    if (syncUrl) collectParams({ selected_id: entityId });
+    const requestId = ++detailRequestId;
     showSpinner();
     try {
       const [entityRes, edgesRes] = await Promise.all([
@@ -1666,11 +1675,12 @@
       if (!entityRes.ok) throw new Error(`HTTP ${entityRes.status}`);
       const entity = await entityRes.json();
       const edges = edgesRes.ok ? await edgesRes.json() : [];
+      if (requestId !== detailRequestId) return;
       renderDetail({ ...entity, edges });
     } catch (err) {
       console.error('showEntityDetail error:', err);
     } finally {
-      hideSpinner();
+      if (requestId === detailRequestId) hideSpinner();
     }
   }
 
@@ -2248,10 +2258,15 @@
   });
 
   // ── History navigation ────────────────────────────────────────────────────
-  window.addEventListener('popstate', () => {
+  window.addEventListener('popstate', async () => {
     const state = readUrlState();
     applyUrlState(state);
-    refreshView(collectParams({}, true));
+    await refreshView(collectParams({}, true));
+    if (state.selected_id) {
+      await showEntityDetail(state.selected_id, false);
+    } else {
+      closeDetail(false);
+    }
   });
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
@@ -2317,7 +2332,7 @@
     syncDepthEnabled();
     initList();
     await refreshView(collectParams({}, true));
-    if (_initial.node_id) showEntityDetail(_initial.node_id);
+    if (_initial.selected_id) showEntityDetail(_initial.selected_id, false);
   });
 
 })();

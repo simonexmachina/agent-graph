@@ -215,6 +215,24 @@ def test_viewer_persists_list_sort_in_url_state() -> None:
     assert "const sortDir = current.sort === sort && current.sort_dir === 'asc' ? 'desc' : 'asc';" in viewer_html
 
 
+def test_viewer_persists_selected_entity_detail_in_url_state() -> None:
+    """Opening a detail panel is shareable and is restored from the URL."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "selected_id: p.get('selected_id') || null" in viewer_html
+    assert "if (params.selected_id) q.set('selected_id', params.selected_id);" in viewer_html
+    assert "selected_id: current.selected_id || undefined" in viewer_html
+    assert "function closeDetail(syncUrl = true)" in viewer_html
+    assert "detailRequestId += 1;" in viewer_html
+    assert "collectParams({ selected_id: null });" in viewer_html
+    assert "async function showEntityDetail(entityId, syncUrl = true)" in viewer_html
+    assert "collectParams({ selected_id: entityId });" in viewer_html
+    assert "if (requestId !== detailRequestId) return;" in viewer_html
+    assert "if (_initial.selected_id) showEntityDetail(_initial.selected_id, false);" in viewer_html
+    assert "if (state.selected_id) {" in viewer_html
+    assert "closeDetail(false);" in viewer_html
+
+
 def test_viewer_offers_more_results_when_limit_is_reached() -> None:
     """The viewer can increase its active result limit from the result area."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
