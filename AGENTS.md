@@ -2,6 +2,10 @@
 
 Commit incrementally as you complete each logical unit of work — don't batch everything into one commit at the end.
 
+## Questions and Changes
+
+When the user asks a question, answer it without changing code unless they explicitly request implementation or a fix is an unambiguously necessary improvement.
+
 ## CLI / MCP / Skill Parity
 
 Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli_query.py`), apply the equivalent change to the MCP server (`agentgraph/mcp/server.py`) and update the `/graph` skill (`.claude/skills/graph/SKILL.md`) in the same pass. All three must stay in sync.
