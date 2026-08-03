@@ -57,6 +57,8 @@ async def test_backend_suite_writes_quality_checked_report(tmp_path: Path) -> No
     exact = next(workload for workload in report.workloads if workload.name == "search.exact")
     assert exact.quality is not None
     assert exact.quality.must_return_ids_present
+    assert exact.quality.mrr == 1.0
+    assert exact.quality.ndcg_at_limit == 1.0
     assert "sqlite.search.fts" in exact.phase_summaries
     assert "sqlite.search.hydrate" in exact.phase_summaries
     semantic = next(
@@ -124,6 +126,8 @@ def test_compare_runs_flags_latency_and_required_result_regressions() -> None:
                     must_return_ids=["a"],
                     returned_ids=["a"],
                     recall_at_limit=1.0,
+                    mrr=1.0,
+                    ndcg_at_limit=1.0,
                     must_return_ids_present=True,
                 ),
             )
@@ -136,11 +140,14 @@ def test_compare_runs_flags_latency_and_required_result_regressions() -> None:
         must_return_ids=["a"],
         returned_ids=[],
         recall_at_limit=0.0,
+        mrr=0.0,
+        ndcg_at_limit=0.0,
         must_return_ids_present=False,
     )
 
     assert {regression.metric for regression in compare_runs(baseline, run)} == {
         "p95_ms",
         "recall_at_limit",
+        "ndcg_at_limit",
         "must_return_ids_present",
     }

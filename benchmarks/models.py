@@ -40,6 +40,8 @@ class QualityResult(BaseModel):
     must_return_ids: list[str] = []
     returned_ids: list[str]
     recall_at_limit: float = Field(ge=0, le=1)
+    mrr: float = Field(default=0, ge=0, le=1)
+    ndcg_at_limit: float = Field(default=0, ge=0, le=1)
     must_return_ids_present: bool
 
 

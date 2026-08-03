@@ -63,6 +63,19 @@ def compare_runs(
                     message="retrieval recall regressed",
                 )
             )
+        if (
+            workload.quality.ndcg_at_limit
+            < previous.quality.ndcg_at_limit - allowed_recall_regression
+        ):
+            regressions.append(
+                Regression(
+                    workload=workload.name,
+                    metric="ndcg_at_limit",
+                    baseline=previous.quality.ndcg_at_limit,
+                    current=workload.quality.ndcg_at_limit,
+                    message="retrieval ranking quality regressed",
+                )
+            )
         if not workload.quality.must_return_ids_present:
             regressions.append(
                 Regression(

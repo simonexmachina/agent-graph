@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from math import log2
 from pathlib import Path
 from time import perf_counter
 from typing import Literal, cast
@@ -89,11 +90,20 @@ def evaluate_search_quality(
         required = must_return_ids or []
         relevant = set(expected_ids)
         recall = sum(result_id in relevant for result_id in returned_ids) / len(relevant)
+        relevant_ranks = [
+            rank for rank, result_id in enumerate(returned_ids, start=1) if result_id in relevant
+        ]
+        mrr = 1 / relevant_ranks[0] if relevant_ranks else 0.0
+        dcg = sum(1 / log2(rank + 1) for rank in relevant_ranks)
+        ideal_count = min(len(relevant), len(returned_ids))
+        ideal_dcg = sum(1 / log2(rank + 1) for rank in range(1, ideal_count + 1))
         return QualityResult(
             expected_ids=expected_ids,
             must_return_ids=required,
             returned_ids=returned_ids,
             recall_at_limit=recall,
+            mrr=mrr,
+            ndcg_at_limit=dcg / ideal_dcg if ideal_dcg else 0.0,
             must_return_ids_present=all(result_id in returned_ids for result_id in required),
         )
 
