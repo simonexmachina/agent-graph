@@ -22,6 +22,12 @@ Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli
 
 - `agentgraph serve` is managed by the macOS LaunchAgent `com.agentgraph.server`. Do not start or stop it directly; use `launchctl kickstart` when a restart is required.
 
+## Chrome Extension Publishing
+
+- Publish the Chrome extension only through the GitHub Actions `Extension Release` workflow. Do not upload builds through the Chrome Web Store dashboard.
+- A version bump in `extension/manifest.json`, `extension/package.json`, and `extension/package-lock.json`, followed by a pushed `v*` tag, triggers the release. The workflow creates the GitHub Release and publishes the ZIP to Chrome Web Store.
+- The repository requires `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, and `CWS_REFRESH_TOKEN` Actions secrets for Chrome Web Store publishing.
+
 ## Connector / Core Boundary
 
 Connector-specific logic must live in the connector package (`packages/agentgraph-connector-*/`), not in the main `agentgraph/` package. Violations to watch for:

@@ -34,12 +34,22 @@ jobs:
         run: npm run build
 
       - name: Archive extension bundle
-        run: zip -r ../agentgraph-extension.zip dist
+        run: cd dist && zip -r -X ../../agentgraph-extension.zip .
 
       - name: Create release and upload asset
         uses: softprops/action-gh-release@v2
         with:
           files: agentgraph-extension.zip
+
+      - name: Publish to Chrome Web Store
+        uses: mnao305/chrome-extension-upload@v6.0.0
+        with:
+          file-path: agentgraph-extension.zip
+          extension-id: iilkfclglabllelhjacijldknapbhidi
+          client-id: ${{ secrets.CWS_CLIENT_ID }}
+          client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
+          publish: true
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
