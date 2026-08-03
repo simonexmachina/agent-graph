@@ -46,6 +46,7 @@ async def test_backend_suite_writes_quality_checked_report(tmp_path: Path) -> No
     write_report(report, output)
 
     assert {workload.name for workload in report.workloads} == {
+        "ingestion.batch_25",
         "search.exact",
         "search.semantic_sparse",
         "search.common_term",

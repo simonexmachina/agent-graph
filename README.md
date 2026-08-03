@@ -7,6 +7,7 @@ AgentGraph is a local knowledge graph for AI agents. It indexes content from Sla
 - [Install](docs-src/install.md)
 - [Quickstart](docs-src/quickstart.md)
 - [Configuration](docs-src/configuration.md)
+- [Performance testing](docs-src/performance.md)
 - [Extending](docs-src/extending.md)
 - [Commands](docs-src/commands/index.md)
 - [MCP tools](docs-src/mcp/index.md)

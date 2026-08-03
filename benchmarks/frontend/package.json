@@ -1,0 +1,11 @@
+{
+  "name": "agentgraph-frontend-benchmarks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node viewer.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0"
+  }
+}

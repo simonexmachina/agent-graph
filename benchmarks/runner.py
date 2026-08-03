@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import subprocess
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 from typing import Literal, cast
 
 from agentgraph.backends.sqlite.backend import SQLiteBackend
+from agentgraph.connectors.base import EntityBatch, EntityRecord
 from benchmarks.corpus import (
     SeededCorpus,
     build_seeded_corpus,
@@ -105,10 +107,41 @@ async def run_backend_suite(
     await backend.initialize()
     try:
         exact_vector = query_vector(17 % spec.cluster_count, spec.cluster_count)
+        ingestion_sequence = 0
+
+        async def ingest_batch() -> None:
+            nonlocal ingestion_sequence
+            start = ingestion_sequence * 25
+            ingestion_sequence += 1
+            entities = [
+                EntityRecord(
+                    entity_type="Document",
+                    platform="benchmark-ingest",
+                    platform_entity_id=f"ingest-{start + offset:08d}",
+                    title=f"Ingest benchmark {start + offset}",
+                    content=f"ingest topic-{offset % spec.cluster_count} fixture",
+                    created_at=datetime.now(UTC),
+                )
+                for offset in range(25)
+            ]
+            embeddings: dict[str, list[float] | None] = {
+                entity.platform_entity_id: query_vector(
+                    offset % spec.cluster_count, spec.cluster_count
+                )
+                for offset, entity in enumerate(entities)
+            }
+            await backend.upsert_batch(EntityBatch(entities=entities), {}, embeddings)
+
         hub = await backend.get_entity_by_platform("benchmark", seeded.hub_platform_id)
         if hub is None:
             raise RuntimeError("Seeded benchmark hub was not persisted")
         workloads = [
+            await measure_workload(
+                "ingestion.batch_25",
+                ingest_batch,
+                iterations=iterations,
+                warmup_iterations=warmup_iterations,
+            ),
             await measure_workload(
                 "search.exact",
                 lambda: backend.search_entities(exact_vector, seeded.exact_query, None, 10, 0.0),
