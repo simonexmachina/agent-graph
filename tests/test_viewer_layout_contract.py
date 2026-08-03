@@ -106,14 +106,18 @@ def _layout_metrics(page: Page) -> dict[str, Any]:
           const nodes = cy.nodes().toArray();
           const boxes = nodes.map(node => ({ id: node.id(), box: node.renderedBoundingBox({ includeLabels: true, includeOverlays: false }) }));
           let overlaps = 0;
+          let minimumGap = Infinity;
           for (let i = 0; i < boxes.length; i += 1) {
             for (let j = i + 1; j < boxes.length; j += 1) {
               const a = boxes[i].box;
               const b = boxes[j].box;
               if (a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1) overlaps += 1;
+              const horizontalGap = Math.max(a.x1 - b.x2, b.x1 - a.x2, 0);
+              const verticalGap = Math.max(a.y1 - b.y2, b.y1 - a.y2, 0);
+              minimumGap = Math.min(minimumGap, Math.hypot(horizontalGap, verticalGap));
             }
           }
-          return { overlaps, boxes };
+          return { overlaps, minimumGap, boxes };
         }"""
     )
 
@@ -125,6 +129,7 @@ def test_edge_free_graph_uses_a_non_overlapping_grid(page: Page) -> None:
         metrics = _layout_metrics(page)
 
     assert metrics["overlaps"] == 0
+    assert metrics["minimumGap"] >= 16
 
 
 def test_node_bounds_and_labels_remain_capped_across_zoom(page: Page) -> None:

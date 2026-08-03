@@ -1011,6 +1011,7 @@
   const DEFAULT_LAYOUT_PADDING = 60;
   const READABLE_GRID_CELL_WIDTH = 205;
   const READABLE_GRID_CELL_HEIGHT = 104;
+  const GRID_GUTTER = 24;
 
   function applyZoomStyles() {
     const z = cy.zoom();
@@ -1083,9 +1084,10 @@
   function readableGridPositionFor(index, count) {
     const node = cy.nodes()[0];
     const bounds = node.boundingBox({ includeLabels: true, includeOverlays: false });
-    const cellWidth = Math.max(READABLE_GRID_CELL_WIDTH, bounds.w + 24);
-    const cellHeight = Math.max(READABLE_GRID_CELL_HEIGHT, bounds.h + 24);
     const zoom = cy.zoom();
+    const gutter = GRID_GUTTER / zoom;
+    const cellWidth = Math.max(READABLE_GRID_CELL_WIDTH, bounds.w + gutter);
+    const cellHeight = Math.max(READABLE_GRID_CELL_HEIGHT, bounds.h + gutter);
     const padding = DEFAULT_LAYOUT_PADDING / zoom;
     const viewportWidth = cy.width() / zoom;
     const usableWidth = Math.max(viewportWidth - (padding * 2), cellWidth);
