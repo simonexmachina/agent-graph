@@ -61,7 +61,7 @@ jobs:
           upload_status="$(curl --silent --show-error --output upload-response.json --write-out '%{http_code}' \
             --header "Authorization: Bearer ${access_token}" \
             --header 'Content-Type: application/zip' \
-            --request POST --data-binary @agentgraph-extension.zip \
+            --request POST --data-binary @../agentgraph-extension.zip \
             "https://chromewebstore.googleapis.com/upload/v2/${item}:upload")"
           jq . upload-response.json
           test "${upload_status}" -ge 200 && test "${upload_status}" -lt 300
