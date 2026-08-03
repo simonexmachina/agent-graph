@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from benchmarks.api import run_api_suite
+from benchmarks.compare import compare_runs
 from benchmarks.corpus import build_seeded_corpus
 from benchmarks.models import CorpusSpec, summarize_samples
 from benchmarks.runner import run_backend_suite, write_report
@@ -52,5 +54,69 @@ async def test_backend_suite_writes_quality_checked_report(tmp_path: Path) -> No
     }
     exact = next(workload for workload in report.workloads if workload.name == "search.exact")
     assert exact.quality is not None
-    assert exact.quality.required_ids_present
+    assert exact.quality.must_return_ids_present
     assert '"schema_version": 1' in output.read_text()
+
+
+@pytest.mark.integration
+async def test_api_suite_exercises_cli_routes(tmp_path: Path) -> None:
+    report = await run_api_suite(
+        tmp_path / "benchmark-api.db",
+        CorpusSpec(
+            name="tiny", entity_count=30, cluster_count=5, high_degree_edges=10, batch_size=10
+        ),
+        iterations=2,
+        warmup_iterations=0,
+    )
+
+    assert {workload.name for workload in report.workloads} == {
+        "api.search.exact",
+        "api.viewer_nodes",
+        "api.graph_traversal",
+    }
+    exact = next(workload for workload in report.workloads if workload.name == "api.search.exact")
+    assert exact.quality is not None
+    assert exact.quality.must_return_ids_present
+
+
+def test_compare_runs_flags_latency_and_required_result_regressions() -> None:
+    spec = CorpusSpec(name="tiny", entity_count=1)
+    baseline = run = None
+    from benchmarks.models import BenchmarkRun, QualityResult, WorkloadResult
+
+    baseline = BenchmarkRun(
+        corpus=spec,
+        vector_mode="numpy",
+        cold=False,
+        workloads=[
+            WorkloadResult(
+                name="search.exact",
+                kind="backend",
+                warmup_iterations=0,
+                summary=summarize_samples([10.0]),
+                operations_per_second=100,
+                quality=QualityResult(
+                    expected_ids=["a"],
+                    must_return_ids=["a"],
+                    returned_ids=["a"],
+                    recall_at_limit=1.0,
+                    must_return_ids_present=True,
+                ),
+            )
+        ],
+    )
+    run = baseline.model_copy(deep=True)
+    run.workloads[0].summary.p95_ms = 20.0
+    run.workloads[0].quality = QualityResult(
+        expected_ids=["a"],
+        must_return_ids=["a"],
+        returned_ids=[],
+        recall_at_limit=0.0,
+        must_return_ids_present=False,
+    )
+
+    assert {regression.metric for regression in compare_runs(baseline, run)} == {
+        "p95_ms",
+        "recall_at_limit",
+        "must_return_ids_present",
+    }

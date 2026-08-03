@@ -7,10 +7,15 @@ import subprocess
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from time import perf_counter
-from typing import cast
+from typing import Literal, cast
 
 from agentgraph.backends.sqlite.backend import SQLiteBackend
-from benchmarks.corpus import SeededCorpus, build_seeded_corpus, query_vector, seed_sqlite_database
+from benchmarks.corpus import (
+    SeededCorpus,
+    build_seeded_corpus,
+    query_vector,
+    seed_sqlite_database,
+)
 from benchmarks.models import (
     BenchmarkRun,
     CorpusSpec,
@@ -19,7 +24,7 @@ from benchmarks.models import (
     summarize_samples,
 )
 
-Operation = Callable[[], Awaitable[list[dict[str, object]] | dict[str, object] | None]]
+Operation = Callable[[], Awaitable[object]]
 
 
 def _git_sha() -> str | None:
@@ -31,12 +36,13 @@ def _git_sha() -> str | None:
         return None
 
 
-async def _measure(
+async def measure_workload(
     name: str,
     operation: Operation,
     *,
     iterations: int,
     warmup_iterations: int,
+    kind: Literal["backend", "api", "frontend"] = "backend",
     quality: Callable[[object], QualityResult] | None = None,
 ) -> WorkloadResult:
     for _ in range(warmup_iterations):
@@ -50,7 +56,7 @@ async def _measure(
     total_seconds = sum(samples_ms) / 1000
     return WorkloadResult(
         name=name,
-        kind="backend",
+        kind=kind,
         warmup_iterations=warmup_iterations,
         summary=summarize_samples(samples_ms),
         operations_per_second=iterations / total_seconds if total_seconds else 0,
@@ -58,7 +64,7 @@ async def _measure(
     )
 
 
-def _search_quality(expected_platform_id: str) -> Callable[[object], QualityResult]:
+def evaluate_search_quality(expected_platform_id: str) -> Callable[[object], QualityResult]:
     def evaluate(result: object) -> QualityResult:
         rows = cast(list[object], result) if isinstance(result, list) else []
         returned_ids = [
@@ -70,9 +76,10 @@ def _search_quality(expected_platform_id: str) -> Callable[[object], QualityResu
         present = expected_platform_id in returned_ids
         return QualityResult(
             expected_ids=[expected_platform_id],
+            must_return_ids=[expected_platform_id],
             returned_ids=returned_ids,
             recall_at_limit=1.0 if present else 0.0,
-            required_ids_present=present,
+            must_return_ids_present=present,
         )
 
     return evaluate
@@ -102,14 +109,14 @@ async def run_backend_suite(
         if hub is None:
             raise RuntimeError("Seeded benchmark hub was not persisted")
         workloads = [
-            await _measure(
+            await measure_workload(
                 "search.exact",
                 lambda: backend.search_entities(exact_vector, seeded.exact_query, None, 10, 0.0),
                 iterations=iterations,
                 warmup_iterations=warmup_iterations,
-                quality=_search_quality(seeded.exact_platform_id),
+                quality=evaluate_search_quality(seeded.exact_platform_id),
             ),
-            await _measure(
+            await measure_workload(
                 "search.semantic_sparse",
                 lambda: backend.search_entities(
                     seeded.semantic_vector, seeded.semantic_query, None, 10, 0.0
@@ -117,13 +124,13 @@ async def run_backend_suite(
                 iterations=iterations,
                 warmup_iterations=warmup_iterations,
             ),
-            await _measure(
+            await measure_workload(
                 "search.common_term",
                 lambda: backend.search_entities(exact_vector, "shared context", None, 10, 0.0),
                 iterations=iterations,
                 warmup_iterations=warmup_iterations,
             ),
-            await _measure(
+            await measure_workload(
                 "retrieval.filtered_documents",
                 lambda: backend.query_by_filter(
                     "Document", {"platform": "benchmark"}, 50, "last_accessed", None, None
@@ -131,7 +138,7 @@ async def run_backend_suite(
                 iterations=iterations,
                 warmup_iterations=warmup_iterations,
             ),
-            await _measure(
+            await measure_workload(
                 "graph.high_degree_traversal",
                 lambda: backend.traverse_graph(str(hub["id"]), 2),
                 iterations=iterations,

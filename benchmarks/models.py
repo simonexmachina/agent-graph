@@ -36,9 +36,10 @@ class QualityResult(BaseModel):
     """Retrieval quality outcome for a single query workload."""
 
     expected_ids: list[str]
+    must_return_ids: list[str] = []
     returned_ids: list[str]
     recall_at_limit: float = Field(ge=0, le=1)
-    required_ids_present: bool
+    must_return_ids_present: bool
 
 
 class WorkloadResult(BaseModel):
