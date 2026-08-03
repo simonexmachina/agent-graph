@@ -175,9 +175,12 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     assert "nodeDimensionsIncludeLabels: true" in viewer_html
     assert "nodeRepulsion: () => 1500000" in viewer_html
     assert "idealEdgeLength: () => 260" in viewer_html
-    assert "nodeOverlap: 64" in viewer_html
-    assert "componentSpacing: 120" in viewer_html
-    assert viewer_html.count("fitGraphToViewport();") == 3
+    assert "nodeOverlap: 160" in viewer_html
+    assert "componentSpacing: 360" in viewer_html
+    assert "const refinedLayout = cy.layout(coseOptions);" in viewer_html
+    assert "function resolveNodeOverlaps()" in viewer_html
+    assert "resolveNodeOverlaps();" in viewer_html
+    assert viewer_html.count("fitGraphToViewport();") == 4
     assert "ensureReadableDefaultZoom" not in viewer_html
 
 

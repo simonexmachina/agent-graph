@@ -1045,6 +1045,41 @@
     applyZoomStyles();
   }
 
+  function resolveNodeOverlaps() {
+    const nodes = cy.nodes().toArray();
+    const gap = 24;
+
+    for (let iteration = 0; iteration < 100; iteration += 1) {
+      let moved = false;
+      for (let i = 0; i < nodes.length; i += 1) {
+        for (let j = i + 1; j < nodes.length; j += 1) {
+          const first = nodes[i];
+          const second = nodes[j];
+          const a = first.boundingBox({ includeLabels: true, includeOverlays: false });
+          const b = second.boundingBox({ includeLabels: true, includeOverlays: false });
+          const overlapX = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+          const overlapY = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+          if (overlapX <= 0 || overlapY <= 0) continue;
+
+          const shift = (Math.min(overlapX, overlapY) + gap) / 2;
+          const firstPosition = first.position();
+          const secondPosition = second.position();
+          if (overlapX < overlapY) {
+            const direction = firstPosition.x <= secondPosition.x ? -1 : 1;
+            first.position({ x: firstPosition.x + (direction * shift), y: firstPosition.y });
+            second.position({ x: secondPosition.x - (direction * shift), y: secondPosition.y });
+          } else {
+            const direction = firstPosition.y <= secondPosition.y ? -1 : 1;
+            first.position({ x: firstPosition.x, y: firstPosition.y + (direction * shift) });
+            second.position({ x: secondPosition.x, y: secondPosition.y - (direction * shift) });
+          }
+          moved = true;
+        }
+      }
+      if (!moved) return;
+    }
+  }
+
   function readableGridPositionFor(index, count) {
     const usableWidth = Math.max(cy.width() - (DEFAULT_LAYOUT_PADDING * 2), READABLE_GRID_CELL_WIDTH);
     const columns = Math.max(1, Math.floor(usableWidth / READABLE_GRID_CELL_WIDTH));
@@ -1272,23 +1307,32 @@
       return;
     }
 
-    const layout = cy.layout({
+    const coseOptions = {
       name: 'cose',
       animate: false,
       randomize: false,
       nodeDimensionsIncludeLabels: true,
       nodeRepulsion: () => 1500000,
       idealEdgeLength: () => 260,
-      nodeOverlap: 64,
-      componentSpacing: 120,
+      nodeOverlap: 160,
+      componentSpacing: 360,
       gravity: 0.18,
       numIter: 1000,
       refresh: 20,
       fit: false,
       padding: DEFAULT_LAYOUT_PADDING,
-    });
+    };
+    const layout = cy.layout(coseOptions);
     layout.one('layoutstop', () => {
       fitGraphToViewport();
+      // The fit updates zoom-aware node dimensions. Run a second pass against
+      // those dimensions so boxes cannot overlap after the final fit.
+      const refinedLayout = cy.layout(coseOptions);
+      refinedLayout.one('layoutstop', () => {
+        resolveNodeOverlaps();
+        fitGraphToViewport();
+      });
+      refinedLayout.run();
     });
     layout.run();
   }
