@@ -912,14 +912,14 @@
       {
         selector: 'node',
         style: {
-          'background-color': (ele) => nodeColor(ele.data('entity_type')),
+          'background-color': '#ffffff',
           'label': (ele) => {
             const type = ele.data('entity_type') || '';
             const lbl = truncateLabel(ele.data('label') || '', 22);
             const marker = ele.data('bookmarked') ? '🔖 ' : '';
             return `${marker}[${type}]\n${lbl}`;
           },
-          'color': '#e2e8f0',
+          'color': '#1f2937',
           'font-size': '12px',
           'shape': 'round-rectangle',
           'text-valign': 'center',
@@ -931,7 +931,7 @@
           'height': '64px',
           'border-width': '2px',
           'border-color': (ele) => nodeColor(ele.data('entity_type')),
-          'border-opacity': 0.5,
+          'border-opacity': 1,
         },
       },
       {
@@ -977,8 +977,8 @@
   });
   window.__agentGraphViewer = { cy };
 
-  // ── Zoom-aware edge styling ───────────────────────────────────────────────
-  const Z = { nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
+  // ── Zoom-aware styling ────────────────────────────────────────────────────
+  const Z = { nodeFont: 12, textMaxWidth: 140, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
   const DEFAULT_LAYOUT_PADDING = 60;
   const READABLE_GRID_CELL_WIDTH = 205;
   const READABLE_GRID_CELL_HEIGHT = 104;
@@ -990,6 +990,8 @@
     const zc = Math.max(z, 0.5);
     cy.batch(() => {
       cy.nodes().style({
+        'font-size':      Z.nodeFont / zc,
+        'text-max-width': Z.textMaxWidth / zc,
         'border-width':   Z.nodeBorder / zc,
       });
       cy.nodes('[?bookmarked]').style({

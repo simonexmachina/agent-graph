@@ -186,12 +186,17 @@ def test_viewer_renders_text_inside_rounded_rectangle_nodes() -> None:
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "'shape': 'round-rectangle'" in viewer_html
+    assert "'background-color': '#ffffff'" in viewer_html
+    assert "'color': '#1f2937'" in viewer_html
+    assert "'border-opacity': 1" in viewer_html
     assert "'text-valign': 'center'" in viewer_html
     assert "'text-halign': 'center'" in viewer_html
     assert "truncateLabel(ele.data('label') || '', 22)" in viewer_html
     assert "'width': '168px'" in viewer_html
     assert "'height': '64px'" in viewer_html
-    assert "// ── Zoom-aware edge styling" in viewer_html
+    assert "// ── Zoom-aware styling" in viewer_html
+    assert "'font-size':      Z.nodeFont / zc" in viewer_html
+    assert "'text-max-width': Z.textMaxWidth / zc" in viewer_html
 
 
 def test_viewer_has_native_remote_list_mode() -> None:
