@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import tempfile
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -66,7 +67,9 @@ async def measure_workload(
     )
 
 
-def evaluate_search_quality(expected_platform_id: str) -> Callable[[object], QualityResult]:
+def evaluate_search_quality(
+    expected_ids: list[str], *, must_return_ids: list[str] | None = None
+) -> Callable[[object], QualityResult]:
     def evaluate(result: object) -> QualityResult:
         rows = cast(list[object], result) if isinstance(result, list) else []
         returned_ids = [
@@ -75,13 +78,15 @@ def evaluate_search_quality(expected_platform_id: str) -> Callable[[object], Qua
             if isinstance(row, dict)
             and isinstance(cast(dict[str, object], row).get("platform_entity_id"), str)
         ]
-        present = expected_platform_id in returned_ids
+        required = must_return_ids or []
+        relevant = set(expected_ids)
+        recall = sum(result_id in relevant for result_id in returned_ids) / len(relevant)
         return QualityResult(
-            expected_ids=[expected_platform_id],
-            must_return_ids=[expected_platform_id],
+            expected_ids=expected_ids,
+            must_return_ids=required,
             returned_ids=returned_ids,
-            recall_at_limit=1.0 if present else 0.0,
-            must_return_ids_present=present,
+            recall_at_limit=recall,
+            must_return_ids_present=all(result_id in returned_ids for result_id in required),
         )
 
     return evaluate
@@ -147,7 +152,9 @@ async def run_backend_suite(
                 lambda: backend.search_entities(exact_vector, seeded.exact_query, None, 10, 0.0),
                 iterations=iterations,
                 warmup_iterations=warmup_iterations,
-                quality=evaluate_search_quality(seeded.exact_platform_id),
+                quality=evaluate_search_quality(
+                    [seeded.exact_platform_id], must_return_ids=[seeded.exact_platform_id]
+                ),
             ),
             await measure_workload(
                 "search.semantic_sparse",
@@ -156,6 +163,7 @@ async def run_backend_suite(
                 ),
                 iterations=iterations,
                 warmup_iterations=warmup_iterations,
+                quality=evaluate_search_quality(seeded.semantic_expected_platform_ids),
             ),
             await measure_workload(
                 "search.common_term",
@@ -190,9 +198,18 @@ async def run_backend_suite(
 
 
 def write_report(report: BenchmarkRun, output_path: Path) -> None:
-    """Write a portable, schema-versioned benchmark report."""
+    """Atomically write a portable, schema-versioned benchmark report."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(report.model_dump_json(indent=2) + "\n")
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.name}.",
+        delete=False,
+    ) as temporary:
+        temporary.write(report.model_dump_json(indent=2) + "\n")
+        temporary_path = Path(temporary.name)
+    temporary_path.replace(output_path)
 
 
 def main() -> None:

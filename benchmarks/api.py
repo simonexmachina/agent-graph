@@ -53,7 +53,9 @@ async def run_api_suite(
                         iterations=iterations,
                         warmup_iterations=warmup_iterations,
                         kind="api",
-                        quality=evaluate_search_quality(seeded.exact_platform_id),
+                        quality=evaluate_search_quality(
+                            [seeded.exact_platform_id], must_return_ids=[seeded.exact_platform_id]
+                        ),
                     ),
                     await measure_workload(
                         "api.viewer_nodes",

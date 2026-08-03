@@ -30,12 +30,14 @@ logger = logging.getLogger(__name__)
 
 _SCHEMA_SQL = (Path(__file__).parent / "schema.sql").read_text()
 
-_FTS5_SPECIAL = re.compile(r'[^\w\s]', re.UNICODE)
+_FTS5_SPECIAL = re.compile(r"[^\w\s]", re.UNICODE)
 
 
 def _fts5_query(text: str) -> str:
     """Strip FTS5 syntax characters so arbitrary user text doesn't cause parse errors."""
     return _FTS5_SPECIAL.sub(" ", text).strip()
+
+
 _VALID_ORDER_BY = {"created_at", "updated_at", "last_accessed", "synced_at"}
 _LIST_PAGE_ORDER_BY = {
     **{field: field for field in _VALID_ORDER_BY},
@@ -53,6 +55,7 @@ _LIST_PAGE_ORDER_BY = {
     "platform": "platform COLLATE NOCASE",
 }
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
+_FTS_DELETE_CHUNK_SIZE = 500
 
 
 def _now() -> str:
@@ -96,7 +99,9 @@ def _append_merged_people(
 
 
 class SQLiteBackend(StorageBackend):
-    def __init__(self, db_path: str = "~/.agentgraph/agentgraph.db", vector_mode: str = "sqlite-vec") -> None:
+    def __init__(
+        self, db_path: str = "~/.agentgraph/agentgraph.db", vector_mode: str = "sqlite-vec"
+    ) -> None:
         self._db_path = str(Path(db_path).expanduser()) if db_path != ":memory:" else db_path
         self._vector_mode = vector_mode
         self._conn: aiosqlite.Connection | None = None
@@ -270,8 +275,12 @@ class SQLiteBackend(StorageBackend):
             ):
                 await conn.execute("BEGIN")
                 try:
-                    person_id_map = await self._upsert_persons(conn, batch.persons, person_embeddings)
-                    entity_id_map = await self._upsert_entities(conn, batch.entities, entity_embeddings)
+                    person_id_map = await self._upsert_persons(
+                        conn, batch.persons, person_embeddings
+                    )
+                    entity_id_map = await self._upsert_entities(
+                        conn, batch.entities, entity_embeddings
+                    )
                     await self._upsert_edges(conn, batch, person_id_map, entity_id_map)
                     await conn.execute("COMMIT")
                 except Exception:
@@ -312,7 +321,14 @@ class SQLiteBackend(StorageBackend):
                         last_accessed = ?
                     WHERE id = ?
                     """,
-                    [p.display_name, p.canonical_email, emb_blob, json.dumps(meta), now, existing_id],
+                    [
+                        p.display_name,
+                        p.canonical_email,
+                        emb_blob,
+                        json.dumps(meta),
+                        now,
+                        existing_id,
+                    ],
                 )
                 entity_id = existing_id
             else:
@@ -381,6 +397,9 @@ class SQLiteBackend(StorageBackend):
         embeddings: dict[str, list[float] | None],
     ) -> dict[str, str]:
         id_map: dict[str, str] = {}
+        # FTS maintenance is independent of edge resolution. Deferring it avoids
+        # two SQLite round trips for every entity in a connector-sized batch.
+        fts_entries: dict[str, tuple[str, str] | None] = {}
         now = _now()
         for e in entities:
             if e.is_stub:
@@ -416,29 +435,56 @@ class SQLiteBackend(StorageBackend):
                         last_accessed     = EXCLUDED.last_accessed
                     RETURNING id
                     """,
-                    [_new_id(), e.entity_type, e.platform, e.platform_entity_id,
-                     e.title, e.content, emb_blob, json.dumps(dict(e.metadata)),
-                     created, updated, now, now],
+                    [
+                        _new_id(),
+                        e.entity_type,
+                        e.platform,
+                        e.platform_entity_id,
+                        e.title,
+                        e.content,
+                        emb_blob,
+                        json.dumps(dict(e.metadata)),
+                        created,
+                        updated,
+                        now,
+                        now,
+                    ],
                 )
 
-                # Maintain FTS index for non-stub entities
                 row = await cursor.fetchone()
                 if row is None:
-                    raise RuntimeError(f"Failed to upsert entity {e.platform}:{e.platform_entity_id}")
-                entity_id: str = row[0]
-                await conn.execute("DELETE FROM entities_fts WHERE id = ?", [entity_id])
-                if e.title or e.content:
-                    await conn.execute(
-                        "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)",
-                        [entity_id, e.title or "", e.content or ""],
+                    raise RuntimeError(
+                        f"Failed to upsert entity {e.platform}:{e.platform_entity_id}"
                     )
+                entity_id: str = row[0]
+                fts_entries[entity_id] = (
+                    (e.title or "", e.content or "") if e.title or e.content else None
+                )
                 id_map[e.platform_entity_id] = entity_id
                 continue
 
             row = await cursor.fetchone()
             if row is None:
-                raise RuntimeError(f"Failed to upsert stub entity {e.platform}:{e.platform_entity_id}")
+                raise RuntimeError(
+                    f"Failed to upsert stub entity {e.platform}:{e.platform_entity_id}"
+                )
             id_map[e.platform_entity_id] = row[0]
+
+        fts_ids = list(fts_entries)
+        for start in range(0, len(fts_ids), _FTS_DELETE_CHUNK_SIZE):
+            ids = fts_ids[start : start + _FTS_DELETE_CHUNK_SIZE]
+            placeholders = ",".join("?" * len(ids))
+            await conn.execute(f"DELETE FROM entities_fts WHERE id IN ({placeholders})", ids)
+        inserts = [
+            [entity_id, title, content]
+            for entity_id, entry in fts_entries.items()
+            if entry is not None
+            for title, content in [entry]
+        ]
+        if inserts:
+            await conn.executemany(
+                "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)", inserts
+            )
         return id_map
 
     async def _upsert_edges(
@@ -494,8 +540,15 @@ class SQLiteBackend(StorageBackend):
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (edge_type, source_entity_id, target_entity_id) DO NOTHING
                 """,
-                [_new_id(), edge.edge_type, source_id, target_id,
-                 edge.platform, json.dumps(dict(edge.properties)), now],
+                [
+                    _new_id(),
+                    edge.edge_type,
+                    source_id,
+                    target_id,
+                    edge.platform,
+                    json.dumps(dict(edge.properties)),
+                    now,
+                ],
             )
 
     async def merge_person_entities(
@@ -811,6 +864,7 @@ class SQLiteBackend(StorageBackend):
 
                 if (r["score"] or 0) >= min_score:
                     results.append(r)
+
             def _score(result: dict[str, Any]) -> float:
                 raw_score = result.get("score")
                 return float(raw_score) if isinstance(raw_score, int | float) else 0.0
@@ -994,7 +1048,9 @@ class SQLiteBackend(StorageBackend):
 
         where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
         params.append(limit)
-        with timed("sqlite.query_by_filter", entity_type=entity_type, order_by=order_by, limit=limit):
+        with timed(
+            "sqlite.query_by_filter", entity_type=entity_type, order_by=order_by, limit=limit
+        ):
             rows = await self._fetchall(
                 f"""
                 SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
@@ -1177,6 +1233,7 @@ class SQLiteBackend(StorageBackend):
         cutoff = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         # SQLite doesn't have interval arithmetic; compute cutoff in Python
         from datetime import timedelta
+
         cutoff_dt = datetime.now(UTC) - timedelta(days=retention_days)
         cutoff = cutoff_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -1209,9 +1266,7 @@ class SQLiteBackend(StorageBackend):
     # --- Sync state ---
 
     async def load_cursor(self, source: str) -> dict[str, Any]:
-        val = await self._fetchval(
-            "SELECT cursor FROM sync_state WHERE source = ?", [source]
-        )
+        val = await self._fetchval("SELECT cursor FROM sync_state WHERE source = ?", [source])
         return json.loads(val) if val else {}
 
     async def save_cursor(self, source: str, cursor: dict[str, Any]) -> None:
@@ -1240,9 +1295,7 @@ class SQLiteBackend(StorageBackend):
             [dwell_ms, platform, platform_entity_id],
         )
 
-    async def get_last_synced_at(
-        self, platform: str, platform_entity_id: str
-    ) -> datetime | None:
+    async def get_last_synced_at(self, platform: str, platform_entity_id: str) -> datetime | None:
         val = await self._fetchval(
             """
             SELECT max(synced_at) FROM entities
@@ -1324,6 +1377,7 @@ class SQLiteBackend(StorageBackend):
 
 
 # --- Row serialization helpers ---
+
 
 def _row_to_entity(row: Any) -> EntityResult:
     keys = row.keys() if hasattr(row, "keys") else []

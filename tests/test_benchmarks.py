@@ -56,6 +56,11 @@ async def test_backend_suite_writes_quality_checked_report(tmp_path: Path) -> No
     exact = next(workload for workload in report.workloads if workload.name == "search.exact")
     assert exact.quality is not None
     assert exact.quality.must_return_ids_present
+    semantic = next(
+        workload for workload in report.workloads if workload.name == "search.semantic_sparse"
+    )
+    assert semantic.quality is not None
+    assert semantic.quality.recall_at_limit > 0
     assert '"schema_version": 1' in output.read_text()
 
 

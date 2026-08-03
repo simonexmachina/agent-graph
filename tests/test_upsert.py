@@ -33,6 +33,7 @@ async def sqlite_backend() -> AsyncGenerator[SQLiteBackend, None]:
 # FetchPolicy unit tests (no DB needed)
 # ---------------------------------------------------------------------------
 
+
 def test_fetch_policy_first_visit() -> None:
     policy = FetchPolicy(stale_after_seconds=300)
     assert policy.decide(None) == FetchPolicy.FIRST_VISIT
@@ -135,6 +136,29 @@ async def test_upsert_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
 
     edge_count = await sqlite_backend._fetchval("SELECT count(*) FROM edges")
     assert edge_count == 1
+
+
+async def test_upsert_batch_maintains_one_current_fts_row_per_entity(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="gdocs",
+        platform_entity_id="doc-fts",
+        title="Original title",
+        content="original wording",
+    )
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+    updated = entity.model_copy(update={"title": "Updated title", "content": "replacement wording"})
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[updated]), {}, {})
+
+    rows = await sqlite_backend._fetchall(
+        "SELECT id, title, content FROM entities_fts WHERE id = (SELECT id FROM entities WHERE platform_entity_id = ?)",
+        ["doc-fts"],
+    )
+    assert len(rows) == 1
+    assert rows[0]["title"] == "Updated title"
+    assert rows[0]["content"] == "replacement wording"
 
 
 async def test_upsert_edge_to_existing_person_sqlite(sqlite_backend: SQLiteBackend) -> None:

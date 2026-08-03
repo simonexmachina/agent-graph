@@ -21,16 +21,15 @@ class SeededCorpus:
     exact_query: str
     semantic_query: str
     semantic_vector: list[float]
+    semantic_expected_platform_ids: list[str]
 
 
 def query_vector(cluster: int, cluster_count: int) -> list[float]:
     """Return a stable unit vector whose nearest items are in ``cluster``."""
-    dimension = 8
+    dimension = max(8, cluster_count)
     vector = [0.0] * dimension
     vector[cluster % dimension] = 1.0
-    vector[(cluster // dimension) % dimension] = 0.25
-    norm = sum(value * value for value in vector) ** 0.5
-    return [value / norm for value in vector]
+    return vector
 
 
 def build_seeded_corpus(spec: CorpusSpec) -> tuple[list[EntityBatch], SeededCorpus]:
@@ -39,6 +38,7 @@ def build_seeded_corpus(spec: CorpusSpec) -> tuple[list[EntityBatch], SeededCorp
     base_time = datetime(2025, 1, 1, tzinfo=UTC)
     hub_platform_id = "hub-000000"
     exact_platform_id = "doc-000017"
+    semantic_cluster = min(7, spec.cluster_count - 1)
 
     for start in range(0, spec.entity_count, spec.batch_size):
         entities: list[EntityRecord] = []
@@ -88,8 +88,13 @@ def build_seeded_corpus(spec: CorpusSpec) -> tuple[list[EntityBatch], SeededCorp
         hub_platform_id=hub_platform_id,
         exact_platform_id=exact_platform_id,
         exact_query="needle-000017",
-        semantic_query="unseen language for semantic cluster 7",
-        semantic_vector=query_vector(7, spec.cluster_count),
+        semantic_query=f"unseen language for semantic cluster {semantic_cluster}",
+        semantic_vector=query_vector(semantic_cluster, spec.cluster_count),
+        semantic_expected_platform_ids=[
+            f"doc-{index:06d}"
+            for index in range(spec.entity_count)
+            if index % spec.cluster_count == semantic_cluster
+        ],
     )
 
 
