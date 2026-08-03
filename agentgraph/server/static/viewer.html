@@ -1019,6 +1019,9 @@
     const zc = Math.max(z, 0.5);
     cy.batch(() => {
       cy.nodes().style({
+        'width':          (NODE_MAX_WIDTH - (NODE_PADDING * 2)) / zc,
+        'height':         (NODE_MAX_HEIGHT - (NODE_PADDING * 2)) / zc,
+        'padding':        NODE_PADDING / zc,
         'font-size':      Z.nodeFont / zc,
         'text-max-width': Z.textMaxWidth / zc,
         'border-width':   Z.nodeBorder / zc,

@@ -206,6 +206,9 @@ def test_viewer_renders_text_inside_rounded_rectangle_nodes() -> None:
     assert "'border-color': (ele) => nodeColor(ele.data('entity_type'))" in viewer_html
     assert "const TYPE_COLORS = NODE_COLORS;" in viewer_html
     assert "// ── Zoom-aware styling" in viewer_html
+    assert "'width':          (NODE_MAX_WIDTH - (NODE_PADDING * 2)) / zc" in viewer_html
+    assert "'height':         (NODE_MAX_HEIGHT - (NODE_PADDING * 2)) / zc" in viewer_html
+    assert "'padding':        NODE_PADDING / zc" in viewer_html
     assert "'font-size':      Z.nodeFont / zc" in viewer_html
     assert "'text-max-width': Z.textMaxWidth / zc" in viewer_html
 
