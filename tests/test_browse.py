@@ -191,7 +191,9 @@ def test_viewer_renders_text_inside_rounded_rectangle_nodes() -> None:
     assert "'border-opacity': 1" in viewer_html
     assert "'text-valign': 'center'" in viewer_html
     assert "'text-halign': 'center'" in viewer_html
-    assert "truncateLabel(ele.data('label') || '', 22)" in viewer_html
+    assert "function wrapNodeLabel(label)" in viewer_html
+    assert "return (label || '').replace(/([/_-])/g, '$1\\u200b');" in viewer_html
+    assert "const lbl = wrapNodeLabel(ele.data('label'));" in viewer_html
     assert "const NODE_MAX_WIDTH = 168;" in viewer_html
     assert "const NODE_MAX_HEIGHT = 64;" in viewer_html
     assert "'width': NODE_MAX_WIDTH" in viewer_html

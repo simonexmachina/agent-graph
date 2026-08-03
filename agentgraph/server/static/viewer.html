@@ -905,6 +905,10 @@
     return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label;
   }
 
+  function wrapNodeLabel(label) {
+    return (label || '').replace(/([/_-])/g, '$1\u200b');
+  }
+
   const NODE_MAX_WIDTH = 168;
   const NODE_MAX_HEIGHT = 64;
 
@@ -917,7 +921,7 @@
         style: {
           'background-color': '#ffffff',
           'label': (ele) => {
-            const lbl = truncateLabel(ele.data('label') || '', 22);
+            const lbl = wrapNodeLabel(ele.data('label'));
             const marker = ele.data('bookmarked') ? '🔖 ' : '';
             return `${marker}${lbl}`;
           },
