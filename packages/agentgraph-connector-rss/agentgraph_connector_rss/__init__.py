@@ -153,7 +153,11 @@ class RssConnector(BaseConnector):
         normalised_url = normalise_article_url(url)
         if normalised_url is None:
             return None
-        entries = await get_backend().query_by_filter(
+        try:
+            backend = get_backend()
+        except RuntimeError:
+            return None
+        entries = await backend.query_by_filter(
             "Document",
             {"platform": self.source, "web_url": normalised_url},
             1,
