@@ -24,6 +24,24 @@
           <button id="reset-defaults" type="button" class="button-secondary">Reset to default</button>
         </div>
       </form>
+
+      <section class="metadata" aria-labelledby="extension-details-heading">
+        <div class="metadata__header">
+          <h2 id="extension-details-heading">Extension details</h2>
+          <button id="refresh-metadata" type="button" class="button-secondary">Refresh</button>
+        </div>
+        <dl>
+          <div>
+            <dt>Extension version</dt>
+            <dd id="extension-version">-</dd>
+          </div>
+          <div>
+            <dt>Observation patterns</dt>
+            <dd id="observation-pattern-count">-</dd>
+          </div>
+        </dl>
+        <ul id="observation-patterns" class="pattern-list" aria-label="Observation patterns"></ul>
+      </section>
     </section>
   </main>
   <script type="module" src="options.js"></script>

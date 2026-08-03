@@ -96,3 +96,71 @@ button:hover {
   background: #fff;
   color: #1f2937;
 }
+
+.metadata {
+  margin-top: 28px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 20px;
+}
+
+.metadata__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.metadata__header button {
+  padding: 7px 10px;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+dt {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pattern-list {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #e5e7eb;
+}
+
+.pattern-list:empty::before {
+  display: block;
+  padding: 10px 12px;
+  color: #6b7280;
+  content: "No observation patterns are available.";
+}
+
+.pattern-list li {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f3f4f6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.pattern-list li:last-child {
+  border-bottom: 0;
+}
