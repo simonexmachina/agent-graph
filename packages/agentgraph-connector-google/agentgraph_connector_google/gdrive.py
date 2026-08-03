@@ -219,9 +219,8 @@ class DriveChangesConnector(BaseConnector):
 
         combined = EntityBatch()
         if changed_files:
-            from agentgraph.connectors.registry import get_all_connectors
+            from agentgraph.connectors.registry import get_connector
 
-            connectors = get_all_connectors()
             known_file_ids = await _get_known_file_ids({f["id"] for f in changed_files})
 
             for file_info in changed_files:
@@ -231,15 +230,16 @@ class DriveChangesConnector(BaseConnector):
                 if file_id not in known_file_ids:
                     continue
 
-                connector = next((c for c in connectors if c.can_handle(web_link)), None)
-                if connector is None:
-                    continue
-
+                connector_source = "unknown"
                 try:
                     from agentgraph.server.router import classify_url
 
                     ref = classify_url(web_link)
                     if ref is None:
+                        continue
+                    connector_source = ref.source
+                    connector = get_connector(ref.source)
+                    if connector is None:
                         continue
                     batch = await connector.fetch(
                         ref.resource_type,
@@ -251,7 +251,7 @@ class DriveChangesConnector(BaseConnector):
                     combined.persons.extend(batch.persons)
                     combined.edges.extend(batch.edges)
                 except Exception:
-                    logger.exception("drive poll: failed to fetch %s via %s", file_id, connector.source)
+                    logger.exception("drive poll: failed to fetch %s via %s", file_id, connector_source)
 
         return combined, {"page_token": new_page_token}
 

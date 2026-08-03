@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
@@ -15,7 +15,7 @@ from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
-from agentgraph.connectors.base import EntityBatch
+from agentgraph.connectors.base import EntityBatch, SourceReference
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -263,6 +263,65 @@ async def test_drive_file_fetch_adds_download_metadata(monkeypatch: pytest.Monke
         entity.metadata["download_url"] == "https://drive.google.com/uc?id=file-123&export=download"
     )
     assert entity.metadata["web_url"] == "https://drive.google.com/file/d/file-123/view"
+
+
+@pytest.mark.asyncio
+async def test_drive_poll_routes_changed_file_to_classified_connector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_id = "1ZkMa4uotZNRe980FRtGkNkZl3Tabis62"
+    web_link = f"https://drive.google.com/file/d/{file_id}/view"
+    changes = MagicMock()
+    changes.list.return_value.execute.return_value = {
+        "newStartPageToken": "next-page-token",
+        "changes": [{"file": {"id": file_id, "webViewLink": web_link}}],
+    }
+    service = MagicMock()
+    service.changes.return_value = changes
+    expected_batch = EntityBatch()
+    drive_connector = MagicMock(source="gdrive")
+    drive_connector.fetch = AsyncMock(return_value=expected_batch)
+
+    def build_drive_service(_account_id: str | None) -> Any:
+        return service
+
+    def classify_drive_url(_url: str) -> SourceReference:
+        return SourceReference("gdrive", "document", file_id)
+
+    def get_drive_connector(source: str) -> Any:
+        return drive_connector if source == "gdrive" else None
+
+    def unexpected_connector_scan() -> list[Any]:
+        raise AssertionError("Drive polling must route through classify_url")
+
+    monkeypatch.setattr(
+        "agentgraph_connector_google.gdrive._build_drive_service_for",
+        build_drive_service,
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_google.gdrive._get_known_file_ids",
+        AsyncMock(return_value={file_id}),
+    )
+    monkeypatch.setattr(
+        "agentgraph.server.router.classify_url",
+        classify_drive_url,
+    )
+    monkeypatch.setattr(
+        "agentgraph.connectors.registry.get_connector", get_drive_connector
+    )
+    monkeypatch.setattr(
+        "agentgraph.connectors.registry.get_all_connectors",
+        unexpected_connector_scan,
+    )
+
+    batch, cursor = await DriveChangesConnector().poll({"page_token": "current-page-token"})
+
+    assert batch is not expected_batch
+    assert batch == EntityBatch()
+    assert cursor == {"page_token": "next-page-token"}
+    drive_connector.fetch.assert_awaited_once_with(
+        "document", file_id, meta=None, account_id=None
+    )
 
 
 @pytest.mark.asyncio
