@@ -192,8 +192,14 @@ def test_viewer_renders_text_inside_rounded_rectangle_nodes() -> None:
     assert "'text-valign': 'center'" in viewer_html
     assert "'text-halign': 'center'" in viewer_html
     assert "truncateLabel(ele.data('label') || '', 22)" in viewer_html
-    assert "'width': '168px'" in viewer_html
-    assert "'height': '64px'" in viewer_html
+    assert "const NODE_MAX_WIDTH = 168;" in viewer_html
+    assert "const NODE_MAX_HEIGHT = 64;" in viewer_html
+    assert "'width': NODE_MAX_WIDTH" in viewer_html
+    assert "'height': NODE_MAX_HEIGHT" in viewer_html
+    assert "return `${marker}${lbl}`;" in viewer_html
+    assert "return `${marker}[${type}]\\n${lbl}`;" not in viewer_html
+    assert "'border-color': (ele) => nodeColor(ele.data('entity_type'))" in viewer_html
+    assert "const TYPE_COLORS = NODE_COLORS;" in viewer_html
     assert "// ── Zoom-aware styling" in viewer_html
     assert "'font-size':      Z.nodeFont / zc" in viewer_html
     assert "'text-max-width': Z.textMaxWidth / zc" in viewer_html

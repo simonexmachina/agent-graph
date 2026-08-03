@@ -905,6 +905,9 @@
     return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label;
   }
 
+  const NODE_MAX_WIDTH = 168;
+  const NODE_MAX_HEIGHT = 64;
+
   // ── Cytoscape init ────────────────────────────────────────────────────────
   const cy = cytoscape({
     container: document.getElementById('cy'),
@@ -914,10 +917,9 @@
         style: {
           'background-color': '#ffffff',
           'label': (ele) => {
-            const type = ele.data('entity_type') || '';
             const lbl = truncateLabel(ele.data('label') || '', 22);
             const marker = ele.data('bookmarked') ? '🔖 ' : '';
-            return `${marker}[${type}]\n${lbl}`;
+            return `${marker}${lbl}`;
           },
           'color': '#1f2937',
           'font-size': '12px',
@@ -927,8 +929,8 @@
           'text-justification': 'center',
           'text-wrap': 'wrap',
           'text-max-width': '140px',
-          'width': '168px',
-          'height': '64px',
+          'width': NODE_MAX_WIDTH,
+          'height': NODE_MAX_HEIGHT,
           'border-width': '2px',
           'border-color': (ele) => nodeColor(ele.data('entity_type')),
           'border-opacity': 1,
