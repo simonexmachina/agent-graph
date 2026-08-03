@@ -1267,6 +1267,7 @@
         edges,
         hasMore: Boolean(data.has_more),
       };
+      updatePageTitle(params);
       setMoreAvailable(viewerCache.hasMore);
       renderGraph({ nodes, edges });
     } catch (err) {
@@ -1355,8 +1356,21 @@
   // ── URL state ─────────────────────────────────────────────────────────────
   let ALL_TYPES = ['Channel', 'Document', 'Folder', 'Message', 'Person', 'Spreadsheet', 'Thread'];
   let FETCHABLE_PLATFORMS = new Set();
+  const DEFAULT_PAGE_TITLE = 'AgentGraph Viewer';
   const DEFAULT_LIST_SORT = 'last_accessed';
   const DEFAULT_LIST_SORT_DIR = 'desc';
+
+  function focusedNodeTitle(nodeId) {
+    const entity = viewerCache?.rawNodes.find(candidate => candidate.id === nodeId);
+    return entity ? entityToNode(entity).data.label : nodeId;
+  }
+
+  function updatePageTitle(params) {
+    const parts = [DEFAULT_PAGE_TITLE];
+    if (params.search) parts.push(`Search: ${params.search}`);
+    if (params.node_id) parts.push(`Focus: ${focusedNodeTitle(params.node_id)}`);
+    document.title = parts.join(' | ');
+  }
 
   function readUrlState() {
     const p = new URLSearchParams(window.location.search);
@@ -1433,6 +1447,7 @@
       ...override,
     };
     pushUrlState(params, replace);
+    updatePageTitle(params);
     return params;
   }
 

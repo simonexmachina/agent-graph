@@ -132,6 +132,13 @@ def test_edge_free_graph_uses_a_non_overlapping_grid(page: Page) -> None:
     assert metrics["minimumGap"] >= 16
 
 
+def test_page_title_includes_search_and_focused_node(page: Page) -> None:
+    nodes = [_node(1, "Quarterly planning")]
+    with _serve_viewer(nodes, []) as url:
+        _wait_for_graph(page, f"{url}?search=roadmap&node_id=node-1", len(nodes))
+        expect(page).to_have_title("AgentGraph Viewer | Search: roadmap | Focus: Quarterly planning")
+
+
 def test_node_bounds_and_labels_remain_capped_across_zoom(page: Page) -> None:
     nodes = [_node(1, "A deliberately long document title that needs more than three lines to display")]
     with _serve_viewer(nodes, []) as url:
