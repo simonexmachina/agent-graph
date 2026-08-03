@@ -30,3 +30,18 @@ jobs:
 
       - name: Lint
         run: uv run ruff check agentgraph/
+
+  performance-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra all
+
+      - name: Run deterministic performance smoke suite
+        run: uv run python -m benchmarks.suite --entities 1000 --iterations 3 --output .benchmarks/smoke.json
