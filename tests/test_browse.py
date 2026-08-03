@@ -131,6 +131,14 @@ def test_viewer_renders_standard_web_url_links() -> None:
     assert "detailBody.appendChild(row('Link', linkHtml))" in viewer_html
 
 
+def test_viewer_renders_recorded_dwell_time_in_entity_detail() -> None:
+    """Recorded dwell time is visible in the entity detail panel."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "Number(entity.cumulative_dwell_ms || 0) > 0" in viewer_html
+    assert "detailBody.appendChild(row('Dwell', formatDwell(entity.cumulative_dwell_ms)))" in viewer_html
+
+
 def test_viewer_renders_html_content_through_a_safe_reader() -> None:
     """Stored HTML uses the reader pipeline and has an escaped source fallback."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()

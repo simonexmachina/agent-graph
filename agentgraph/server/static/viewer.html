@@ -2079,6 +2079,10 @@
       detailBody.appendChild(row('Created', new Date(entity.created_at).toLocaleString()));
     }
 
+    if (Number(entity.cumulative_dwell_ms || 0) > 0) {
+      detailBody.appendChild(row('Dwell', formatDwell(entity.cumulative_dwell_ms)));
+    }
+
     if (entity.entity_type === 'Person') {
       detailBody.appendChild(renderPersonUnificationControls(entity));
     }
