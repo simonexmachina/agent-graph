@@ -905,8 +905,29 @@
     return label.length > maxLength ? `${label.slice(0, maxLength - 1)}…` : label;
   }
 
-  function wrapNodeLabel(label) {
-    return (label || '').replace(/([/_-])/g, '$1\u200b');
+  function formatNodeLabel(label) {
+    const maxCharsPerLine = 18;
+    const maxLines = 3;
+    const words = (label || '').replace(/([/_-])/g, '$1 ').trim().split(/\s+/).filter(Boolean);
+    const lines = [];
+    let line = '';
+
+    for (const word of words) {
+      const chunks = word.match(new RegExp(`.{1,${maxCharsPerLine}}`, 'g')) || [];
+      for (const chunk of chunks) {
+        const candidate = line ? `${line} ${chunk}` : chunk;
+        if (candidate.length <= maxCharsPerLine) {
+          line = candidate;
+          continue;
+        }
+        if (line) lines.push(line);
+        line = chunk;
+      }
+    }
+    if (line) lines.push(line);
+
+    if (lines.length <= maxLines) return lines.join('\n');
+    return `${lines.slice(0, maxLines).join('\n').slice(0, -1)}…`;
   }
 
   const NODE_MAX_WIDTH = 168;
@@ -921,7 +942,7 @@
         style: {
           'background-color': '#ffffff',
           'label': (ele) => {
-            const lbl = wrapNodeLabel(ele.data('label'));
+            const lbl = formatNodeLabel(ele.data('label'));
             const marker = ele.data('bookmarked') ? '🔖 ' : '';
             return `${marker}${lbl}`;
           },
