@@ -74,8 +74,8 @@ def test_rss_can_handle_returns_false_without_config() -> None:
 
 def test_normalise_article_url_removes_fragments_trailing_slashes_and_tracking() -> None:
     assert normalise_article_url(
-        "HTTPS://Example.COM/posts/one/?utm_source=feed&keep=value#section"
-    ) == "https://example.com/posts/one?keep=value"
+        "HTTPS://Example.COM/posts/one/?z=last&utm_source=feed&keep=value#section"
+    ) == "https://example.com/posts/one?keep=value&z=last"
 
 
 def test_derive_observation_patterns_prefers_shared_specific_paths() -> None:

@@ -513,14 +513,12 @@ def normalise_article_url(url: str) -> str | None:
     parsed = urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
-    query = urlencode(
-        [
-            (key, value)
-            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-            if not _is_tracking_query_key(key)
-        ],
-        doseq=True,
+    query_items = sorted(
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not _is_tracking_query_key(key)
     )
+    query = urlencode(query_items, doseq=True)
     path = parsed.path.rstrip("/") or "/"
     return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, query, ""))
 
