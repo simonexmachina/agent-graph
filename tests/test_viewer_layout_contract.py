@@ -132,6 +132,28 @@ def test_edge_free_graph_uses_a_non_overlapping_grid(page: Page) -> None:
     assert metrics["minimumGap"] >= 16
 
 
+def test_connected_long_label_graph_keeps_nodes_separate(page: Page) -> None:
+    nodes = [
+        _node(index, f"Long RSS article title {index}: " + "A detailed discussion of agent systems " * 3)
+        for index in range(22)
+    ]
+    edges = [
+        {
+            "id": f"edge-{index}",
+            "source_entity_id": "node-0",
+            "target_entity_id": f"node-{index}",
+            "edge_type": "contains",
+        }
+        for index in range(1, len(nodes))
+    ]
+    with _serve_viewer(nodes, edges) as url:
+        _wait_for_graph(page, url, len(nodes))
+        metrics = _layout_metrics(page)
+
+    assert metrics["overlaps"] == 0
+    assert metrics["minimumGap"] >= 16
+
+
 def test_page_title_includes_search_and_focused_node(page: Page) -> None:
     nodes = [_node(1, "Quarterly planning")]
     with _serve_viewer(nodes, []) as url:

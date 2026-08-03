@@ -171,6 +171,7 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "const DEFAULT_LAYOUT_PADDING = 60;" in viewer_html
+    assert "arrowScale: 1.2" in viewer_html
     assert "const READABLE_GRID_CELL_WIDTH = 205;" in viewer_html
     assert "const READABLE_GRID_CELL_HEIGHT = 104;" in viewer_html
     assert "function fitGraphToViewport()" in viewer_html
@@ -193,7 +194,7 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     assert "const refinedLayout = cy.layout(coseOptions);" in viewer_html
     assert "function resolveNodeOverlaps()" in viewer_html
     assert "resolveNodeOverlaps();" in viewer_html
-    assert viewer_html.count("fitGraphToViewport();") == 5
+    assert viewer_html.count("fitGraphToViewport();") == 6
     assert "ensureReadableDefaultZoom" not in viewer_html
 
 

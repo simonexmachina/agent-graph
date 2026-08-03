@@ -1038,7 +1038,7 @@
   window.__agentGraphViewer = { cy };
 
   // ── Zoom-aware styling ────────────────────────────────────────────────────
-  const Z = { nodeFont: 12, textMaxWidth: 136, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
+  const Z = { nodeFont: 12, textMaxWidth: 136, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.2 };
   const DEFAULT_LAYOUT_PADDING = 60;
   const READABLE_GRID_CELL_WIDTH = 205;
   const READABLE_GRID_CELL_HEIGHT = 104;
@@ -1079,9 +1079,11 @@
 
   function resolveNodeOverlaps() {
     const nodes = cy.nodes().toArray();
-    const gap = 24;
+    // Bounding boxes are in graph coordinates, while the desired visual
+    // separation is in screen pixels.
+    const gap = GRID_GUTTER / cy.zoom();
 
-    for (let iteration = 0; iteration < 100; iteration += 1) {
+    for (let iteration = 0; iteration < 500; iteration += 1) {
       let moved = false;
       for (let i = 0; i < nodes.length; i += 1) {
         for (let j = i + 1; j < nodes.length; j += 1) {
@@ -1089,11 +1091,11 @@
           const second = nodes[j];
           const a = first.boundingBox({ includeLabels: true, includeOverlays: false });
           const b = second.boundingBox({ includeLabels: true, includeOverlays: false });
-          const overlapX = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
-          const overlapY = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+          const overlapX = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1) + gap;
+          const overlapY = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1) + gap;
           if (overlapX <= 0 || overlapY <= 0) continue;
 
-          const shift = (Math.min(overlapX, overlapY) + gap) / 2;
+          const shift = Math.min(overlapX, overlapY) / 2;
           const firstPosition = first.position();
           const secondPosition = second.position();
           if (overlapX < overlapY) {
@@ -1377,6 +1379,7 @@
       // those dimensions so boxes cannot overlap after the final fit.
       const refinedLayout = cy.layout(coseOptions);
       refinedLayout.one('layoutstop', () => {
+        fitGraphToViewport();
         resolveNodeOverlaps();
         fitGraphToViewport();
       });
