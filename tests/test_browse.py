@@ -163,8 +163,8 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "const DEFAULT_LAYOUT_PADDING = 60;" in viewer_html
-    assert "const READABLE_GRID_CELL_WIDTH = 165;" in viewer_html
-    assert "const READABLE_GRID_CELL_HEIGHT = 90;" in viewer_html
+    assert "const READABLE_GRID_CELL_WIDTH = 205;" in viewer_html
+    assert "const READABLE_GRID_CELL_HEIGHT = 104;" in viewer_html
     assert "function fitGraphToViewport()" in viewer_html
     assert "cy.fit(cy.nodes(), DEFAULT_LAYOUT_PADDING);" in viewer_html
     assert "function readableGridPositionFor(index, count)" in viewer_html
@@ -173,11 +173,25 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     assert "name: 'preset'" in viewer_html
     assert "positions: readableGridPositions()" in viewer_html
     assert "nodeDimensionsIncludeLabels: true" in viewer_html
-    assert "nodeRepulsion: () => 800000" in viewer_html
-    assert "idealEdgeLength: () => 180" in viewer_html
-    assert "nodeOverlap: 30" in viewer_html
+    assert "nodeRepulsion: () => 1500000" in viewer_html
+    assert "idealEdgeLength: () => 260" in viewer_html
+    assert "nodeOverlap: 64" in viewer_html
+    assert "componentSpacing: 120" in viewer_html
     assert viewer_html.count("fitGraphToViewport();") == 3
     assert "ensureReadableDefaultZoom" not in viewer_html
+
+
+def test_viewer_renders_text_inside_rounded_rectangle_nodes() -> None:
+    """Graph nodes are rounded boxes sized to contain their labels."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "'shape': 'round-rectangle'" in viewer_html
+    assert "'text-valign': 'center'" in viewer_html
+    assert "'text-halign': 'center'" in viewer_html
+    assert "truncateLabel(ele.data('label') || '', 22)" in viewer_html
+    assert "'width': '168px'" in viewer_html
+    assert "'height': '64px'" in viewer_html
+    assert "// ── Zoom-aware edge styling" in viewer_html
 
 
 def test_viewer_has_native_remote_list_mode() -> None:

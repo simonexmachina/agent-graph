@@ -915,19 +915,20 @@
           'background-color': (ele) => nodeColor(ele.data('entity_type')),
           'label': (ele) => {
             const type = ele.data('entity_type') || '';
-            const lbl = truncateLabel(ele.data('label') || '', 30);
+            const lbl = truncateLabel(ele.data('label') || '', 22);
             const marker = ele.data('bookmarked') ? '🔖 ' : '';
             return `${marker}[${type}]\n${lbl}`;
           },
           'color': '#e2e8f0',
           'font-size': '12px',
-          'text-valign': 'bottom',
+          'shape': 'round-rectangle',
+          'text-valign': 'center',
           'text-halign': 'center',
-          'text-margin-y': '4px',
+          'text-justification': 'center',
           'text-wrap': 'wrap',
-          'text-max-width': '150px',
-          'width': '28px',
-          'height': '28px',
+          'text-max-width': '140px',
+          'width': '168px',
+          'height': '64px',
           'border-width': '2px',
           'border-color': (ele) => nodeColor(ele.data('entity_type')),
           'border-opacity': 0.5,
@@ -976,24 +977,19 @@
   });
   window.__agentGraphViewer = { cy };
 
-  // ── Zoom-invariant sizing ─────────────────────────────────────────────────
-  const Z = { nodeSize: 28, nodeFont: 12, textMaxWidth: 150, textMarginY: 4, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
+  // ── Zoom-aware edge styling ───────────────────────────────────────────────
+  const Z = { nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
   const DEFAULT_LAYOUT_PADDING = 60;
-  const READABLE_GRID_CELL_WIDTH = 165;
-  const READABLE_GRID_CELL_HEIGHT = 90;
+  const READABLE_GRID_CELL_WIDTH = 205;
+  const READABLE_GRID_CELL_HEIGHT = 104;
 
   function applyZoomStyles() {
     const z = cy.zoom();
-    // Below z=0.5 stop compensating — otherwise node model-space radii exceed
-    // inter-node distances and eat the edges, making arrowheads disappear.
+    // Prevent edge strokes and arrowheads from becoming disproportionately large
+    // when the graph is zoomed far out.
     const zc = Math.max(z, 0.5);
     cy.batch(() => {
       cy.nodes().style({
-        'width':          Z.nodeSize / zc,
-        'height':         Z.nodeSize / zc,
-        'font-size':      Z.nodeFont / zc,
-        'text-max-width': Z.textMaxWidth / zc,
-        'text-margin-y':  Z.textMarginY / zc,
         'border-width':   Z.nodeBorder / zc,
       });
       cy.nodes('[?bookmarked]').style({
@@ -1247,9 +1243,10 @@
       animate: false,
       randomize: false,
       nodeDimensionsIncludeLabels: true,
-      nodeRepulsion: () => 800000,
-      idealEdgeLength: () => 180,
-      nodeOverlap: 30,
+      nodeRepulsion: () => 1500000,
+      idealEdgeLength: () => 260,
+      nodeOverlap: 64,
+      componentSpacing: 120,
       gravity: 0.18,
       numIter: 1000,
       refresh: 20,
