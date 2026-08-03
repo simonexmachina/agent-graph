@@ -17,6 +17,8 @@ import {
 
 // Gmail metadata extracted by the content script, keyed by tab ID.
 const gmailMetaByTab = new Map<number, Record<string, string>>();
+const META_REFRESH_ALARM = "agentgraph_refresh_meta";
+const META_REFRESH_PERIOD_MINUTES = 15;
 
 // ---------------------------------------------------------------------------
 // Tab tracking helpers
@@ -176,6 +178,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== META_REFRESH_ALARM) return;
+  void refreshPatternsAndRestartObservation();
+});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "reload_url_patterns") return false;
 
@@ -224,4 +231,19 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 // Startup
 // ---------------------------------------------------------------------------
 
-init().catch(() => {/* server may not be running yet */});
+async function refreshPatternsAndRestartObservation(): Promise<void> {
+  await refreshMeta();
+  if (activeTabId !== null) {
+    activeUrl = "";
+    await onFocus(activeTabId);
+  }
+}
+
+async function initialiseBackground(): Promise<void> {
+  await init();
+  await chrome.alarms.create(META_REFRESH_ALARM, {
+    periodInMinutes: META_REFRESH_PERIOD_MINUTES,
+  });
+}
+
+initialiseBackground().catch(() => {/* server may not be running yet */});

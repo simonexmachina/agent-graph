@@ -83,6 +83,17 @@ agentgraph poll rss
 
 The RSS connector also polls configured feeds in the background when `agentgraph serve` is running.
 
+## Browser dwell observations
+
+After a feed has been indexed, AgentGraph derives a small set of article URL-prefix patterns
+from its known entry links. The browser extension refreshes those patterns periodically and can
+then report dwell for matching article pages.
+
+The prefixes are only an extension-side eligibility filter. The server attributes dwell to RSS
+only when the observed, normalized URL exactly matches a previously indexed RSS entry. Unknown
+pages under a matching prefix are ignored. Configured feed URLs themselves continue to be
+supported for dwell observations.
+
 ## Query articles
 
 RSS entries are indexed as `Document` entities with `platform=rss`.

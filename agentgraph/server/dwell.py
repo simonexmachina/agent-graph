@@ -7,14 +7,14 @@ import logging
 from typing import Any
 
 from agentgraph.connectors.base import ResourceType
-from agentgraph.server.router import classify_url
+from agentgraph.server.router import classify_observation_url
 
 logger = logging.getLogger(__name__)
 
 
 async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None = None) -> dict[str, Any]:
     """Classify url and increment its cumulative dwell time in the backend."""
-    ref = classify_url(url)
+    ref = await classify_observation_url(url)
     if ref is None:
         logger.debug("report-dwell: unrecognised URL %s", url)
         return {"status": "ignored", "reason": "unrecognised URL"}
@@ -37,7 +37,11 @@ async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None
                 "Dwell threshold met (%dms >= %dms): dispatching fetch for %s %s/%s",
                 dwell_ms, threshold_ms, ref.source, ref.resource_type, ref.resource_id
             )
-            asyncio.create_task(_dispatch(ref.source, ref.resource_type, ref.resource_id, meta))
+            fetch_meta = dict(meta or {})
+            fetch_meta.update(ref.fetch_meta or {})
+            asyncio.create_task(
+                _dispatch(ref.source, ref.resource_type, ref.resource_id, fetch_meta or None)
+            )
 
         return {"status": "accepted", "source": ref.source, "resource_type": ref.resource_type}
     except Exception:
@@ -62,6 +66,10 @@ async def _dispatch(
         batch = await connector.fetch(
             resource_type=resource_type, resource_id=resource_id, meta=meta
         )
+        if batch.entities or batch.persons or batch.edges:
+            from agentgraph.graph.upsert import upsert_batch
+
+            await upsert_batch(batch)
         logger.info(
             "Fetch complete %s/%s/%s — %d entities, %d persons, %d edges",
             source, resource_type, resource_id,

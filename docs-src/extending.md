@@ -95,9 +95,10 @@ A connector is a Python package that subclasses `BaseConnector`, implements the 
 The required shape is small: identify which URLs the connector owns, implement `fetch()`, and optionally implement polling, ingest, auth, and user identity hooks. The signatures below match `agentgraph.connectors.base.BaseConnector`.
 
 - `source` is the stable connector identifier used by the CLI, MCP server, and registry.
-- `url_patterns` declares which browser URLs the connector should claim for dwell-based fetches.
+- `url_patterns` declares static browser URL patterns for dwell-based fetches. Connectors can override `observation_url_patterns()` to provide derived patterns.
 - `fetch_policy` controls when a targeted fetch should be skipped because a resource is still fresh.
 - `can_handle(self, url) -> bool` is required and should confirm whether a specific URL belongs to the connector.
+- `resolve_observation_url(self, url)` can asynchronously resolve a browser observation and attach generic fetch metadata to the result.
 - `fetch(self, resource_type, resource_id, meta=None, account_id=None) -> EntityBatch` is the required runtime fetch hook.
 - `normalise_fetch_id(self, resource_id, entity_type) -> tuple[str, ResourceType]` lets a connector translate stored IDs into fetchable IDs when they differ.
 - `poll_interval`, `poll_delegates`, `poll_account_ids()`, `poll()`, and `ingest()` are the optional background refresh hooks.
@@ -112,7 +113,9 @@ The contract is intentionally generic: core AgentGraph code calls these hooks wi
 | `source: ClassVar[str]` | Yes | Stable connector key used everywhere the platform is identified. |
 | `fetch_policy: ClassVar[FetchPolicy]` | Yes | Declares how long fetched resources stay fresh before an incremental refresh is needed. |
 | `url_patterns: ClassVar[list[str]]` | No | URL match patterns that declare which browser URLs this connector can observe. |
+| `observation_url_patterns() -> list[str]` | No | Async hook for dynamic browser observation patterns; defaults to `url_patterns`. |
 | `can_handle(self, url: str) -> bool` | Yes | Fine-grained URL matcher used after `url_patterns` to decide whether the connector owns a specific URL. |
+| `resolve_observation_url(self, url) -> SourceReference \| None` | No | Async browser-dwell resolver; may attach fetch metadata while preserving connector-owned URL ownership. |
 | `fetch(...) -> EntityBatch` | Yes | Fetch one resource and return the entities, people, and edges needed to represent it in the graph. |
 | `normalise_fetch_id(...) -> tuple[str, ResourceType]` | No | Override when stored entity IDs differ from the IDs required by the upstream fetch path. |
 | `poll_interval: ClassVar[timedelta \| None]` | No | Enables scheduled background polling when set to a duration. |
