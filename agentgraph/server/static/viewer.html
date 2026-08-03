@@ -39,14 +39,22 @@
 
   /* ── layout ────────────────────────────────────────────────────────────── */
   #app {
-    display: flex;
+    --sidebar-width: clamp(240px, 18vw, 300px);
+    --detail-width: clamp(320px, 28vw, 440px);
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
     height: 100vh;
+    overflow: hidden;
+    transition: grid-template-columns 0.2s ease;
+  }
+
+  #app.detail-open,
+  #app:has(#detail.open) {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--detail-width);
   }
 
   /* ── sidebar ───────────────────────────────────────────────────────────── */
   #sidebar {
-    width: 220px;
-    min-width: 220px;
     background: var(--surface);
     border-right: 1px solid var(--border);
     display: flex;
@@ -167,7 +175,7 @@
 
   /* ── canvas area ────────────────────────────────────────────────────────── */
   #canvas-wrap {
-    flex: 1;
+    min-width: 0;
     position: relative;
     overflow: hidden;
   }
@@ -367,8 +375,9 @@
 
   /* ── detail panel ───────────────────────────────────────────────────────── */
   #detail {
-    width: 300px;
-    min-width: 300px;
+    grid-column: 3;
+    width: var(--detail-width);
+    min-width: 0;
     background: var(--surface);
     border-left: 1px solid var(--border);
     display: flex;
@@ -376,15 +385,37 @@
     overflow-y: auto;
     transform: translateX(100%);
     transition: transform 0.2s ease;
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
+    position: relative;
     z-index: 5;
   }
 
   #detail.open {
     transform: translateX(0);
+  }
+
+  @media (max-width: 1100px) {
+    #app,
+    #app.detail-open {
+      display: flex;
+    }
+
+    #sidebar {
+      width: 220px;
+      min-width: 220px;
+    }
+
+    #canvas-wrap {
+      flex: 1;
+    }
+
+    #detail {
+      width: min(360px, 82vw);
+      min-width: min(360px, 82vw);
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+    }
   }
 
   #detail-header {
@@ -1139,6 +1170,7 @@
   const depthInput    = document.getElementById('depth-input');
   const resetBtn      = document.getElementById('reset-btn');
   const refreshBtn    = document.getElementById('refresh-btn');
+  const app           = document.getElementById('app');
   const detail        = document.getElementById('detail');
   const detailTitle   = document.getElementById('detail-title');
   const detailBody    = document.getElementById('detail-body');
@@ -1727,6 +1759,8 @@
   function closeDetail(syncUrl = true) {
     detailRequestId += 1;
     detail.classList.remove('open');
+    app.classList.remove('detail-open');
+    window.setTimeout(() => cy.resize(), 200);
     if (syncUrl) collectParams({ selected_id: null });
   }
 
@@ -2136,7 +2170,9 @@
       detailBody.appendChild(edgesSection);
     }
 
+    app.classList.add('detail-open');
     detail.classList.add('open');
+    window.setTimeout(() => cy.resize(), 200);
   }
 
   function renderMergedPeople(metadata) {

@@ -215,3 +215,21 @@ def test_hover_card_hides_when_pointer_enters_detail_panel(page: Page) -> None:
         expect(page.locator("#hover-card")).to_be_visible()
         page.mouse.move(detail["x"] + 20, detail["y"] + 20)
         expect(page.locator("#hover-card")).not_to_be_visible()
+
+
+def test_open_detail_uses_its_own_desktop_column(page: Page) -> None:
+    nodes = [_node(1, "Detail target")]
+    with _serve_viewer(nodes, []) as url:
+        _wait_for_graph(page, url, len(nodes))
+        canvas_before = page.locator("#canvas-wrap").bounding_box()
+        page.locator("#app").evaluate("app => app.classList.add('detail-open')")
+        page.locator("#detail").evaluate("panel => panel.classList.add('open')")
+        page.wait_for_timeout(250)
+        canvas_after = page.locator("#canvas-wrap").bounding_box()
+        detail = page.locator("#detail").bounding_box()
+
+    assert canvas_before is not None
+    assert canvas_after is not None
+    assert detail is not None
+    assert canvas_before["width"] - canvas_after["width"] >= 300
+    assert detail["x"] >= canvas_after["x"] + canvas_after["width"]
