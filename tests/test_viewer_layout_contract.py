@@ -185,3 +185,21 @@ def test_selection_and_hover_do_not_move_graph_geometry(page: Page) -> None:
 
     assert after_selection == before
     assert after == before
+
+
+def test_hover_card_hides_when_pointer_enters_detail_panel(page: Page) -> None:
+    nodes = [_node(1, "Hover target")]
+    with _serve_viewer(nodes, []) as url:
+        _wait_for_graph(page, url, len(nodes))
+        page.locator("#detail").evaluate("panel => panel.classList.add('open')")
+        page.wait_for_timeout(250)
+        canvas = page.locator("#cy").bounding_box()
+        target = page.evaluate("() => window.__agentGraphViewer.cy.nodes()[0].renderedPosition()")
+        detail = page.locator("#detail").bounding_box()
+        assert canvas is not None
+        assert detail is not None
+
+        page.mouse.move(canvas["x"] + target["x"], canvas["y"] + target["y"])
+        expect(page.locator("#hover-card")).to_be_visible()
+        page.mouse.move(detail["x"] + 20, detail["y"] + 20)
+        expect(page.locator("#hover-card")).not_to_be_visible()

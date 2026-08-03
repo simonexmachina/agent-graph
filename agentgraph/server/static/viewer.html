@@ -2309,6 +2309,10 @@
     hideHoverCard();
   });
 
+  // The detail panel overlays the graph, so Cytoscape does not always receive
+  // the node mouseout when the pointer crosses into it.
+  detail.addEventListener('mouseenter', hideHoverCard);
+
   cy.on('mousemove', 'node', (evt) => {
     positionHoverCard(evt.target);
   });
