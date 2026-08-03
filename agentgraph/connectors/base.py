@@ -48,6 +48,7 @@ class SourceReference:
     source: str
     resource_type: ResourceType
     resource_id: str
+    fetch_meta: dict[str, str] | None = None
 
 
 class PersonRecord(BaseModel):
@@ -332,6 +333,19 @@ class BaseConnector(ABC):
         """Return the fetchable resource behind a URL, if this connector owns it."""
         _ = url
         return None
+
+    async def resolve_observation_url(self, url: str) -> SourceReference | None:
+        """Resolve a URL observed by the browser extension.
+
+        Connectors can override this when resolution requires an async lookup or
+        fetch metadata that must accompany a targeted fetch. The default keeps
+        existing synchronous URL resolvers usable for observations.
+        """
+        return self.resolve_url(url)
+
+    async def observation_url_patterns(self) -> list[str]:
+        """Return browser observation patterns, including connector-derived ones."""
+        return self.url_patterns
 
     @abstractmethod
     async def fetch(

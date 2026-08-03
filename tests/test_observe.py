@@ -48,3 +48,24 @@ def test_report_dwell_unrecognised(client: TestClient) -> None:
     resp = client.post("/report-dwell", json={"url": "https://example.com/unknown", "dwell_ms": 15000})
     assert resp.status_code == 202
     assert resp.json()["status"] == "ignored"
+
+
+@pytest.mark.asyncio
+async def test_cli_meta_includes_dynamic_connector_patterns() -> None:
+    from agentgraph.server.cli_api import cli_meta
+
+    connector = MagicMock()
+    connector.source = "rss"
+    connector.observation_url_patterns = AsyncMock(
+        return_value=["https://example.com/articles/*", "https://example.com/articles/*"]
+    )
+    settings = MagicMock(dwell_threshold_seconds=3)
+
+    with (
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[connector]),
+        patch("agentgraph.config.get_settings", return_value=settings),
+    ):
+        result = await cli_meta()
+
+    assert result["url_patterns"] == ["https://example.com/articles/*"]
+    connector.observation_url_patterns.assert_awaited_once()

@@ -88,7 +88,7 @@ async def cli_meta() -> dict[str, Any]:
     seen_patterns: list[str] = []
     seen_set: set[str] = set()
     for c in connectors:
-        for p in c.url_patterns:
+        for p in await c.observation_url_patterns():
             if p not in seen_set:
                 seen_patterns.append(p)
                 seen_set.add(p)
