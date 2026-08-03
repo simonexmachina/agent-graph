@@ -19,6 +19,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra all
 
+      - name: Install browser for viewer contracts
+        run: uv run playwright install --with-deps chromium
+
       - name: Build docs
         run: uv run python scripts/build_docs.py
 

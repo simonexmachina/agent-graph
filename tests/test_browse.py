@@ -169,6 +169,9 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     assert "cy.fit(cy.nodes(), DEFAULT_LAYOUT_PADDING);" in viewer_html
     assert "function readableGridPositionFor(index, count)" in viewer_html
     assert "function readableGridPositions()" in viewer_html
+    assert "const cellWidth = Math.max(READABLE_GRID_CELL_WIDTH, bounds.w + 24);" in viewer_html
+    assert "const cellHeight = Math.max(READABLE_GRID_CELL_HEIGHT, bounds.h + 24);" in viewer_html
+    assert "const gridLayout = () => cy.layout({" in viewer_html
     assert "window.__agentGraphViewer = { cy };" in viewer_html
     assert "name: 'preset'" in viewer_html
     assert "positions: readableGridPositions()" in viewer_html
@@ -180,7 +183,7 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     assert "const refinedLayout = cy.layout(coseOptions);" in viewer_html
     assert "function resolveNodeOverlaps()" in viewer_html
     assert "resolveNodeOverlaps();" in viewer_html
-    assert viewer_html.count("fitGraphToViewport();") == 4
+    assert viewer_html.count("fitGraphToViewport();") == 5
     assert "ensureReadableDefaultZoom" not in viewer_html
 
 

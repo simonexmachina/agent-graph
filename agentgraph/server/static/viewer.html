@@ -1081,14 +1081,21 @@
   }
 
   function readableGridPositionFor(index, count) {
-    const usableWidth = Math.max(cy.width() - (DEFAULT_LAYOUT_PADDING * 2), READABLE_GRID_CELL_WIDTH);
-    const columns = Math.max(1, Math.floor(usableWidth / READABLE_GRID_CELL_WIDTH));
-    const totalWidth = ((Math.min(count, columns) - 1) * READABLE_GRID_CELL_WIDTH);
-    const xOffset = Math.max(DEFAULT_LAYOUT_PADDING, (cy.width() - totalWidth) / 2);
+    const node = cy.nodes()[0];
+    const bounds = node.boundingBox({ includeLabels: true, includeOverlays: false });
+    const cellWidth = Math.max(READABLE_GRID_CELL_WIDTH, bounds.w + 24);
+    const cellHeight = Math.max(READABLE_GRID_CELL_HEIGHT, bounds.h + 24);
+    const zoom = cy.zoom();
+    const padding = DEFAULT_LAYOUT_PADDING / zoom;
+    const viewportWidth = cy.width() / zoom;
+    const usableWidth = Math.max(viewportWidth - (padding * 2), cellWidth);
+    const columns = Math.max(1, Math.floor(usableWidth / cellWidth));
+    const totalWidth = ((Math.min(count, columns) - 1) * cellWidth);
+    const xOffset = Math.max(padding, (viewportWidth - totalWidth) / 2);
 
     return {
-      x: xOffset + ((index % columns) * READABLE_GRID_CELL_WIDTH),
-      y: DEFAULT_LAYOUT_PADDING + (Math.floor(index / columns) * READABLE_GRID_CELL_HEIGHT),
+      x: xOffset + ((index % columns) * cellWidth),
+      y: padding + (Math.floor(index / columns) * cellHeight),
     };
   }
 
@@ -1294,14 +1301,20 @@
 
   function runLayout() {
     if (cy.edges().length === 0) {
-      const layout = cy.layout({
+      const gridLayout = () => cy.layout({
         name: 'preset',
         animate: false,
         fit: false,
         positions: readableGridPositions(),
       });
+      const layout = gridLayout();
       layout.one('layoutstop', () => {
         fitGraphToViewport();
+        const refinedLayout = gridLayout();
+        refinedLayout.one('layoutstop', () => {
+          fitGraphToViewport();
+        });
+        refinedLayout.run();
       });
       layout.run();
       return;
@@ -1439,7 +1452,7 @@
     listView.style.display = isList ? 'block' : 'none';
     document.getElementById('cy').style.display = isList ? 'none' : 'block';
     if (!isList) cy.resize();
-    document.getElementById('hover-card').style.display = 'none';
+    hideHoverCard();
     graphTab.classList.toggle('active', !isList);
     graphTab.setAttribute('aria-selected', String(!isList));
     listTab.classList.toggle('active', isList);
