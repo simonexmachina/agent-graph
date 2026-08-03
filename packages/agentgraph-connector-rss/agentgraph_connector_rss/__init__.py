@@ -36,6 +36,7 @@ from agentgraph_connector_rss.auth import (
     run_rss_flow,
     verify_rss_auth,
 )
+from agentgraph_connector_rss.tls import feed_tls_verify
 
 _STALE_AFTER = 30 * 60
 _FEED_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
@@ -231,6 +232,7 @@ async def _parse_feed(feed_url: str) -> Any:
         follow_redirects=True,
         max_redirects=5,
         timeout=_FEED_TIMEOUT,
+        verify=feed_tls_verify(feed_url),
         headers={"Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"},
     ) as client:
         response = await client.get(feed_url)
