@@ -12,7 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import feedparser  # type: ignore[import-untyped]
 import pytest
-from agentgraph_connector_rss import RssConnector, _fetch_feed
+from agentgraph_connector_rss import (
+    RssConnector,
+    _fetch_feed,
+    derive_observation_url_patterns,
+    normalise_article_url,
+)
 from agentgraph_connector_rss.auth import (
     OpmlFeed,
     RssConfig,
@@ -65,6 +70,73 @@ def test_rss_can_handle_returns_false_without_config() -> None:
     with patch("agentgraph_connector_rss.load_rss_settings", side_effect=RuntimeError("missing")):
         assert not connector.can_handle("https://example.com/feed.xml")
     assert not connector.can_handle("file:///tmp/feed.xml")
+
+
+def test_normalise_article_url_removes_fragments_trailing_slashes_and_tracking() -> None:
+    assert normalise_article_url(
+        "HTTPS://Example.COM/posts/one/?utm_source=feed&keep=value#section"
+    ) == "https://example.com/posts/one?keep=value"
+
+
+def test_derive_observation_patterns_prefers_shared_specific_paths() -> None:
+    patterns = derive_observation_url_patterns(
+        {
+            "https://example.com/feed.xml": [
+                "https://example.com/articles/2026/first",
+                "https://example.com/articles/2026/second",
+                "https://example.com/articles/2025/third",
+                "https://example.com/about",
+            ]
+        }
+    )
+
+    assert patterns[0] == "https://example.com/articles/2026/*"
+    assert "https://example.com/articles/*" in patterns
+    assert "https://example.com/*" not in patterns
+    assert len(patterns) <= 5
+
+
+@pytest.mark.asyncio
+async def test_rss_observation_resolution_requires_an_exact_known_entry() -> None:
+    known_entry = {
+        "platform_entity_id": "entry/known",
+        "metadata": {
+            "feed_url": "https://example.com/feed.xml",
+            "link": "https://example.com/articles/known",
+            "web_url": "https://example.com/articles/known",
+            "http_etag": '"cached"',
+        },
+    }
+    backend = MagicMock()
+    backend.query_by_filter = AsyncMock(return_value=[known_entry])
+    set_backend(backend)
+
+    ref = await RssConnector().resolve_observation_url(
+        "https://example.com/articles/known/?utm_source=reader#top"
+    )
+
+    assert ref is not None
+    assert ref.resource_id == "entry/known"
+    assert ref.fetch_meta == known_entry["metadata"]
+    backend.query_by_filter.assert_awaited_once_with(
+        "Document",
+        {"platform": "rss", "web_url": "https://example.com/articles/known"},
+        1,
+        "updated_at",
+        None,
+        None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_rss_observation_resolution_ignores_unknown_matching_prefix_url() -> None:
+    backend = MagicMock()
+    backend.query_by_filter = AsyncMock(return_value=[])
+    set_backend(backend)
+
+    ref = await RssConnector().resolve_observation_url("https://example.com/articles/not-indexed")
+
+    assert ref is None
 
 
 def test_rss_config_roundtrip_uses_config_toml(

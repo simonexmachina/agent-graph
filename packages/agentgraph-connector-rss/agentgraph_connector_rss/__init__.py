@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from importlib import import_module
 from typing import Any, cast
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from agentgraph.connectors.base import (
     BaseConnector,
@@ -36,6 +37,17 @@ from agentgraph_connector_rss.auth import (
 )
 
 _STALE_AFTER = 30 * 60
+_MAX_OBSERVATION_PATTERNS_PER_FEED = 5
+_TRACKING_QUERY_KEYS = {
+    "fbclid",
+    "gclid",
+    "dclid",
+    "msclkid",
+    "mc_cid",
+    "mc_eid",
+    "_hsenc",
+    "_hsmi",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +59,9 @@ class RssConnector(BaseConnector):
     auth_label = "rss"
     auth_description = "RSS/Atom feeds: feed URLs are fetched directly and entries are indexed as Document entities."
     onboard_prompt = "Set up RSS feeds?"
+
+    def __init__(self) -> None:
+        self._observation_patterns: list[str] | None = None
 
     @classmethod
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
@@ -130,6 +145,59 @@ class RssConnector(BaseConnector):
             resource_id=url,
         )
 
+    async def resolve_observation_url(self, url: str) -> SourceReference | None:
+        configured_feed = self.resolve_url(url)
+        if configured_feed is not None:
+            return configured_feed
+
+        normalised_url = normalise_article_url(url)
+        if normalised_url is None:
+            return None
+        entries = await get_backend().query_by_filter(
+            "Document",
+            {"platform": self.source, "web_url": normalised_url},
+            1,
+            "updated_at",
+            None,
+            None,
+        )
+        if not entries:
+            return None
+        entry = entries[0]
+        platform_entity_id = entry.get("platform_entity_id")
+        metadata = entry.get("metadata")
+        if not isinstance(platform_entity_id, str) or not isinstance(metadata, Mapping):
+            return None
+        return SourceReference(
+            source=self.source,
+            resource_type="document",
+            resource_id=platform_entity_id,
+            fetch_meta=_string_metadata(metadata),
+        )
+
+    async def observation_url_patterns(self) -> list[str]:
+        if self._observation_patterns is not None:
+            return self._observation_patterns
+        try:
+            settings = load_rss_settings()
+        except RuntimeError:
+            return []
+
+        links_by_feed: dict[str, list[str]] = {}
+        backend = get_backend()
+        for feed_url in settings.feed_urls:
+            entries = await backend.query_by_filter(
+                "Document",
+                {"platform": self.source, "feed_url": feed_url},
+                10_000,
+                "updated_at",
+                None,
+                None,
+            )
+            links_by_feed[feed_url] = _entry_links(entries)
+        self._observation_patterns = derive_observation_url_patterns(links_by_feed)
+        return self._observation_patterns
+
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         settings = load_rss_settings(account_id)
         combined = EntityBatch()
@@ -138,6 +206,9 @@ class RssConnector(BaseConnector):
             combined.entities.extend(batch.entities)
             combined.edges.extend(batch.edges)
             combined.persons.extend(batch.persons)
+        self._observation_patterns = derive_observation_url_patterns(
+            _entry_links_by_feed(combined.entities)
+        )
         return combined
 
     async def poll(
@@ -318,7 +389,7 @@ def _entry_to_entity(
     feed_entity_id: str,
     entry: dict[str, Any],
 ) -> EntityRecord:
-    link = str(entry.get("link") or "")
+    link = normalise_article_url(str(entry.get("link") or "")) or ""
     external_id = str(entry.get("id") or entry.get("guid") or link or entry.get("title") or "")
     entity_id = f"entry/{_hash_ref(feed_url + ':' + external_id)}"
     title = str(entry.get("title") or link or "(untitled)")
@@ -427,6 +498,94 @@ def _entity_record_metadata(
 def _metadata_str(metadata: Mapping[str, object], key: str) -> str | None:
     value = metadata.get(key)
     return value if isinstance(value, str) and value else None
+
+
+def _string_metadata(metadata: Mapping[str, object]) -> dict[str, str]:
+    return {key: value for key, value in metadata.items() if isinstance(value, str)}
+
+
+def normalise_article_url(url: str) -> str | None:
+    """Canonicalise an RSS entry URL for exact observation matching."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    query = urlencode(
+        [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not _is_tracking_query_key(key)
+        ],
+        doseq=True,
+    )
+    path = parsed.path.rstrip("/") or "/"
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, query, ""))
+
+
+def derive_observation_url_patterns(links_by_feed: Mapping[str, list[str]]) -> list[str]:
+    """Build bounded Chrome patterns from previously indexed article links."""
+    patterns: list[str] = []
+    seen: set[str] = set()
+    for links in links_by_feed.values():
+        candidates: dict[str, set[str]] = {}
+        for raw_link in links:
+            link = normalise_article_url(raw_link)
+            if link is None:
+                continue
+            parsed = urlsplit(link)
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+            segments = [segment for segment in parsed.path.split("/") if segment]
+            for depth in range(1, len(segments)):
+                prefix = f"{origin}/{'/'.join(segments[:depth])}"
+                candidates.setdefault(prefix, set()).add(link)
+            candidates.setdefault(origin, set()).add(link)
+
+        shared = [
+            (prefix, urls)
+            for prefix, urls in candidates.items()
+            if len(urls) >= 2 and prefix.count("/") > 2
+        ]
+        useful = shared or [(prefix, urls) for prefix, urls in candidates.items() if len(urls) >= 1]
+        useful.sort(
+            key=lambda item: (
+                -item[0].removeprefix("https://").removeprefix("http://").count("/"),
+                -len(item[1]),
+                item[0],
+            )
+        )
+        for prefix, _urls in useful[:_MAX_OBSERVATION_PATTERNS_PER_FEED]:
+            pattern = f"{prefix}/*"
+            if pattern not in seen:
+                patterns.append(pattern)
+                seen.add(pattern)
+    return patterns
+
+
+def _is_tracking_query_key(key: str) -> bool:
+    return key.lower().startswith("utm_") or key.lower() in _TRACKING_QUERY_KEYS
+
+
+def _entry_links(entries: Sequence[Mapping[str, object]]) -> list[str]:
+    links: list[str] = []
+    for entry in entries:
+        metadata = entry.get("metadata")
+        if not isinstance(metadata, Mapping):
+            continue
+        link = _metadata_str(metadata, "web_url") or _metadata_str(metadata, "link")
+        if link is not None:
+            links.append(link)
+    return links
+
+
+def _entry_links_by_feed(entities: list[EntityRecord]) -> dict[str, list[str]]:
+    links_by_feed: dict[str, list[str]] = {}
+    for entity in entities:
+        if entity.entity_type != "Document":
+            continue
+        feed_url = _metadata_str(entity.metadata, "feed_url")
+        link = _metadata_str(entity.metadata, "web_url") or _metadata_str(entity.metadata, "link")
+        if feed_url is not None and link is not None:
+            links_by_feed.setdefault(feed_url, []).append(link)
+    return links_by_feed
 
 
 def _entry_text(entry: dict[str, Any]) -> str:
