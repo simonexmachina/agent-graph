@@ -1,0 +1,119 @@
+"""Deterministic corpus generation for AgentGraph benchmark workloads."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from agentgraph.backends.sqlite.backend import SQLiteBackend
+from agentgraph.connectors.base import EdgeRecord, EntityBatch, EntityRecord
+from benchmarks.models import CorpusSpec
+
+
+@dataclass(frozen=True)
+class SeededCorpus:
+    """References required to exercise a seeded benchmark database."""
+
+    spec: CorpusSpec
+    hub_platform_id: str
+    exact_platform_id: str
+    exact_query: str
+    semantic_query: str
+    semantic_vector: list[float]
+
+
+def query_vector(cluster: int, cluster_count: int) -> list[float]:
+    """Return a stable unit vector whose nearest items are in ``cluster``."""
+    dimension = 8
+    vector = [0.0] * dimension
+    vector[cluster % dimension] = 1.0
+    vector[(cluster // dimension) % dimension] = 0.25
+    norm = sum(value * value for value in vector) ** 0.5
+    return [value / norm for value in vector]
+
+
+def build_seeded_corpus(spec: CorpusSpec) -> tuple[list[EntityBatch], SeededCorpus]:
+    """Build deterministic entities and edges without connector or model dependencies."""
+    batches: list[EntityBatch] = []
+    base_time = datetime(2025, 1, 1, tzinfo=UTC)
+    hub_platform_id = "hub-000000"
+    exact_platform_id = "doc-000017"
+
+    for start in range(0, spec.entity_count, spec.batch_size):
+        entities: list[EntityRecord] = []
+        edges: list[EdgeRecord] = []
+        end = min(start + spec.batch_size, spec.entity_count)
+        for index in range(start, end):
+            cluster = index % spec.cluster_count
+            entity_type = "Document" if index % 3 == 0 else "Message"
+            platform_id = hub_platform_id if index == 0 else f"doc-{index:06d}"
+            entities.append(
+                EntityRecord(
+                    entity_type=entity_type,
+                    platform="benchmark",
+                    platform_entity_id=platform_id,
+                    title=f"Benchmark {entity_type} {index}",
+                    content=(
+                        f"topic-{cluster} shared context semantic-cluster-{cluster} "
+                        f"needle-{index:06d} workload fixture"
+                    ),
+                    created_at=base_time + timedelta(minutes=index),
+                    updated_at=base_time + timedelta(minutes=index),
+                    metadata={"cluster": cluster, "fixture": "benchmark"},
+                )
+            )
+            if index and (index <= spec.high_degree_edges or index % 11 == 0):
+                edges.append(
+                    EdgeRecord(
+                        edge_type="references",
+                        source_platform_entity_id=hub_platform_id,
+                        target_platform_entity_id=platform_id,
+                        platform="benchmark",
+                    )
+                )
+            elif index > 1:
+                edges.append(
+                    EdgeRecord(
+                        edge_type="references",
+                        source_platform_entity_id=f"doc-{index - 1:06d}",
+                        target_platform_entity_id=platform_id,
+                        platform="benchmark",
+                    )
+                )
+        batches.append(EntityBatch(entities=entities, edges=edges))
+
+    return batches, SeededCorpus(
+        spec=spec,
+        hub_platform_id=hub_platform_id,
+        exact_platform_id=exact_platform_id,
+        exact_query="needle-000017",
+        semantic_query="unseen language for semantic cluster 7",
+        semantic_vector=query_vector(7, spec.cluster_count),
+    )
+
+
+async def seed_sqlite_database(
+    path: Path, spec: CorpusSpec, vector_mode: str = "numpy"
+) -> SeededCorpus:
+    """Create a disposable SQLite fixture database and return its workload handles."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.unlink()
+    backend = SQLiteBackend(str(path), vector_mode=vector_mode)
+    await backend.initialize()
+    batches, seeded = build_seeded_corpus(spec)
+    try:
+        for batch in batches:
+            embeddings: dict[str, list[float] | None] = {}
+            for entity in batch.entities:
+                if entity.is_stub:
+                    continue
+                cluster = entity.metadata.get("cluster")
+                if not isinstance(cluster, int):
+                    raise RuntimeError("Benchmark corpus entity is missing its integer cluster")
+                embeddings[entity.platform_entity_id] = query_vector(cluster, spec.cluster_count)
+            await backend.upsert_batch(batch, {}, embeddings)
+    finally:
+        await backend.close()
+    return seeded

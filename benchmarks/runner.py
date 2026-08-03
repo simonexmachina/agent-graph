@@ -1,0 +1,181 @@
+"""Backend benchmark execution and JSON report generation."""
+
+from __future__ import annotations
+
+import asyncio
+import subprocess
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from time import perf_counter
+from typing import cast
+
+from agentgraph.backends.sqlite.backend import SQLiteBackend
+from benchmarks.corpus import SeededCorpus, build_seeded_corpus, query_vector, seed_sqlite_database
+from benchmarks.models import (
+    BenchmarkRun,
+    CorpusSpec,
+    QualityResult,
+    WorkloadResult,
+    summarize_samples,
+)
+
+Operation = Callable[[], Awaitable[list[dict[str, object]] | dict[str, object] | None]]
+
+
+def _git_sha() -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+async def _measure(
+    name: str,
+    operation: Operation,
+    *,
+    iterations: int,
+    warmup_iterations: int,
+    quality: Callable[[object], QualityResult] | None = None,
+) -> WorkloadResult:
+    for _ in range(warmup_iterations):
+        await operation()
+    samples_ms: list[float] = []
+    final_result: object = None
+    for _ in range(iterations):
+        start = perf_counter()
+        final_result = await operation()
+        samples_ms.append((perf_counter() - start) * 1000)
+    total_seconds = sum(samples_ms) / 1000
+    return WorkloadResult(
+        name=name,
+        kind="backend",
+        warmup_iterations=warmup_iterations,
+        summary=summarize_samples(samples_ms),
+        operations_per_second=iterations / total_seconds if total_seconds else 0,
+        quality=quality(final_result) if quality else None,
+    )
+
+
+def _search_quality(expected_platform_id: str) -> Callable[[object], QualityResult]:
+    def evaluate(result: object) -> QualityResult:
+        rows = cast(list[object], result) if isinstance(result, list) else []
+        returned_ids = [
+            str(cast(dict[str, object], row)["platform_entity_id"])
+            for row in rows
+            if isinstance(row, dict)
+            and isinstance(cast(dict[str, object], row).get("platform_entity_id"), str)
+        ]
+        present = expected_platform_id in returned_ids
+        return QualityResult(
+            expected_ids=[expected_platform_id],
+            returned_ids=returned_ids,
+            recall_at_limit=1.0 if present else 0.0,
+            required_ids_present=present,
+        )
+
+    return evaluate
+
+
+async def run_backend_suite(
+    database_path: Path,
+    spec: CorpusSpec,
+    *,
+    iterations: int = 10,
+    warmup_iterations: int = 3,
+    vector_mode: str = "numpy",
+    seed: bool = True,
+) -> BenchmarkRun:
+    """Seed and execute the standard direct-storage workload suite."""
+    seeded: SeededCorpus
+    if seed:
+        seeded = await seed_sqlite_database(database_path, spec, vector_mode)
+    else:
+        _, seeded = build_seeded_corpus(spec)
+
+    backend = SQLiteBackend(str(database_path), vector_mode=vector_mode)
+    await backend.initialize()
+    try:
+        exact_vector = query_vector(17 % spec.cluster_count, spec.cluster_count)
+        hub = await backend.get_entity_by_platform("benchmark", seeded.hub_platform_id)
+        if hub is None:
+            raise RuntimeError("Seeded benchmark hub was not persisted")
+        workloads = [
+            await _measure(
+                "search.exact",
+                lambda: backend.search_entities(exact_vector, seeded.exact_query, None, 10, 0.0),
+                iterations=iterations,
+                warmup_iterations=warmup_iterations,
+                quality=_search_quality(seeded.exact_platform_id),
+            ),
+            await _measure(
+                "search.semantic_sparse",
+                lambda: backend.search_entities(
+                    seeded.semantic_vector, seeded.semantic_query, None, 10, 0.0
+                ),
+                iterations=iterations,
+                warmup_iterations=warmup_iterations,
+            ),
+            await _measure(
+                "search.common_term",
+                lambda: backend.search_entities(exact_vector, "shared context", None, 10, 0.0),
+                iterations=iterations,
+                warmup_iterations=warmup_iterations,
+            ),
+            await _measure(
+                "retrieval.filtered_documents",
+                lambda: backend.query_by_filter(
+                    "Document", {"platform": "benchmark"}, 50, "last_accessed", None, None
+                ),
+                iterations=iterations,
+                warmup_iterations=warmup_iterations,
+            ),
+            await _measure(
+                "graph.high_degree_traversal",
+                lambda: backend.traverse_graph(str(hub["id"]), 2),
+                iterations=iterations,
+                warmup_iterations=warmup_iterations,
+            ),
+        ]
+    finally:
+        await backend.close()
+    return BenchmarkRun(
+        git_sha=_git_sha(),
+        corpus=spec,
+        vector_mode=vector_mode,
+        cold=False,
+        workloads=workloads,
+    )
+
+
+def write_report(report: BenchmarkRun, output_path: Path) -> None:
+    """Write a portable, schema-versioned benchmark report."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(report.model_dump_json(indent=2) + "\n")
+
+
+def main() -> None:
+    """Run a local medium corpus benchmark via ``python -m benchmarks.runner``."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run AgentGraph backend benchmarks")
+    parser.add_argument("--database", type=Path, default=Path(".benchmarks/medium.db"))
+    parser.add_argument("--output", type=Path, default=Path(".benchmarks/latest.json"))
+    parser.add_argument("--entities", type=int, default=10_000)
+    parser.add_argument("--iterations", type=int, default=10)
+    args = parser.parse_args()
+    report = asyncio.run(
+        run_backend_suite(
+            args.database,
+            CorpusSpec(
+                name=f"generated-{args.entities}", entity_count=args.entities, high_degree_edges=250
+            ),
+            iterations=args.iterations,
+        )
+    )
+    write_report(report, args.output)
+
+
+if __name__ == "__main__":
+    main()
