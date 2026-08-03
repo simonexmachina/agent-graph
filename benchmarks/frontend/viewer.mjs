@@ -32,6 +32,15 @@ try {
     await page.goto(`${baseUrl.replace(/\/$/, '')}/viewer`, { waitUntil: 'networkidle' });
     await page.locator('#cy').waitFor({ state: 'visible' });
   }));
+  workloads.push(await measure('viewer.graph_layout', async () => {
+    await page.waitForFunction(() => {
+      const graph = window.__agentGraphViewer?.cy;
+      return graph && graph.nodes().length > 0 && graph.nodes().every(node => {
+        const position = node.position();
+        return Number.isFinite(position.x) && Number.isFinite(position.y);
+      });
+    });
+  }));
   workloads.push(await measure('viewer.search_to_results', async () => {
     const search = page.locator('#search-input');
     await search.fill('shared context');
@@ -41,6 +50,10 @@ try {
   workloads.push(await measure('viewer.list_paging', async () => {
     await page.locator('#list-tab').click();
     await page.locator('#node-list-body tr').first().waitFor({ state: 'visible' });
+  }));
+  workloads.push(await measure('viewer.entity_detail', async () => {
+    await page.locator('#node-list-body tr').first().click();
+    await page.locator('#detail').waitFor({ state: 'visible' });
   }));
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, `${JSON.stringify({ schema_version: 1, workloads, failures }, null, 2)}\n`);
