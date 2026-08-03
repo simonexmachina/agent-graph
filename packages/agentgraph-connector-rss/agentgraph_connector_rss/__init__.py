@@ -584,14 +584,16 @@ def derive_observation_url_patterns(links_by_feed: Mapping[str, list[str]]) -> l
             if len(urls) >= 2 and prefix.count("/") > 2
         ]
         useful = shared or [(prefix, urls) for prefix, urls in candidates.items() if len(urls) >= 1]
-        useful.sort(
-            key=lambda item: (
-                -item[0].removeprefix("https://").removeprefix("http://").count("/"),
-                -len(item[1]),
-                item[0],
-            )
-        )
-        for prefix, _urls in useful[:_MAX_OBSERVATION_PATTERNS_PER_FEED]:
+        useful.sort(key=lambda item: (item[0].count("/"), -len(item[1]), item[0]))
+        selected_prefixes: list[str] = []
+        for prefix, _urls in useful:
+            if any(prefix.startswith(f"{selected}/") or prefix == selected for selected in selected_prefixes):
+                continue
+            selected_prefixes.append(prefix)
+            if len(selected_prefixes) == _MAX_OBSERVATION_PATTERNS_PER_FEED:
+                break
+
+        for prefix in selected_prefixes:
             pattern = f"{prefix}/*"
             if pattern not in seen:
                 patterns.append(pattern)

@@ -80,7 +80,7 @@ def test_normalise_article_url_removes_fragments_trailing_slashes_and_tracking()
     ) == "https://example.com/posts/one?keep=value&z=last"
 
 
-def test_derive_observation_patterns_prefers_shared_specific_paths() -> None:
+def test_derive_observation_patterns_remove_subsumed_specific_paths() -> None:
     patterns = derive_observation_url_patterns(
         {
             "https://example.com/feed.xml": [
@@ -92,10 +92,8 @@ def test_derive_observation_patterns_prefers_shared_specific_paths() -> None:
         }
     )
 
-    assert patterns[0] == "https://example.com/articles/2026/*"
-    assert "https://example.com/articles/*" in patterns
+    assert patterns == ["https://example.com/articles/*"]
     assert "https://example.com/*" not in patterns
-    assert len(patterns) <= 5
 
 
 @pytest.mark.asyncio
@@ -119,7 +117,7 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
     ):
         patterns = await RssConnector().observation_url_patterns()
 
-    assert "https://example.com/articles/*" in patterns
+    assert patterns == ["https://example.com/*"]
     backend.query_by_filter.assert_awaited_once_with(
         "Document",
         {"platform": "rss", "feed_url": feed_url},
