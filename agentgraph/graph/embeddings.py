@@ -11,6 +11,7 @@ from fastembed import TextEmbedding
 from numpy.typing import NDArray
 
 from agentgraph.config import get_settings
+from agentgraph.perf import timed
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +32,18 @@ def _normalise(vec: NDArray[Any]) -> list[float]:
 
 def encode_passage(text: str) -> list[float]:
     """Return a normalized passage embedding vector for indexed content."""
-    model = _get_model()
-    vec = cast(NDArray[Any], next(iter(model.passage_embed([text]))))
-    return _normalise(vec)
+    with timed("embedding.passage", characters=len(text)):
+        model = _get_model()
+        vec = cast(NDArray[Any], next(iter(model.passage_embed([text]))))
+        return _normalise(vec)
 
 
 def encode_query(text: str) -> list[float]:
     """Return a normalized query embedding vector for search text."""
-    model = _get_model()
-    vec = cast(NDArray[Any], next(iter(model.query_embed(text))))
-    return _normalise(vec)
+    with timed("embedding.query", characters=len(text)):
+        model = _get_model()
+        vec = cast(NDArray[Any], next(iter(model.query_embed(text))))
+        return _normalise(vec)
 
 
 def encode(text: str) -> list[float]:

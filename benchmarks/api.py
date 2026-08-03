@@ -42,7 +42,9 @@ async def run_api_suite(
         async with httpx.AsyncClient(transport=transport, base_url="http://benchmark") as client:
             with patch(
                 "agentgraph.graph.query._cached_query_embedding",
-                return_value=tuple(query_vector(17 % spec.cluster_count, spec.cluster_count)),
+                return_value=tuple(
+                    query_vector(17 % spec.cluster_count, spec.embedding_dimensions)
+                ),
             ):
                 workloads = [
                     await measure_workload(

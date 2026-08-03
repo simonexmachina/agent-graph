@@ -24,12 +24,18 @@ class SeededCorpus:
     semantic_expected_platform_ids: list[str]
 
 
-def query_vector(cluster: int, cluster_count: int) -> list[float]:
+def query_vector(cluster: int, dimensions: int) -> list[float]:
     """Return a stable unit vector whose nearest items are in ``cluster``."""
-    dimension = max(8, cluster_count)
-    vector = [0.0] * dimension
-    vector[cluster % dimension] = 1.0
+    vector = [0.0] * dimensions
+    vector[cluster % dimensions] = 1.0
     return vector
+
+
+def _fixture_content(index: int, cluster: int) -> str:
+    """Generate repeatable short, medium, and long source-like body content."""
+    word_count = (32, 192, 1_024)[index % 3]
+    body = " ".join(f"context-{cluster}-{word % 17}" for word in range(word_count))
+    return f"topic-{cluster} shared context semantic-cluster-{cluster} needle-{index:06d} {body}"
 
 
 def build_seeded_corpus(spec: CorpusSpec) -> tuple[list[EntityBatch], SeededCorpus]:
@@ -54,10 +60,7 @@ def build_seeded_corpus(spec: CorpusSpec) -> tuple[list[EntityBatch], SeededCorp
                     platform="benchmark",
                     platform_entity_id=platform_id,
                     title=f"Benchmark {entity_type} {index}",
-                    content=(
-                        f"topic-{cluster} shared context semantic-cluster-{cluster} "
-                        f"needle-{index:06d} workload fixture"
-                    ),
+                    content=_fixture_content(index, cluster),
                     created_at=base_time + timedelta(minutes=index),
                     updated_at=base_time + timedelta(minutes=index),
                     metadata={"cluster": cluster, "fixture": "benchmark"},
@@ -89,7 +92,7 @@ def build_seeded_corpus(spec: CorpusSpec) -> tuple[list[EntityBatch], SeededCorp
         exact_platform_id=exact_platform_id,
         exact_query="needle-000017",
         semantic_query=f"unseen language for semantic cluster {semantic_cluster}",
-        semantic_vector=query_vector(semantic_cluster, spec.cluster_count),
+        semantic_vector=query_vector(semantic_cluster, spec.embedding_dimensions),
         semantic_expected_platform_ids=[
             f"doc-{index:06d}"
             for index in range(spec.entity_count)
@@ -117,7 +120,9 @@ async def seed_sqlite_database(
                 cluster = entity.metadata.get("cluster")
                 if not isinstance(cluster, int):
                     raise RuntimeError("Benchmark corpus entity is missing its integer cluster")
-                embeddings[entity.platform_entity_id] = query_vector(cluster, spec.cluster_count)
+                embeddings[entity.platform_entity_id] = query_vector(
+                    cluster, spec.embedding_dimensions
+                )
             await backend.upsert_batch(batch, {}, embeddings)
     finally:
         await backend.close()

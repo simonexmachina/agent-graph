@@ -19,6 +19,7 @@ class CorpusSpec(BaseModel):
     cluster_count: int = Field(default=20, ge=1)
     high_degree_edges: int = Field(default=0, ge=0)
     batch_size: int = Field(default=500, ge=1)
+    embedding_dimensions: int = Field(default=384, ge=8)
 
 
 class SampleSummary(BaseModel):
@@ -50,6 +51,7 @@ class WorkloadResult(BaseModel):
     warmup_iterations: int = Field(ge=0)
     summary: SampleSummary
     operations_per_second: float = Field(ge=0)
+    phase_summaries: dict[str, SampleSummary] = Field(default_factory=dict)
     quality: QualityResult | None = None
 
 

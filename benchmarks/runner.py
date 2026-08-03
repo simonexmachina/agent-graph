@@ -13,6 +13,7 @@ from typing import Literal, cast
 
 from agentgraph.backends.sqlite.backend import SQLiteBackend
 from agentgraph.connectors.base import EntityBatch, EntityRecord
+from agentgraph.perf import capture_timings
 from benchmarks.corpus import (
     SeededCorpus,
     build_seeded_corpus,
@@ -51,11 +52,15 @@ async def measure_workload(
     for _ in range(warmup_iterations):
         await operation()
     samples_ms: list[float] = []
+    phase_samples: dict[str, list[float]] = {}
     final_result: object = None
     for _ in range(iterations):
         start = perf_counter()
-        final_result = await operation()
+        with capture_timings() as timings:
+            final_result = await operation()
         samples_ms.append((perf_counter() - start) * 1000)
+        for phase, elapsed_ms in timings:
+            phase_samples.setdefault(phase, []).append(elapsed_ms)
     total_seconds = sum(samples_ms) / 1000
     return WorkloadResult(
         name=name,
@@ -63,6 +68,9 @@ async def measure_workload(
         warmup_iterations=warmup_iterations,
         summary=summarize_samples(samples_ms),
         operations_per_second=iterations / total_seconds if total_seconds else 0,
+        phase_summaries={
+            phase: summarize_samples(samples) for phase, samples in phase_samples.items()
+        },
         quality=quality(final_result) if quality else None,
     )
 
@@ -111,7 +119,7 @@ async def run_backend_suite(
     backend = SQLiteBackend(str(database_path), vector_mode=vector_mode)
     await backend.initialize()
     try:
-        exact_vector = query_vector(17 % spec.cluster_count, spec.cluster_count)
+        exact_vector = query_vector(17 % spec.cluster_count, spec.embedding_dimensions)
         ingestion_sequence = 0
 
         async def ingest_batch() -> None:
@@ -131,7 +139,7 @@ async def run_backend_suite(
             ]
             embeddings: dict[str, list[float] | None] = {
                 entity.platform_entity_id: query_vector(
-                    offset % spec.cluster_count, spec.cluster_count
+                    offset % spec.cluster_count, spec.embedding_dimensions
                 )
                 for offset, entity in enumerate(entities)
             }

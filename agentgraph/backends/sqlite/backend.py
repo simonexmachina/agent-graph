@@ -765,32 +765,33 @@ class SQLiteBackend(StorageBackend):
 
             # BM25 via FTS5
             fts_ids: list[tuple[str, int]] = []
-            try:
-                extra_clause = ""
-                fts_extra_params: list[Any] = []
-                if entity_types:
-                    placeholders = ",".join("?" * len(entity_types))
-                    extra_clause += f" AND e.entity_type IN ({placeholders})"
-                    fts_extra_params.extend(entity_types)
-                if platform:
-                    extra_clause += " AND e.platform = ?"
-                    fts_extra_params.append(platform)
+            with timed("sqlite.search.fts", limit=initial_candidate_limit, platform=platform):
+                try:
+                    extra_clause = ""
+                    fts_extra_params: list[Any] = []
+                    if entity_types:
+                        placeholders = ",".join("?" * len(entity_types))
+                        extra_clause += f" AND e.entity_type IN ({placeholders})"
+                        fts_extra_params.extend(entity_types)
+                    if platform:
+                        extra_clause += " AND e.platform = ?"
+                        fts_extra_params.append(platform)
 
-                cursor = await conn.execute(
-                    f"""
-                    SELECT e.id
-                    FROM entities_fts f
-                    JOIN entities e ON e.id = f.id
-                    WHERE entities_fts MATCH ? {extra_clause}
-                    ORDER BY f.rank
-                    LIMIT ?
-                    """,
-                    [_fts5_query(query_text), *fts_extra_params, initial_candidate_limit],
-                )
-                rows = await cursor.fetchall()
-                fts_ids = [(row[0], i + 1) for i, row in enumerate(rows)]
-            except Exception:
-                pass
+                    cursor = await conn.execute(
+                        f"""
+                        SELECT e.id
+                        FROM entities_fts f
+                        JOIN entities e ON e.id = f.id
+                        WHERE entities_fts MATCH ? {extra_clause}
+                        ORDER BY f.rank
+                        LIMIT ?
+                        """,
+                        [_fts5_query(query_text), *fts_extra_params, initial_candidate_limit],
+                    )
+                    rows = await cursor.fetchall()
+                    fts_ids = [(row[0], i + 1) for i, row in enumerate(rows)]
+                except Exception:
+                    pass
 
             # Vector search is the expensive leg. A saturated initial FTS
             # window already has enough lexical candidates for the requested
@@ -817,25 +818,26 @@ class SQLiteBackend(StorageBackend):
 
             # RRF fusion (k=60, fulltext weight=2x)
             # Rule: if BM25 found anything, include only results that BM25 also found.
-            fts_set = {eid for eid, _ in fts_ids}
-            vec_rank: dict[str, int] = {eid: rank for eid, rank in vec_ids}
-            fts_rank: dict[str, int] = {eid: rank for eid, rank in fts_ids}
+            with timed("sqlite.search.fusion", limit=limit):
+                fts_set = {eid for eid, _ in fts_ids}
+                vec_rank: dict[str, int] = {eid: rank for eid, rank in vec_ids}
+                fts_rank: dict[str, int] = {eid: rank for eid, rank in fts_ids}
 
-            candidates = fts_set if fts_set else set(vec_rank)
-            if not candidates:
-                return []
+                candidates = fts_set if fts_set else set(vec_rank)
+                if not candidates:
+                    return []
 
-            scored: list[tuple[str, float]] = []
-            for eid in candidates:
-                score = 0.0
-                if eid in vec_rank:
-                    score += 1.0 / (60 + vec_rank[eid])
-                if eid in fts_rank:
-                    score += 2.0 / (60 + fts_rank[eid])
-                scored.append((eid, score))
+                scored: list[tuple[str, float]] = []
+                for eid in candidates:
+                    score = 0.0
+                    if eid in vec_rank:
+                        score += 1.0 / (60 + vec_rank[eid])
+                    if eid in fts_rank:
+                        score += 2.0 / (60 + fts_rank[eid])
+                    scored.append((eid, score))
 
-            scored.sort(key=lambda x: x[1], reverse=True)
-            top = scored[:limit]
+                scored.sort(key=lambda x: x[1], reverse=True)
+                top = scored[:limit]
 
             if not top:
                 return []
@@ -845,32 +847,33 @@ class SQLiteBackend(StorageBackend):
             id_list = [eid for eid, _ in top]
             score_map = {eid: sc for eid, sc in top}
             placeholders = ",".join("?" * len(id_list))
-            cursor = await conn.execute(
-                f"""
-                SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
-                FROM entities WHERE id IN ({placeholders})
-                """,
-                id_list,
-            )
-            rows = await cursor.fetchall()
-            results: list[dict[str, Any]] = []
-            for row in rows:
-                r = _row_to_entity(row)
-                base_score = score_map.get(r["id"], 0.0)
-                dwell_ms = r.get("cumulative_dwell_ms", 0)
-                dwell_boost = 0.1 * math.log10(1 + (dwell_ms / 1000.0))
-                r["score"] = base_score + dwell_boost
+            with timed("sqlite.search.hydrate", count=len(id_list)):
+                cursor = await conn.execute(
+                    f"""
+                    SELECT id, entity_type, platform, platform_entity_id,
+                           title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
+                    FROM entities WHERE id IN ({placeholders})
+                    """,
+                    id_list,
+                )
+                rows = await cursor.fetchall()
+                results: list[dict[str, Any]] = []
+                for row in rows:
+                    r = _row_to_entity(row)
+                    base_score = score_map.get(r["id"], 0.0)
+                    dwell_ms = r.get("cumulative_dwell_ms", 0)
+                    dwell_boost = 0.1 * math.log10(1 + (dwell_ms / 1000.0))
+                    r["score"] = base_score + dwell_boost
 
-                if (r["score"] or 0) >= min_score:
-                    results.append(r)
+                    if (r["score"] or 0) >= min_score:
+                        results.append(r)
 
-            def _score(result: dict[str, Any]) -> float:
-                raw_score = result.get("score")
-                return float(raw_score) if isinstance(raw_score, int | float) else 0.0
+                def _score(result: dict[str, Any]) -> float:
+                    raw_score = result.get("score")
+                    return float(raw_score) if isinstance(raw_score, int | float) else 0.0
 
-            results.sort(key=_score, reverse=True)
-            return results
+                results.sort(key=_score, reverse=True)
+                return results
 
     async def get_entity_by_id(self, entity_id: str) -> EntityResult | None:
         row = await self._fetchone(
