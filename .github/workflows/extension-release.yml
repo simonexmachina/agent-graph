@@ -42,14 +42,37 @@ jobs:
           files: agentgraph-extension.zip
 
       - name: Publish to Chrome Web Store
-        uses: mnao305/chrome-extension-upload@v6.0.0
-        with:
-          file-path: agentgraph-extension.zip
-          extension-id: iilkfclglabllelhjacijldknapbhidi
-          client-id: ${{ secrets.CWS_CLIENT_ID }}
-          client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
-          publish: true
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_EXTENSION_ID: iilkfclglabllelhjacijldknapbhidi
+          CWS_PUBLISHER_ID: 65ad19cd-473c-496f-9278-0c6ea2636903
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          access_token="$(curl --silent --show-error --request POST https://oauth2.googleapis.com/token \
+            --data-urlencode "client_id=${CWS_CLIENT_ID}" \
+            --data-urlencode "client_secret=${CWS_CLIENT_SECRET}" \
+            --data-urlencode "refresh_token=${CWS_REFRESH_TOKEN}" \
+            --data-urlencode 'grant_type=refresh_token' | jq --exit-status --raw-output '.access_token')"
+          item="publishers/${CWS_PUBLISHER_ID}/items/${CWS_EXTENSION_ID}"
+
+          upload_status="$(curl --silent --show-error --output upload-response.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${access_token}" \
+            --header 'Content-Type: application/zip' \
+            --request POST --data-binary @agentgraph-extension.zip \
+            "https://chromewebstore.googleapis.com/upload/v2/${item}:upload")"
+          jq . upload-response.json
+          test "${upload_status}" -ge 200 && test "${upload_status}" -lt 300
+
+          publish_status="$(curl --silent --show-error --output publish-response.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${access_token}" \
+            --header 'Content-Type: application/json' \
+            --request POST --data '{}' \
+            "https://chromewebstore.googleapis.com/v2/${item}:publish")"
+          jq . publish-response.json
+          test "${publish_status}" -ge 200 && test "${publish_status}" -lt 300
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
