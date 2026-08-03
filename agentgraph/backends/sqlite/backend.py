@@ -1132,6 +1132,7 @@ class SQLiteBackend(StorageBackend):
         frontier: list[str] = [entity_id]
         all_nodes: list[EntityResult] = []
         all_edges: list[EdgeResult] = []
+        seen_edge_ids: set[str] = set()
 
         for _ in range(max_depth):
             if not frontier:
@@ -1167,7 +1168,10 @@ class SQLiteBackend(StorageBackend):
             )
             next_frontier: list[str] = []
             for row in await cursor.fetchall():
-                all_edges.append(_row_to_edge(row))
+                edge_id = str(row["id"])
+                if edge_id not in seen_edge_ids:
+                    seen_edge_ids.add(edge_id)
+                    all_edges.append(_row_to_edge(row))
                 for key in ("source_entity_id", "target_entity_id"):
                     val: str | None = row[key]
                     if val and val not in visited:

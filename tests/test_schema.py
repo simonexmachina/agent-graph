@@ -99,6 +99,31 @@ async def test_traverse_depth_zero_returns_only_the_starting_entity(
     assert result["edges"] == []
 
 
+async def test_traverse_graph_returns_each_edge_once_across_depths(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    await conn.executemany(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id)
+        VALUES (?, 'Document', 'web', ?)
+        """,
+        [["entity-1", "document-1"], ["entity-2", "document-2"], ["entity-3", "document-3"]],
+    )
+    await conn.executemany(
+        """
+        INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id)
+        VALUES (?, 'references', ?, ?)
+        """,
+        [["edge-1", "entity-1", "entity-2"], ["edge-2", "entity-2", "entity-3"]],
+    )
+
+    result = await sqlite_backend.traverse_graph("entity-1", max_depth=2)
+
+    assert {edge["id"] for edge in result["edges"]} == {"edge-1", "edge-2"}
+    assert len(result["edges"]) == 2
+
+
 async def test_get_platforms_last_synced_at_groups_platforms(sqlite_backend: SQLiteBackend) -> None:
     conn = sqlite_backend._conn_or_raise()
     await conn.executemany(
