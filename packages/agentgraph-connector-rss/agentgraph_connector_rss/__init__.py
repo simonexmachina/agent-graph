@@ -41,6 +41,7 @@ from agentgraph_connector_rss.auth import (
 _STALE_AFTER = 30 * 60
 _FEED_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _MAX_FEED_BYTES = 5_000_000
+_MAX_OBSERVATION_ENTRIES_PER_FEED = 64
 _MAX_OBSERVATION_PATTERNS_PER_FEED = 5
 _TRACKING_QUERY_KEYS = {
     "fbclid",
@@ -198,7 +199,7 @@ class RssConnector(BaseConnector):
             entries = await backend.query_by_filter(
                 "Document",
                 {"platform": self.source, "feed_url": feed_url},
-                10_000,
+                _MAX_OBSERVATION_ENTRIES_PER_FEED,
                 "updated_at",
                 None,
                 None,

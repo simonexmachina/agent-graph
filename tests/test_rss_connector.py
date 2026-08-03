@@ -15,6 +15,7 @@ import feedparser  # type: ignore[import-untyped]
 import pytest
 from agentgraph_connector_rss import (
     RssConnector,
+    _MAX_OBSERVATION_ENTRIES_PER_FEED,
     _fetch_feed,
     derive_observation_url_patterns,
     normalise_article_url,
@@ -95,6 +96,38 @@ def test_derive_observation_patterns_prefers_shared_specific_paths() -> None:
     assert "https://example.com/articles/*" in patterns
     assert "https://example.com/*" not in patterns
     assert len(patterns) <= 5
+
+
+@pytest.mark.asyncio
+async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None:
+    feed_url = "https://example.com/feed.xml"
+    backend = MagicMock()
+    backend.query_by_filter = AsyncMock(
+        return_value=[
+            {
+                "metadata": {
+                    "web_url": "https://example.com/articles/first",
+                }
+            }
+        ]
+    )
+    set_backend(backend)
+
+    with patch(
+        "agentgraph_connector_rss.load_rss_settings",
+        return_value=RssConfig(feed_urls=[feed_url]),
+    ):
+        patterns = await RssConnector().observation_url_patterns()
+
+    assert "https://example.com/articles/*" in patterns
+    backend.query_by_filter.assert_awaited_once_with(
+        "Document",
+        {"platform": "rss", "feed_url": feed_url},
+        _MAX_OBSERVATION_ENTRIES_PER_FEED,
+        "updated_at",
+        None,
+        None,
+    )
 
 
 @pytest.mark.asyncio
