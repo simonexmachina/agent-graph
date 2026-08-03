@@ -17,8 +17,6 @@ from xml.etree import ElementTree
 import yaml
 from pydantic import BaseModel, Field
 
-from agentgraph_connector_rss.tls import feed_tls_verify
-
 
 class RssConfig(BaseModel):
     feed_urls: list[str] = Field(default_factory=list)
@@ -290,17 +288,7 @@ def resolve_feed_source(source: str) -> str:
 
 def _parse_feed(feed_url: str) -> Any:
     import feedparser  # type: ignore[import-untyped]
-    import httpx
 
-    if urlparse(feed_url).scheme in {"http", "https"}:
-        response = httpx.get(
-            feed_url,
-            follow_redirects=True,
-            timeout=10,
-            verify=feed_tls_verify(feed_url),
-        )
-        response.raise_for_status()
-        return feedparser.parse(response.content)
     return feedparser.parse(feed_url)
 
 
@@ -332,12 +320,7 @@ def _fetch_html_url(url: str) -> HtmlSource | None:
     import httpx
 
     try:
-        response = httpx.get(
-            url,
-            follow_redirects=True,
-            timeout=10,
-            verify=feed_tls_verify(url),
-        )
+        response = httpx.get(url, follow_redirects=True, timeout=10)
         response.raise_for_status()
     except httpx.HTTPError:
         return None
