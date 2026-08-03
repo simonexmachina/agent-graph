@@ -44,4 +44,4 @@ jobs:
         run: uv sync --extra all
 
       - name: Run deterministic performance smoke suite
-        run: uv run python -m benchmarks.suite --entities 1000 --iterations 3 --output .benchmarks/smoke.json
+        run: uv run python -m benchmarks.suite --entities 1000 --iterations 3 --vector-mode sqlite-vec --output .benchmarks/smoke.json

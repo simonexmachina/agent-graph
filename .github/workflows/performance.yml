@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra all
       - name: Run medium workload suite
-        run: uv run python -m benchmarks.suite --entities 10000 --iterations 20 --output .benchmarks/latest.json
+        run: uv run python -m benchmarks.suite --entities 10000 --iterations 20 --vector-mode sqlite-vec --output .benchmarks/latest.json
       - name: Upload performance report
         uses: actions/upload-artifact@v4
         with:

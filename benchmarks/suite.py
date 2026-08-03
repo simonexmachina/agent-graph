@@ -17,14 +17,17 @@ async def run_suite(
     *,
     iterations: int,
     include_api: bool,
+    vector_mode: str,
 ) -> BenchmarkRun:
     """Run all requested server-side workload layers with one corpus specification."""
     backend_report = await run_backend_suite(
-        database_directory / "backend.db", spec, iterations=iterations
+        database_directory / "backend.db", spec, iterations=iterations, vector_mode=vector_mode
     )
     workloads = list(backend_report.workloads)
     if include_api:
-        api_report = await run_api_suite(database_directory / "api.db", spec, iterations=iterations)
+        api_report = await run_api_suite(
+            database_directory / "api.db", spec, iterations=iterations, vector_mode=vector_mode
+        )
         workloads.extend(api_report.workloads)
     return backend_report.model_copy(update={"workloads": workloads})
 
@@ -37,6 +40,9 @@ def main() -> None:
     parser.add_argument("--entities", type=int, default=10_000)
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--without-api", action="store_true")
+    parser.add_argument(
+        "--vector-mode", choices=("sqlite-vec", "numpy", "bm25-only"), default="sqlite-vec"
+    )
     args = parser.parse_args()
     report = asyncio.run(
         run_suite(
@@ -48,6 +54,7 @@ def main() -> None:
             ),
             iterations=args.iterations,
             include_api=not args.without_api,
+            vector_mode=args.vector_mode,
         )
     )
     write_report(report, args.output)

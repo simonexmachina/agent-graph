@@ -18,6 +18,9 @@ uv run python -m benchmarks.suite --entities 10000 --iterations 10 \
   --output .benchmarks/latest.json
 ```
 
+The suite defaults to `sqlite-vec`, matching the production configuration. Use
+`--vector-mode numpy` only to measure the fallback path explicitly.
+
 The report records its corpus shape, vector mode, host/Python metadata, samples, percentiles, throughput, and retrieval outcomes. Use a local disposable directory; the generated databases are not application data.
 
 The standard workloads include exact, sparse-semantic, and common-term hybrid search; filtered document retrieval; high-degree graph traversal; and the same representative routes through the CLI HTTP API.

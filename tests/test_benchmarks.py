@@ -11,6 +11,7 @@ from benchmarks.compare import compare_runs
 from benchmarks.corpus import build_seeded_corpus
 from benchmarks.models import CorpusSpec, summarize_samples
 from benchmarks.runner import run_backend_suite, write_report
+from benchmarks.suite import run_suite
 
 
 def test_corpus_is_deterministic_and_contains_a_high_degree_hub() -> None:
@@ -83,6 +84,21 @@ async def test_api_suite_exercises_cli_routes(tmp_path: Path) -> None:
     exact = next(workload for workload in report.workloads if workload.name == "api.search.exact")
     assert exact.quality is not None
     assert exact.quality.must_return_ids_present
+
+
+@pytest.mark.integration
+async def test_combined_suite_keeps_its_requested_vector_mode(tmp_path: Path) -> None:
+    report = await run_suite(
+        tmp_path,
+        CorpusSpec(
+            name="tiny", entity_count=30, cluster_count=5, high_degree_edges=10, batch_size=10
+        ),
+        iterations=1,
+        include_api=False,
+        vector_mode="bm25-only",
+    )
+
+    assert report.vector_mode == "bm25-only"
 
 
 def test_compare_runs_flags_latency_and_required_result_regressions() -> None:
