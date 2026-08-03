@@ -197,8 +197,10 @@ def test_viewer_renders_text_inside_rounded_rectangle_nodes() -> None:
     assert "const lbl = formatNodeLabel(ele.data('label'));" in viewer_html
     assert "const NODE_MAX_WIDTH = 168;" in viewer_html
     assert "const NODE_MAX_HEIGHT = 64;" in viewer_html
-    assert "'width': NODE_MAX_WIDTH" in viewer_html
-    assert "'height': NODE_MAX_HEIGHT" in viewer_html
+    assert "const NODE_PADDING = 8;" in viewer_html
+    assert "'width': NODE_MAX_WIDTH - (NODE_PADDING * 2)" in viewer_html
+    assert "'height': NODE_MAX_HEIGHT - (NODE_PADDING * 2)" in viewer_html
+    assert "'padding': NODE_PADDING" in viewer_html
     assert "return `${marker}${lbl}`;" in viewer_html
     assert "return `${marker}[${type}]\\n${lbl}`;" not in viewer_html
     assert "'border-color': (ele) => nodeColor(ele.data('entity_type'))" in viewer_html

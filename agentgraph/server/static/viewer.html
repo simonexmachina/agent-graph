@@ -932,6 +932,7 @@
 
   const NODE_MAX_WIDTH = 168;
   const NODE_MAX_HEIGHT = 64;
+  const NODE_PADDING = 8;
 
   // ── Cytoscape init ────────────────────────────────────────────────────────
   const cy = cytoscape({
@@ -954,8 +955,9 @@
           'text-justification': 'center',
           'text-wrap': 'wrap',
           'text-max-width': '140px',
-          'width': NODE_MAX_WIDTH,
-          'height': NODE_MAX_HEIGHT,
+          'width': NODE_MAX_WIDTH - (NODE_PADDING * 2),
+          'height': NODE_MAX_HEIGHT - (NODE_PADDING * 2),
+          'padding': NODE_PADDING,
           'border-width': '2px',
           'border-color': (ele) => nodeColor(ele.data('entity_type')),
           'border-opacity': 1,
@@ -1005,7 +1007,7 @@
   window.__agentGraphViewer = { cy };
 
   // ── Zoom-aware styling ────────────────────────────────────────────────────
-  const Z = { nodeFont: 12, textMaxWidth: 140, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
+  const Z = { nodeFont: 12, textMaxWidth: 136, nodeBorder: 2, edgeFont: 10, edgeWidth: 1.5, arrowScale: 1.5 };
   const DEFAULT_LAYOUT_PADDING = 60;
   const READABLE_GRID_CELL_WIDTH = 205;
   const READABLE_GRID_CELL_HEIGHT = 104;
