@@ -161,6 +161,23 @@ def test_page_title_includes_search_and_focused_node(page: Page) -> None:
         expect(page).to_have_title("AgentGraph Viewer | Search: roadmap | Focus: Quarterly planning")
 
 
+def test_slash_focuses_search_without_intercepting_text_input(page: Page) -> None:
+    nodes = [_node(1, "Keyboard shortcuts")]
+    with _serve_viewer(nodes, []) as url:
+        _wait_for_graph(page, url, len(nodes))
+
+        page.locator("#canvas-wrap").click(position={"x": 20, "y": 20})
+        page.keyboard.press("/")
+        expect(page.locator("#search-input")).to_be_focused()
+        expect(page.locator("#search-input")).to_have_value("")
+
+        lookup_input = page.locator("#lookup-input")
+        lookup_input.focus()
+        page.keyboard.type("/")
+        expect(lookup_input).to_be_focused()
+        expect(lookup_input).to_have_value("/")
+
+
 def test_node_bounds_and_labels_remain_capped_across_zoom(page: Page) -> None:
     nodes = [_node(1, "A deliberately long document title that needs more than three lines to display")]
     with _serve_viewer(nodes, []) as url:
