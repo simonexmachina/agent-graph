@@ -26,7 +26,7 @@ from agentgraph.auth.credentials import (
     upsert_platform_account,
 )
 from agentgraph.cli import app
-from agentgraph.connectors.base import ConnectorAccount
+from agentgraph.connectors.base import ConnectorAccount, ConnectorCommandEffects
 from agentgraph.core.storage import EntityResult
 
 runner = CliRunner()
@@ -457,6 +457,15 @@ class _FakeRssConnector:
     def format_cli_result(cls, result: dict[str, Any]) -> str:
         return f"formatted {result['status']}"
 
+    @classmethod
+    def command_effects(
+        cls,
+        args: list[str],
+        result: dict[str, Any],
+    ) -> ConnectorCommandEffects:
+        _ = (args, result)
+        return ConnectorCommandEffects()
+
 
 class _FakeGoogleToken:
     token = "new-access-token"
@@ -675,6 +684,90 @@ def test_connector_command_json_outputs_raw_result() -> None:
     assert result.exit_code == 0
     assert '"status": "ok"' in result.output
     assert '"args": [' in result.output
+
+
+def test_connector_command_queues_requested_poll() -> None:
+    class _PollingRssConnector(_FakeRssConnector):
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "ok", "args": args}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(poll=True)
+
+    poll_result = {"source": "rss", "status": "queued", "reason": None}
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=_PollingRssConnector()),
+        patch("agentgraph.cli_query.queue_connector_poll", return_value=poll_result) as queue_poll,
+    ):
+        result = runner.invoke(
+            app, ["connector", "rss", "add", "https://example.com/feed.xml", "--json"]
+        )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["poll"] == poll_result
+    queue_poll.assert_called_once_with("rss")
+
+
+def test_connector_command_does_not_poll_after_validation_error() -> None:
+    class _InvalidRssConnector(_FakeRssConnector):
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            _ = args
+            raise ValueError("Not a valid RSS/Atom feed")
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=_InvalidRssConnector()),
+        patch("agentgraph.cli_query.queue_connector_poll") as queue_poll,
+    ):
+        result = runner.invoke(
+            app, ["connector", "rss", "add", "https://example.com/not-a-feed"]
+        )
+
+    assert result.exit_code == 1
+    assert "Not a valid RSS/Atom feed" in result.output
+    queue_poll.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (
+            {"polled": ["rss"], "already_running": [], "skipped": []},
+            {"source": "rss", "status": "queued", "reason": None},
+        ),
+        (
+            {"polled": [], "already_running": ["rss"], "skipped": []},
+            {"source": "rss", "status": "already_running", "reason": None},
+        ),
+        (
+            {
+                "polled": [],
+                "already_running": [],
+                "skipped": [{"source": "rss", "reason": "authentication missing"}],
+            },
+            {"source": "rss", "status": "skipped", "reason": "authentication missing"},
+        ),
+    ],
+)
+def test_queue_connector_poll_normalizes_server_result(
+    response: dict[str, object],
+    expected: dict[str, object],
+) -> None:
+    from agentgraph.cli_query import queue_connector_poll
+
+    with patch("agentgraph.cli_query._post", return_value=response):
+        result = queue_connector_poll("rss")
+
+    assert result == expected
 
 
 def test_connector_command_dispatches_help_to_connector() -> None:

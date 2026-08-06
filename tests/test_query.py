@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 
+from agentgraph.connectors.base import ConnectorCommandEffects
 from agentgraph.core.context import set_backend
 
 # ---------------------------------------------------------------------------
@@ -1036,6 +1037,77 @@ async def test_mcp_install_skill_tool_installs_to_user_agents_skills(
     assert parsed["target"] == "user"
     assert parsed["overwritten"] is False
     assert (home / ".agents" / "skills" / "graph" / "SKILL.md").is_file()
+
+
+@pytest.mark.asyncio
+async def test_mcp_connector_command_queues_requested_poll() -> None:
+    from agentgraph.mcp.server import run_connector_command_tool
+
+    class Connector:
+        source = "rss"
+
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "ok", "args": args}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(poll=True)
+
+    poll_result = {"source": "rss", "status": "queued", "reason": None}
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch(
+            "agentgraph.server.sync.schedule_poll_connector",
+            new=AsyncMock(return_value=poll_result),
+        ) as schedule_poll,
+    ):
+        result = await run_connector_command_tool(
+            "rss", ["add", "https://example.com/feed.xml"]
+        )
+
+    assert json.loads(result)["poll"] == poll_result
+    schedule_poll.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mcp_connector_command_does_not_poll_after_validation_error() -> None:
+    from agentgraph.mcp.server import run_connector_command_tool
+
+    class Connector:
+        source = "rss"
+
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            _ = args
+            raise ValueError("Not a valid RSS/Atom feed")
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(poll=True)
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch("agentgraph.server.sync.schedule_poll_connector") as schedule_poll,
+    ):
+        result = await run_connector_command_tool(
+            "rss", ["add", "https://example.com/not-a-feed"]
+        )
+
+    assert json.loads(result) == {"error": "Not a valid RSS/Atom feed"}
+    schedule_poll.assert_not_called()
 
 
 @pytest.mark.asyncio

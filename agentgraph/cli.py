@@ -308,8 +308,14 @@ def connector_command(
         typer.echo(type(connector).cli_help())
         return
 
+    command_args = args or []
     try:
-        result = type(connector).run_cli_command(args or [])
+        result = type(connector).run_cli_command(command_args)
+        effects = type(connector).command_effects(command_args, result)
+        if effects.poll:
+            from agentgraph.cli_query import queue_connector_poll
+
+            result["poll"] = queue_connector_poll(connector.source)
     except NotImplementedError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc

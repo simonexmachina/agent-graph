@@ -37,11 +37,9 @@ Add one or more feed URLs:
 agentgraph connector rss add https://example.com/feed.xml
 ```
 
-You can also pass an HTML page or local HTML file. AgentGraph validates the page, looks for standard RSS or Atom `<link rel="alternate">` tags, validates the discovered feed, and saves the feed URL:
-
-```bash
-agentgraph connector rss add https://example.com/
-```
+AgentGraph validates every supplied URL as an RSS or Atom feed before saving it.
+HTML pages and invalid feeds are rejected without changing the connector
+configuration. A successful add queues an RSS poll immediately.
 
 ## Remove feeds
 

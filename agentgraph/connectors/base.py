@@ -51,6 +51,13 @@ class SourceReference:
     fetch_meta: dict[str, str] | None = None
 
 
+@dataclass(frozen=True)
+class ConnectorCommandEffects:
+    """Side effects requested after a connector command succeeds."""
+
+    poll: bool = False
+
+
 class PersonRecord(BaseModel):
     platform: str
     platform_user_id: str
@@ -291,6 +298,16 @@ class BaseConnector(ABC):
         import json
 
         return json.dumps(result, indent=2, default=str)
+
+    @classmethod
+    def command_effects(
+        cls,
+        args: list[str],
+        result: dict[str, Any],
+    ) -> ConnectorCommandEffects:
+        """Return side effects for core to run after a command succeeds."""
+        _ = (args, result)
+        return ConnectorCommandEffects()
 
     def normalise_fetch_id(
         self, resource_id: str, entity_type: str

@@ -162,9 +162,8 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         source: Connector source, e.g. "rss".
         args: Connector command and arguments, e.g.
             ["add", "https://simonwillison.net/atom/everything/"].
-            RSS add validates feeds before saving. If an HTML page/file is
-            supplied, the connector looks for an alternate RSS/Atom <link> and
-            adds the discovered feed.
+            RSS add validates the supplied URLs as feeds before saving and
+            queues an RSS poll after a successful change.
             RSS remove is available as:
             ["remove", "https://simonwillison.net/atom/everything/"].
             RSS OPML import is also available as:
@@ -185,6 +184,11 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         return json.dumps({"source": source, "help": type(connector).cli_help()})
     try:
         result = type(connector).run_cli_command(args)
+        effects = type(connector).command_effects(args, result)
+        if effects.poll:
+            from agentgraph.server.sync import schedule_poll_connector
+
+            result["poll"] = await schedule_poll_connector(connector)
         return json.dumps(result, default=str)
     except (NotImplementedError, OSError, ValueError) as exc:
         return json.dumps({"error": str(exc)})

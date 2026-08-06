@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import httpx
 from rich.console import Console
@@ -459,6 +459,30 @@ def cmd_poll(source: str | None, as_json: bool) -> None:
         console.print(f"[yellow]Skipped:[/yellow] {source_name} — {reason}")
     if not polled and not already_running and not skipped:
         console.print("[dim]No connectors polled (none matched or none have poll_interval set).[/dim]")
+
+
+def queue_connector_poll(source: str) -> dict[str, str | None]:
+    """Queue one connector through the server and normalize its schedule result."""
+    try:
+        result = cast(dict[str, Any], _post("/poll", params={"source": source}))
+    except httpx.HTTPStatusError as exc:
+        try:
+            detail = str(exc.response.json().get("detail", str(exc)))
+        except Exception:
+            detail = str(exc)
+        raise ValueError(detail) from exc
+
+    if source in cast(list[str], result.get("polled", [])):
+        return {"source": source, "status": "queued", "reason": None}
+    if source in cast(list[str], result.get("already_running", [])):
+        return {"source": source, "status": "already_running", "reason": None}
+
+    skipped = cast(list[dict[str, str | None]], result.get("skipped", []))
+    reason = next(
+        (item.get("reason") for item in skipped if item.get("source") == source),
+        "poll was not queued",
+    )
+    return {"source": source, "status": "skipped", "reason": reason}
 
 
 def cmd_ingest(source: str, as_json: bool) -> None:

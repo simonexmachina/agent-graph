@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import feedparser  # type: ignore[import-untyped]
 import pytest
 from agentgraph_connector_rss import (
-    RssConnector,
     _MAX_OBSERVATION_ENTRIES_PER_FEED,
+    RssConnector,
     _fetch_feed,
     derive_observation_url_patterns,
     normalise_article_url,
@@ -334,7 +334,7 @@ def test_remove_feed_urls_rejects_unconfigured_feed(
         remove_feed_urls(["https://example.com/missing.xml"])
 
 
-def test_resolve_feed_source_discovers_feed_from_html_file(
+def test_resolve_feed_source_rejects_html_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -350,17 +350,13 @@ def test_resolve_feed_source_discovers_feed_from_html_file(
         encoding="utf-8",
     )
 
-    def fake_parse(source: str) -> object:
-        if source == "https://example.com/feed.xml":
-            return _ParsedFeed()
-        return _ParsedNonFeed()
+    monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedNonFeed())
 
-    monkeypatch.setattr(feedparser, "parse", fake_parse)
-
-    assert resolve_feed_source(str(html_path)) == "https://example.com/feed.xml"
+    with pytest.raises(ValueError, match="Not a valid RSS/Atom feed"):
+        resolve_feed_source(str(html_path))
 
 
-def test_rss_connector_add_html_file_reports_discovered_feed_url(
+def test_rss_connector_add_rejects_html_without_saving(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -373,12 +369,7 @@ def test_rss_connector_add_html_file_reports_discovered_feed_url(
     )
     saved: dict[str, object] = {}
 
-    def fake_parse(source: str) -> object:
-        if source == "https://example.com/atom.xml":
-            return _ParsedFeed()
-        return _ParsedNonFeed()
-
-    monkeypatch.setattr(feedparser, "parse", fake_parse)
+    monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedNonFeed())
     monkeypatch.setattr(
         "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
@@ -388,12 +379,36 @@ def test_rss_connector_add_html_file_reports_discovered_feed_url(
         lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
 
-    result = RssConnector.run_cli_command(["add", str(html_path)])
+    with pytest.raises(ValueError, match="Not a valid RSS/Atom feed"):
+        RssConnector.run_cli_command(["add", str(html_path)])
 
-    assert result["added"] == ["https://example.com/atom.xml"]
-    assert saved["data"] == {
-        "feed_urls": ["https://example.com/atom.xml"],
-    }
+    assert saved == {}
+
+
+@pytest.mark.parametrize("command", ["add", "import-opml"])
+def test_rss_connector_requests_poll_after_commands_that_add_feeds(command: str) -> None:
+    effects = RssConnector.command_effects([command], {"status": "ok"})
+
+    assert effects.poll is True
+
+
+def test_rss_connector_does_not_request_poll_after_remove() -> None:
+    effects = RssConnector.command_effects(["remove"], {"status": "ok"})
+
+    assert effects.poll is False
+
+
+def test_rss_connector_formats_poll_status() -> None:
+    rendered = RssConnector.format_cli_result(
+        {
+            "status": "ok",
+            "feed_urls": ["https://example.com/feed.xml"],
+            "added": ["https://example.com/feed.xml"],
+            "poll": {"source": "rss", "status": "already_running", "reason": None},
+        }
+    )
+
+    assert "Poll: already running." in rendered
 
 
 def test_rss_connector_remove_reports_removed_feed(

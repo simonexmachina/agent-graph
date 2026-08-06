@@ -7,11 +7,9 @@ from __future__ import annotations
 
 import json
 import tomllib
-from dataclasses import dataclass
-from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import unquote, urlparse
 from xml.etree import ElementTree
 
 import yaml
@@ -28,34 +26,8 @@ class OpmlFeed(BaseModel):
     html_url: str | None = None
 
 
-@dataclass(frozen=True)
-class HtmlSource:
-    text: str
-    base_url: str
-
-
 _RSS_CONFIG_BEGIN = "# BEGIN AgentGraph managed RSS config"
 _RSS_CONFIG_END = "# END AgentGraph managed RSS config"
-
-
-class _FeedLinkParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.hrefs: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() != "link":
-            return
-        attr_map = {name.lower(): value for name, value in attrs if value is not None}
-        rel_tokens = {token.lower() for token in attr_map.get("rel", "").split()}
-        if "alternate" not in rel_tokens:
-            return
-        link_type = attr_map.get("type", "").lower()
-        if link_type not in {"application/rss+xml", "application/atom+xml", "text/xml"}:
-            return
-        href = attr_map.get("href", "").strip()
-        if href:
-            self.hrefs.append(href)
 
 
 def load_rss_settings(account_id: str | None = None) -> RssConfig:
@@ -251,7 +223,7 @@ def remove_feed_urls(
 
 
 def resolve_feed_sources(sources: list[str]) -> list[str]:
-    """Resolve user-provided feed or HTML sources to validated RSS/Atom feed URLs."""
+    """Validate user-provided RSS/Atom feed URLs and deduplicate them."""
     resolved: list[str] = []
     seen: set[str] = set()
     for source in sources:
@@ -263,7 +235,7 @@ def resolve_feed_sources(sources: list[str]) -> list[str]:
 
 
 def resolve_feed_source(source: str) -> str:
-    """Return a valid feed URL, discovering it from HTML when necessary."""
+    """Return the supplied source if it is a valid RSS/Atom feed."""
     candidate = source.strip()
     if not candidate:
         raise ValueError("RSS feed URL cannot be empty")
@@ -271,19 +243,7 @@ def resolve_feed_source(source: str) -> str:
     parsed = _parse_feed(candidate)
     if _is_valid_feed(parsed):
         return candidate
-
-    html_source = _load_html_source(candidate)
-    if html_source is None:
-        raise ValueError(f"Not a valid RSS/Atom feed: {candidate}")
-
-    feed_links = _extract_feed_links(html_source.text, html_source.base_url)
-    if not feed_links:
-        raise ValueError(f"No RSS/Atom feed link found in HTML: {candidate}")
-
-    for feed_link in feed_links:
-        if _is_valid_feed(_parse_feed(feed_link)):
-            return feed_link
-    raise ValueError(f"No valid RSS/Atom feed found in HTML: {candidate}")
+    raise ValueError(f"Not a valid RSS/Atom feed: {candidate}")
 
 
 def _parse_feed(feed_url: str) -> Any:
@@ -299,54 +259,6 @@ def _is_valid_feed(parsed: Any) -> bool:
     feed = cast(dict[str, Any], getattr(parsed, "feed", {}) or {})
     entries = cast(list[Any], getattr(parsed, "entries", []) or [])
     return bool(feed or entries)
-
-
-def _load_html_source(source: str) -> HtmlSource | None:
-    parsed = urlparse(source)
-    if parsed.scheme in {"http", "https"}:
-        return _fetch_html_url(source)
-    if parsed.scheme == "file":
-        path = _local_file_path(source, kind="HTML")
-        return _read_html_file(path)
-    if parsed.scheme:
-        return None
-    path = Path(source).expanduser()
-    if path.exists():
-        return _read_html_file(path)
-    return None
-
-
-def _fetch_html_url(url: str) -> HtmlSource | None:
-    import httpx
-
-    try:
-        response = httpx.get(url, follow_redirects=True, timeout=10)
-        response.raise_for_status()
-    except httpx.HTTPError:
-        return None
-    text = response.text
-    content_type = response.headers.get("content-type", "").lower()
-    if "html" not in content_type and not _looks_like_html(text):
-        return None
-    return HtmlSource(text=text, base_url=str(response.url))
-
-
-def _read_html_file(path: Path) -> HtmlSource | None:
-    text = path.read_text(encoding="utf-8")
-    if not _looks_like_html(text):
-        return None
-    return HtmlSource(text=text, base_url=path.resolve().as_uri())
-
-
-def _looks_like_html(text: str) -> bool:
-    sample = text[:500].lower()
-    return "<html" in sample or "<!doctype html" in sample or "<link" in sample
-
-
-def _extract_feed_links(html: str, base_url: str) -> list[str]:
-    parser = _FeedLinkParser()
-    parser.feed(html)
-    return [urljoin(base_url, href) for href in parser.hrefs]
 
 
 def parse_opml_feeds(path: str | Path) -> list[OpmlFeed]:

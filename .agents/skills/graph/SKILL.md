@@ -55,7 +55,7 @@ agentgraph connectors [--verify] [--json] # auth_provider, auth_status/auth_deta
 # Run a connector-owned command
 agentgraph connector <source> <command> [args...] [--json] # e.g. agentgraph connector rss add https://simonwillison.net/atom/everything/
 agentgraph connector <source> --help
-agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...] [--json] # validates feeds; HTML pages/files resolve via RSS/Atom <link>
+agentgraph connector rss add <feed-url> [feed-url...] [--json] # validates feeds, rejects non-feeds without saving, and queues an RSS poll
 agentgraph connector rss remove <feed-url> [feed-url...] [--json] # removes exact configured feed URLs
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
 
@@ -67,7 +67,7 @@ agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use w
 agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
 agentgraph auth remove <provider> [--account <account-id>] [--json] # remove stored credentials; does not delete graph data
-agentgraph connector rss add <feed-or-html-url>           # RSS/Atom feed URLs are connector configuration, not auth
+agentgraph connector rss add <feed-url>                   # RSS/Atom feed URLs are connector configuration, not auth
 
 # Server
 agentgraph serve [--reload]

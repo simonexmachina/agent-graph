@@ -19,6 +19,7 @@ import httpx
 from agentgraph.connectors.base import (
     BaseConnector,
     ConnectorAccount,
+    ConnectorCommandEffects,
     EdgeRecord,
     EntityBatch,
     EntityRecord,
@@ -134,6 +135,16 @@ class RssConnector(BaseConnector):
     @classmethod
     def format_cli_result(cls, result: dict[str, Any]) -> str:
         return _format_rss_cli_result(result)
+
+    @classmethod
+    def command_effects(
+        cls,
+        args: list[str],
+        result: dict[str, Any],
+    ) -> ConnectorCommandEffects:
+        _ = result
+        command = args[0] if args else None
+        return ConnectorCommandEffects(poll=command in {"add", "import-opml"})
 
     def can_handle(self, url: str) -> bool:
         return self.resolve_url(url) is not None
@@ -319,7 +330,7 @@ async def _parse_feed(feed_url: str) -> Any:
 
 def _rss_usage() -> str:
     return (
-        "Usage: agentgraph connector rss add <feed-or-html-url> [feed-or-html-url...]\n"
+        "Usage: agentgraph connector rss add <feed-url> [feed-url...]\n"
         "   or: agentgraph connector rss remove <feed-url> [feed-url...]\n"
         "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>]"
     )
@@ -333,8 +344,8 @@ def _rss_help() -> str:
             _rss_usage(),
             "",
             "Commands:",
-            "  add <feed-or-html-url> [feed-or-html-url...]",
-            "      Add one or more RSS/Atom feeds. HTML pages are scanned for RSS/Atom <link> tags.",
+            "  add <feed-url> [feed-url...]",
+            "      Validate and add one or more RSS/Atom feeds, then queue an RSS poll.",
             "  remove <feed-url> [feed-url...]",
             "      Remove one or more exact RSS/Atom feed URLs from the configured feed list.",
             "  import-opml <file.opml> [--all | --select <indexes>]",
@@ -375,6 +386,10 @@ def _format_rss_cli_result(result: dict[str, Any]) -> str:
         if len(removed) > 20:
             lines.append(f"  ... {len(removed) - 20} more")
     lines.append(f"Total configured feeds: {len(feed_urls)}")
+    poll = result.get("poll")
+    if isinstance(poll, Mapping):
+        status = str(poll.get("status") or "unknown").replace("_", " ")
+        lines.append(f"Poll: {status}.")
     return "\n".join(lines)
 
 
