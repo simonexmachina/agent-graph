@@ -29,6 +29,15 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
             self._send(200, "text/html; charset=utf-8", server.viewer_html)
         elif path == "/api/cli/meta":
             self._send(200, "application/json", {"entity_types": ["Document"], "platforms": []})
+        elif path.startswith("/api/cli/entity/"):
+            entity_id = path.removeprefix("/api/cli/entity/")
+            entity = next((node for node in server.nodes if node["id"] == entity_id), None)
+            if entity:
+                self._send(200, "application/json", entity)
+            else:
+                self._send(404, "application/json", {"detail": "not found"})
+        elif path.startswith("/api/cli/edges/"):
+            self._send(200, "application/json", server.edges)
         elif path == "/api/cli/browse/nodes":
             self._send(200, "application/json", {"data": server.nodes, "has_more": False})
         elif path == "/api/cli/browse/edges":
@@ -159,6 +168,22 @@ def test_page_title_includes_search_and_focused_node(page: Page) -> None:
     with _serve_viewer(nodes, []) as url:
         _wait_for_graph(page, f"{url}?search=roadmap&node_id=node-1", len(nodes))
         expect(page).to_have_title("AgentGraph Viewer | Search: roadmap | Focus: Quarterly planning")
+
+
+def test_detail_panel_focus_button_focuses_the_displayed_entity(page: Page) -> None:
+    nodes = [_node(1, "Focus target"), _node(2, "Neighbour")]
+    with _serve_viewer(nodes, []) as url:
+        _wait_for_graph(page, url, len(nodes))
+        page.evaluate("() => window.__agentGraphViewer.cy.getElementById('node-1').emit('tap')")
+        focus_button = page.locator("#detail-focus")
+        expect(focus_button).to_be_visible()
+        expect(focus_button).to_have_attribute("aria-label", "Focus on entity")
+
+        focus_button.click()
+
+        expect(page.locator("#lookup-input")).to_have_value("node-1")
+        expect(page).to_have_url(f"{url}?node_id=node-1&selected_id=node-1")
+        expect(page).to_have_title("AgentGraph Viewer | Focus: Focus target")
 
 
 def test_slash_focuses_search_without_intercepting_text_input(page: Page) -> None:

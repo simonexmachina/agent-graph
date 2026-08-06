@@ -477,6 +477,17 @@
     stroke-linejoin: round;
   }
 
+  .focus-glyph {
+    width: 14px;
+    height: 14px;
+    display: block;
+    overflow: visible;
+    fill: transparent;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+
   #detail-bookmark[aria-pressed="true"] {
     color: #fbbf24;
   }
@@ -878,6 +889,12 @@
     <div id="detail-header">
       <div id="detail-title">—</div>
       <div id="detail-actions">
+        <button id="detail-focus" class="detail-icon-btn" type="button" title="Focus on entity" aria-label="Focus on entity">
+          <svg class="focus-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="5"></circle>
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
+          </svg>
+        </button>
         <button id="detail-bookmark" class="detail-icon-btn" title="Not bookmarked" aria-label="Bookmark entity" aria-pressed="false">
           <svg class="bookmark-glyph" viewBox="0 0 16 20" aria-hidden="true" focusable="false">
             <path d="M4 2.5h8v14l-4-2.75-4 2.75z"></path>
@@ -1176,6 +1193,7 @@
   const detail        = document.getElementById('detail');
   const detailTitle   = document.getElementById('detail-title');
   const detailBody    = document.getElementById('detail-body');
+  const detailFocus   = document.getElementById('detail-focus');
   const detailBookmark = document.getElementById('detail-bookmark');
   const detailDelete  = document.getElementById('detail-delete');
   const detailClose   = document.getElementById('detail-close');
@@ -1977,6 +1995,8 @@
   function renderDetail(entity) {
     detailTitle.textContent = entity.title || entity.display_name || entity.id;
     detailBody.innerHTML = '';
+
+    detailFocus.onclick = () => focusNode(entity.id);
 
     const isBookmarked = Boolean(entity.bookmarked);
     detailBookmark.setAttribute('aria-pressed', isBookmarked ? 'true' : 'false');
