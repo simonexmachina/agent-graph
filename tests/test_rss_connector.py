@@ -729,6 +729,26 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
     assert batch.edges[0].edge_type == "posted_in"
 
 
+@pytest.mark.asyncio
+async def test_rss_fetch_feed_hydrates_linked_articles() -> None:
+    batch = EntityBatch()
+
+    with patch(
+        "agentgraph_connector_rss._fetch_feed",
+        new=AsyncMock(return_value=batch),
+    ) as fetch_feed:
+        result = await RssConnector().fetch(
+            "folder",
+            "https://example.com/feed.xml",
+        )
+
+    assert result is batch
+    fetch_feed.assert_awaited_once_with(
+        "https://example.com/feed.xml",
+        hydrate_documents=True,
+    )
+
+
 def test_parse_authors_reads_atom_name_and_email() -> None:
     authors = _parse_authors({"authors": [{"name": "Ada Lovelace", "email": "Ada@Example.com"}]})
 

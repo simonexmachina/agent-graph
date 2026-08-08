@@ -267,7 +267,7 @@ class RssConnector(BaseConnector):
     ) -> EntityBatch:
         _ = (resource_type, meta, account_id)
         if resource_id.startswith(("http://", "https://")):
-            return await _fetch_feed(resource_id)
+            return await _fetch_feed(resource_id, hydrate_documents=True)
         if resource_type == "document" and meta and meta.get("web_url"):
             entity = await _fetch_entry_document(resource_id, meta)
             return EntityBatch(entities=[entity])
