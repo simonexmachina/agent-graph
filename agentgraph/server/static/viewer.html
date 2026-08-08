@@ -488,6 +488,10 @@
     stroke-linecap: round;
   }
 
+  #detail-focus[aria-pressed="true"] {
+    color: var(--accent);
+  }
+
   #detail-bookmark[aria-pressed="true"] {
     color: #fbbf24;
   }
@@ -889,7 +893,7 @@
     <div id="detail-header">
       <div id="detail-title">—</div>
       <div id="detail-actions">
-        <button id="detail-focus" class="detail-icon-btn" type="button" title="Focus on entity" aria-label="Focus on entity">
+        <button id="detail-focus" class="detail-icon-btn" type="button" title="Focus on entity" aria-label="Focus on entity" aria-pressed="false">
           <svg class="focus-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="5"></circle>
             <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
@@ -1501,6 +1505,7 @@
     };
     pushUrlState(params, replace);
     updatePageTitle(params);
+    syncDetailFocusState(params.node_id);
     return params;
   }
 
@@ -1996,6 +2001,8 @@
     detailTitle.textContent = entity.title || entity.display_name || entity.id;
     detailBody.innerHTML = '';
 
+    detailFocus.dataset.entityId = entity.id;
+    syncDetailFocusState(readUrlState().node_id);
     detailFocus.onclick = () => focusNode(entity.id);
 
     const isBookmarked = Boolean(entity.bookmarked);
@@ -2383,6 +2390,12 @@
   }
 
   // ── Cytoscape events ──────────────────────────────────────────────────────
+  function syncDetailFocusState(focusedEntityId) {
+    const isFocused = Boolean(focusedEntityId)
+      && detailFocus.dataset.entityId === focusedEntityId;
+    detailFocus.setAttribute('aria-pressed', isFocused ? 'true' : 'false');
+  }
+
   function focusNode(entityId) {
     lookupInput.value = entityId;
     syncDepthEnabled();

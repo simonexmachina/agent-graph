@@ -178,12 +178,14 @@ def test_detail_panel_focus_button_focuses_the_displayed_entity(page: Page) -> N
         focus_button = page.locator("#detail-focus")
         expect(focus_button).to_be_visible()
         expect(focus_button).to_have_attribute("aria-label", "Focus on entity")
+        expect(focus_button).to_have_attribute("aria-pressed", "false")
 
         focus_button.click()
 
         expect(page.locator("#lookup-input")).to_have_value("node-1")
         expect(page).to_have_url(f"{url}?node_id=node-1&selected_id=node-1")
         expect(page).to_have_title("AgentGraph Viewer | Focus: Focus target")
+        expect(focus_button).to_have_attribute("aria-pressed", "true")
 
 
 def test_slash_focuses_search_without_intercepting_text_input(page: Page) -> None:
