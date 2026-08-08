@@ -102,3 +102,17 @@ agentgraph search "release notes" --platform rss --limit 10
 ```
 
 Each article document includes the entry title, summary or content, source link, author metadata when available, and published or updated timestamps when the feed provides them.
+
+## Article authors
+
+Feed authors — Atom `<author>`, RSS `<author>`, and `<dc:creator>` — become `Person` entities. Every
+author credited by the feed or one of its entries is linked to the feed `Folder`, and authors are
+linked to their articles, by `authored` edges. Entries that declare no author of their own inherit
+the feed-level author, per the Atom spec. Authors are identified by email address when the feed
+supplies one and by name otherwise, so a name-only author is shared across every feed that credits
+that name.
+
+```bash
+agentgraph search "Matt Ridley" --type Person
+agentgraph edges <person-id>
+```

@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from importlib import import_module
@@ -24,6 +25,7 @@ from agentgraph.connectors.base import (
     EntityBatch,
     EntityRecord,
     FetchPolicy,
+    PersonRecord,
     ResourceType,
     SourceReference,
 )
@@ -126,7 +128,9 @@ class RssConnector(BaseConnector):
                 "selected_feed_count": len(selected_feeds),
                 "added": selected_feed_urls,
             }
-        raise ValueError(f"Unknown rss connector command '{command}'. Available: add, remove, import-opml")
+        raise ValueError(
+            f"Unknown rss connector command '{command}'. Available: add, remove, import-opml"
+        )
 
     @classmethod
     def cli_help(cls) -> str:
@@ -286,11 +290,17 @@ async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> Enti
         )
     ]
     edges: list[EdgeRecord] = []
+    persons: dict[str, PersonRecord] = {}
     batch = EntityBatch()
+    feed_authors = _parse_authors(cast(dict[str, Any], parsed.feed))
+    for author in feed_authors:
+        persons.setdefault(author.user_id, author.to_person())
 
     for raw_entry in cast(list[Any], parsed.entries):
         entry = cast(dict[str, Any], raw_entry)
-        entity = _entry_to_entity(feed_url, feed_entity_id, entry)
+        # RFC 4287 §4.2.1: feed-level authors apply to entries that declare none.
+        authors = _parse_authors(entry) or feed_authors
+        entity = _entry_to_entity(feed_url, feed_entity_id, entry, authors)
         if hydrate_documents:
             entity = await _hydrate_entry_document(entity)
         entities.append(entity)
@@ -302,10 +312,31 @@ async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> Enti
                 platform="rss",
             )
         )
+        for author in authors:
+            persons.setdefault(author.user_id, author.to_person())
+            edges.append(
+                EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id=author.user_id,
+                    target_platform_entity_id=entity.platform_entity_id,
+                    platform="rss",
+                )
+            )
         batch.add_stubs_from(entity)
+
+    edges.extend(
+        EdgeRecord(
+            edge_type="authored",
+            source_platform_user_id=platform_user_id,
+            target_platform_entity_id=feed_entity_id,
+            platform="rss",
+        )
+        for platform_user_id in persons
+    )
 
     batch.entities = [*entities, *batch.entities]
     batch.edges = [*edges, *batch.edges]
+    batch.persons = [*persons.values(), *batch.persons]
     return batch
 
 
@@ -318,7 +349,9 @@ async def _parse_feed(feed_url: str) -> Any:
         follow_redirects=True,
         max_redirects=5,
         timeout=_FEED_TIMEOUT,
-        headers={"Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"},
+        headers={
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+        },
     ) as client:
         response = await client.get(feed_url)
         response.raise_for_status()
@@ -367,9 +400,7 @@ def _format_rss_cli_result(result: dict[str, Any]) -> str:
     if "imported_feed_count" in result:
         imported_count = int(result.get("imported_feed_count") or 0)
         selected_count = int(result.get("selected_feed_count") or len(added))
-        lines = [
-            f"Imported {selected_count} of {imported_count} feed(s)."
-        ]
+        lines = [f"Imported {selected_count} of {imported_count} feed(s)."]
     elif "removed" in result:
         lines = [f"Removed {len(removed)} feed(s)."]
     else:
@@ -434,10 +465,78 @@ def _parse_import_opml_args(args: list[str]) -> dict[str, Any]:
     }
 
 
+@dataclass(frozen=True)
+class FeedAuthor:
+    """An author declared by a feed or one of its entries."""
+
+    user_id: str
+    display_name: str | None
+    email: str | None
+
+    def to_person(self) -> PersonRecord:
+        return PersonRecord(
+            platform="rss",
+            platform_user_id=self.user_id,
+            display_name=self.display_name,
+            canonical_email=self.email,
+        )
+
+    @property
+    def label(self) -> str:
+        return self.display_name or self.user_id
+
+
+def _author_details(container: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return feedparser author dicts for a feed or entry, newest API first."""
+    raw_authors = container.get("authors")
+    if isinstance(raw_authors, list):
+        details = [item for item in cast(list[Any], raw_authors) if isinstance(item, Mapping)]
+        if details:
+            return cast(list[Mapping[str, Any]], details)
+    detail = container.get("author_detail")
+    if isinstance(detail, Mapping):
+        return [cast(Mapping[str, Any], detail)]
+    name = container.get("author")
+    if isinstance(name, str) and name.strip():
+        return [{"name": name}]
+    return []
+
+
+def _parse_authors(container: Mapping[str, Any]) -> list[FeedAuthor]:
+    """Map feedparser author metadata onto identity-bearing FeedAuthor records.
+
+    RSS ``<author>`` carries an email address, Atom ``<author>`` a name plus
+    optional email, and ``<dc:creator>`` a bare name; feedparser normalises all
+    three into ``{"name": ..., "email": ...}`` dicts with either key optional.
+    """
+    authors: list[FeedAuthor] = []
+    seen: set[str] = set()
+    for detail in _author_details(container):
+        name = _clean_author_field(detail.get("name"))
+        email = _clean_author_field(detail.get("email"))
+        if email is None and name is not None and "@" in name and " " not in name:
+            name, email = None, name
+        if email is not None:
+            email = email.lower()
+        user_id = email or name
+        if user_id is None or user_id in seen:
+            continue
+        seen.add(user_id)
+        authors.append(FeedAuthor(user_id=user_id, display_name=name, email=email))
+    return authors
+
+
+def _clean_author_field(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value.strip() or None
+
+
 def _entry_to_entity(
     feed_url: str,
     feed_entity_id: str,
     entry: dict[str, Any],
+    authors: Sequence[FeedAuthor] = (),
 ) -> EntityRecord:
     link = normalise_article_url(str(entry.get("link") or "")) or ""
     external_id = str(entry.get("id") or entry.get("guid") or link or entry.get("title") or "")
@@ -450,7 +549,8 @@ def _entry_to_entity(
         "feed_entity_id": feed_entity_id,
         "link": link or None,
         "web_url": link or None,
-        "author": str(entry.get("author")) if entry.get("author") else None,
+        "author": authors[0].label if authors else None,
+        "authors": ", ".join(author.label for author in authors) or None,
     }
     content_parts = [title]
     if summary:
@@ -602,7 +702,10 @@ def derive_observation_url_patterns(links_by_feed: Mapping[str, list[str]]) -> l
         useful.sort(key=lambda item: (item[0].count("/"), -len(item[1]), item[0]))
         selected_prefixes: list[str] = []
         for prefix, _urls in useful:
-            if any(prefix.startswith(f"{selected}/") or prefix == selected for selected in selected_prefixes):
+            if any(
+                prefix.startswith(f"{selected}/") or prefix == selected
+                for selected in selected_prefixes
+            ):
                 continue
             selected_prefixes.append(prefix)
             if len(selected_prefixes) == _MAX_OBSERVATION_PATTERNS_PER_FEED:

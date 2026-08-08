@@ -15,8 +15,10 @@ import feedparser  # type: ignore[import-untyped]
 import pytest
 from agentgraph_connector_rss import (
     _MAX_OBSERVATION_ENTRIES_PER_FEED,
+    FeedAuthor,
     RssConnector,
     _fetch_feed,
+    _parse_authors,
     derive_observation_url_patterns,
     normalise_article_url,
 )
@@ -75,9 +77,12 @@ def test_rss_can_handle_returns_false_without_config() -> None:
 
 
 def test_normalise_article_url_removes_fragments_trailing_slashes_and_tracking() -> None:
-    assert normalise_article_url(
-        "HTTPS://Example.COM/posts/one/?z=last&utm_source=feed&keep=value#section"
-    ) == "https://example.com/posts/one?keep=value&z=last"
+    assert (
+        normalise_article_url(
+            "HTTPS://Example.COM/posts/one/?z=last&utm_source=feed&keep=value#section"
+        )
+        == "https://example.com/posts/one?keep=value&z=last"
+    )
 
 
 def test_derive_observation_patterns_remove_subsumed_specific_paths() -> None:
@@ -651,7 +656,9 @@ def test_rss_connector_import_opml_select(
 
 @pytest.mark.asyncio
 async def test_verify_rss_auth_missing() -> None:
-    with patch("agentgraph_connector_rss.auth.load_rss_settings", side_effect=RuntimeError("missing")):
+    with patch(
+        "agentgraph_connector_rss.auth.load_rss_settings", side_effect=RuntimeError("missing")
+    ):
         assert await verify_rss_auth() == ("missing", None)
 
 
@@ -718,7 +725,178 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
     assert entry.content and "A short summary" in entry.content
     assert entry.metadata["link"] == "https://example.com/first"
     assert entry.metadata["web_url"] == "https://example.com/first"
+    assert entry.metadata["author"] == "Author Name"
     assert batch.edges[0].edge_type == "posted_in"
+
+
+def test_parse_authors_reads_atom_name_and_email() -> None:
+    authors = _parse_authors({"authors": [{"name": "Ada Lovelace", "email": "Ada@Example.com"}]})
+
+    assert authors == [
+        _author("ada@example.com", display_name="Ada Lovelace", email="ada@example.com")
+    ]
+
+
+def test_parse_authors_reads_bare_rss_email_author() -> None:
+    authors = _parse_authors({"authors": [{"email": "solo@example.com"}]})
+
+    assert authors == [_author("solo@example.com", display_name=None, email="solo@example.com")]
+
+
+def test_parse_authors_treats_email_only_name_as_an_email() -> None:
+    authors = _parse_authors({"author_detail": {"name": "solo@example.com"}})
+
+    assert authors == [_author("solo@example.com", display_name=None, email="solo@example.com")]
+
+
+def test_parse_authors_keys_name_only_authors_by_name() -> None:
+    authors = _parse_authors({"author": "  Matt Ridley  "})
+
+    assert authors == [_author("Matt Ridley", display_name="Matt Ridley", email=None)]
+
+
+def test_parse_authors_deduplicates_and_skips_empty_entries() -> None:
+    authors = _parse_authors(
+        {
+            "authors": [
+                {"name": "Matt Ridley"},
+                {"name": ""},
+                {"name": "Matt Ridley"},
+                {"name": "Stephen McBride"},
+            ]
+        }
+    )
+
+    assert [author.user_id for author in authors] == ["Matt Ridley", "Stephen McBride"]
+
+
+def test_parse_authors_returns_empty_without_author_metadata() -> None:
+    assert _parse_authors({"title": "No author here"}) == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_feed_creates_persons_and_authored_edges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Parsed:
+        bozo = False
+        feed = {"title": "Rational Optimist Society"}
+        entries = [
+            {
+                "id": "post-1",
+                "title": "Wildfires",
+                "link": "https://example.com/wildfires",
+                "authors": [{"name": "Matt Ridley"}],
+            },
+            {
+                "id": "post-2",
+                "title": "Jet fuel",
+                "link": "https://example.com/jet-fuel",
+                "authors": [{"name": "Matt Ridley"}, {"name": "Stephen McBride"}],
+            },
+        ]
+
+    async def fake_parse_feed(feed_url: str) -> _Parsed:
+        _ = feed_url
+        return _Parsed()
+
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", fake_parse_feed)
+
+    batch = await _fetch_feed("https://example.com/feed.xml")
+
+    assert [
+        (person.platform, person.platform_user_id, person.display_name) for person in batch.persons
+    ] == [
+        ("rss", "Matt Ridley", "Matt Ridley"),
+        ("rss", "Stephen McBride", "Stephen McBride"),
+    ]
+    assert all(person.canonical_email is None for person in batch.persons)
+
+    first, second = batch.entities[1], batch.entities[2]
+    assert first.metadata["author"] == "Matt Ridley"
+    assert second.metadata["authors"] == "Matt Ridley, Stephen McBride"
+
+    authored = [edge for edge in batch.edges if edge.edge_type == "authored"]
+    assert [
+        (edge.source_platform_user_id, edge.target_platform_entity_id) for edge in authored
+    ] == [
+        ("Matt Ridley", first.platform_entity_id),
+        ("Matt Ridley", second.platform_entity_id),
+        ("Stephen McBride", second.platform_entity_id),
+        ("Matt Ridley", batch.entities[0].platform_entity_id),
+        ("Stephen McBride", batch.entities[0].platform_entity_id),
+    ]
+    assert all(edge.platform == "rss" for edge in authored)
+
+
+@pytest.mark.asyncio
+async def test_fetch_feed_falls_back_to_feed_level_authors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Parsed:
+        bozo = False
+        feed = {
+            "title": "Sam Altman",
+            "authors": [{"name": "Sam Altman", "email": "sam@example.com"}],
+        }
+        entries = [
+            {"id": "post-1", "title": "Untitled", "link": "https://example.com/one"},
+            {
+                "id": "post-2",
+                "title": "Guest post",
+                "link": "https://example.com/two",
+                "author": "Guest Writer",
+            },
+        ]
+
+    async def fake_parse_feed(feed_url: str) -> _Parsed:
+        _ = feed_url
+        return _Parsed()
+
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", fake_parse_feed)
+
+    batch = await _fetch_feed("https://example.com/feed.xml")
+
+    assert [person.platform_user_id for person in batch.persons] == [
+        "sam@example.com",
+        "Guest Writer",
+    ]
+    assert batch.persons[0].canonical_email == "sam@example.com"
+    assert batch.entities[1].metadata["author"] == "Sam Altman"
+    assert batch.entities[2].metadata["author"] == "Guest Writer"
+    folder_id = batch.entities[0].platform_entity_id
+    assert {
+        edge.source_platform_user_id
+        for edge in batch.edges
+        if edge.edge_type == "authored" and edge.target_platform_entity_id == folder_id
+    } == {"sam@example.com", "Guest Writer"}
+
+
+@pytest.mark.asyncio
+async def test_fetch_feed_without_authors_creates_no_persons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Parsed:
+        bozo = False
+        feed = {"title": "Example Feed"}
+        entries = [{"id": "post-1", "title": "One", "link": "https://example.com/one"}]
+
+    async def fake_parse_feed(feed_url: str) -> _Parsed:
+        _ = feed_url
+        return _Parsed()
+
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", fake_parse_feed)
+
+    batch = await _fetch_feed("https://example.com/feed.xml")
+
+    assert batch.persons == []
+    assert not [edge for edge in batch.edges if edge.edge_type == "authored"]
+    assert batch.entities[1].metadata["author"] is None
+    assert batch.entities[1].metadata["authors"] is None
+
+
+def _author(user_id: str, *, display_name: str | None, email: str | None) -> FeedAuthor:
+    return FeedAuthor(user_id=user_id, display_name=display_name, email=email)
 
 
 @pytest.mark.asyncio
