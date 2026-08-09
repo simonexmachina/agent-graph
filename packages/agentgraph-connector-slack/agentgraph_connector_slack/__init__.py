@@ -1,4 +1,4 @@
-"""Slack connector (cookie token auth)."""
+"""Slack connector with OAuth and browser-session authentication."""
 
 from __future__ import annotations
 
@@ -23,9 +23,11 @@ from agentgraph.connectors.base import (
 )
 from agentgraph.graph.upsert import upsert_batch
 from agentgraph_connector_slack.auth import (
+    SlackBrowserCredentials,
     account_id_for_team,
     list_slack_accounts,
     load_slack_creds,
+    slack_headers,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,15 +40,6 @@ _SLACK_CHANNEL_URL_RE = re.compile(
 )
 
 
-def _get_headers(account_id: str | None = None) -> dict[str, str]:
-    creds = load_slack_creds(account_id)
-    return {
-        "Authorization": f"Bearer {creds.xoxc_token}",
-        "Cookie": f"d={creds.d_cookie}",
-        "Content-Type": "application/json",
-    }
-
-
 def _team_id_from_token(account_id: str | None = None) -> str | None:
     """Extract the Slack team ID from the stored credentials."""
     try:
@@ -55,6 +48,8 @@ def _team_id_from_token(account_id: str | None = None) -> str | None:
         return None
     if creds.team_id:
         return creds.team_id
+    if not isinstance(creds, SlackBrowserCredentials):
+        return None
     parts = creds.xoxc_token.split("-")
     return parts[1] if len(parts) >= 2 else None
 
@@ -87,17 +82,29 @@ def _normalise_channel_ref(resource_id: str, account_id: str | None = None) -> s
     return _channel_ref(team_id, resource_id)
 
 
-async def _api_get(client: httpx.AsyncClient, method: str, account_id: str | None = None, **params: Any) -> dict[str, Any]:
-    resp = await client.get(
-        f"{SLACK_API}/{method}",
-        headers=_get_headers(account_id),
-        params=params,
-    )
-    resp.raise_for_status()
-    data: dict[str, Any] = resp.json()
-    if not data.get("ok"):
-        raise RuntimeError(f"Slack API error on {method}: {data.get('error', 'unknown')}")
-    return data
+async def _api_get(
+    client: httpx.AsyncClient,
+    method: str,
+    account_id: str | None = None,
+    **params: Any,
+) -> dict[str, Any]:
+    for attempt in range(2):
+        resp = await client.get(
+            f"{SLACK_API}/{method}",
+            headers=await slack_headers(
+                account_id,
+                force_refresh=attempt == 1,
+                client=client,
+            ),
+            params=params,
+        )
+        resp.raise_for_status()
+        data: dict[str, Any] = resp.json()
+        if data.get("ok"):
+            return data
+        if data.get("error") != "token_expired" or attempt == 1:
+            raise RuntimeError(f"Slack API error on {method}: {data.get('error', 'unknown')}")
+    raise RuntimeError(f"Slack API error on {method}: token_expired")
 
 
 async def _fetch_channel_info(client: httpx.AsyncClient, channel_id: str, account_id: str | None = None) -> dict[str, Any]:
