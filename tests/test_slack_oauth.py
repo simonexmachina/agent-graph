@@ -325,6 +325,23 @@ def test_oauth_flow_rejects_denial_and_state_mismatch(
     exchange.assert_not_called()
 
 
+def test_oauth_denial_still_requires_matching_state(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTGRAPH_SLACK_CLIENT_ID", "123.456")
+    with (
+        patch("agentgraph_connector_slack.auth.secrets.token_urlsafe", return_value="state-value"),
+        patch(
+            "agentgraph_connector_slack.auth._wait_for_oauth_callback",
+            return_value=SlackOAuthCallback(error="access_denied", state="wrong"),
+        ),
+        patch("agentgraph_connector_slack.auth.webbrowser.open"),
+        pytest.raises(RuntimeError, match="state did not match"),
+    ):
+        run_oauth_flow()
+
+
 def test_oauth_flow_reports_callback_timeout(
     tmp_creds: Path,
     monkeypatch: pytest.MonkeyPatch,

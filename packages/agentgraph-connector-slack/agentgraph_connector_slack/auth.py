@@ -252,10 +252,10 @@ def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
     typer.echo(f"Opening Slack authorization in your browser:\n{authorize_url}")
     webbrowser.open(authorize_url)
     callback = _wait_for_oauth_callback(redirect_uri)
-    if callback.error:
-        raise RuntimeError(f"Slack OAuth authorization denied: {callback.error}")
     if not callback.state or not secrets.compare_digest(callback.state, state):
         raise RuntimeError("Slack OAuth callback state did not match")
+    if callback.error:
+        raise RuntimeError(f"Slack OAuth authorization denied: {callback.error}")
     if not callback.code:
         raise RuntimeError("Slack OAuth callback did not include an authorization code")
 
