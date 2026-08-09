@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from agentgraph.logging import LOG_BACKUP_COUNT, MAX_LOG_BYTES, configure_logging
 
 
-def test_configure_logging_rotates_file(tmp_path):
+def test_configure_logging_rotates_file(tmp_path: Path) -> None:
     path = tmp_path / "agentgraph.log"
     root = logging.getLogger()
     before = list(root.handlers)
