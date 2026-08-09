@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from agentgraph.logging import configure_logging
 
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings.log_file)
 
     backend_class: Any = get_backend_class(settings.backend)
     if settings.backend == "sqlite":

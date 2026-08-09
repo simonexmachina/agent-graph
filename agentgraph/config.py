@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     )
     # Logging
     log_level: str = Field(default="INFO")
+    log_file: Path = Field(default=Path("/tmp/agentgraph.log"))
 
 
 _settings: Settings | None = None
