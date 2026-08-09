@@ -412,7 +412,7 @@ async def fetch_entity_tool(platform: str, resource_id: str) -> str:
     Trigger a connector fetch for a platform entity.
 
     Forces re-ingestion of a specific resource from its source platform,
-    updating content and edges in the graph.
+    persisting updated content, people, and edges before returning.
 
     Args:
         platform: Platform name (e.g. "gdocs", "slack", "discord", "gmail", "rss").
@@ -441,7 +441,8 @@ async def fetch_entity_by_id_tool(entity_id: str) -> str:
     Trigger a connector fetch for an entity by its internal UUID.
 
     Looks up the entity's platform and platform-specific ID, then forces
-    re-ingestion from the source platform.
+    re-ingestion from the source platform and persists the returned batch
+    before returning.
 
     Args:
         entity_id: Internal entity UUID (the id field from graph nodes).

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, cast
 
 import typer
@@ -23,6 +25,18 @@ auth_app = typer.Typer(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 app.add_typer(auth_app, name="auth")
+
+
+@contextmanager
+def _readable_credentials() -> Iterator[None]:
+    """Report a damaged credentials file as an error instead of a traceback."""
+    from agentgraph.auth.credentials import CredentialsFileError
+
+    try:
+        yield
+    except CredentialsFileError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def _run_auth_flow(connector_cls: type[BaseConnector], account_id: str | None, add: bool) -> None:
@@ -182,7 +196,8 @@ def auth(
             )
             raise typer.Exit(code=1)
         provider = args[1]
-        result = _remove_auth_credentials(provider, parsed_account)
+        with _readable_credentials():
+            result = _remove_auth_credentials(provider, parsed_account)
 
         if parsed_json:
             typer.echo(_json.dumps(result, indent=2))
@@ -226,22 +241,25 @@ def auth(
                 run_cookie_flow,  # type: ignore[import-not-found]
             )
 
-            run_cookie_flow(
-                account_id=parsed_account,
-                add=parsed_add,
-                xoxc_token=parsed_xoxc_token,
-                d_cookie=parsed_d_cookie,
-            )
+            with _readable_credentials():
+                run_cookie_flow(
+                    account_id=parsed_account,
+                    add=parsed_add,
+                    xoxc_token=parsed_xoxc_token,
+                    d_cookie=parsed_d_cookie,
+                )
             return
 
-        _run_auth_flow(type(seen[target]), parsed_account, parsed_add)
+        with _readable_credentials():
+            _run_auth_flow(type(seen[target]), parsed_account, parsed_add)
         return
 
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
     from agentgraph.connectors.status import auth_provider_status_items
 
     bootstrap()
-    items = asyncio.run(auth_provider_status_items(get_all_connectors(), verify=parsed_verify))
+    with _readable_credentials():
+        items = asyncio.run(auth_provider_status_items(get_all_connectors(), verify=parsed_verify))
 
     if parsed_json:
         typer.echo(_json.dumps(items, indent=2))
@@ -384,7 +402,7 @@ def serve(
     from agentgraph.logging import configure_logging
 
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings.log_file)
     uvicorn.run(
         "agentgraph.server.app:app",
         host=settings.server_host,

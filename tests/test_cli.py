@@ -225,7 +225,7 @@ def test_download_uses_server_endpoint() -> None:
 
 
 def test_fetch_uses_server_endpoint() -> None:
-    from agentgraph.cli_query import cmd_fetch
+    from agentgraph.cli_query import FETCH_TIMEOUT, cmd_fetch
 
     fetch_result = {"entities": 1, "persons": 0, "edges": 0}
 
@@ -235,6 +235,22 @@ def test_fetch_uses_server_endpoint() -> None:
     post.assert_called_once_with(
         "/fetch",
         params={"platform": "gsheets", "resource_id": "sheet-id"},
+        timeout=FETCH_TIMEOUT,
+    )
+
+
+def test_fetch_entity_uses_extended_server_timeout() -> None:
+    from agentgraph.cli_query import FETCH_TIMEOUT, cmd_fetch_entity
+
+    fetch_result = {"entities": 1, "persons": 1, "edges": 1}
+
+    with patch("agentgraph.cli_query._post", return_value=fetch_result) as post:
+        cmd_fetch_entity("entity-id", as_json=True)
+
+    post.assert_called_once_with(
+        "/fetch-entity",
+        params={"entity_id": "entity-id"},
+        timeout=FETCH_TIMEOUT,
     )
 
 
@@ -636,6 +652,26 @@ def test_auth_remove_account_outputs_json(tmp_creds: Path) -> None:
         "two@example.com"
     ]
     assert load_platform_account("google", "two@example.com") is not None
+
+
+def test_auth_status_reports_corrupt_credentials_file(tmp_creds: Path) -> None:
+    save_platform("slack", {"xoxc_token": "xoxc-test"})
+    tmp_creds.write_text(tmp_creds.read_text() + '  "discord": {')
+
+    result = runner.invoke(app, ["auth", "status"])
+
+    assert result.exit_code == 1
+    assert "Could not parse" in result.output
+    assert str(tmp_creds) in result.output
+
+
+def test_auth_remove_reports_corrupt_credentials_file(tmp_creds: Path) -> None:
+    tmp_creds.write_text("{not json")
+
+    result = runner.invoke(app, ["auth", "remove", "slack"])
+
+    assert result.exit_code == 1
+    assert "Could not parse" in result.output
 
 
 def test_auth_remove_missing_provider_exits_nonzero() -> None:

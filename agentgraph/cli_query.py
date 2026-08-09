@@ -14,6 +14,7 @@ from agentgraph.config import get_settings
 console = Console()
 GET_TIMEOUT = httpx.Timeout(10, connect=0.5)
 POST_TIMEOUT = httpx.Timeout(30, connect=0.5)
+FETCH_TIMEOUT = httpx.Timeout(15 * 60, connect=0.5)
 
 
 def _server_base() -> str:
@@ -43,13 +44,18 @@ def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         _server_unavailable(exc)
 
 
-def _post(path: str, params: dict[str, Any] | None = None) -> Any:
+def _post(
+    path: str,
+    params: dict[str, Any] | None = None,
+    *,
+    timeout: httpx.Timeout = POST_TIMEOUT,
+) -> Any:
     """POST to the server's CLI API and return parsed JSON."""
     try:
         resp = httpx.post(
             f"{_server_base()}{path}",
             params=params,
-            timeout=POST_TIMEOUT,
+            timeout=timeout,
         )
         resp.raise_for_status()
         return resp.json()
@@ -254,7 +260,11 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool, resolve: bool = 
 
 def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
     try:
-        result = _post("/fetch", params={"platform": platform, "resource_id": resource_id})
+        result = _post(
+            "/fetch",
+            params={"platform": platform, "resource_id": resource_id},
+            timeout=FETCH_TIMEOUT,
+        )
     except httpx.HTTPStatusError as exc:
         try:
             detail = exc.response.json().get("detail", str(exc))
@@ -274,7 +284,11 @@ def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
 
 def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
     try:
-        result = _post("/fetch-entity", params={"entity_id": entity_id})
+        result = _post(
+            "/fetch-entity",
+            params={"entity_id": entity_id},
+            timeout=FETCH_TIMEOUT,
+        )
     except httpx.HTTPStatusError as exc:
         try:
             detail = exc.response.json().get("detail", str(exc))
