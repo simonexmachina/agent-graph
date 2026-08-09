@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import os
+import secrets
+import time
+import webbrowser
 from datetime import UTC, datetime, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Annotated, Any, Literal, cast
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 from pydantic import BaseModel, Field, TypeAdapter
 
 SLACK_TOKEN_URL = "https://slack.com/api/oauth.v2.user.access"
+SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2_user/authorize"
+DEFAULT_REDIRECT_URI = "http://localhost:8766/slack/oauth/callback"
 REQUIRED_SCOPES: frozenset[str] = frozenset({
     "channels:history",
     "channels:read",
@@ -57,6 +67,12 @@ _CREDENTIAL_ADAPTER: TypeAdapter[SlackCredential] = TypeAdapter(SlackCredential)
 SlackCredentials = SlackBrowserCredentials
 
 _refresh_locks: dict[str, asyncio.Lock] = {}
+
+
+class SlackOAuthCallback(BaseModel):
+    code: str | None = None
+    state: str | None = None
+    error: str | None = None
 
 
 def parse_slack_credentials(raw: dict[str, Any]) -> SlackCredential:
@@ -127,6 +143,181 @@ def _oauth_values(data: dict[str, Any]) -> tuple[str, str, int, list[str]]:
         raise RuntimeError("Slack OAuth response did not include token expiry")
     scopes = [scope for scope in str(raw_scopes).split(",") if scope]
     return access_token, refresh_token, int(expires_in), scopes
+
+
+def _pkce_pair() -> tuple[str, str]:
+    verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return verifier, challenge
+
+
+def _wait_for_oauth_callback(
+    redirect_uri: str,
+    *,
+    timeout_seconds: float = 300,
+) -> SlackOAuthCallback:
+    parsed = urlparse(redirect_uri)
+    if parsed.scheme != "http" or parsed.hostname not in {"localhost", "127.0.0.1"}:
+        raise ValueError("Slack OAuth redirect must use http://localhost or http://127.0.0.1")
+    if parsed.port is None:
+        raise ValueError("Slack OAuth redirect must include a local port")
+
+    result: SlackOAuthCallback | None = None
+    expected_path = parsed.path or "/"
+
+    class CallbackHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            nonlocal result
+            request_url = urlparse(self.path)
+            if request_url.path != expected_path:
+                self.send_error(404)
+                return
+            query = parse_qs(request_url.query)
+            result = SlackOAuthCallback(
+                code=query.get("code", [None])[0],
+                state=query.get("state", [None])[0],
+                error=query.get("error", [None])[0],
+            )
+            body = b"Slack authorization received. You can close this window."
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            _ = (format, args)
+
+    deadline = time.monotonic() + timeout_seconds
+    with HTTPServer((parsed.hostname, parsed.port), CallbackHandler) as server:
+        while result is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Timed out waiting five minutes for Slack OAuth approval")
+            server.timeout = remaining
+            server.handle_request()
+    return result
+
+
+def _exchange_oauth_code(
+    *,
+    code: str,
+    verifier: str,
+    client_id: str,
+    redirect_uri: str,
+) -> dict[str, Any]:
+    response = httpx.post(
+        SLACK_TOKEN_URL,
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "code_verifier": verifier,
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    data: dict[str, Any] = response.json()
+    if not data.get("ok"):
+        raise RuntimeError(f"Slack OAuth exchange failed: {data.get('error', 'unknown')}")
+    return data
+
+
+def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
+    """Authorize a Slack user with PKCE and store rotating credentials."""
+    _ = add
+    import typer
+
+    client_id = os.environ.get("AGENTGRAPH_SLACK_CLIENT_ID")
+    if not client_id:
+        raise RuntimeError(
+            "AGENTGRAPH_SLACK_CLIENT_ID is required. Create an internal Slack app first."
+        )
+    redirect_uri = os.environ.get("AGENTGRAPH_SLACK_REDIRECT_URI", DEFAULT_REDIRECT_URI)
+    verifier, challenge = _pkce_pair()
+    state = secrets.token_urlsafe(32)
+    authorize_url = f"{SLACK_AUTHORIZE_URL}?{urlencode({
+        'client_id': client_id,
+        'scope': ','.join(sorted(REQUIRED_SCOPES | OPTIONAL_SCOPES)),
+        'redirect_uri': redirect_uri,
+        'state': state,
+        'code_challenge': challenge,
+        'code_challenge_method': 'S256',
+    })}"
+    typer.echo(f"Opening Slack authorization in your browser:\n{authorize_url}")
+    webbrowser.open(authorize_url)
+    callback = _wait_for_oauth_callback(redirect_uri)
+    if callback.error:
+        raise RuntimeError(f"Slack OAuth authorization denied: {callback.error}")
+    if not callback.state or not secrets.compare_digest(callback.state, state):
+        raise RuntimeError("Slack OAuth callback state did not match")
+    if not callback.code:
+        raise RuntimeError("Slack OAuth callback did not include an authorization code")
+
+    data = _exchange_oauth_code(
+        code=callback.code,
+        verifier=verifier,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+    )
+    access_token, refresh_token, expires_in, scopes = _oauth_values(data)
+    missing_scopes = validate_required_scopes(scopes)
+    if missing_scopes:
+        raise RuntimeError(
+            "Slack authorization is missing required scopes: " + ", ".join(missing_scopes)
+        )
+    team = data.get("team")
+    team_data = cast(dict[str, Any], team) if isinstance(team, dict) else {}
+    authed_user = data.get("authed_user")
+    user_data = cast(dict[str, Any], authed_user) if isinstance(authed_user, dict) else {}
+    team_id = team_data.get("id")
+    user_id = user_data.get("id") or data.get("user_id")
+    if not isinstance(team_id, str) or not isinstance(user_id, str):
+        raise RuntimeError("Slack OAuth response did not identify the workspace and user")
+
+    email: str | None = None
+    if "users:read.email" in scopes:
+        try:
+            profile_response = httpx.get(
+                "https://slack.com/api/users.info",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"user": user_id},
+                timeout=10,
+            )
+            profile_data: dict[str, Any] = profile_response.json()
+            raw_user = profile_data.get("user")
+            user_profile = cast(dict[str, Any], raw_user) if isinstance(raw_user, dict) else {}
+            raw_profile = user_profile.get("profile")
+            profile = cast(dict[str, Any], raw_profile) if isinstance(raw_profile, dict) else {}
+            raw_email = profile.get("email")
+            email = raw_email if isinstance(raw_email, str) else None
+        except Exception:
+            email = None
+
+    credentials = SlackOAuthCredentials(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_at=datetime.now(UTC) + timedelta(seconds=expires_in),
+        client_id=client_id,
+        scopes=scopes,
+        user_id=user_id,
+        team_id=team_id,
+        team_name=team_data.get("name") if isinstance(team_data.get("name"), str) else None,
+        email=email,
+    )
+    resolved_account_id = account_id or f"slack:{team_id}:{user_id}"
+    if account_id is not None and account_id != f"slack:{team_id}:{user_id}":
+        raise RuntimeError(
+            f"Slack identity {team_id}:{user_id} does not match requested account {account_id}"
+        )
+    from agentgraph.auth.credentials import upsert_platform_account
+
+    upsert_platform_account("slack", resolved_account_id, credentials, make_default=True)
+    from agentgraph.config import CREDENTIALS_FILE
+
+    typer.echo(f"Slack OAuth credentials saved to {CREDENTIALS_FILE} ({resolved_account_id})")
 
 
 async def refresh_oauth_credentials(

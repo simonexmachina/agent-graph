@@ -144,8 +144,9 @@ class SlackConnector(BaseConnector):
 
     @classmethod
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
-        from agentgraph_connector_slack.auth import run_cookie_flow
-        run_cookie_flow(account_id=account_id, add=add)
+        from agentgraph_connector_slack.auth import run_oauth_flow
+
+        run_oauth_flow(account_id=account_id, add=add)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:
@@ -170,6 +171,24 @@ class SlackConnector(BaseConnector):
             )
             for account in list_slack_accounts()
         ]
+
+    @classmethod
+    async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
+        try:
+            credentials = load_slack_creds(account_id)
+        except RuntimeError:
+            return ("missing", None)
+        except Exception as exc:
+            return ("invalid", str(exc))
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                data = await _api_get(client, "auth.test", account_id=account_id)
+        except Exception as exc:
+            return ("invalid", str(exc))
+        team_name = data.get("team") or credentials.team_name or credentials.team_id
+        user_id = data.get("user_id") or credentials.user_id
+        detail = f"{team_name} / {user_id}" if team_name and user_id else user_id or team_name
+        return ("ok", str(detail) if detail else "authenticated")
 
     @classmethod
     def current_user_ids(cls) -> list[str]:
