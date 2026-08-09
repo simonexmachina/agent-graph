@@ -85,7 +85,7 @@ async def list_entities_page(
     since: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    order_by: str = "last_accessed",
+    order_by: str | None = "last_accessed",
     order_dir: str = "desc",
 ) -> tuple[list[dict[str, Any]], int]:
     from agentgraph.graph.query import list_entities_page as impl
@@ -184,7 +184,7 @@ def _summarize_entities(
 
 
 @router.get("/meta")
-async def cli_meta() -> dict[str, Any]:
+async def cli_meta(include_dynamic_url_patterns: bool = True) -> dict[str, Any]:
     """Return registered connector sources, URL patterns, and known entity types."""
     from agentgraph.config import get_settings
     from agentgraph.connectors.base import ENTITY_TYPES
@@ -194,7 +194,12 @@ async def cli_meta() -> dict[str, Any]:
     seen_patterns: list[str] = []
     seen_set: set[str] = set()
     for c in connectors:
-        for p in await c.observation_url_patterns():
+        patterns = (
+            await c.observation_url_patterns()
+            if include_dynamic_url_patterns
+            else c.url_patterns
+        )
+        for p in patterns:
             if p not in seen_set:
                 seen_patterns.append(p)
                 seen_set.add(p)
@@ -279,7 +284,11 @@ def _viewer_sort_value(node: dict[str, Any], order_by: str) -> str:
 
 
 def _page_entities(
-    nodes: list[dict[str, Any]], page: int, page_size: int, order_by: str, order_dir: str
+    nodes: list[dict[str, Any]],
+    page: int,
+    page_size: int,
+    order_by: str | None,
+    order_dir: str,
 ) -> tuple[list[dict[str, Any]], int]:
     reverse = order_dir.lower() != "asc"
     if order_by in _VIEWER_ORDER_FIELDS:
@@ -302,6 +311,7 @@ async def _resolve_viewer_node_set(
     page_size: int | None = None,
     order_by: str = "last_accessed",
     order_dir: str = "desc",
+    ordered: bool = True,
 ) -> tuple[list[dict[str, Any]], int, bool]:
     """Resolve the filtered viewer node set; traversal edges are only used for pruning."""
     # --- Phase 1: neighbourhood (only when node_id given) ---
@@ -344,7 +354,7 @@ async def _resolve_viewer_node_set(
             since=since,
             limit=min(page_size, max(limit - offset, 0)),
             offset=offset,
-            order_by=order_by,
+            order_by=order_by if ordered else None,
             order_dir=order_dir,
         )
         return nodes, min(total, limit), total > limit
@@ -415,7 +425,13 @@ async def _resolve_viewer_node_set(
                 nodes = (nodes + neighbours)[:limit]
 
     if page is not None and page_size is not None:
-        nodes, total = _page_entities(nodes, page, page_size, order_by, order_dir)
+        nodes, total = _page_entities(
+            nodes,
+            page,
+            page_size,
+            order_by if ordered else None,
+            order_dir,
+        )
     else:
         total = len(nodes)
     return nodes, total, has_more
@@ -445,11 +461,16 @@ async def cli_browse_nodes(
     size: int = Query(default=50, ge=1, le=1000),
     sort: str = Query(default="last_accessed"),
     sort_dir: str = Query(default="desc"),
+    ordered: bool = Query(default=True),
 ) -> dict[str, Any]:
-    """Return one ordered page from the viewer node set."""
+    """Return one viewer node page, optionally omitting ordering for graph layout."""
     nodes, total, has_more = await _resolve_viewer_node_set(
         search, entity_type, platform, since, node_id, depth, limit,
-        page=page, page_size=size, order_by=sort, order_dir=sort_dir,
+        page=page,
+        page_size=size,
+        order_by=sort,
+        order_dir=sort_dir,
+        ordered=ordered,
     )
     return {
         "data": _with_display_names(_summarize_entities(nodes, content_limit=300)),

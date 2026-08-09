@@ -92,16 +92,15 @@ def test_viewer_supports_zero_depth_for_a_node_only_view() -> None:
     assert "depthInput.value === '' ? undefined : Number(depthInput.value)" in viewer_html
 
 
-def test_viewer_unifies_people_and_shows_the_canonical_person() -> None:
-    """Merging from a Person panel returns focus and detail to the canonical record."""
+def test_viewer_unifies_people_and_refreshes_the_active_view() -> None:
+    """Merging refetches the active collection and canonical Person detail."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
     assert "function renderPersonUnificationControls(entity)" in viewer_html
     assert "Merge duplicate people" in viewer_html
     assert "/api/cli/unify-persons" in viewer_html
     assert "const primary = result.primary;" in viewer_html
-    assert "lookupInput.value = primary.id;" in viewer_html
-    assert "await forceRefreshGraph({ node_id: primary.id, depth: 1 });" in viewer_html
+    assert "await forceRefreshGraph();" in viewer_html
     assert "await showEntityDetail(primary.id);" in viewer_html
 
 
@@ -249,6 +248,16 @@ def test_viewer_has_native_remote_list_mode() -> None:
     assert "function renderCachedList(params)" in viewer_html
     assert "renderCachedList(params)" in viewer_html
     assert "cy.resize();" in viewer_html
+
+
+def test_viewer_requests_unordered_graph_nodes() -> None:
+    """Graph mode omits list ordering while retaining ordered list requests."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "function graphRequestParams(params)" in viewer_html
+    assert "sort: undefined, sort_dir: undefined, ordered: false" in viewer_html
+    assert "const requestParams = graphRequestParams(params);" in viewer_html
+    assert "key: viewerScopeKey(requestParams)," in viewer_html
 
 
 def test_viewer_persists_list_sort_in_url_state() -> None:
@@ -877,6 +886,39 @@ async def test_browse_nodes_returns_paginated_node_page() -> None:
         offset=2,
         order_by="updated_at",
         order_dir="asc",
+    )
+
+
+@pytest.mark.asyncio
+async def test_browse_nodes_can_skip_ordering_for_graph_view() -> None:
+    """Graph node pages tell storage to omit ordering without changing list defaults."""
+    from agentgraph.server.cli_api import cli_browse_nodes
+
+    mock_page = AsyncMock(return_value=([_entity(title="Node")], 1))
+    with patch("agentgraph.server.cli_api.list_entities_page", mock_page):
+        await cli_browse_nodes(
+            search=None,
+            entity_type=["Message", "Thread"],
+            platform=None,
+            since=None,
+            node_id=None,
+            depth=2,
+            limit=50,
+            page=1,
+            size=50,
+            sort="last_accessed",
+            sort_dir="desc",
+            ordered=False,
+        )
+
+    mock_page.assert_awaited_once_with(
+        entity_types=["Message", "Thread"],
+        platform=None,
+        since=None,
+        limit=50,
+        offset=0,
+        order_by=None,
+        order_dir="desc",
     )
 
 

@@ -247,6 +247,14 @@
   #node-list tbody tr:nth-child(even) { background: #11141c; }
   #node-list tbody tr:hover,
   #node-list tbody tr:focus-visible { background: var(--surface2); outline: none; }
+  #node-list tbody tr[aria-selected="true"] {
+    background: rgba(96, 165, 250, 0.18);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  #node-list tbody tr[aria-selected="true"]:hover,
+  #node-list tbody tr[aria-selected="true"]:focus-visible {
+    background: rgba(96, 165, 250, 0.24);
+  }
   #node-list td:nth-child(1) { min-width: 240px; width: 30%; }
   #node-list td:nth-child(2),
   #node-list td:nth-child(3) { width: 110px; }
@@ -1256,6 +1264,10 @@
   const typeFilters   = () => [...document.querySelectorAll('.type-filter')].filter(c => c.checked).map(c => c.value);
   function activeEntityTypes() {
     const selected = typeFilters();
+    if (document.querySelectorAll('.type-filter').length === 0) {
+      const requested = readUrlState().entity_type;
+      return requested.length === ALL_TYPES.length ? undefined : requested;
+    }
     const allTypesSelected = selected.length === ALL_TYPES.length
       && ALL_TYPES.every(type => selected.includes(type));
     return allTypesSelected ? undefined : selected;
@@ -1348,7 +1360,12 @@
       limit: params.limit,
       sort: params.sort,
       sort_dir: params.sort_dir,
+      ordered: params.ordered,
     });
+  }
+
+  function graphRequestParams(params) {
+    return { ...params, sort: undefined, sort_dir: undefined, ordered: false };
   }
 
   function rawNodesToGraphNodes(rawNodes) {
@@ -1356,7 +1373,11 @@
   }
 
   function renderCachedGraph(params) {
-    if (!viewerCache || viewerCache.key !== viewerScopeKey(params)) return false;
+    const cacheKeys = new Set([
+      viewerScopeKey(params),
+      viewerScopeKey(graphRequestParams(params)),
+    ]);
+    if (!viewerCache || !cacheKeys.has(viewerCache.key)) return false;
     setMoreAvailable(viewerCache.hasMore);
     renderGraph({
       nodes: rawNodesToGraphNodes(viewerCache.rawNodes),
@@ -1379,7 +1400,12 @@
   }
 
   async function loadGraph(params) {
-    const url = buildUrl('/api/cli/browse/nodes', { ...params, page: 1, size: params.limit });
+    const requestParams = graphRequestParams(params);
+    const url = buildUrl('/api/cli/browse/nodes', {
+      ...requestParams,
+      page: 1,
+      size: params.limit,
+    });
     if (url === _lastBrowseUrl) return;
     _lastBrowseUrl = url;
     setMoreAvailable(false);
@@ -1396,7 +1422,7 @@
       const edgeData = await edgesRes.json();
       const edges = (edgeData.edges || []).map(e => edgeToCyto(e, nodeIdSet)).filter(Boolean);
       viewerCache = {
-        key: viewerScopeKey(params),
+        key: viewerScopeKey(requestParams),
         rawNodes: data.data || [],
         edges,
         hasMore: Boolean(data.has_more),
@@ -1662,6 +1688,12 @@
     row.appendChild(cell);
   }
 
+  function updateListSelection(selectedId) {
+    listBody.querySelectorAll('tr[data-entity-id]').forEach(row => {
+      row.setAttribute('aria-selected', String(row.dataset.entityId === selectedId));
+    });
+  }
+
   function renderList(rawNodes, params) {
     listBody.replaceChildren();
     listEmpty.hidden = rawNodes.length > 0;
@@ -1671,6 +1703,7 @@
       const row = document.createElement('tr');
       row.tabIndex = 0;
       row.dataset.entityId = entity.id;
+      row.setAttribute('aria-selected', String(entity.id === params.selected_id));
       const name = entity.display_name || entity.viewer_label || entity.title || entity.platform_entity_id || entity.id;
       addListCell(row, truncateListName(name));
       addListCell(row, entity.entity_type || '—');
@@ -1772,9 +1805,15 @@
   const markLookupInputSubmitted = wireTextInputSubmission(lookupInput, () => doLookup());
 
   document.addEventListener('keydown', (event) => {
-    if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target;
     if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+    if (event.key.toLowerCase() === 'i' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      toggleSelectedDetail();
+      return;
+    }
+    if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
     event.preventDefault();
     searchInput.focus();
   });
@@ -1871,12 +1910,27 @@
     refreshGraph({ node_id: null, depth: 1 });
   });
   // ── Detail panel ──────────────────────────────────────────────────────────
-  function closeDetail(syncUrl = true) {
+  function hideDetail() {
     detailRequestId += 1;
     detail.classList.remove('open');
     app.classList.remove('detail-open');
     window.setTimeout(() => cy.resize(), 200);
+  }
+
+  function closeDetail(syncUrl = true) {
+    hideDetail();
+    updateListSelection(null);
     if (syncUrl) collectParams({ selected_id: null });
+  }
+
+  function toggleSelectedDetail() {
+    const selectedId = readUrlState().selected_id || cy.$('node:selected').first().id();
+    if (!selectedId) return;
+    if (detail.classList.contains('open')) {
+      hideDetail();
+      return;
+    }
+    showEntityDetail(selectedId, false);
   }
 
   detailClose.addEventListener('click', closeDetail);
@@ -1910,6 +1964,7 @@
 
   async function showEntityDetail(entityId, syncUrl = true) {
     if (syncUrl) collectParams({ selected_id: entityId });
+    updateListSelection(entityId);
     const requestId = ++detailRequestId;
     showSpinner();
     try {
@@ -2378,11 +2433,7 @@
         const primary = result.primary;
         if (!primary || !primary.id) throw new Error('Server did not return the canonical person.');
 
-        lookupInput.value = primary.id;
-        depthInput.value = '1';
-        syncDepthEnabled();
-        markLookupInputSubmitted();
-        await forceRefreshGraph({ node_id: primary.id, depth: 1 });
+        await forceRefreshGraph();
         await showEntityDetail(primary.id);
       } catch (err) {
         mergeButton.disabled = false;
@@ -2506,6 +2557,8 @@
   cy.on('tap', 'node', (evt) => {
     const node = evt.target;
     hideHoverCard();
+    cy.nodes().unselect();
+    node.select();
     showEntityDetail(node.data('id'));
   });
 
@@ -2537,7 +2590,7 @@
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   async function loadMeta() {
     try {
-      const res = await fetch('/api/cli/meta');
+      const res = await fetch('/api/cli/meta?include_dynamic_url_patterns=false');
       if (!res.ok) return;
       const meta = await res.json();
 
@@ -2584,12 +2637,18 @@
           sel.appendChild(opt);
         });
       }
+      applyUrlState(readUrlState());
     } catch (_) { /* server not running yet — static fallbacks remain empty */ }
   }
 
   const TYPE_COLORS = NODE_COLORS;
 
-  loadMeta().then(async () => {
+  async function bootstrapViewer() {
+    const metaRequest = loadMeta();
+    await Promise.race([
+      metaRequest,
+      new Promise(resolve => setTimeout(resolve, 500)),
+    ]);
     const _initial = readUrlState();
     applyUrlState(_initial);
     markSearchInputSubmitted();
@@ -2598,7 +2657,9 @@
     initList();
     await refreshView(collectParams({}, true));
     if (_initial.selected_id) showEntityDetail(_initial.selected_id, false);
-  });
+  }
+
+  bootstrapViewer();
 
 })();
 </script>

@@ -74,6 +74,28 @@ async def test_cli_meta_includes_dynamic_connector_patterns() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cli_meta_can_skip_dynamic_connector_patterns() -> None:
+    from agentgraph.server.cli_api import cli_meta
+
+    connector = MagicMock()
+    connector.source = "rss"
+    connector.url_patterns = ["https://static.example.com/*"]
+    connector.observation_url_patterns = AsyncMock()
+    settings = MagicMock(dwell_threshold_seconds=3)
+
+    with (
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[connector]),
+        patch("agentgraph.config.get_settings", return_value=settings),
+    ):
+        result = await cli_meta(include_dynamic_url_patterns=False)
+
+    assert result["entity_types"]
+    assert result["platforms"] == ["rss"]
+    assert result["url_patterns"] == ["https://static.example.com/*"]
+    connector.observation_url_patterns.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_rss_dwell_uses_exact_observation_reference() -> None:
     from agentgraph.server.dwell import record_dwell_time
 

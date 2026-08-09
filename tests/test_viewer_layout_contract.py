@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from typing import Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from playwright.sync_api import Browser, Page, ViewportSize, expect, sync_playwright
@@ -19,6 +20,7 @@ class _ViewerFixtureServer(ThreadingHTTPServer):
     nodes: list[dict[str, Any]]
     edges: list[dict[str, Any]]
     viewer_html: bytes
+    meta_delay_seconds: float
 
 
 class _ViewerFixtureHandler(BaseHTTPRequestHandler):
@@ -28,6 +30,7 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
         if path == "/viewer":
             self._send(200, "text/html; charset=utf-8", server.viewer_html)
         elif path == "/api/cli/meta":
+            time.sleep(server.meta_delay_seconds)
             self._send(200, "application/json", {"entity_types": ["Document"], "platforms": []})
         elif path.startswith("/api/cli/entity/"):
             entity_id = path.removeprefix("/api/cli/entity/")
@@ -45,10 +48,44 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
         else:
             self._send(404, "application/json", {"detail": "not found"})
 
+    def do_POST(self) -> None:  # noqa: N802
+        server = cast(_ViewerFixtureServer, self.server)
+        request = urlsplit(self.path)
+        if request.path != "/api/cli/unify-persons":
+            self._send(404, "application/json", {"detail": "not found"})
+            return
+
+        params = parse_qs(request.query)
+        primary_id = params.get("primary", [""])[0]
+        duplicate_ids = params.get("duplicate", [])
+        primary = next((node for node in server.nodes if node["id"] == primary_id), None)
+        duplicates = [node for node in server.nodes if node["id"] in duplicate_ids]
+        if primary is None or len(duplicates) != len(duplicate_ids):
+            self._send(400, "application/json", {"detail": "Person not found"})
+            return
+
+        metadata = dict(primary.get("metadata", {}))
+        metadata["merged_people"] = [
+            {
+                "id": duplicate["id"],
+                "title": duplicate.get("title", ""),
+                "platform_entity_id": duplicate.get("platform_entity_id", ""),
+            }
+            for duplicate in duplicates
+        ]
+        primary["metadata"] = metadata
+        server.nodes[:] = [node for node in server.nodes if node["id"] not in duplicate_ids]
+        self._send(200, "application/json", {"primary": primary, "merged_count": len(duplicates)})
+
     def log_message(self, format: str, *args: object) -> None:
         return
 
-    def _send(self, status: int, content_type: str, body: bytes | dict[str, Any]) -> None:
+    def _send(
+        self,
+        status: int,
+        content_type: str,
+        body: bytes | dict[str, Any] | list[dict[str, Any]],
+    ) -> None:
         payload = body if isinstance(body, bytes) else json.dumps(body).encode()
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -58,10 +95,16 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def _serve_viewer(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> Iterator[str]:
+def _serve_viewer(
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    *,
+    meta_delay_seconds: float = 0,
+) -> Iterator[str]:
     server = _ViewerFixtureServer(("127.0.0.1", 0), _ViewerFixtureHandler)
     server.nodes = nodes
     server.edges = edges
+    server.meta_delay_seconds = meta_delay_seconds
     server.viewer_html = Path("agentgraph/server/static/viewer.html").read_bytes()
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -96,6 +139,18 @@ def _node(index: int, label: str) -> dict[str, Any]:
         "platform_entity_id": str(index),
         "viewer_label": label,
         "content": "",
+    }
+
+
+def _person(index: int, name: str) -> dict[str, Any]:
+    return {
+        "id": f"person-{index}",
+        "entity_type": "Person",
+        "platform": "test",
+        "platform_entity_id": f"person-ref-{index}",
+        "title": name,
+        "content": "",
+        "metadata": {},
     }
 
 
@@ -160,6 +215,34 @@ def test_edge_free_graph_uses_a_non_overlapping_grid(page: Page) -> None:
 
     assert metrics["overlaps"] == 0
     assert metrics["minimumGap"] >= 16
+
+
+def test_graph_load_does_not_wait_indefinitely_for_metadata(page: Page) -> None:
+    nodes = [_node(1, "Available before metadata")]
+    with _serve_viewer(nodes, [], meta_delay_seconds=2) as url:
+        started = time.monotonic()
+        _wait_for_graph(page, url, len(nodes))
+        elapsed = time.monotonic() - started
+
+    assert elapsed < 1.5
+
+
+def test_list_highlights_selected_entity_and_updates_on_row_click(page: Page) -> None:
+    nodes = [_node(1, "First document"), _node(2, "Second document")]
+    with _serve_viewer(nodes, []) as url:
+        page.goto(f"{url}?view=list&selected_id=node-1")
+        rows = page.locator("#node-list-body tr")
+        expect(rows).to_have_count(2)
+
+        first_row = rows.nth(0)
+        second_row = rows.nth(1)
+        expect(first_row).to_have_attribute("aria-selected", "true")
+        expect(second_row).to_have_attribute("aria-selected", "false")
+        assert first_row.evaluate("row => getComputedStyle(row).backgroundColor") == "rgba(96, 165, 250, 0.18)"
+
+        second_row.click()
+        expect(first_row).to_have_attribute("aria-selected", "false")
+        expect(second_row).to_have_attribute("aria-selected", "true")
 
 
 def test_connected_long_label_graph_keeps_nodes_separate(page: Page) -> None:
@@ -246,6 +329,32 @@ def test_detail_panel_focus_button_focuses_the_displayed_entity(page: Page) -> N
         expect(focus_button).to_have_attribute("aria-pressed", "true")
 
 
+@pytest.mark.parametrize("view", ["graph", "list"])
+def test_person_merge_refetches_active_view_and_canonical_detail(page: Page, view: str) -> None:
+    nodes = [_person(1, "Canonical person"), _person(2, "Duplicate person")]
+    with _serve_viewer(nodes, []) as url:
+        view_url = f"{url}?view=list" if view == "list" else url
+        _wait_for_graph(page, view_url, 0 if view == "list" else len(nodes))
+        if view == "list":
+            page.locator('tr[data-entity-id="person-1"]').click()
+        else:
+            page.evaluate("() => window.__agentGraphViewer.cy.getElementById('person-1').emit('tap')")
+
+        page.get_by_label("Duplicate person IDs or platform references").fill("person-2")
+        page.on("dialog", lambda dialog: dialog.accept())
+        page.get_by_role("button", name="Merge into this person").click()
+
+        expect(page.locator(".merged-people-list")).to_contain_text("Duplicate person")
+        if view == "list":
+            expect(page.locator("#node-list-body tr")).to_have_count(1)
+            expect(page.locator('tr[data-entity-id="person-2"]')).to_have_count(0)
+        else:
+            page.wait_for_function("() => window.__agentGraphViewer.cy.nodes().length === 1")
+            assert page.evaluate(
+                "() => window.__agentGraphViewer.cy.getElementById('person-2').length"
+            ) == 0
+
+
 def test_slash_focuses_search_without_intercepting_text_input(page: Page) -> None:
     nodes = [_node(1, "Keyboard shortcuts")]
     with _serve_viewer(nodes, []) as url:
@@ -261,6 +370,49 @@ def test_slash_focuses_search_without_intercepting_text_input(page: Page) -> Non
         page.keyboard.type("/")
         expect(lookup_input).to_be_focused()
         expect(lookup_input).to_have_value("/")
+
+
+def test_i_toggles_selected_node_detail_without_intercepting_text_input(page: Page) -> None:
+    nodes = [_node(1, "Keyboard detail"), _node(2, "Other node")]
+    with _serve_viewer(nodes, []) as url:
+        _wait_for_graph(page, url, len(nodes))
+        canvas = page.locator("#cy").bounding_box()
+        position = page.evaluate("() => window.__agentGraphViewer.cy.getElementById('node-1').renderedPosition()")
+        assert canvas is not None
+        page.mouse.click(canvas["x"] + position["x"], canvas["y"] + position["y"])
+        assert page.evaluate("() => window.__agentGraphViewer.cy.$('node:selected').id()") == "node-1"
+        expect(page.locator("#detail")).to_have_class("open")
+
+        page.locator("#detail-title").click()
+        page.keyboard.press("i")
+        expect(page.locator("#detail")).not_to_have_class("open")
+
+        page.keyboard.press("I")
+        expect(page.locator("#detail")).to_have_class("open")
+
+        lookup_input = page.locator("#lookup-input")
+        lookup_input.focus()
+        page.keyboard.type("i")
+        expect(lookup_input).to_have_value("i")
+        expect(page.locator("#detail")).to_have_class("open")
+
+
+def test_i_hides_and_shows_url_selected_detail_in_list_mode(page: Page) -> None:
+    nodes = [_node(1, "List keyboard detail")]
+    with _serve_viewer(nodes, []) as url:
+        page.goto(f"{url}?limit=100&node_id=node-1&selected_id=node-1&depth=0&view=list")
+        expect(page.locator("#detail")).to_have_class("open")
+        selected_row = page.locator('tr[data-entity-id="node-1"]')
+        expect(selected_row).to_have_attribute("aria-selected", "true")
+
+        page.locator("#detail-title").click()
+        page.keyboard.press("i")
+        expect(page.locator("#detail")).not_to_have_class("open")
+        expect(page).to_have_url(f"{url}?limit=100&node_id=node-1&selected_id=node-1&depth=0&view=list")
+        expect(selected_row).to_have_attribute("aria-selected", "true")
+
+        page.keyboard.press("i")
+        expect(page.locator("#detail")).to_have_class("open")
 
 
 def test_node_bounds_and_labels_remain_capped_across_zoom(page: Page) -> None:
