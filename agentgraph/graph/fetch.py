@@ -15,6 +15,7 @@ async def fetch_entity(platform: str, resource_id: str) -> dict[str, Any]:
     fetch.  Returns counts of ingested entities/persons/edges.
     """
     from agentgraph.connectors.registry import get_connector
+    from agentgraph.graph.upsert import upsert_batch
 
     connector = get_connector(platform)
     if connector is None:
@@ -32,6 +33,7 @@ async def fetch_entity(platform: str, resource_id: str) -> dict[str, Any]:
     await backend.reset_synced_at(platform, resource_id)
 
     batch = await connector.fetch(resource_type=resource_type, resource_id=resource_id, meta=meta)
+    await upsert_batch(batch)
     return {
         "entities": len(batch.entities),
         "persons": len(batch.persons),

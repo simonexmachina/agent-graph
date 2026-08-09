@@ -6,6 +6,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -198,6 +199,28 @@ async def test_list_entities_page_orders_by_visible_table_columns(
     assert [entity["id"] for entity in by_name] == ["entity-2", "entity-3", "entity-1"]
     assert [entity["id"] for entity in by_type] == ["entity-3", "entity-1", "entity-2"]
     assert [entity["id"] for entity in by_platform] == ["entity-2", "entity-3", "entity-1"]
+
+
+async def test_list_entities_page_can_omit_ordering(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    """Graph pages can avoid a temporary SQL sort when row order is irrelevant."""
+    with patch.object(
+        sqlite_backend,
+        "_fetchone",
+        AsyncMock(return_value={"count": 0}),
+    ), patch.object(
+        sqlite_backend,
+        "_fetchall",
+        AsyncMock(return_value=[]),
+    ) as fetchall:
+        await sqlite_backend.list_entities_page(
+            ["Message", "Thread"], None, None, 50, 0, None, "desc"
+        )
+
+    assert fetchall.await_args is not None
+    sql = fetchall.await_args.args[0]
+    assert "ORDER BY" not in sql
 
 
 async def test_file_database_uses_separate_read_connection(tmp_path: Path) -> None:

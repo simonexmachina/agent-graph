@@ -265,16 +265,28 @@ class RssConnector(BaseConnector):
         meta: dict[str, str] | None = None,
         account_id: str | None = None,
     ) -> EntityBatch:
-        _ = (resource_type, meta, account_id)
-        if resource_id.startswith(("http://", "https://")):
-            return await _fetch_feed(resource_id, hydrate_documents=True)
+        _ = account_id
+        feed_url = resource_id
+        if resource_type == "folder" and meta and meta.get("feed_url"):
+            feed_url = meta["feed_url"]
+        if feed_url.startswith(("http://", "https://")):
+            return await _fetch_feed(
+                feed_url,
+                hydrate_documents=True,
+                new_documents_only=True,
+            )
         if resource_type == "document" and meta and meta.get("web_url"):
             entity = await _fetch_entry_document(resource_id, meta)
             return EntityBatch(entities=[entity])
         return EntityBatch()
 
 
-async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> EntityBatch:
+async def _fetch_feed(
+    feed_url: str,
+    *,
+    hydrate_documents: bool = False,
+    new_documents_only: bool = False,
+) -> EntityBatch:
     parsed = await _parse_feed(feed_url)
     feed_title = str(cast(dict[str, Any], parsed.feed).get("title") or feed_url)
     feed_id = _feed_id(feed_url)
@@ -301,9 +313,17 @@ async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> Enti
         # RFC 4287 §4.2.1: feed-level authors apply to entries that declare none.
         authors = _parse_authors(entry) or feed_authors
         entity = _entry_to_entity(feed_url, feed_entity_id, entry, authors)
-        if hydrate_documents:
-            entity = await _hydrate_entry_document(entity)
-        entities.append(entity)
+        include_entity = True
+        if new_documents_only:
+            existing = await get_backend().get_entity_by_platform(
+                "rss",
+                entity.platform_entity_id,
+            )
+            include_entity = existing is None
+        if include_entity:
+            if hydrate_documents:
+                entity = await _hydrate_entry_document(entity)
+            entities.append(entity)
         edges.append(
             EdgeRecord(
                 edge_type="posted_in",
@@ -322,7 +342,8 @@ async def _fetch_feed(feed_url: str, *, hydrate_documents: bool = False) -> Enti
                     platform="rss",
                 )
             )
-        batch.add_stubs_from(entity)
+        if include_entity:
+            batch.add_stubs_from(entity)
 
     edges.extend(
         EdgeRecord(

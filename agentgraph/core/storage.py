@@ -119,10 +119,10 @@ class StorageBackend(ABC):
         since: datetime | None,
         limit: int,
         offset: int,
-        order_by: str,
+        order_by: str | None,
         order_dir: str,
     ) -> tuple[list[EntityResult], int]:
-        """Return an ordered entity page and the total matching entity count."""
+        """Return an entity page and total count, optionally ordered by a supported field."""
         ...
 
     @abstractmethod

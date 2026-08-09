@@ -746,6 +746,29 @@ async def test_rss_fetch_feed_hydrates_linked_articles() -> None:
     fetch_feed.assert_awaited_once_with(
         "https://example.com/feed.xml",
         hydrate_documents=True,
+        new_documents_only=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_rss_fetch_folder_uses_stored_feed_url() -> None:
+    batch = EntityBatch()
+
+    with patch(
+        "agentgraph_connector_rss._fetch_feed",
+        new=AsyncMock(return_value=batch),
+    ) as fetch_feed:
+        result = await RssConnector().fetch(
+            "folder",
+            "feed/73c63ac29e5d1dc80f240d99",
+            meta={"feed_url": "http://stratechery.com/feed/"},
+        )
+
+    assert result is batch
+    fetch_feed.assert_awaited_once_with(
+        "http://stratechery.com/feed/",
+        hydrate_documents=True,
+        new_documents_only=True,
     )
 
 
@@ -970,6 +993,50 @@ async def test_fetch_feed_hydrates_entry_documents_when_requested(
     assert entry.metadata["feed_url"] == "https://example.com/feed.xml"
     assert entry.metadata["web_url"] == "https://example.com/first"
     assert entry.metadata["http_etag"] == '"fresh"'
+
+
+@pytest.mark.asyncio
+async def test_fetch_feed_new_documents_only_skips_existing_article_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Parsed:
+        bozo = False
+        feed = {"title": "Example Feed"}
+        entries = [
+            {
+                "id": "post-1",
+                "title": "First Post",
+                "link": "https://example.com/first",
+                "author": "Author One",
+            }
+        ]
+
+    monkeypatch.setattr("agentgraph_connector_rss._parse_feed", AsyncMock(return_value=_Parsed()))
+    backend = MagicMock()
+    backend.get_entity_by_platform = AsyncMock(return_value={"id": "existing-entry"})
+    set_backend(backend)
+
+    with patch(
+        "agentgraph_connector_rss._hydrate_entry_document",
+        new=AsyncMock(),
+    ) as hydrate:
+        batch = await _fetch_feed(
+            "https://example.com/feed.xml",
+            hydrate_documents=True,
+            new_documents_only=True,
+        )
+
+    hydrate.assert_not_awaited()
+    assert [entity.entity_type for entity in batch.entities] == ["Folder"]
+    assert [person.platform_user_id for person in batch.persons] == ["Author One"]
+    authored_targets = {
+        edge.target_platform_entity_id
+        for edge in batch.edges
+        if edge.edge_type == "authored"
+    }
+    assert batch.entities[0].platform_entity_id in authored_targets
+    assert len(authored_targets) == 2
+    assert any(target and target.startswith("entry/") for target in authored_targets)
 
 
 @pytest.mark.asyncio

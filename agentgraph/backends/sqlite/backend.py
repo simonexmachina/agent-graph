@@ -311,6 +311,17 @@ class SQLiteBackend(StorageBackend):
                 conn, canonical_key, p.platform, p.platform_user_id
             )
             if existing_id is not None:
+                existing_cursor = await conn.execute(
+                    "SELECT title, content FROM entities WHERE id = ?", [existing_id]
+                )
+                existing_row = await existing_cursor.fetchone()
+                existing_title = str(existing_row[0]) if existing_row and existing_row[0] else ""
+                existing_content = str(existing_row[1]) if existing_row and existing_row[1] else ""
+                fts_title = p.display_name if p.display_name is not None else existing_title
+                fts_content = (
+                    p.canonical_email if p.canonical_email is not None else existing_content
+                )
+                rewrite_fts = fts_title != existing_title or fts_content != existing_content
                 await conn.execute(
                     """
                     UPDATE entities
@@ -354,13 +365,16 @@ class SQLiteBackend(StorageBackend):
                 if row is None:
                     raise RuntimeError("Failed to upsert person entity")
                 entity_id = str(row[0])
+                fts_title = p.display_name or ""
+                fts_content = p.canonical_email or ""
+                rewrite_fts = bool(fts_title or fts_content)
 
-            # Maintain FTS index
-            await conn.execute("DELETE FROM entities_fts WHERE id = ?", [entity_id])
-            if p.display_name or p.canonical_email:
+            if rewrite_fts:
+                if existing_id is not None:
+                    await conn.execute("DELETE FROM entities_fts WHERE id = ?", [entity_id])
                 await conn.execute(
                     "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)",
-                    [entity_id, p.display_name or "", p.canonical_email or ""],
+                    [entity_id, fts_title, fts_content],
                 )
 
             id_map[p.platform_user_id] = entity_id
@@ -399,7 +413,8 @@ class SQLiteBackend(StorageBackend):
         id_map: dict[str, str] = {}
         # FTS maintenance is independent of edge resolution. Deferring it avoids
         # two SQLite round trips for every entity in a connector-sized batch.
-        fts_entries: dict[str, tuple[str, str] | None] = {}
+        fts_delete_ids: list[str] = []
+        fts_entries: dict[str, tuple[str, str]] = {}
         now = _now()
         for e in entities:
             if e.is_stub:
@@ -414,6 +429,23 @@ class SQLiteBackend(StorageBackend):
                     [_new_id(), e.entity_type, e.platform, e.platform_entity_id, now],
                 )
             else:
+                existing_cursor = await conn.execute(
+                    """
+                    SELECT id, title, content FROM entities
+                    WHERE platform = ? AND platform_entity_id = ?
+                    """,
+                    [e.platform, e.platform_entity_id],
+                )
+                existing_row = await existing_cursor.fetchone()
+                existing_title = str(existing_row[1]) if existing_row and existing_row[1] else ""
+                existing_content = str(existing_row[2]) if existing_row and existing_row[2] else ""
+                fts_title = e.title if e.title is not None else existing_title
+                fts_content = e.content if e.content is not None else existing_content
+                rewrite_fts = (
+                    existing_row is None
+                    or fts_title != existing_title
+                    or fts_content != existing_content
+                )
                 embedding = embeddings.get(e.platform_entity_id)
                 emb_blob = pack_embedding(embedding) if embedding else None
                 created = e.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if e.created_at else None
@@ -457,9 +489,11 @@ class SQLiteBackend(StorageBackend):
                         f"Failed to upsert entity {e.platform}:{e.platform_entity_id}"
                     )
                 entity_id: str = row[0]
-                fts_entries[entity_id] = (
-                    (e.title or "", e.content or "") if e.title or e.content else None
-                )
+                if rewrite_fts:
+                    if existing_row is not None:
+                        fts_delete_ids.append(entity_id)
+                    if fts_title or fts_content:
+                        fts_entries[entity_id] = (fts_title, fts_content)
                 id_map[e.platform_entity_id] = entity_id
                 continue
 
@@ -470,15 +504,13 @@ class SQLiteBackend(StorageBackend):
                 )
             id_map[e.platform_entity_id] = row[0]
 
-        fts_ids = list(fts_entries)
-        for start in range(0, len(fts_ids), _FTS_DELETE_CHUNK_SIZE):
-            ids = fts_ids[start : start + _FTS_DELETE_CHUNK_SIZE]
+        for start in range(0, len(fts_delete_ids), _FTS_DELETE_CHUNK_SIZE):
+            ids = fts_delete_ids[start : start + _FTS_DELETE_CHUNK_SIZE]
             placeholders = ",".join("?" * len(ids))
             await conn.execute(f"DELETE FROM entities_fts WHERE id IN ({placeholders})", ids)
         inserts = [
             [entity_id, title, content]
             for entity_id, entry in fts_entries.items()
-            if entry is not None
             for title, content in [entry]
         ]
         if inserts:
@@ -965,12 +997,17 @@ class SQLiteBackend(StorageBackend):
         since: datetime | None,
         limit: int,
         offset: int,
-        order_by: str,
+        order_by: str | None,
         order_dir: str,
     ) -> tuple[list[EntityResult], int]:
-        order_by_sql = _LIST_PAGE_ORDER_BY.get(order_by, "last_accessed")
+        order_by_sql = (
+            _LIST_PAGE_ORDER_BY.get(order_by, "last_accessed") if order_by is not None else None
+        )
         if order_dir.upper() not in {"ASC", "DESC"}:
             order_dir = "DESC"
+        order_clause = (
+            f"ORDER BY {order_by_sql} {order_dir}, id ASC" if order_by_sql is not None else ""
+        )
 
         clauses: list[str] = []
         params: list[Any] = []
@@ -994,7 +1031,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at, synced_at, last_accessed, cumulative_dwell_ms, bookmarked
             FROM entities
             {where}
-            ORDER BY {order_by_sql} {order_dir}, id ASC
+            {order_clause}
             LIMIT ? OFFSET ?
             """,
             [*params, limit, offset],

@@ -181,7 +181,7 @@ async def list_entities_page(
     since: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    order_by: str = "last_accessed",
+    order_by: str | None = "last_accessed",
     order_dir: str = "desc",
 ) -> tuple[list[EntityResult], int]:
     since_dt = _parse_since(since) if since else None

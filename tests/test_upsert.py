@@ -5,6 +5,7 @@ from __future__ import annotations
 # pyright: reportPrivateUsage=false
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -159,6 +160,46 @@ async def test_upsert_batch_maintains_one_current_fts_row_per_entity(
     assert len(rows) == 1
     assert rows[0]["title"] == "Updated title"
     assert rows[0]["content"] == "replacement wording"
+
+
+async def test_upsert_batch_skips_fts_rewrites_for_unchanged_text(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    batch = EntityBatch(
+        persons=[
+            PersonRecord(
+                platform="rss",
+                platform_user_id="author-1",
+                display_name="Author One",
+            )
+        ],
+        entities=[
+            EntityRecord(
+                entity_type="Folder",
+                platform="rss",
+                platform_entity_id="feed/example",
+                title="Example Feed",
+                content="RSS feed: Example Feed",
+            )
+        ],
+    )
+    await sqlite_backend.upsert_batch(batch, {}, {})
+    statements: list[str] = []
+    conn = sqlite_backend._conn_or_raise()
+    trace_conn: Any = conn
+    await trace_conn.set_trace_callback(statements.append)
+
+    try:
+        await sqlite_backend.upsert_batch(batch, {}, {})
+    finally:
+        await trace_conn.set_trace_callback(None)
+
+    fts_writes = [
+        statement
+        for statement in statements
+        if "entities_fts" in statement and statement.lstrip().startswith(("DELETE", "INSERT"))
+    ]
+    assert fts_writes == []
 
 
 async def test_upsert_edge_to_existing_person_sqlite(sqlite_backend: SQLiteBackend) -> None:
