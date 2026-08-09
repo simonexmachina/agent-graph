@@ -176,6 +176,33 @@ async def test_concurrent_refresh_is_coalesced(tmp_creds: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_concurrent_forced_refresh_reuses_first_rotation(tmp_creds: Path) -> None:
+    save_platform("slack", _oauth_record())
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.01)
+        return httpx.Response(200, json={
+            "ok": True,
+            "access_token": "forced-token",
+            "refresh_token": "forced-refresh",
+            "expires_in": 43200,
+            "scope": ",".join(sorted(REQUIRED_SCOPES)),
+        })
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        first, second = await asyncio.gather(
+            refresh_oauth_credentials("slack:T1:U1", force=True, client=client),
+            refresh_oauth_credentials("slack:T1:U1", force=True, client=client),
+        )
+
+    assert first.access_token == second.access_token == "forced-token"
+    assert calls == 1
+
+
+@pytest.mark.asyncio
 async def test_refresh_failure_keeps_existing_tokens(tmp_creds: Path) -> None:
     save_platform("slack", _oauth_record(expires_at=datetime.now(UTC)))
 

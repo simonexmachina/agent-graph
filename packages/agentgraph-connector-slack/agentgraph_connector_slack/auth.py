@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Annotated, Any, Literal, cast
 from urllib.parse import parse_qs, urlencode, urlparse
+from weakref import WeakKeyDictionary
 
 import httpx
 from pydantic import BaseModel, Field, TypeAdapter
@@ -66,7 +67,9 @@ _CREDENTIAL_ADAPTER: TypeAdapter[SlackCredential] = TypeAdapter(SlackCredential)
 # Backwards-compatible public name for callers that used the old model.
 SlackCredentials = SlackBrowserCredentials
 
-_refresh_locks: dict[str, asyncio.Lock] = {}
+_refresh_locks: WeakKeyDictionary[
+    asyncio.AbstractEventLoop, dict[str, asyncio.Lock]
+] = WeakKeyDictionary()
 
 
 class SlackOAuthCallback(BaseModel):
@@ -331,7 +334,8 @@ async def refresh_oauth_credentials(
     if not isinstance(initial, SlackOAuthCredentials):
         raise RuntimeError("Slack browser credentials cannot be refreshed")
     resolved_id = account_id or f"slack:{initial.team_id}:{initial.user_id}"
-    lock = _refresh_locks.setdefault(resolved_id, asyncio.Lock())
+    locks = _refresh_locks.setdefault(asyncio.get_running_loop(), {})
+    lock = locks.setdefault(resolved_id, asyncio.Lock())
     async with lock:
         current = load_slack_creds(resolved_id)
         if not isinstance(current, SlackOAuthCredentials):
@@ -340,6 +344,8 @@ async def refresh_oauth_credentials(
         expires_at = current.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=UTC)
+        if force and current.access_token != initial.access_token:
+            return current
         if not force and expires_at > now + REFRESH_WINDOW:
             return current
 
