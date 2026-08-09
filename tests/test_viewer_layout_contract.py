@@ -12,7 +12,7 @@ from typing import Any, cast
 from urllib.parse import urlsplit
 
 import pytest
-from playwright.sync_api import Browser, Page, expect, sync_playwright
+from playwright.sync_api import Browser, Page, ViewportSize, expect, sync_playwright
 
 
 class _ViewerFixtureServer(ThreadingHTTPServer):
@@ -116,6 +116,18 @@ def _layout_metrics(page: Page) -> dict[str, Any]:
           const boxes = nodes.map(node => ({ id: node.id(), box: node.renderedBoundingBox({ includeLabels: true, includeOverlays: false }) }));
           let overlaps = 0;
           let minimumGap = Infinity;
+          let totalNodeArea = 0;
+          let x1 = Infinity;
+          let y1 = Infinity;
+          let x2 = -Infinity;
+          let y2 = -Infinity;
+          for (const { box } of boxes) {
+            totalNodeArea += box.w * box.h;
+            x1 = Math.min(x1, box.x1);
+            y1 = Math.min(y1, box.y1);
+            x2 = Math.max(x2, box.x2);
+            y2 = Math.max(y2, box.y2);
+          }
           for (let i = 0; i < boxes.length; i += 1) {
             for (let j = i + 1; j < boxes.length; j += 1) {
               const a = boxes[i].box;
@@ -126,7 +138,16 @@ def _layout_metrics(page: Page) -> dict[str, Any]:
               minimumGap = Math.min(minimumGap, Math.hypot(horizontalGap, verticalGap));
             }
           }
-          return { overlaps, minimumGap, boxes };
+          const graphArea = Math.max(x2 - x1, 1) * Math.max(y2 - y1, 1);
+          return {
+            overlaps,
+            minimumGap,
+            utilization: totalNodeArea / graphArea,
+            insideViewport: boxes.every(({ box }) => (
+              box.x1 >= 0 && box.y1 >= 0 && box.x2 <= cy.width() && box.y2 <= cy.height()
+            )),
+            boxes,
+          };
         }"""
     )
 
@@ -161,6 +182,43 @@ def test_connected_long_label_graph_keeps_nodes_separate(page: Page) -> None:
 
     assert metrics["overlaps"] == 0
     assert metrics["minimumGap"] >= 16
+
+
+@pytest.mark.parametrize("viewport", [{"width": 1280, "height": 720}, {"width": 800, "height": 900}])
+def test_mixed_graph_packs_components_without_wasting_space(
+    page: Page,
+    viewport: ViewportSize,
+) -> None:
+    page.set_viewport_size(viewport)
+    nodes = [_node(index, f"Mixed component document {index}") for index in range(10)]
+    edges = [
+        {
+            "id": "edge-0-1",
+            "source_entity_id": "node-0",
+            "target_entity_id": "node-1",
+            "edge_type": "contains",
+        },
+        {
+            "id": "edge-1-2",
+            "source_entity_id": "node-1",
+            "target_entity_id": "node-2",
+            "edge_type": "contains",
+        },
+        {
+            "id": "edge-3-4",
+            "source_entity_id": "node-3",
+            "target_entity_id": "node-4",
+            "edge_type": "contains",
+        },
+    ]
+    with _serve_viewer(nodes, edges) as url:
+        _wait_for_graph(page, url, len(nodes))
+        metrics = _layout_metrics(page)
+
+    assert metrics["overlaps"] == 0
+    assert metrics["minimumGap"] >= 16
+    assert metrics["insideViewport"] is True
+    assert metrics["utilization"] >= 0.20
 
 
 def test_page_title_includes_search_and_focused_node(page: Page) -> None:

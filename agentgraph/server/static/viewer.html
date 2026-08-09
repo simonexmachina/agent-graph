@@ -1135,6 +1135,84 @@
     }
   }
 
+  function packGraphComponents() {
+    const components = cy.elements().components();
+    if (components.length <= 1) return;
+
+    const preferWide = cy.width() >= cy.height();
+    components.forEach(elements => {
+      if (elements.nodes().length < 2) return;
+      const bounds = elements.boundingBox({ includeLabels: true, includeOverlays: false });
+      const shouldRotate = preferWide ? bounds.h > bounds.w : bounds.w > bounds.h;
+      if (!shouldRotate) return;
+      const centerX = (bounds.x1 + bounds.x2) / 2;
+      const centerY = (bounds.y1 + bounds.y2) / 2;
+      elements.nodes().positions(node => {
+        const position = node.position();
+        return {
+          x: centerX - (position.y - centerY),
+          y: centerY + (position.x - centerX),
+        };
+      });
+    });
+
+    const zoom = Math.max(cy.zoom(), 0.01);
+    const gap = GRID_GUTTER / zoom;
+    const packed = components.map((elements, index) => ({
+      elements,
+      index,
+      bounds: elements.boundingBox({ includeLabels: true, includeOverlays: false }),
+    }));
+    packed.sort((first, second) => (
+      second.bounds.h - first.bounds.h
+      || second.bounds.w - first.bounds.w
+      || first.index - second.index
+    ));
+
+    function packRows(targetWidth) {
+      const placements = [];
+      let x = 0;
+      let y = 0;
+      let rowHeight = 0;
+      let width = 0;
+      packed.forEach(component => {
+        if (x > 0 && x + component.bounds.w > targetWidth) {
+          x = 0;
+          y += rowHeight + gap;
+          rowHeight = 0;
+        }
+        placements.push({ component, x, y });
+        x += component.bounds.w + gap;
+        width = Math.max(width, x - gap);
+        rowHeight = Math.max(rowHeight, component.bounds.h);
+      });
+      return { placements, width, height: y + rowHeight };
+    }
+
+    const widestComponent = Math.max(...packed.map(component => component.bounds.w));
+    let cumulativeWidth = 0;
+    const candidateWidths = packed.map((component, index) => {
+      cumulativeWidth += component.bounds.w + (index === 0 ? 0 : gap);
+      return Math.max(widestComponent, cumulativeWidth);
+    });
+    const bestPacking = candidateWidths
+      .map(packRows)
+      .sort((first, second) => {
+        const firstScale = Math.max(first.width / cy.width(), first.height / cy.height());
+        const secondScale = Math.max(second.width / cy.width(), second.height / cy.height());
+        return firstScale - secondScale || (first.width * first.height) - (second.width * second.height);
+      })[0];
+
+    bestPacking.placements.forEach(({ component, x, y }) => {
+      const dx = x - component.bounds.x1;
+      const dy = y - component.bounds.y1;
+      component.elements.nodes().positions(node => ({
+        x: node.position('x') + dx,
+        y: node.position('y') + dy,
+      }));
+    });
+  }
+
   function readableGridPositionFor(index, count) {
     const node = cy.nodes()[0];
     const bounds = node.boundingBox({ includeLabels: true, includeOverlays: false });
@@ -1384,10 +1462,10 @@
       animate: false,
       randomize: false,
       nodeDimensionsIncludeLabels: true,
-      nodeRepulsion: () => 1500000,
-      idealEdgeLength: () => 260,
-      nodeOverlap: 160,
-      componentSpacing: 360,
+      nodeRepulsion: () => 400000,
+      idealEdgeLength: () => 160,
+      nodeOverlap: 80,
+      componentSpacing: 40,
       gravity: 0.18,
       numIter: 1000,
       refresh: 20,
@@ -1401,6 +1479,9 @@
       // those dimensions so boxes cannot overlap after the final fit.
       const refinedLayout = cy.layout(coseOptions);
       refinedLayout.one('layoutstop', () => {
+        packGraphComponents();
+        fitGraphToViewport();
+        resolveNodeOverlaps();
         fitGraphToViewport();
         resolveNodeOverlaps();
         fitGraphToViewport();

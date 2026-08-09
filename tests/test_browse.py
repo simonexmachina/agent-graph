@@ -190,14 +190,11 @@ def test_viewer_initial_layout_contains_all_nodes() -> None:
     assert "name: 'preset'" in viewer_html
     assert "positions: readableGridPositions()" in viewer_html
     assert "nodeDimensionsIncludeLabels: true" in viewer_html
-    assert "nodeRepulsion: () => 1500000" in viewer_html
-    assert "idealEdgeLength: () => 260" in viewer_html
-    assert "nodeOverlap: 160" in viewer_html
-    assert "componentSpacing: 360" in viewer_html
     assert "const refinedLayout = cy.layout(coseOptions);" in viewer_html
+    assert "function packGraphComponents()" in viewer_html
+    assert "packGraphComponents();" in viewer_html
     assert "function resolveNodeOverlaps()" in viewer_html
     assert "resolveNodeOverlaps();" in viewer_html
-    assert viewer_html.count("fitGraphToViewport();") == 6
     assert "ensureReadableDefaultZoom" not in viewer_html
 
 
