@@ -102,7 +102,7 @@ async def list_auth_providers_tool(verify: bool = False) -> str:
           - auth_detail: aggregate auth summary or error message; null if missing
           - auth_verified: true when credentials were live-checked with provider APIs
           - accounts: authenticated account rows with account_id, label, workspace_id,
-            email, auth_status, and auth_detail
+            email, auth_method, auth_status, and auth_detail
     """
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
     from agentgraph.connectors.status import auth_provider_status_items
@@ -110,6 +110,48 @@ async def list_auth_providers_tool(verify: bool = False) -> str:
     bootstrap()
     result = await auth_provider_status_items(get_all_connectors(), verify=verify)
     return json.dumps(result)
+
+
+@mcp.tool()
+async def authenticate_provider_tool(
+    provider: str,
+    args: list[str] | None = None,
+    account_id: str | None = None,
+    add: bool = False,
+) -> str:
+    """Authenticate an installed provider through its connector-owned flow.
+
+    This is the MCP equivalent of:
+        agentgraph auth <provider> [connector auth options]
+
+    Args:
+        provider: Generic auth provider key, such as "google" or "slack".
+        args: Connector-owned auth options. Slack accepts
+            ["--method", "oauth|browser"], plus browser credential options.
+        account_id: Existing account identity to replace.
+        add: Add another identity and make it the default.
+
+    Returns:
+        JSON with provider and authenticated=true, or an error.
+    """
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import auth_provider_connectors
+
+    bootstrap()
+    grouped = auth_provider_connectors(get_all_connectors())
+    connectors = grouped.get(provider)
+    if not connectors:
+        return json.dumps({"error": f"Unknown auth provider {provider!r}"})
+    try:
+        await asyncio.to_thread(
+            type(connectors[0]).run_auth_flow_with_args,
+            args or [],
+            account_id,
+            add,
+        )
+    except (NotImplementedError, OSError, RuntimeError, ValueError) as exc:
+        return json.dumps({"error": str(exc)})
+    return json.dumps({"provider": provider, "authenticated": True})
 
 
 @mcp.tool()

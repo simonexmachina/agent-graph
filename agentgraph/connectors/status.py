@@ -97,6 +97,7 @@ async def auth_provider_status_items(
                 "user_id": getattr(account, "user_id", None),
                 "workspace_id": getattr(account, "workspace_id", None),
                 "email": getattr(account, "email", None),
+                "auth_method": getattr(account, "auth_method", None),
                 "auth_status": status,
                 "auth_detail": detail,
             })

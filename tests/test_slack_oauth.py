@@ -101,6 +101,28 @@ async def test_headers_are_bearer_only_for_oauth_and_include_cookie_for_browser(
 
 
 @pytest.mark.asyncio
+async def test_headers_select_mixed_method_accounts(tmp_creds: Path) -> None:
+    from agentgraph.auth.credentials import upsert_platform_account
+
+    upsert_platform_account("slack", "slack:T1:U1", _oauth_record())
+    upsert_platform_account(
+        "slack",
+        "slack:T2:U2",
+        SlackBrowserCredentials(
+            xoxc_token="xoxc-T2", d_cookie="cookie-2", team_id="T2", user_id="U2"
+        ),
+    )
+
+    oauth_headers = await slack_headers("slack:T1:U1")
+    browser_headers = await slack_headers("slack:T2:U2")
+
+    assert oauth_headers["Authorization"] == "Bearer xoxe.xoxp-old"
+    assert "Cookie" not in oauth_headers
+    assert browser_headers["Authorization"] == "Bearer xoxc-T2"
+    assert browser_headers["Cookie"] == "d=cookie-2"
+
+
+@pytest.mark.asyncio
 async def test_proactive_refresh_persists_rotated_tokens(tmp_creds: Path) -> None:
     save_platform("slack", _oauth_record(expires_at=datetime.now(UTC) + timedelta(minutes=4)))
     requests: list[httpx.Request] = []

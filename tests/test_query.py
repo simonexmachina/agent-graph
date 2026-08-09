@@ -962,6 +962,38 @@ async def test_mcp_list_auth_providers_tool_returns_json() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_auth_status_exposes_slack_auth_method(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agentgraph_connector_slack import SlackConnector
+
+    from agentgraph.auth.credentials import save_platform
+    from agentgraph.mcp.server import list_auth_providers_tool
+
+    credentials_file = tmp_path / "credentials.json"
+    monkeypatch.setattr("agentgraph.auth.credentials.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.auth.credentials.CREDENTIALS_FILE", credentials_file)
+    save_platform("slack", {
+        "xoxc_token": "xoxc-T1-old",
+        "d_cookie": "cookie",
+        "team_id": "T1",
+        "user_id": "U1",
+    })
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
+    ):
+        result = await list_auth_providers_tool()
+
+    parsed = json.loads(result)
+    assert parsed[0]["accounts"][0]["auth_method"] == "browser"
+
+
+@pytest.mark.asyncio
 async def test_mcp_remove_auth_provider_tool_removes_credentials(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -979,6 +1011,45 @@ async def test_mcp_remove_auth_provider_tool_removes_credentials(
     parsed = json.loads(result)
     assert parsed == {"provider": "slack", "removed": True}
     assert load_platform("slack") is None
+
+
+@pytest.mark.asyncio
+async def test_mcp_authenticate_provider_dispatches_generic_connector_args() -> None:
+    from agentgraph.mcp.server import authenticate_provider_tool
+
+    captured: dict[str, object] = {}
+
+    class AuthConnector:
+        source = "example"
+        auth_label = "example"
+        appears_in_auth_status = True
+
+        @classmethod
+        def run_auth_flow_with_args(
+            cls,
+            args: list[str],
+            account_id: str | None = None,
+            add: bool = False,
+        ) -> None:
+            captured.update(args=args, account_id=account_id, add=add)
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[AuthConnector()],
+        ),
+    ):
+        result = await authenticate_provider_tool(
+            "example", ["--method", "custom"], "example:1", True
+        )
+
+    assert json.loads(result) == {"provider": "example", "authenticated": True}
+    assert captured == {
+        "args": ["--method", "custom"],
+        "account_id": "example:1",
+        "add": True,
+    }
 
 
 @pytest.mark.asyncio

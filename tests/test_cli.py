@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from agentgraph_connector_slack import SlackConnector
 from typer.testing import CliRunner
 
 from agentgraph.auth.credentials import (
@@ -431,6 +432,7 @@ class _FakeGoogleConnector:
                 source=cls.source,
                 user_id="user@example.com",
                 email="user@example.com",
+                auth_method="oauth",
             )
         ]
 
@@ -596,7 +598,10 @@ def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:
 
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
-        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
         patch("agentgraph_connector_slack.auth.run_cookie_flow", side_effect=fake_cookie_flow),
     ):
         result = runner.invoke(
@@ -621,6 +626,43 @@ def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:
         "xoxc_token": "xoxc-test",
         "d_cookie": "cookie",
     }
+
+
+def test_auth_slack_explicit_oauth_rejects_browser_options() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["auth", "slack", "--method", "oauth", "--xoxc-token", "xoxc-test"],
+        )
+
+    assert result.exit_code == 1
+    assert "cannot be used with --method oauth" in result.output
+
+
+def test_auth_slack_explicit_browser_dispatches_to_connector() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
+        patch("agentgraph_connector_slack.auth.run_cookie_flow") as browser,
+    ):
+        result = runner.invoke(app, ["auth", "slack", "--method=browser", "--add"])
+
+    assert result.exit_code == 0
+    browser.assert_called_once_with(
+        account_id=None,
+        add=True,
+        xoxc_token=None,
+        d_cookie=None,
+    )
 
 
 def test_auth_remove_deletes_provider_credentials(tmp_creds: Path) -> None:
@@ -953,7 +995,29 @@ def test_auth_status_dedupes_shared_google_provider() -> None:
 
     assert result.exit_code == 0
     assert result.output.count("account: User Example [acct-google]") == 1
+    assert "method: oauth" in result.output
     assert "connectors: gdocs, gdrive" in result.output
+
+
+def test_auth_status_exposes_slack_auth_method(tmp_creds: Path) -> None:
+    save_platform("slack", {
+        "xoxc_token": "xoxc-T1-old",
+        "d_cookie": "cookie",
+        "team_id": "T1",
+        "user_id": "U1",
+    })
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
+    ):
+        result = runner.invoke(app, ["auth", "status"])
+
+    assert result.exit_code == 0
+    assert "slack:T1:U1" in result.output
+    assert "method: browser" in result.output
 
 
 def test_auth_status_excludes_non_auth_connectors() -> None:

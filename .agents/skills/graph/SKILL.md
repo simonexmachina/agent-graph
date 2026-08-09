@@ -60,11 +60,12 @@ agentgraph connector rss remove <feed-url> [feed-url...] [--json] # removes exac
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
 
 # Show credential-backed auth provider state (dedupes shared providers like Google); add --verify for live provider API checks
-agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[]
+agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[] including auth_method
 
 # Authenticate connectors/providers
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
-agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
+agentgraph auth slack [--method oauth|browser] [--add] [--account <account-id>] # OAuth PKCE by default
+agentgraph auth slack --method browser [--xoxc-token <token>] [--d-cookie <cookie>] # explicit browser-session fallback; credential flags imply browser
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
 agentgraph auth remove <provider> [--account <account-id>] [--json] # remove stored credentials; does not delete graph data
 agentgraph connector rss add <feed-url>                   # RSS/Atom feed URLs are connector configuration, not auth
@@ -87,6 +88,7 @@ When using AgentGraph through MCP instead of the CLI, use these equivalent tools
 ```text
 agentgraph connectors              -> list_connectors_tool(verify)
 agentgraph auth [--json] status    -> list_auth_providers_tool(verify) # credential-backed providers only
+agentgraph auth <provider> ...     -> authenticate_provider_tool(provider, args, account_id, add)
 agentgraph auth remove ...         -> remove_auth_provider_tool(provider, account_id)
 agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
 agentgraph search ...              -> search_entities_tool(...)

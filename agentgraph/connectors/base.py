@@ -177,6 +177,7 @@ class ConnectorAccount(BaseModel):
     user_id: str | None = None
     workspace_id: str | None = None
     email: str | None = None
+    auth_method: str | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
@@ -238,6 +239,18 @@ class BaseConnector(ABC):
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
         """Run the interactive authentication flow for this connector."""
         raise NotImplementedError(f"{cls.__name__} does not have an auth flow")
+
+    @classmethod
+    def run_auth_flow_with_args(
+        cls,
+        args: list[str],
+        account_id: str | None = None,
+        add: bool = False,
+    ) -> None:
+        """Parse connector-owned auth arguments and run authentication."""
+        if args:
+            raise ValueError(f"Unknown authentication option for {cls.source}: {args[0]}")
+        cls.run_auth_flow(account_id=account_id, add=add)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:

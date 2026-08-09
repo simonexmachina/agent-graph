@@ -149,6 +149,57 @@ class SlackConnector(BaseConnector):
         run_oauth_flow(account_id=account_id, add=add)
 
     @classmethod
+    def run_auth_flow_with_args(
+        cls,
+        args: list[str],
+        account_id: str | None = None,
+        add: bool = False,
+    ) -> None:
+        from agentgraph_connector_slack.auth import run_cookie_flow, run_oauth_flow
+
+        method: str | None = None
+        xoxc_token: str | None = None
+        d_cookie: str | None = None
+        index = 0
+        while index < len(args):
+            arg = args[index]
+            if arg in {"--method", "--xoxc-token", "--d-cookie"}:
+                if index + 1 >= len(args):
+                    raise ValueError(f"{arg} requires a value")
+                value = args[index + 1]
+                index += 1
+            elif any(arg.startswith(f"{option}=") for option in (
+                "--method", "--xoxc-token", "--d-cookie"
+            )):
+                option, value = arg.split("=", 1)
+                arg = option
+            else:
+                raise ValueError(f"Unknown Slack authentication option: {arg}")
+            if arg == "--method":
+                method = value
+            elif arg == "--xoxc-token":
+                xoxc_token = value
+            else:
+                d_cookie = value
+            index += 1
+
+        if method not in {None, "oauth", "browser"}:
+            raise ValueError("Slack auth method must be 'oauth' or 'browser'")
+        browser_options = xoxc_token is not None or d_cookie is not None
+        if method == "oauth" and browser_options:
+            raise ValueError("--xoxc-token and --d-cookie cannot be used with --method oauth")
+        selected_method = method or ("browser" if browser_options else "oauth")
+        if selected_method == "browser":
+            run_cookie_flow(
+                account_id=account_id,
+                add=add,
+                xoxc_token=xoxc_token,
+                d_cookie=d_cookie,
+            )
+            return
+        run_oauth_flow(account_id=account_id, add=add)
+
+    @classmethod
     def get_authenticated_user(cls) -> str | None:
         try:
             creds = load_slack_creds()
@@ -168,6 +219,8 @@ class SlackConnector(BaseConnector):
                 source=cls.source,
                 user_id=account.get("user_id"),
                 workspace_id=account.get("team_id"),
+                email=account.get("email"),
+                auth_method=account.get("auth_method"),
             )
             for account in list_slack_accounts()
         ]
