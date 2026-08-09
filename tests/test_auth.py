@@ -10,6 +10,7 @@ from agentgraph_connector_discord.auth import DiscordCredentials, load_discord_c
 from agentgraph_connector_slack.auth import SlackCredentials, load_slack_creds
 
 from agentgraph.auth.credentials import (
+    CredentialsFileError,
     GoogleCredentials,
     load_platform,
     load_platform_account,
@@ -65,6 +66,66 @@ def test_remove_platform_deletes_only_requested_platform(tmp_creds: Path) -> Non
     assert load_platform("slack") is None
     assert load_platform("discord") == {"bot_token": "bot"}
     assert remove_platform("slack") is False
+
+
+def test_corrupt_file_raises_instead_of_reporting_no_credentials(tmp_creds: Path) -> None:
+    # A truncated/overlaid write must not look like a first-time setup, or the
+    # auth flow re-prompts for an OAuth client and clobbers other platforms.
+    save_platform("google", {"client_id": "id", "client_secret": "secret"})
+    tmp_creds.write_text(tmp_creds.read_text() + '  "discord": {')
+
+    with pytest.raises(CredentialsFileError, match="Could not parse"):
+        load_platform("google")
+    with pytest.raises(CredentialsFileError):
+        load_platform_accounts("google")
+    with pytest.raises(CredentialsFileError):
+        load_platform_account("google")
+
+
+def test_corrupt_file_is_not_overwritten_by_save(tmp_creds: Path) -> None:
+    save_platform("slack", {"xoxc_token": "tok"})
+    corrupt = tmp_creds.read_text() + "}}"
+    tmp_creds.write_text(corrupt)
+
+    with pytest.raises(CredentialsFileError):
+        save_platform("google", {"client_id": "id"})
+    assert tmp_creds.read_text() == corrupt
+
+
+def test_malformed_accounts_block_raises(tmp_creds: Path) -> None:
+    tmp_creds.write_text('{"google": {"accounts": "not-a-list"}}')
+
+    with pytest.raises(CredentialsFileError, match="malformed"):
+        load_platform_accounts("google")
+
+
+def test_non_object_top_level_raises(tmp_creds: Path) -> None:
+    tmp_creds.write_text("[]")
+
+    with pytest.raises(CredentialsFileError, match="top level"):
+        load_platform("google")
+
+
+def test_write_is_atomic_and_leaves_no_temp_files(tmp_creds: Path) -> None:
+    save_platform("slack", {"xoxc_token": "tok"})
+    save_platform("google", {"client_id": "id"})
+
+    siblings = sorted(p.name for p in tmp_creds.parent.iterdir())
+    assert siblings == ["credentials.json"]
+    assert oct(tmp_creds.stat().st_mode)[-3:] == "600"
+
+
+def test_shorter_write_truncates_previous_content(tmp_creds: Path) -> None:
+    # The corruption this guards against: a short document left overlaid on a
+    # longer one, leaving trailing bytes after the closing brace.
+    save_platform("google", {"client_id": "x" * 500})
+    save_platform("google", {"client_id": "y"})
+    remove_platform("google")
+    save_platform("slack", {"xoxc_token": "tok"})
+
+    assert tmp_creds.read_text().rstrip().endswith("}")
+    assert load_platform("slack") == {"xoxc_token": "tok"}
+    assert load_platform("google") is None
 
 
 def test_upsert_platform_account_preserves_multiple_accounts(tmp_creds: Path) -> None:

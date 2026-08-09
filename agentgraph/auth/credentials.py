@@ -7,12 +7,18 @@ connectors remain fully independent. Use load_platform / save_platform.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from datetime import datetime
 from typing import Any, cast
 
 from pydantic import BaseModel
 
 from agentgraph.config import CONFIG_DIR, CREDENTIALS_FILE
+
+
+class CredentialsFileError(ValueError):
+    """The credentials file exists but could not be read as valid storage."""
 
 
 class GoogleCredentials(BaseModel):
@@ -38,15 +44,44 @@ def _load_all_credentials() -> dict[str, Any]:
         return {}
     try:
         data = json.loads(CREDENTIALS_FILE.read_text())
-    except Exception:
-        return {}
-    return cast(dict[str, Any], data) if isinstance(data, dict) else {}
+    except Exception as exc:
+        # Never fall back to "no credentials" here: callers would treat a
+        # damaged file as a first-time setup and overwrite every platform.
+        raise CredentialsFileError(
+            f"Could not parse {CREDENTIALS_FILE}: {exc}. "
+            "Fix or move the file aside, then re-run auth for each platform."
+        ) from exc
+    if not isinstance(data, dict):
+        raise CredentialsFileError(
+            f"Expected a JSON object at the top level of {CREDENTIALS_FILE}, got {type(data).__name__}."
+        )
+    return cast(dict[str, Any], data)
 
 
 def _write_all_credentials(raw: dict[str, Any]) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CREDENTIALS_FILE.write_text(json.dumps(raw, indent=2, default=str))
-    CREDENTIALS_FILE.chmod(0o600)
+    # Write via a temp file in the same directory and rename, so a concurrent
+    # writer can never leave a shorter document overlaid on a longer one.
+    fd, tmp_name = tempfile.mkstemp(dir=CONFIG_DIR, prefix=".credentials-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            json.dump(raw, handle, indent=2, default=str)
+        os.chmod(tmp_name, 0o600)
+        os.replace(tmp_name, CREDENTIALS_FILE)
+    except BaseException:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
+
+
+def _validate_accounts(platform: str, val: dict[str, Any]) -> PlatformAccounts:
+    try:
+        return PlatformAccounts.model_validate(val)
+    except Exception as exc:
+        raise CredentialsFileError(
+            f"Stored '{platform}' credentials in {CREDENTIALS_FILE} are malformed: {exc}. "
+            f"Fix the file or re-run auth for {platform}."
+        ) from exc
 
 
 def load_platform(platform: str) -> dict[str, Any] | None:
@@ -65,10 +100,7 @@ def load_platform_account(platform: str, account_id: str | None = None) -> dict[
     if "accounts" not in val:
         return cast(dict[str, Any], val)
 
-    try:
-        data = PlatformAccounts.model_validate(val)
-    except Exception:
-        return None
+    data = _validate_accounts(platform, cast(dict[str, Any], val))
     if not data.accounts:
         return None
     target_id = account_id or data.default_account_id
@@ -86,11 +118,7 @@ def load_platform_accounts(platform: str) -> list[dict[str, Any]]:
         return []
     if "accounts" not in val:
         return [cast(dict[str, Any], val)]
-    try:
-        data = PlatformAccounts.model_validate(val)
-    except Exception:
-        return []
-    return data.accounts
+    return _validate_accounts(platform, cast(dict[str, Any], val)).accounts
 
 
 def save_platform(platform: str, data: Any) -> None:
