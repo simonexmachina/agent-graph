@@ -29,6 +29,11 @@ Connector configuration that is not a secret, such as RSS feed URLs, is stored i
 `config.toml` by default, or `config.yaml` if that file exists. Provider tokens and
 OAuth credentials remain in `credentials.json`.
 
+Slack OAuth requires `AGENTGRAPH_SLACK_CLIENT_ID`. Its callback defaults to
+`http://localhost:8766/slack/oauth/callback`; set `AGENTGRAPH_SLACK_REDIRECT_URI`
+only when the exact override is registered on the internal Slack app. See
+[Slack authentication](/slack.html).
+
 ## Storage backend
 
 AgentGraph stores the graph in SQLite by default, and the install and quickstart docs assume this setup.
@@ -82,6 +87,16 @@ Days before an unvisited entity is garbage collected.
 Default: `BAAI/bge-small-en-v1.5`
 
 FastEmbed model used for embeddings.
+
+### `AGENTGRAPH_SLACK_CLIENT_ID`
+
+Required for Slack OAuth. Use the Client ID of the admin-created internal Slack app.
+
+### `AGENTGRAPH_SLACK_REDIRECT_URI`
+
+Default: `http://localhost:8766/slack/oauth/callback`
+
+Slack OAuth callback. An override must exactly match a redirect registered on the app.
 
 ## Slack workspace filter
 

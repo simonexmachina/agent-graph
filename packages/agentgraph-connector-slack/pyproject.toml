@@ -16,3 +16,6 @@ package = true
 
 [tool.uv.sources]
 agentgraph = { workspace = true }
+
+[tool.setuptools.package-data]
+agentgraph_connector_slack = ["slack-app-manifest.yaml"]

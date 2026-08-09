@@ -178,7 +178,7 @@ Included connectors:
 
 | Source | Entities | Auth | Refresh model |
 | --- | --- | --- | --- |
-| Slack | Channel, Message | Browser-derived cookie credentials | Browser dwell plus 5 minute polling |
+| Slack | Channel, Message | User OAuth PKCE; browser-session fallback | Browser dwell plus 5 minute polling |
 | Discord | Channel, Message | Bot token | Browser dwell plus 5 minute polling |
 | Google Docs | Document | Google OAuth | Browser dwell plus Drive-backed refresh |
 | Google Sheets | Spreadsheet | Google OAuth | Browser dwell plus Drive-backed refresh |
@@ -202,6 +202,8 @@ Settings are read from environment variables and from a `.env` file in the confi
 | `AGENTGRAPH_DWELL_THRESHOLD_SECONDS` | `3` | Seconds of focus before a fetch is triggered |
 | `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unvisited entity is garbage collected |
 | `AGENTGRAPH_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | FastEmbed model used for embeddings |
+| `AGENTGRAPH_SLACK_CLIENT_ID` | none | Client ID for the admin-created internal Slack OAuth app |
+| `AGENTGRAPH_SLACK_REDIRECT_URI` | `http://localhost:8766/slack/oauth/callback` | Exact Slack OAuth callback registered on the app |
 
 See [Configuration](docs-src/configuration.md) for the full setup.
 
@@ -211,6 +213,7 @@ See [Configuration](docs-src/configuration.md) for the full setup.
 
 - `list_connectors_tool`
 - `list_auth_providers_tool`
+- `authenticate_provider_tool`
 - `run_connector_command_tool`
 - `search_entities_tool`
 - `get_entity_tool`

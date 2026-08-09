@@ -13,6 +13,7 @@ source_path = "docs-src/mcp/index.md"
 
 - [`list_connectors_tool`](/mcp/list-connectors.html) - inspect installed connectors, auth state, and valid platform values.
 - [`list_auth_providers_tool`](/mcp/list-auth-providers.html) - inspect provider-level authentication state.
+- [`authenticate_provider_tool`](/mcp/authenticate-provider.html) - run connector-owned provider authentication.
 - [`remove_auth_provider_tool`](/mcp/remove-auth-provider.html) - remove stored credentials for an auth provider.
 - [`run_connector_command_tool`](/mcp/run-connector-command.html) - run connector-owned commands.
 

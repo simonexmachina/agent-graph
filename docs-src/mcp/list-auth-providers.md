@@ -21,7 +21,7 @@ list_auth_providers_tool() -> JSON string
 - connector sources that use the provider
 - shared-provider flag
 - `auth_status` and `auth_detail`
-- authenticated account rows
+- authenticated account rows, including `auth_method`
 
 Connectors that only need configuration, such as RSS, and connectors that need
 no setup, such as generic web, are omitted. Use `list_connectors_tool` to
