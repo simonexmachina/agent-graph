@@ -382,7 +382,7 @@ def run_guided_oauth_flow(account_id: str | None = None, add: bool = False) -> N
     typer.echo(
         "\nHow would you like to continue?\n\n"
         "  1. Enter a Client ID provided by a Slack admin\n"
-        "  2. Set up or request the AgentGraph app\n"
+        "  2. Set up the AgentGraph Slack App\n"
     )
     choice = typer.prompt(
         "Choice",

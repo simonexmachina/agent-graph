@@ -24,7 +24,7 @@ An admin follows the printed steps to open `https://api.slack.com/apps`, choose
 printed manifest into Slack's **JSON** tab, approve the app, and enter its Client ID.
 
 A non-admin chooses either **Enter a Client ID provided by a Slack admin** or **Set
-up or request the AgentGraph app**. The second option asks whether the target
+up the AgentGraph Slack App**. The second option asks whether the target
 workspace appears in Slack's **Pick a workspace** list. When it appears, the member
 can create AgentGraph from the printed JSON manifest and enter its Client ID. When it
 does not, AgentGraph prints a copyable request for a Workspace Owner or app manager

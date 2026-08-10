@@ -572,7 +572,7 @@ def test_non_admin_can_enter_admin_provided_client_id(
     )
     output = capsys.readouterr().out
     assert "Enter a Client ID provided by a Slack admin" in output
-    assert "Set up or request the AgentGraph app" in output
+    assert "Set up the AgentGraph Slack App" in output
 
 
 def test_non_admin_can_create_app_when_workspace_is_visible(
