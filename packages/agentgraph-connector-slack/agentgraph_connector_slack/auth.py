@@ -233,15 +233,36 @@ def _oauth_setup_instructions() -> str:
     manifest_path = Path(__file__).with_name("slack-app-manifest.yaml")
     return (
         "\nSlack OAuth (OIDC/PKCE) setup:\n"
-        "  1. Ask a Slack workspace admin to create an internal app from:\n"
+        "  1. Ask a Slack workspace admin to open https://api.slack.com/apps,\n"
+        "     choose Create New App > From a manifest, select the workspace,\n"
+        "     and use this manifest:\n"
         f"     {manifest_path}\n"
-        "  2. Have the admin approve the app and its requested user scopes.\n"
-        f"  3. Register this exact redirect URL: {DEFAULT_REDIRECT_URI}\n"
-        "  4. Set AGENTGRAPH_SLACK_CLIENT_ID to the app's Client ID.\n"
+        "  2. Have the admin create and approve the app and its user scopes.\n"
+        f"  3. Confirm this exact redirect URL is registered: {DEFAULT_REDIRECT_URI}\n"
+        "  4. In Basic Information > App Credentials, copy the Client ID.\n"
+        "     Enter it when prompted, or set\n"
+        "     AGENTGRAPH_SLACK_CLIENT_ID before running this command.\n"
         "\n"
         "If you registered a different localhost callback, set\n"
         "AGENTGRAPH_SLACK_REDIRECT_URI to that exact URL before continuing.\n"
     )
+
+
+def _resolve_oauth_client_id(account_id: str | None, *, add: bool) -> str:
+    configured = os.environ.get("AGENTGRAPH_SLACK_CLIENT_ID", "").strip()
+    if configured:
+        return configured
+    if not add:
+        try:
+            existing = load_slack_creds(account_id)
+        except Exception:
+            existing = None
+        if isinstance(existing, SlackOAuthCredentials):
+            return existing.client_id
+
+    import typer
+
+    return typer.prompt("Slack app Client ID").strip()
 
 
 def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) -> None:
@@ -268,15 +289,10 @@ def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) 
 
 def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
     """Authorize a Slack user with PKCE and store rotating credentials."""
-    _ = add
     import typer
 
     typer.echo(_oauth_setup_instructions())
-    client_id = os.environ.get("AGENTGRAPH_SLACK_CLIENT_ID")
-    if not client_id:
-        raise RuntimeError(
-            "AGENTGRAPH_SLACK_CLIENT_ID is required. Create an internal Slack app first."
-        )
+    client_id = _resolve_oauth_client_id(account_id, add=add)
     redirect_uri = os.environ.get("AGENTGRAPH_SLACK_REDIRECT_URI", DEFAULT_REDIRECT_URI)
     verifier, challenge = _pkce_pair()
     state = secrets.token_urlsafe(32)

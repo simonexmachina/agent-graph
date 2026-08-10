@@ -20,6 +20,7 @@ from agentgraph_connector_slack.auth import (
     SlackBrowserCredentials,
     SlackOAuthCallback,
     SlackOAuthCredentials,
+    _resolve_oauth_client_id,
     load_slack_creds,
     refresh_oauth_credentials,
     run_interactive_auth_flow,
@@ -492,19 +493,50 @@ def test_interactive_auth_chooser_dispatches_selected_method(
     (browser if selected_flow == "oauth" else oauth).assert_not_called()
 
 
-def test_oauth_flow_prints_setup_before_requiring_client_id(
+def test_oauth_client_id_prompts_after_setup_when_environment_is_missing(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.delenv("AGENTGRAPH_SLACK_CLIENT_ID", raising=False)
 
-    with pytest.raises(RuntimeError, match="AGENTGRAPH_SLACK_CLIENT_ID is required"):
+    with patch("typer.prompt", return_value="prompted-client-id") as prompt:
+        client_id = _resolve_oauth_client_id(None, add=False)
+
+    assert client_id == "prompted-client-id"
+    prompt.assert_called_once_with("Slack app Client ID")
+
+
+def test_oauth_client_id_reuses_stored_account(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AGENTGRAPH_SLACK_CLIENT_ID", raising=False)
+    save_platform("slack", _oauth_record())
+
+    with patch("typer.prompt") as prompt:
+        client_id = _resolve_oauth_client_id("slack:T1:U1", add=False)
+
+    assert client_id == "123.456"
+    prompt.assert_not_called()
+
+
+def test_oauth_setup_instructions_explain_client_id_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("AGENTGRAPH_SLACK_CLIENT_ID", "123.456")
+    with patch(
+        "agentgraph_connector_slack.auth._pkce_pair",
+        side_effect=RuntimeError("stop after setup"),
+    ), pytest.raises(RuntimeError, match="stop after setup"):
         run_oauth_flow()
 
     output = capsys.readouterr().out
     assert "Slack OAuth (OIDC/PKCE) setup" in output
+    assert "https://api.slack.com/apps" in output
+    assert "Create New App > From a manifest" in output
     assert "slack-app-manifest.yaml" in output
     assert "http://localhost:8766/slack/oauth/callback" in output
+    assert "Enter it when prompted" in output
 
 
 @pytest.mark.asyncio

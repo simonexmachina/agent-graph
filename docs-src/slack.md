@@ -11,7 +11,8 @@ source_path = "docs-src/slack.md"
 
 ## Create the internal app
 
-Ask a Slack workspace admin to create an app from the packaged manifest at
+Ask a Slack workspace admin to open `https://api.slack.com/apps`, choose **Create
+New App → From a manifest**, select the workspace, and use the packaged manifest at
 `packages/agentgraph-connector-slack/agentgraph_connector_slack/slack-app-manifest.yaml`.
 The manifest enables PKCE, rotating tokens, and the default callback
 `http://localhost:8766/slack/oauth/callback`.
@@ -28,7 +29,9 @@ by the localhost PKCE flow.
 
 ## Configure and authorize
 
-Set the Client ID in the environment or AgentGraph config `.env`:
+AgentGraph prompts for the Client ID on first authorization and stores it with that
+account's rotating credentials. To skip the prompt, set it in the environment or
+AgentGraph config `.env`:
 
 ```bash
 AGENTGRAPH_SLACK_CLIENT_ID=1234567890.1234567890
@@ -52,8 +55,8 @@ agentgraph auth status --verify --json
 ```
 
 OAuth access tokens refresh five minutes before expiry. Slack's rotated access and
-refresh tokens are written atomically. The Client ID is stored per account so each
-identity can refresh independently.
+refresh tokens are written atomically. Re-authentication and refresh reuse the Client
+ID stored per account, so the environment variable is not required again.
 
 Use `--add` for another identity. Re-authenticating an existing
 `slack:<team>:<user>` replaces that identity's method; separate identities may mix
