@@ -494,6 +494,7 @@ def test_interactive_auth_chooser_dispatches_selected_method(
 
 
 def test_oauth_client_id_prompts_after_setup_when_environment_is_missing(
+    tmp_creds: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AGENTGRAPH_SLACK_CLIENT_ID", raising=False)
@@ -533,12 +534,15 @@ def test_oauth_setup_instructions_explain_client_id_prompt(
     output = capsys.readouterr().out
     assert "Slack OAuth (OIDC/PKCE) setup" in output
     assert "https://api.slack.com/apps" in output
-    assert "Create New App > From a manifest" in output
+    assert "Create New App > From a" in output
+    assert "manifest, and select that target workspace" in output
+    assert "select that target workspace" in output
+    assert "different workspace cannot authorize" in output
     assert "slack-app-manifest.yaml" in output
     assert "http://localhost:8766/slack/oauth/callback" in output
-    assert "click Request approval" in output
+    assert "use Request approval" in output
     assert "Admin > Apps and workflows > Requests" in output
-    assert "After approval, rerun this command" in output
+    assert "target workspace's Client ID" in output
     assert "The manifest registers the callback" in output
     assert "Only for a custom callback" in output
     assert "Enter it when prompted" in output

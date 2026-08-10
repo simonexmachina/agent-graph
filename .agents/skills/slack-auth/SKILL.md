@@ -15,9 +15,9 @@ Use official Slack user OAuth unless the user explicitly requests the browser-se
 agentgraph auth status --json | jq '.[] | select(.provider == "slack")'
 ```
 
-2. The workspace admin opens `https://api.slack.com/apps`, chooses **Create New App → From a manifest**, selects the workspace, and uses the packaged AgentGraph manifest. The manifest registers the default `http://localhost:8766/slack/oauth/callback`. Only a custom `AGENTGRAPH_SLACK_REDIRECT_URI` must be added to the Slack app manually. AgentGraph reads `AGENTGRAPH_SLACK_CLIENT_ID`, reuses a stored account value, or prompts for the Client ID.
+2. An admin of the target workspace opens `https://api.slack.com/apps`, chooses **Create New App → From a manifest**, selects that target workspace, and uses the packaged AgentGraph manifest. An undistributed internal app cannot authorize a different workspace. The manifest registers the default `http://localhost:8766/slack/oauth/callback`. Only a custom `AGENTGRAPH_SLACK_REDIRECT_URI` must be added manually. AgentGraph reads `AGENTGRAPH_SLACK_CLIENT_ID`, reuses a stored account value, or prompts for the target workspace app's Client ID.
 
-If Slack blocks installation, the user clicks **Request approval** on the authorization page and submits context. A Workspace Owner or app manager reviews it under **Admin → Apps and workflows → Requests**, selects allowed optional scopes, and approves it. If the request action is unavailable, the user must contact a Workspace Owner because member app requests may be disabled. Rerun auth after approval.
+The target-workspace admin should approve the app and scopes before sharing its Client ID. If members can create internal apps in that workspace, the user may create it there and click **Request approval**; an app manager reviews **Admin → Apps and workflows → Requests**. If only another workspace appears in OAuth, the supplied Client ID belongs to that other workspace or the browser is not signed in to the target.
 
 3. Start the interactive chooser, select official Slack user OAuth (OIDC/PKCE), and let the user approve in the opened browser:
 

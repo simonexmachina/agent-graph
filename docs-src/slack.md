@@ -11,11 +11,19 @@ source_path = "docs-src/slack.md"
 
 ## Create the internal app
 
-Ask a Slack workspace admin to open `https://api.slack.com/apps`, choose **Create
-New App → From a manifest**, select the workspace, and use the packaged manifest at
+Ask an admin of the workspace AgentGraph will connect to open
+`https://api.slack.com/apps`, choose **Create New App → From a manifest**, select
+that target workspace, and use the packaged manifest at
 `packages/agentgraph-connector-slack/agentgraph_connector_slack/slack-app-manifest.yaml`.
 The manifest enables PKCE, rotating tokens, and registers the default callback
 `http://localhost:8766/slack/oauth/callback`; no additional redirect setup is needed.
+
+A newly created, undistributed Slack app belongs to the workspace selected during
+creation and cannot be authorized into a different workspace. Creating AgentGraph in
+a personal or test workspace will therefore make only that workspace eligible in the
+OAuth chooser. The target workspace must have its own admin-created app and Client
+ID. Enabling cross-workspace app distribution is a separate deployment model and is
+outside this internal-app setup.
 
 The required user scopes cover public channels, private channels, direct messages,
 group direct messages, and profiles: `channels:read`, `channels:history`,
@@ -32,12 +40,13 @@ The admin must approve the app and its requested scopes under the workspace's ap
 management policy. Copy the app's Client ID after creation; no client secret is used
 by the localhost PKCE flow.
 
-If Slack blocks the authorization, click **Request approval** on the Slack page, add
-context for the request, and submit it. A Workspace Owner or appointed app manager
-can open **Admin → Apps and workflows → Requests**, review the requested required and
-optional scopes, and approve it. After approval, rerun `agentgraph auth slack`. If
-the request button is unavailable, ask a Workspace Owner directly; the workspace may
-have disabled member app requests.
+The target-workspace admin can approve the app and its required and optional scopes
+before sending you its Client ID. If the workspace permits members to create internal
+apps, you may instead create it while selecting that workspace, click **Request
+approval**, and have a Workspace Owner or app manager review **Admin → Apps and
+workflows → Requests**. If the target workspace does not appear during app creation
+or OAuth, ensure your browser is signed in to it and that the Client ID belongs to an
+app created there.
 
 ## Configure and authorize
 
