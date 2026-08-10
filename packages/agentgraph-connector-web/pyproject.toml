@@ -1,10 +1,10 @@
 [project]
 name = "agentgraph-connector-web"
-version = "0.1.0"
+version = "0.5.0"
 description = "Generic web page connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
-    "agentgraph",
+    "agent-graph>=0.5.0,<0.6",
     "httpx>=0.28.1",
 ]
 
@@ -15,4 +15,4 @@ web = "agentgraph_connector_web:WebConnector"
 package = true
 
 [tool.uv.sources]
-agentgraph = { workspace = true }
+agent-graph = { workspace = true }

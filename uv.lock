@@ -11,7 +11,7 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "agentgraph",
+    "agent-graph",
     "agentgraph-connector-discord",
     "agentgraph-connector-google",
     "agentgraph-connector-rss",
@@ -20,8 +20,8 @@ members = [
 ]
 
 [[package]]
-name = "agentgraph"
-version = "0.1.1"
+name = "agent-graph"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "agentgraph-connector-web" },
@@ -116,25 +116,25 @@ dev = [
 
 [[package]]
 name = "agentgraph-connector-discord"
-version = "0.1.0"
+version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-discord" }
 dependencies = [
-    { name = "agentgraph" },
+    { name = "agent-graph" },
     { name = "httpx" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "agentgraph", editable = "." },
+    { name = "agent-graph", editable = "." },
     { name = "httpx", specifier = ">=0.28.1" },
 ]
 
 [[package]]
 name = "agentgraph-connector-google"
-version = "0.1.0"
+version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-google" }
 dependencies = [
-    { name = "agentgraph" },
+    { name = "agent-graph" },
     { name = "google-api-python-client" },
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
@@ -142,7 +142,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agentgraph", editable = "." },
+    { name = "agent-graph", editable = "." },
     { name = "google-api-python-client", specifier = ">=2.193.0" },
     { name = "google-auth", specifier = ">=2.49.1" },
     { name = "google-auth-oauthlib", specifier = ">=1.3.0" },
@@ -150,10 +150,10 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-connector-rss"
-version = "0.1.0"
+version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-rss" }
 dependencies = [
-    { name = "agentgraph" },
+    { name = "agent-graph" },
     { name = "agentgraph-connector-web" },
     { name = "feedparser" },
     { name = "httpx" },
@@ -163,7 +163,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agentgraph", editable = "." },
+    { name = "agent-graph", editable = "." },
     { name = "agentgraph-connector-web", editable = "packages/agentgraph-connector-web" },
     { name = "feedparser", specifier = ">=6.0.11" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -173,31 +173,31 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-connector-slack"
-version = "0.1.0"
+version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-slack" }
 dependencies = [
-    { name = "agentgraph" },
+    { name = "agent-graph" },
     { name = "httpx" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "agentgraph", editable = "." },
+    { name = "agent-graph", editable = "." },
     { name = "httpx", specifier = ">=0.28.1" },
 ]
 
 [[package]]
 name = "agentgraph-connector-web"
-version = "0.1.0"
+version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-web" }
 dependencies = [
-    { name = "agentgraph" },
+    { name = "agent-graph" },
     { name = "httpx" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "agentgraph", editable = "." },
+    { name = "agent-graph", editable = "." },
     { name = "httpx", specifier = ">=0.28.1" },
 ]
 

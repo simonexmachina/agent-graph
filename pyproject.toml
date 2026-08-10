@@ -1,12 +1,12 @@
 [project]
-name = "agentgraph"
-version = "0.1.1"
+name = "agent-graph"
+version = "0.5.0"
 description = "AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, Drive, and RSS feeds, so your AI agents can search, fetch, and reason over the same connected context you work from."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.20.0",
-    "agentgraph-connector-web",
+    "agentgraph-connector-web>=0.5.0,<0.6",
     "apscheduler>=3.11.2",
     "click<8.4",
     "fastapi>=0.135.2",
@@ -23,17 +23,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-google     = ["agentgraph-connector-google"]
-slack      = ["agentgraph-connector-slack"]
-discord    = ["agentgraph-connector-discord"]
-rss        = ["agentgraph-connector-rss"]
-web        = ["agentgraph-connector-web"]
+google     = ["agentgraph-connector-google>=0.5.0,<0.6"]
+slack      = ["agentgraph-connector-slack>=0.5.0,<0.6"]
+discord    = ["agentgraph-connector-discord>=0.5.0,<0.6"]
+rss        = ["agentgraph-connector-rss>=0.5.0,<0.6"]
+web        = ["agentgraph-connector-web>=0.5.0,<0.6"]
 all        = [
-    "agentgraph-connector-web",
-    "agentgraph-connector-google",
-    "agentgraph-connector-slack",
-    "agentgraph-connector-discord",
-    "agentgraph-connector-rss",
+    "agentgraph-connector-web>=0.5.0,<0.6",
+    "agentgraph-connector-google>=0.5.0,<0.6",
+    "agentgraph-connector-slack>=0.5.0,<0.6",
+    "agentgraph-connector-discord>=0.5.0,<0.6",
+    "agentgraph-connector-rss>=0.5.0,<0.6",
 ]
 
 [dependency-groups]
