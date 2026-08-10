@@ -28,8 +28,8 @@ up or request the AgentGraph app**. The second option asks whether the target
 workspace appears in Slack's **Pick a workspace** list. When it appears, the member
 can create AgentGraph from the printed manifest and enter its Client ID. When it does
 not, AgentGraph prints a copyable request for a Workspace Owner or app manager along
-with the complete manifest. Rerun the command and choose the first non-admin option
-after the admin supplies the Client ID.
+with the project website and complete manifest. Rerun the command and choose the
+first non-admin option after the admin supplies the Client ID.
 
 The packaged manifest enables PKCE and rotating tokens and contains the only
 supported callback, `http://localhost:8766/slack/oauth/callback`.

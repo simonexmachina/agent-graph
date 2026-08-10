@@ -620,6 +620,7 @@ def test_non_admin_missing_workspace_gets_copyable_admin_request(
     assert "using the manifest below" in output
     assert "Example request" in output
     assert "No client secret is needed" in output
+    assert "https://simonexmachina.github.io/agent-graph/" in output
     assert "AgentGraph Slack app manifest" in output
     assert "display_information:" in output
     assert "choose option 1" in output

@@ -290,6 +290,7 @@ def _member_missing_workspace_instructions() -> str:
         "  The required user scopes read public channels, private channels, DMs,\n"
         "  group DMs, and member profiles. Email access is optional. Once the app\n"
         "  is approved, please send me its Client ID. No client secret is needed.\n\n"
+        "  More information: https://simonexmachina.github.io/agent-graph/\n\n"
         f"{_manifest_block()}\n"
         "Slack cannot offer app approval until the app exists in the target\n"
         "workspace. When the admin sends the Client ID, rerun agentgraph auth\n"
