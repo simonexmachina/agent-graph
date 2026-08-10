@@ -34,6 +34,18 @@ jobs:
       - name: Lint
         run: uv run ruff check agentgraph/
 
+  wheel-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Test installed server wheel
+        run: scripts/test_wheel_install.sh
+
   performance-smoke:
     runs-on: ubuntu-latest
     steps:

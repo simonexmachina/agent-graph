@@ -71,6 +71,10 @@ agentgraph-connector-web     = { workspace = true }
 [tool.setuptools.packages.find]
 include = ["agentgraph*"]
 
+[tool.setuptools.package-data]
+"agentgraph.backends.sqlite" = ["schema.sql"]
+"agentgraph.server" = ["static/*.html"]
+
 [tool.setuptools.data-files]
 ".agents/skills/graph" = [".agents/skills/graph/SKILL.md"]
 ".agents/skills/slack-auth" = [".agents/skills/slack-auth/SKILL.md"]
