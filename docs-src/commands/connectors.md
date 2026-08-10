@@ -27,6 +27,10 @@ agentgraph connector rss remove https://simonwillison.net/atom/everything/
 agentgraph connector rss --help
 agentgraph connector rss import-opml feeds.opml --all
 agentgraph connector rss import-opml feeds.opml --select 1,3-5
+agentgraph connector web add http://localhost:3000/*
+agentgraph connector web add http://localhost:3000/content/research.md
+agentgraph connector web list
+agentgraph connector web remove http://localhost:3000/*
 ```
 
 RSS `add` validates each supplied URL as an RSS or Atom feed before saving, then
@@ -37,6 +41,12 @@ RSS `remove` removes exact configured feed URLs without fetching or validating t
 
 For RSS OPML imports, omit `--all` and `--select` in an interactive terminal to choose
 feeds with a checkbox prompt.
+
+The web connector stores browser observation rules in the connector configuration. A URL
+without a trailing `/*` observes that exact URL; a URL ending in `/*` observes every URL
+under that literal prefix. Rules are stored in `~/.agentgraph/config.toml`, or in
+`config.yaml` when that file exists. The browser extension refreshes the rules from the
+running server periodically.
 
 Connectors that do not use credentials, such as RSS and generic web, omit auth
 status in the human output and report `null` auth fields in JSON.

@@ -27,11 +27,11 @@ async function waitForTerminalStatus(tabId, url) {
   throw new Error("Observation did not reach a terminal state");
 }
 
-async function configureDwell(reportResponse) {
+async function configureDwell(reportResponse, urlPatterns = ["https://example.com/*"]) {
   globalThis.fetch = async (url) => {
     if (url.endsWith("/api/cli/meta")) {
       return Response.json({
-        url_patterns: ["https://example.com/*"],
+        url_patterns: urlPatterns,
         dwell_threshold_ms: 0,
       });
     }
@@ -40,6 +40,17 @@ async function configureDwell(reportResponse) {
   };
   await refreshMeta();
 }
+
+test("exact observation rules do not match child URLs", async () => {
+  await configureDwell(new Response(null, { status: 204 }), ["https://example.com/exact"]);
+
+  startDwell(4, "https://example.com/exact/child");
+  assert.equal(getObservationStatus(4, "https://example.com/exact/child").state, "not_matched");
+
+  startDwell(5, "https://example.com/exact");
+  const status = await waitForTerminalStatus(5, "https://example.com/exact");
+  assert.equal(status.state, "sent");
+});
 
 test("marks an observation as sent after a successful report", async () => {
   await configureDwell(new Response(null, { status: 204 }));

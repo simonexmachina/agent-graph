@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 # pyright: reportPrivateUsage=false
+import hashlib
+from pathlib import Path
+
 import agentgraph_connector_web
 import httpx
 import pytest
@@ -20,6 +23,86 @@ def test_web_connector_resolves_http_urls() -> None:
         resource_id="https://example.com/page",
     )
     assert connector.resolve_url("ftp://example.com/file") is None
+
+
+def test_web_config_round_trips_toml(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", config_file)
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
+
+    from agentgraph_connector_web.config import WebConfig, load_web_settings, save_web_config
+
+    save_web_config(WebConfig(observation_urls=["http://localhost:3000/*", "https://example.com/page#part"]))
+
+    assert "[connectors.web]" in config_file.read_text()
+    assert load_web_settings().observation_urls == [
+        "http://localhost:3000/*",
+        "https://example.com/page",
+    ]
+
+
+def test_web_config_round_trips_yaml_and_preserves_other_connectors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_yaml = tmp_path / "config.yaml"
+    config_yaml.write_text("connectors:\n  rss:\n    feed_urls: [https://example.com/feed.xml]\n")
+    monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", config_yaml)
+
+    from agentgraph_connector_web.config import WebConfig, load_web_settings, save_web_config
+
+    save_web_config(WebConfig(observation_urls=["http://localhost:3000/content/*"]))
+
+    content = config_yaml.read_text()
+    assert "rss:" in content
+    assert load_web_settings().observation_urls == ["http://localhost:3000/content/*"]
+
+
+def test_web_cli_add_remove_and_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
+
+    added = WebConnector.run_cli_command(
+        ["add", "http://localhost:3000/page#section", "http://localhost:3000/*"]
+    )
+    assert added["added"] == ["http://localhost:3000/page", "http://localhost:3000/*"]
+    assert WebConnector.run_cli_command(["list"])["observation_urls"] == [
+        "http://localhost:3000/page",
+        "http://localhost:3000/*",
+    ]
+    removed = WebConnector.run_cli_command(["remove", "http://localhost:3000/page"])
+    assert removed["removed"] == ["http://localhost:3000/page"]
+
+
+@pytest.mark.asyncio
+async def test_web_observation_resolution_enforces_exact_and_prefix_rules(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
+
+    from agentgraph_connector_web.config import WebConfig, save_web_config
+
+    save_web_config(WebConfig(observation_urls=["http://localhost:3000/page", "http://localhost:3000/content/*"]))
+    connector = WebConnector()
+
+    assert await connector.resolve_observation_url("http://localhost:3000/page#section") == SourceReference(
+        source="web", resource_type="document", resource_id="http://localhost:3000/page"
+    )
+    assert await connector.resolve_observation_url("http://localhost:3000/page/child") is None
+    assert await connector.resolve_observation_url("http://localhost:3000/content/research.md") is not None
 
 
 def test_parse_html_extracts_title_and_preserves_source() -> None:
@@ -137,6 +220,42 @@ async def test_fetch_web_entity_streams_response() -> None:
     assert entity.metadata["web_url"] == "https://example.com/page"
     assert entity.metadata["http_etag"] == '"fresh"'
     assert entity.metadata["http_last_modified"] == "Mon, 08 Jun 2026 01:23:45 GMT"
+
+
+@pytest.mark.asyncio
+async def test_fetch_web_entity_does_not_update_unchanged_200_response() -> None:
+    body = b"<title>Cached title</title><p>Cached body</p>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html", "etag": '"refreshed"'},
+            content=body,
+            request=request,
+        )
+
+    existing: dict[str, object] = {
+        "entity_type": "Document",
+        "platform": "web",
+        "platform_entity_id": "https://example.com/page",
+        "title": "Cached title",
+        "content": body.decode(),
+        "metadata": {
+            "content_sha256": hashlib.sha256(body).hexdigest(),
+            "http_etag": '"cached"',
+        },
+    }
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        entity = await agentgraph_connector_web._fetch_web_entity(  # noqa: SLF001
+            "https://example.com/page",
+            client=client,
+            existing_entity=existing,
+        )
+
+    assert entity.updated_at is None
+    assert entity.metadata["status_code"] == 200
+    assert entity.metadata["http_etag"] == '"refreshed"'
 
 
 @pytest.mark.asyncio

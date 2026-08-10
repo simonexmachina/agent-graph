@@ -24,6 +24,11 @@ from agentgraph.connectors.base import (
 )
 from agentgraph.core.context import get_backend
 from agentgraph.graph.upsert import upsert_batch
+from agentgraph_connector_web.config import (
+    add_observation_urls,
+    load_web_settings,
+    remove_observation_urls,
+)
 
 _STALE_AFTER = 24 * 60 * 60
 _MAX_BYTES = 2_000_000
@@ -50,6 +55,35 @@ class WebConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return self.resolve_url(url) is not None
 
+    @classmethod
+    def run_cli_command(cls, args: list[str]) -> dict[str, object]:
+        if not args:
+            raise ValueError(_web_usage())
+        command, *rest = args
+        if command == "add":
+            config, added = add_observation_urls(rest)
+            return {"status": "ok", "source": cls.source, "observation_urls": config.observation_urls, "added": added}
+        if command == "remove":
+            config, removed = remove_observation_urls(rest)
+            return {"status": "ok", "source": cls.source, "observation_urls": config.observation_urls, "removed": removed}
+        if command == "list":
+            if rest:
+                raise ValueError(_web_usage())
+            return {"status": "ok", "source": cls.source, "observation_urls": load_web_settings().observation_urls}
+        raise ValueError(f"Unknown web connector command '{command}'. Available: add, remove, list")
+
+    @classmethod
+    def cli_help(cls) -> str:
+        return _web_usage()
+
+    @classmethod
+    def format_cli_result(cls, result: dict[str, object]) -> str:
+        raw_urls = result.get("observation_urls", [])
+        urls: list[str] = []
+        if isinstance(raw_urls, list):
+            urls = [url for url in cast(list[object], raw_urls) if isinstance(url, str)]
+        return "\n".join([f"Web observation URLs ({len(urls)}):", *[f"  {url}" for url in urls]])
+
     def resolve_url(self, url: str) -> SourceReference | None:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -59,6 +93,16 @@ class WebConnector(BaseConnector):
             resource_type="document",
             resource_id=_canonical_url(url),
         )
+
+    async def resolve_observation_url(self, url: str) -> SourceReference | None:
+        normalized = _canonical_url(url)
+        for rule in load_web_settings().observation_urls:
+            if _matches_observation_rule(normalized, rule):
+                return SourceReference(source=self.source, resource_type="document", resource_id=normalized)
+        return None
+
+    async def observation_url_patterns(self) -> list[str]:
+        return load_web_settings().observation_urls
 
     async def fetch(
         self,
@@ -122,13 +166,18 @@ async def _fetch_web_entity(
         content_type = _normalise_content_type(response.headers.get("content-type", ""))
         final_url = _canonical_url(str(response.url))
         parsed = _parse_content(bytes(body), content_type, final_url)
+        content_sha256 = hashlib.sha256(body).hexdigest()
         return EntityRecord(
             entity_type="Document",
             platform="web",
             platform_entity_id=final_url,
             title=parsed.title,
             content=parsed.content,
-            updated_at=datetime.now(UTC),
+            updated_at=(
+                None
+                if existing_metadata.get("content_sha256") == content_sha256
+                else datetime.now(UTC)
+            ),
             metadata={
                 "url": url,
                 "final_url": final_url,
@@ -136,7 +185,7 @@ async def _fetch_web_entity(
                 "content_type": content_type,
                 "status_code": response.status_code,
                 "fetched_at": datetime.now(UTC).isoformat(),
-                "content_sha256": hashlib.sha256(body).hexdigest(),
+                "content_sha256": content_sha256,
                 **_response_cache_metadata(response.headers),
             },
         )
@@ -379,3 +428,11 @@ def _canonical_url(url: str) -> str:
 def _clean_text(text: str) -> str:
     lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
     return "\n".join(line for line in lines if line)
+
+
+def _matches_observation_rule(url: str, rule: str) -> bool:
+    return url.startswith(rule[:-1]) if rule.endswith("/*") else url == rule
+
+
+def _web_usage() -> str:
+    return "Usage: agentgraph connector web add|remove <url> [url...] | list"

@@ -63,14 +63,11 @@ const observations = new Map<number, ObservationStatus>();
 // ---------------------------------------------------------------------------
 
 /**
- * Match a URL against a Chrome match pattern (supports * wildcard in path).
- * We only need simple prefix matching since all our patterns end with /*.
+ * Match exact URL rules and Chrome-style path-prefix rules.
  */
 function matchesAny(url: string, pats: string[]): boolean {
   for (const pat of pats) {
-    // Convert "https://mail.google.com/*" → prefix "https://mail.google.com/"
-    const prefix = pat.endsWith("/*") ? pat.slice(0, -1) : pat.replace(/\*$/, "");
-    if (url.startsWith(prefix)) return true;
+    if (pat.endsWith("/*") ? url.startsWith(pat.slice(0, -1)) : url === pat) return true;
   }
   return false;
 }

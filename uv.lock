@@ -98,12 +98,14 @@ source = { editable = "packages/agentgraph-connector-web" }
 dependencies = [
     { name = "agentgraph-server" },
     { name = "httpx" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "agentgraph-server", editable = "." },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]
