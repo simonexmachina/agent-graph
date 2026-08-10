@@ -1,18 +1,18 @@
+"""Google OAuth credentials shared by the Google connector package."""
+
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false
-"""Google OAuth2 authentication provider.
-
-Credentials are obtained via the OAuth2 browser flow (agentgraph auth google)
-and stored in the AgentGraph config directory under the 'google' key.
-"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from typing import Any
 
-if TYPE_CHECKING:
-    from agentgraph.auth.credentials import GoogleCredentials
+from pydantic import BaseModel
 
+GOOGLE_OAUTH_CLIENT_ID = "243010728161-k5ms99bjeg9n1ub464fgl4lbaf4dtp2q.apps.googleusercontent.com"
+GOOGLE_OAUTH_CLIENT_SECRET = "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"
+GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/documents.readonly",
     "https://www.googleapis.com/auth/spreadsheets.readonly",
@@ -22,8 +22,18 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid",
 ]
-
 GOOGLE_REAUTH_HINT = "run: agentgraph auth google"
+
+
+class GoogleCredentials(BaseModel):
+    """Per-account Google OAuth tokens stored in credentials.json."""
+
+    client_id: str
+    access_token: str
+    refresh_token: str
+    token_expiry: datetime | None = None
+    user_email: str | None = None
+    display_name: str | None = None
 
 
 def _invalid_auth_detail(reason: str) -> str:
@@ -31,20 +41,18 @@ def _invalid_auth_detail(reason: str) -> str:
 
 
 def load_google_creds(account_id: str | None = None) -> tuple[GoogleCredentials, str]:
-    from agentgraph.auth.credentials import GoogleCredentials, load_platform_account
+    from agentgraph.auth.credentials import load_platform_account
 
     data = load_platform_account("google", account_id)
     if data is None:
-        raise RuntimeError(
-            "Google credentials not configured. Run: agentgraph auth google"
-        )
+        raise RuntimeError("Google credentials not configured. Run: agentgraph auth google")
     creds = GoogleCredentials(**data)
     resolved_account_id = str(data.get("account_id") or creds.user_email or "google")
     return creds, resolved_account_id
 
 
 def list_google_accounts() -> list[dict[str, str | None]]:
-    from agentgraph.auth.credentials import GoogleCredentials, load_platform_accounts
+    from agentgraph.auth.credentials import load_platform_accounts
 
     results: list[dict[str, str | None]] = []
     for raw in load_platform_accounts("google"):
@@ -54,69 +62,64 @@ def list_google_accounts() -> list[dict[str, str | None]]:
             continue
         account_id = str(raw.get("account_id") or creds.user_email or "google")
         email = creds.user_email
-        results.append({
-            "account_id": account_id,
-            "email": email,
-            "display_name": creds.display_name,
-            "label": creds.display_name or email or account_id,
-        })
+        results.append(
+            {
+                "account_id": account_id,
+                "email": email,
+                "display_name": creds.display_name,
+                "label": creds.display_name or email or account_id,
+            }
+        )
     return results
 
 
 def get_credentials(account_id: str | None = None) -> Any:
-    """Return a valid google.auth.credentials.Credentials instance."""
+    """Return a valid google-auth Credentials instance."""
     from google.auth.transport.requests import Request  # type: ignore[import-untyped]
     from google.oauth2.credentials import Credentials  # type: ignore[import-untyped]
 
-    from agentgraph.auth.credentials import GoogleCredentials, upsert_platform_account
+    from agentgraph.auth.credentials import upsert_platform_account
 
-    g, resolved_account_id = load_google_creds(account_id)
-    creds = Credentials(
-        token=g.access_token,
-        refresh_token=g.refresh_token,
-        token_uri=g.token_uri,
-        client_id=g.client_id,
-        client_secret=g.client_secret,
-        expiry=g.token_expiry,
+    stored, resolved_account_id = load_google_creds(account_id)
+    credentials = Credentials(
+        token=stored.access_token,
+        refresh_token=stored.refresh_token,
+        token_uri=GOOGLE_TOKEN_URI,
+        client_id=stored.client_id,
+        client_secret=GOOGLE_OAUTH_CLIENT_SECRET,
+        expiry=stored.token_expiry,
     )
-    if not creds.valid and creds.refresh_token:
-        creds.refresh(Request())
+    if not credentials.valid and credentials.refresh_token:
+        credentials.refresh(Request())
         upsert_platform_account(
             "google",
             resolved_account_id,
             GoogleCredentials(
-                client_id=g.client_id,
-                client_secret=g.client_secret,
-                access_token=creds.token or "",
-                refresh_token=creds.refresh_token or "",
-                token_expiry=creds.expiry,
-                user_email=g.user_email,
-                display_name=g.display_name,
+                client_id=stored.client_id,
+                access_token=credentials.token or "",
+                refresh_token=credentials.refresh_token or "",
+                token_expiry=credentials.expiry,
+                user_email=stored.user_email,
+                display_name=stored.display_name,
             ),
             make_default=(account_id is None),
         )
-    return creds
+    return credentials
 
 
 def get_user_email(account_id: str | None = None) -> str | None:
-    """Return the authenticated user's email, or None if unavailable."""
     try:
-        creds, _ = load_google_creds(account_id)
+        credentials, _ = load_google_creds(account_id)
     except Exception:
         return None
-    return creds.user_email
+    return credentials.user_email
 
 
 def verify_google_auth(account_id: str | None = None) -> tuple[str, str | None]:
-    """Verify Google credentials by exercising the refresh token.
-
-    Returns a (status, detail) tuple where status is "ok", "missing", or
-    "invalid". On "ok", detail is the authenticated user_email; on
-    "invalid", detail is a short error message.
-    """
+    """Verify stored credentials by exercising the refresh token."""
     from pydantic import ValidationError
 
-    from agentgraph.auth.credentials import GoogleCredentials, load_platform_account
+    from agentgraph.auth.credentials import load_platform_account
 
     data = load_platform_account("google", account_id)
     if data is None:
@@ -131,11 +134,14 @@ def verify_google_auth(account_id: str | None = None) -> tuple[str, str | None]:
         return ("invalid", _invalid_auth_detail("missing Google refresh token"))
 
     try:
-        creds = get_credentials(account_id) if account_id is not None else get_credentials()
+        credentials = get_credentials(account_id) if account_id is not None else get_credentials()
     except Exception as exc:
-        return ("invalid", _invalid_auth_detail(f"Google refresh token was rejected ({type(exc).__name__})"))
+        return (
+            "invalid",
+            _invalid_auth_detail(f"Google refresh token was rejected ({type(exc).__name__})"),
+        )
 
-    if not creds.valid:
+    if not credentials.valid:
         return ("invalid", _invalid_auth_detail("Google token is expired"))
 
     return ("ok", data.get("user_email") or "authenticated")

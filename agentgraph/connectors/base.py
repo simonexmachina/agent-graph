@@ -236,7 +236,12 @@ class BaseConnector(ABC):
     """
 
     @classmethod
-    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
         """Run the interactive authentication flow for this connector."""
         raise NotImplementedError(f"{cls.__name__} does not have an auth flow")
 
@@ -248,9 +253,7 @@ class BaseConnector(ABC):
         add: bool = False,
     ) -> None:
         """Parse connector-owned auth arguments and run authentication."""
-        if args:
-            raise ValueError(f"Unknown authentication option for {cls.source}: {args[0]}")
-        cls.run_auth_flow(account_id=account_id, add=add)
+        cls.run_auth_flow(account_id=account_id, add=add, args=args)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:

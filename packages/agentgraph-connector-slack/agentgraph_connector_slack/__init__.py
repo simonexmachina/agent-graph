@@ -143,9 +143,17 @@ class SlackConnector(BaseConnector):
     onboard_prompt = "Set up Slack?"
 
     @classmethod
-    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
         from agentgraph_connector_slack.auth import run_interactive_auth_flow
 
+        if args:
+            cls.run_auth_flow_with_args(args, account_id=account_id, add=add)
+            return
         run_interactive_auth_flow(account_id=account_id, add=add)
 
     @classmethod

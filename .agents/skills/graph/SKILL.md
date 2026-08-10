@@ -63,7 +63,7 @@ agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--jso
 agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[] including auth_method
 
 # Authenticate connectors/providers
-agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
+agentgraph auth google [--add] [--account <account-id>]   # uses AgentGraph's packaged OAuth client
 agentgraph auth slack [--method oauth|browser] [--client-id <client-id>] [--add] [--account <account-id>] # --client-id implies OAuth; without one, OAuth shows admin/app setup guidance
 agentgraph auth slack --method browser [--xoxc-token <token>] [--d-cookie <cookie>] # explicit browser-session fallback; credential flags imply browser
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
@@ -28,6 +29,39 @@ def auth_provider_connectors(
             continue
         grouped.setdefault(auth_provider_key(connector), []).append(connector)
     return grouped
+
+
+def run_auth_provider_flow(
+    connectors: list[BaseConnector],
+    provider: str,
+    *,
+    account_id: str | None = None,
+    add: bool = False,
+    args: list[str] | None = None,
+) -> None:
+    """Dispatch an authentication flow through a provider's representative connector."""
+    grouped = auth_provider_connectors(connectors)
+    members = grouped.get(provider)
+    if not members:
+        available = ", ".join(sorted(grouped))
+        raise ValueError(f"Unknown auth provider {provider!r}. Available: {available}")
+
+    connector_cls = type(members[0])
+    provider_args = args or []
+    auth_hook = getattr(connector_cls, "run_auth_flow_with_args", None)
+    if callable(auth_hook):
+        auth_hook(provider_args, account_id=account_id, add=add)
+        return
+
+    auth_flow = connector_cls.run_auth_flow
+    if "args" in inspect.signature(auth_flow).parameters:
+        auth_flow(account_id=account_id, add=add, args=provider_args)
+        return
+    if provider_args:
+        raise ValueError(
+            f"{provider!r} does not accept auth options: {' '.join(provider_args)}"
+        )
+    auth_flow()
 
 
 def _list_accounts(connector: BaseConnector) -> list[object]:

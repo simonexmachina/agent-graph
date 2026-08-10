@@ -113,50 +113,6 @@ async def list_auth_providers_tool(verify: bool = False) -> str:
 
 
 @mcp.tool()
-async def authenticate_provider_tool(
-    provider: str,
-    args: list[str] | None = None,
-    account_id: str | None = None,
-    add: bool = False,
-) -> str:
-    """Authenticate an installed provider through its connector-owned flow.
-
-    This is the MCP equivalent of:
-        agentgraph auth <provider> [connector auth options]
-
-    Args:
-        provider: Generic auth provider key, such as "google" or "slack".
-        args: Connector-owned auth options. Slack accepts
-            ["--method", "oauth|browser"], ["--client-id", "<client-id>"], plus
-            browser credential options. A Client ID implies OAuth; use the CLI for
-            guided app setup.
-        account_id: Existing account identity to replace.
-        add: Add another identity and make it the default.
-
-    Returns:
-        JSON with provider and authenticated=true, or an error.
-    """
-    from agentgraph.connectors.registry import bootstrap, get_all_connectors
-    from agentgraph.connectors.status import auth_provider_connectors
-
-    bootstrap()
-    grouped = auth_provider_connectors(get_all_connectors())
-    connectors = grouped.get(provider)
-    if not connectors:
-        return json.dumps({"error": f"Unknown auth provider {provider!r}"})
-    try:
-        await asyncio.to_thread(
-            type(connectors[0]).run_auth_flow_with_args,
-            args or [],
-            account_id,
-            add,
-        )
-    except (NotImplementedError, OSError, RuntimeError, ValueError) as exc:
-        return json.dumps({"error": str(exc)})
-    return json.dumps({"provider": provider, "authenticated": True})
-
-
-@mcp.tool()
 async def remove_auth_provider_tool(provider: str, account_id: str | None = None) -> str:
     """
     Remove stored credentials for an authentication provider.
@@ -188,6 +144,51 @@ async def remove_auth_provider_tool(provider: str, account_id: str | None = None
     }
     if account_id is not None:
         result["account_id"] = account_id
+    return json.dumps(result)
+
+
+@mcp.tool()
+async def authenticate_provider_tool(
+    provider: str,
+    args: list[str] | None = None,
+    account_id: str | None = None,
+    add: bool = False,
+) -> str:
+    """Authenticate a credential-backed provider through its connector-owned flow.
+
+    This is the MCP equivalent of:
+        agentgraph auth <provider> [--account <account-id>] [--add] [provider options]
+
+    Slack accepts ``--method``, ``--client-id``, ``--xoxc-token``, and
+    ``--d-cookie`` in ``args``. A Client ID implies OAuth; use the CLI for guided
+    app setup.
+    """
+    import contextlib
+    import io
+
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import run_auth_provider_flow
+
+    def _run() -> str:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            run_auth_provider_flow(
+                get_all_connectors(),
+                provider,
+                account_id=account_id,
+                add=add,
+                args=args,
+            )
+        return output.getvalue()
+
+    bootstrap()
+    try:
+        output = await asyncio.to_thread(_run)
+    except ValueError as exc:
+        return json.dumps({"provider": provider, "authenticated": False, "error": str(exc)})
+    result: dict[str, object] = {"provider": provider, "authenticated": True}
+    if output:
+        result["output"] = output
     return json.dumps(result)
 
 

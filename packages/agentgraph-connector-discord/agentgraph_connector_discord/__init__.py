@@ -174,8 +174,16 @@ class DiscordConnector(BaseConnector):
     onboard_prompt = "Set up Discord?"
 
     @classmethod
-    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
         from agentgraph_connector_discord.auth import run_token_flow
+
+        if args:
+            raise ValueError(f"Discord authentication does not accept options: {' '.join(args)}")
         run_token_flow(account_id=account_id, add=add)
 
     @classmethod

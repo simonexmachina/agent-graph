@@ -39,24 +39,6 @@ def _readable_credentials() -> Iterator[None]:
         raise typer.Exit(code=1) from exc
 
 
-def _run_auth_flow(
-    connector_cls: type[BaseConnector],
-    args: list[str],
-    account_id: str | None,
-    add: bool,
-) -> None:
-    auth_hook = getattr(connector_cls, "run_auth_flow_with_args", None)
-    if callable(auth_hook):
-        auth_hook(args, account_id=account_id, add=add)
-        return
-    if args:
-        raise ValueError(f"Unknown authentication option: {args[0]}")
-    try:
-        connector_cls.run_auth_flow(account_id=account_id, add=add)
-    except TypeError:
-        connector_cls.run_auth_flow()
-
-
 def _status_label(status: str) -> str:
     return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(
         status, status
@@ -87,13 +69,14 @@ def _parse_auth_args(
     json: bool,
     verify: bool,
     add: bool,
-) -> tuple[list[str], list[str], str | None, bool, bool, bool, str | None]:
+    provider_args: list[str] | None = None,
+) -> tuple[list[str], str | None, bool, bool, bool, list[str], str | None]:
     positionals: list[str] = []
-    connector_args: list[str] = []
     parsed_account = account
     parsed_json = json
     parsed_verify = verify
     parsed_add = add
+    parsed_provider_args = list(provider_args or [])
     error: str | None = None
     i = 0
     while i < len(args):
@@ -112,18 +95,24 @@ def _parse_auth_args(
             i += 1
         elif arg.startswith("--account="):
             parsed_account = arg.split("=", 1)[1]
-        elif not positionals or (positionals == ["remove"] and not arg.startswith("-")):
-            positionals.append(arg)
+        elif arg.startswith("-"):
+            if not positionals or positionals[0] in ("status", "remove"):
+                error = f"Unknown option for auth: {arg}"
+                break
+            parsed_provider_args.append(arg)
         else:
-            connector_args.append(arg)
+            if len(positionals) == 1 and positionals[0] not in ("status", "remove"):
+                parsed_provider_args.append(arg)
+            else:
+                positionals.append(arg)
         i += 1
     return (
         positionals,
-        connector_args,
         parsed_account,
         parsed_json,
         parsed_verify,
         parsed_add,
+        parsed_provider_args,
         error,
     )
 
@@ -148,11 +137,11 @@ def auth(
     """Show auth status or authenticate a provider."""
     (
         args,
-        connector_args,
         parsed_account,
         parsed_json,
         parsed_verify,
         parsed_add,
+        parsed_provider_args,
         parse_error,
     ) = _parse_auth_args(
         auth_args or [],
@@ -167,9 +156,6 @@ def auth(
 
     target = args[0] if args else None
     if target == "remove":
-        if connector_args:
-            typer.echo(f"Unexpected argument for auth remove: {connector_args[0]}", err=True)
-            raise typer.Exit(code=1)
         if len(args) > 2:
             typer.echo(f"Unexpected argument for auth remove: {args[2]}", err=True)
             raise typer.Exit(code=1)
@@ -209,10 +195,14 @@ def auth(
 
     if target not in (None, "status"):
         from agentgraph.connectors.registry import bootstrap, get_all_connectors
-        from agentgraph.connectors.status import auth_provider_connectors
+        from agentgraph.connectors.status import (
+            auth_provider_connectors,
+            run_auth_provider_flow,
+        )
 
         bootstrap()
-        grouped = auth_provider_connectors(get_all_connectors())
+        all_connectors = get_all_connectors()
+        grouped = auth_provider_connectors(all_connectors)
         seen = {label: connectors[0] for label, connectors in grouped.items()}
 
         if target not in seen:
@@ -220,17 +210,19 @@ def auth(
             typer.echo(f"Unknown auth target '{target}'. Available: {available}", err=True)
             raise typer.Exit(code=1)
 
-        try:
-            with _readable_credentials():
-                _run_auth_flow(type(seen[target]), connector_args, parsed_account, parsed_add)
-        except ValueError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(code=1) from exc
+        with _readable_credentials():
+            try:
+                run_auth_provider_flow(
+                    all_connectors,
+                    target,
+                    account_id=parsed_account,
+                    add=parsed_add,
+                    args=parsed_provider_args,
+                )
+            except ValueError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(code=2) from exc
         return
-
-    if connector_args:
-        typer.echo(f"Unexpected argument for auth status: {connector_args[0]}", err=True)
-        raise typer.Exit(code=1)
 
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
     from agentgraph.connectors.status import auth_provider_status_items

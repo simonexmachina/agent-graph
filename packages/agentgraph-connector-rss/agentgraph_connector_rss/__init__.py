@@ -73,7 +73,14 @@ class RssConnector(BaseConnector):
         self._observation_patterns: list[str] | None = None
 
     @classmethod
-    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
+        if args:
+            raise ValueError(f"RSS setup does not accept auth options: {' '.join(args)}")
         run_rss_flow(account_id=account_id, add=add)
 
     @classmethod

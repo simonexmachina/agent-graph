@@ -12,7 +12,7 @@ source_path = "docs-src/commands/auth.md"
 ## Synopsis
 
 ```bash
-agentgraph auth PLATFORM [--add] [--account ACCOUNT_ID]
+agentgraph auth PLATFORM [--account ACCOUNT_ID] [--add] [PROVIDER_OPTIONS]
 agentgraph auth slack [--method oauth|browser] [--client-id CLIENT_ID] [--xoxc-token TOKEN] [--d-cookie VALUE]
 agentgraph auth remove PLATFORM [--account ACCOUNT_ID] [--json]
 ```
@@ -20,6 +20,7 @@ agentgraph auth remove PLATFORM [--account ACCOUNT_ID] [--json]
 ## Notes
 
 - `PLATFORM` is the auth label, such as `google`, `slack`, or `discord`
+- Google uses AgentGraph's packaged Desktop OAuth client
 - Slack prompts between user OAuth with PKCE and browser-session credentials when `--method` is omitted
 - OAuth asks whether you administer the target workspace; non-admins can enter an admin-provided Client ID or follow the app-request flow
 - `--client-id` supplies an admin-provided Client ID and implies OAuth when `--method` is omitted

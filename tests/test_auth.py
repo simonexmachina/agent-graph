@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 from agentgraph_connector_discord.auth import DiscordCredentials, load_discord_creds
+from agentgraph_connector_google import provider as google_provider
+from agentgraph_connector_google.provider import (
+    GOOGLE_OAUTH_CLIENT_SECRET,
+    GoogleCredentials,
+    verify_google_auth,
+)
 from agentgraph_connector_slack.auth import SlackCredentials, load_slack_creds
 
 from agentgraph.auth.credentials import (
     CredentialsFileError,
-    GoogleCredentials,
     load_platform,
     load_platform_account,
     load_platform_accounts,
@@ -20,7 +26,6 @@ from agentgraph.auth.credentials import (
     save_platform,
     upsert_platform_account,
 )
-from agentgraph.auth.google_provider import verify_google_auth
 
 
 @pytest.fixture
@@ -184,17 +189,15 @@ def test_remove_platform_account_deletes_final_account(tmp_creds: Path) -> None:
 def test_google_credentials_model() -> None:
     g = GoogleCredentials(
         client_id="id",
-        client_secret="secret",
         access_token="tok",
         refresh_token="ref",
     )
-    assert g.token_uri == "https://oauth2.googleapis.com/token"
+    assert "client_secret" not in g.model_dump()
 
 
 def test_save_model_instance(tmp_creds: Path) -> None:
     g = GoogleCredentials(
         client_id="id",
-        client_secret="secret",
         access_token="tok",
         refresh_token="ref",
         user_email="user@example.com",
@@ -204,6 +207,102 @@ def test_save_model_instance(tmp_creds: Path) -> None:
     assert data is not None
     assert data["client_id"] == "id"
     assert data["user_email"] == "user@example.com"
+
+
+def test_google_refresh_uses_packaged_secret_and_does_not_store_it(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_platform(
+        "google",
+        GoogleCredentials(
+            client_id="desktop-client-id",
+            access_token="expired-token",
+            refresh_token="refresh-token",
+            user_email="user@example.com",
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    class _RefreshableCredentials:
+        valid = False
+        token = "expired-token"
+        refresh_token = "refresh-token"
+        expiry = None
+
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def refresh(self, request: object) -> None:
+            captured["request"] = request
+            self.valid = True
+            self.token = "refreshed-token"
+
+    request = object()
+    monkeypatch.setattr("google.oauth2.credentials.Credentials", _RefreshableCredentials)
+    monkeypatch.setattr("google.auth.transport.requests.Request", lambda: request)
+
+    credentials = google_provider.get_credentials()
+
+    assert credentials.valid is True
+    assert captured["client_id"] == "desktop-client-id"
+    assert captured["client_secret"] == GOOGLE_OAUTH_CLIENT_SECRET
+    assert captured["request"] is request
+    saved = load_platform_account("google")
+    assert saved is not None
+    assert saved["access_token"] == "refreshed-token"
+    assert "client_secret" not in saved
+
+
+@pytest.mark.asyncio
+async def test_mcp_authenticate_provider_passes_raw_connector_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agentgraph.mcp.server import authenticate_provider_tool
+
+    captured: dict[str, object] = {}
+
+    def _run_auth_provider_flow(
+        connectors: list[object],
+        provider: str,
+        *,
+        account_id: str | None,
+        add: bool,
+        args: list[str] | None,
+    ) -> None:
+        captured.update(
+            connectors=connectors,
+            provider=provider,
+            account_id=account_id,
+            add=add,
+            args=args,
+        )
+
+    connectors = [object()]
+    monkeypatch.setattr("agentgraph.connectors.registry.bootstrap", lambda: None)
+    monkeypatch.setattr("agentgraph.connectors.registry.get_all_connectors", lambda: connectors)
+    monkeypatch.setattr(
+        "agentgraph.connectors.status.run_auth_provider_flow",
+        _run_auth_provider_flow,
+    )
+
+    result = json.loads(
+        await authenticate_provider_tool(
+            "google",
+            account_id="user@example.com",
+            add=True,
+            args=["--client-id", "override-client-id"],
+        )
+    )
+
+    assert result["authenticated"] is True
+    assert captured == {
+        "connectors": connectors,
+        "provider": "google",
+        "account_id": "user@example.com",
+        "add": True,
+        "args": ["--client-id", "override-client-id"],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +324,6 @@ def test_verify_google_auth_missing_refresh_token_returns_invalid(tmp_creds: Pat
         "google",
         GoogleCredentials(
             client_id="id",
-            client_secret="secret",
             access_token="tok",
             refresh_token="",
             user_email="user@example.com",
@@ -248,7 +346,6 @@ def test_verify_google_auth_refresh_failure_returns_invalid(
         "google",
         GoogleCredentials(
             client_id="id",
-            client_secret="secret",
             access_token="tok",
             refresh_token="ref",
             user_email="user@example.com",
@@ -258,7 +355,9 @@ def test_verify_google_auth_refresh_failure_returns_invalid(
     def _raise_refresh_error() -> Any:
         raise RuntimeError("nope")
 
-    monkeypatch.setattr("agentgraph.auth.google_provider.get_credentials", _raise_refresh_error)
+    monkeypatch.setattr(
+        "agentgraph_connector_google.provider.get_credentials", _raise_refresh_error
+    )
 
     status, detail = verify_google_auth()
 
@@ -276,14 +375,13 @@ def test_verify_google_auth_valid_returns_email(
         "google",
         GoogleCredentials(
             client_id="id",
-            client_secret="secret",
             access_token="tok",
             refresh_token="ref",
             user_email="user@example.com",
         ),
     )
     monkeypatch.setattr(
-        "agentgraph.auth.google_provider.get_credentials",
+        "agentgraph_connector_google.provider.get_credentials",
         lambda: _FakeGoogleAuthCredentials(valid=True),
     )
 

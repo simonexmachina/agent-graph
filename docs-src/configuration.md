@@ -27,7 +27,10 @@ That directory controls:
 
 Connector configuration that is not a secret, such as RSS feed URLs, is stored in
 `config.toml` by default, or `config.yaml` if that file exists. Provider tokens and
-OAuth credentials remain in `credentials.json`.
+account identifiers remain in `credentials.json`. Google records include the public
+OAuth client ID that issued each refresh token, but never the packaged OAuth client
+secret. Desktop OAuth client credentials distributed with AgentGraph are public
+application identifiers, not a security boundary.
 
 Slack OAuth accepts `AGENTGRAPH_SLACK_CLIENT_ID` or prompts for the Client ID on
 first authorization, then stores it per account. The packaged app manifest contains
