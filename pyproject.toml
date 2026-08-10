@@ -1,12 +1,12 @@
 [project]
-name = "agent-graph"
+name = "agentgraph-server"
 version = "0.5.0"
 description = "AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, Drive, and RSS feeds, so your AI agents can search, fetch, and reason over the same connected context you work from."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.20.0",
-    "agent-graph-connector-web>=0.5.0,<0.6",
+    "agentgraph-connector-web>=0.5.0,<0.6",
     "apscheduler>=3.11.2",
     "click<8.4",
     "fastapi>=0.135.2",
@@ -23,17 +23,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-google     = ["agent-graph-connector-google>=0.5.0,<0.6"]
-slack      = ["agent-graph-connector-slack>=0.5.0,<0.6"]
-discord    = ["agent-graph-connector-discord>=0.5.0,<0.6"]
-rss        = ["agent-graph-connector-rss>=0.5.0,<0.6"]
-web        = ["agent-graph-connector-web>=0.5.0,<0.6"]
+google     = ["agentgraph-connector-google>=0.5.0,<0.6"]
+slack      = ["agentgraph-connector-slack>=0.5.0,<0.6"]
+discord    = ["agentgraph-connector-discord>=0.5.0,<0.6"]
+rss        = ["agentgraph-connector-rss>=0.5.0,<0.6"]
+web        = ["agentgraph-connector-web>=0.5.0,<0.6"]
 all        = [
-    "agent-graph-connector-web>=0.5.0,<0.6",
-    "agent-graph-connector-google>=0.5.0,<0.6",
-    "agent-graph-connector-slack>=0.5.0,<0.6",
-    "agent-graph-connector-discord>=0.5.0,<0.6",
-    "agent-graph-connector-rss>=0.5.0,<0.6",
+    "agentgraph-connector-web>=0.5.0,<0.6",
+    "agentgraph-connector-google>=0.5.0,<0.6",
+    "agentgraph-connector-slack>=0.5.0,<0.6",
+    "agentgraph-connector-discord>=0.5.0,<0.6",
+    "agentgraph-connector-rss>=0.5.0,<0.6",
 ]
 
 [dependency-groups]
@@ -62,11 +62,11 @@ package = true
 members = ["packages/*"]
 
 [tool.uv.sources]
-agent-graph-connector-google  = { workspace = true }
-agent-graph-connector-slack   = { workspace = true }
-agent-graph-connector-discord = { workspace = true }
-agent-graph-connector-rss     = { workspace = true }
-agent-graph-connector-web     = { workspace = true }
+agentgraph-connector-google  = { workspace = true }
+agentgraph-connector-slack   = { workspace = true }
+agentgraph-connector-discord = { workspace = true }
+agentgraph-connector-rss     = { workspace = true }
+agentgraph-connector-web     = { workspace = true }
 
 [tool.setuptools.packages.find]
 include = ["agentgraph*"]

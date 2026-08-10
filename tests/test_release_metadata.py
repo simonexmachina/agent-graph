@@ -17,14 +17,14 @@ def _project(path: Path) -> dict[str, Any]:
 
 def test_release_projects_use_public_names_and_matching_versions() -> None:
     root_project = _project(ROOT / "pyproject.toml")
-    assert root_project["name"] == "agent-graph"
+    assert root_project["name"] == "agentgraph-server"
     assert root_project["version"] == VERSION
 
     connector_projects = [
         _project(path) for path in sorted((ROOT / "packages").glob("*/pyproject.toml"))
     ]
     assert len(connector_projects) == 5
-    assert all(project["name"].startswith("agent-graph-connector-") for project in connector_projects)
+    assert all(project["name"].startswith("agentgraph-connector-") for project in connector_projects)
     assert all(project["version"] == VERSION for project in connector_projects)
     connector_requirements = {
         requirement.split(">=", maxsplit=1)[0]
@@ -36,4 +36,4 @@ def test_release_projects_use_public_names_and_matching_versions() -> None:
 def test_connectors_require_the_matching_agent_graph_release_line() -> None:
     for path in sorted((ROOT / "packages").glob("*/pyproject.toml")):
         project = _project(path)
-        assert "agent-graph>=0.5.0,<0.6" in project["dependencies"]
+        assert "agentgraph-server>=0.5.0,<0.6" in project["dependencies"]

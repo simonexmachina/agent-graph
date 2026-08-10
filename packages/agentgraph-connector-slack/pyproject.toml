@@ -1,10 +1,10 @@
 [project]
-name = "agent-graph-connector-slack"
+name = "agentgraph-connector-slack"
 version = "0.5.0"
 description = "Slack connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
-    "agent-graph>=0.5.0,<0.6",
+    "agentgraph-server>=0.5.0,<0.6",
     "httpx>=0.28.1",
 ]
 
@@ -15,7 +15,7 @@ slack = "agentgraph_connector_slack:SlackConnector"
 package = true
 
 [tool.uv.sources]
-agent-graph = { workspace = true }
+agentgraph-server = { workspace = true }
 
 [tool.setuptools.package-data]
 agentgraph_connector_slack = ["slack-app-manifest.json"]

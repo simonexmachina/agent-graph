@@ -1,10 +1,10 @@
 [project]
-name = "agent-graph-connector-discord"
+name = "agentgraph-connector-discord"
 version = "0.5.0"
 description = "Discord connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
-    "agent-graph>=0.5.0,<0.6",
+    "agentgraph-server>=0.5.0,<0.6",
     "httpx>=0.28.1",
 ]
 
@@ -15,4 +15,4 @@ discord = "agentgraph_connector_discord:DiscordConnector"
 package = true
 
 [tool.uv.sources]
-agent-graph = { workspace = true }
+agentgraph-server = { workspace = true }
