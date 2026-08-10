@@ -15,13 +15,17 @@ import httpx
 import pytest
 from agentgraph_connector_slack import SlackConnector, _api_get
 from agentgraph_connector_slack.auth import (
+    DEFAULT_REDIRECT_URI,
     OPTIONAL_SCOPES,
     REQUIRED_SCOPES,
     SlackBrowserCredentials,
     SlackOAuthCallback,
     SlackOAuthCredentials,
-    _oauth_setup_instructions,
-    _resolve_oauth_client_id,
+    _admin_setup_instructions,
+    _authorization_instructions,
+    _available_oauth_client_id,
+    _member_missing_workspace_instructions,
+    _member_visible_workspace_instructions,
     load_slack_creds,
     refresh_oauth_credentials,
     run_guided_oauth_flow,
@@ -270,6 +274,10 @@ def test_oauth_flow_uses_pkce_state_and_default_redirect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("AGENTGRAPH_SLACK_CLIENT_ID", "123.456")
+    monkeypatch.setenv(
+        "AGENTGRAPH_SLACK_REDIRECT_URI",
+        "http://localhost:9999/unsupported",
+    )
     opened: list[str] = []
     exchange = MagicMock(return_value=_exchange_result())
 
@@ -290,13 +298,13 @@ def test_oauth_flow_uses_pkce_state_and_default_redirect(
     assert query["code_challenge"] == ["challenge"]
     assert query["code_challenge_method"] == ["S256"]
     assert query["state"] == ["state-value"]
-    assert query["redirect_uri"] == ["http://localhost:8766/slack/oauth/callback"]
-    wait.assert_called_once_with("http://localhost:8766/slack/oauth/callback")
+    assert query["redirect_uri"] == [DEFAULT_REDIRECT_URI]
+    wait.assert_called_once_with(DEFAULT_REDIRECT_URI)
     exchange.assert_called_once_with(
         code="code",
         verifier="verifier",
         client_id="123.456",
-        redirect_uri="http://localhost:8766/slack/oauth/callback",
+        redirect_uri=DEFAULT_REDIRECT_URI,
     )
     stored = load_platform_account("slack", "slack:T1:U1")
     assert stored is not None
@@ -495,10 +503,35 @@ def test_interactive_auth_chooser_dispatches_selected_method(
     (browser if selected_flow == "oauth" else oauth).assert_not_called()
 
 
-@pytest.mark.parametrize("workspace_admin", [True, False])
-def test_guided_oauth_passes_workspace_role_to_setup(workspace_admin: bool) -> None:
+def test_guided_oauth_uses_available_client_id_without_setup() -> None:
     with (
-        patch("typer.confirm", return_value=workspace_admin) as confirm,
+        patch(
+            "agentgraph_connector_slack.auth._available_oauth_client_id",
+            return_value="stored-client-id",
+        ),
+        patch("typer.confirm") as confirm,
+        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+    ):
+        run_guided_oauth_flow(account_id="slack:T1:U1", add=True)
+
+    confirm.assert_not_called()
+    oauth.assert_called_once_with(
+        account_id="slack:T1:U1",
+        add=True,
+        client_id="stored-client-id",
+    )
+
+
+def test_guided_oauth_admin_creates_app_and_enters_client_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with (
+        patch(
+            "agentgraph_connector_slack.auth._available_oauth_client_id",
+            return_value=None,
+        ),
+        patch("typer.confirm", return_value=True) as confirm,
+        patch("typer.prompt", return_value="admin-client-id"),
         patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
     ):
         run_guided_oauth_flow(account_id="slack:T1:U1", add=True)
@@ -510,70 +543,120 @@ def test_guided_oauth_passes_workspace_role_to_setup(workspace_admin: bool) -> N
     oauth.assert_called_once_with(
         account_id="slack:T1:U1",
         add=True,
-        workspace_admin=workspace_admin,
+        client_id="admin-client-id",
+    )
+    output = capsys.readouterr().out
+    assert "Create the AgentGraph Slack app" in output
+    assert "AgentGraph Slack app manifest" in output
+    assert "display_information:" in output
+
+
+def test_non_admin_can_enter_admin_provided_client_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with (
+        patch(
+            "agentgraph_connector_slack.auth._available_oauth_client_id",
+            return_value=None,
+        ),
+        patch("typer.confirm", return_value=False),
+        patch("typer.prompt", side_effect=["1", "admin-client-id"]),
+        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+    ):
+        run_guided_oauth_flow(account_id="slack:T1:U1", add=True)
+
+    oauth.assert_called_once_with(
+        account_id="slack:T1:U1",
+        add=True,
+        client_id="admin-client-id",
+    )
+    output = capsys.readouterr().out
+    assert "Enter a Client ID provided by a Slack admin" in output
+    assert "Set up or request the AgentGraph app" in output
+
+
+def test_non_admin_can_create_app_when_workspace_is_visible(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with (
+        patch(
+            "agentgraph_connector_slack.auth._available_oauth_client_id",
+            return_value=None,
+        ),
+        patch("typer.confirm", side_effect=[False, True]),
+        patch("typer.prompt", side_effect=["2", "member-client-id"]),
+        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+    ):
+        run_guided_oauth_flow(account_id="slack:T1:U1", add=True)
+
+    oauth.assert_called_once_with(
+        account_id="slack:T1:U1",
+        add=True,
+        client_id="member-client-id",
+    )
+    output = capsys.readouterr().out
+    assert "At Pick a workspace" in output
+    assert "Select that workspace" in output
+    assert "AgentGraph Slack app manifest" in output
+
+
+def test_non_admin_missing_workspace_gets_copyable_admin_request(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with (
+        patch(
+            "agentgraph_connector_slack.auth._available_oauth_client_id",
+            return_value=None,
+        ),
+        patch("typer.confirm", side_effect=[False, False]),
+        patch("typer.prompt", return_value="2"),
+        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+    ):
+        run_guided_oauth_flow(account_id="slack:T1:U1", add=True)
+
+    oauth.assert_not_called()
+    output = capsys.readouterr().out
+    assert "The workspace is not available in Slack's app creation list" in output
+    assert "using the manifest below" in output
+    assert "Example request" in output
+    assert "No client secret is needed" in output
+    assert "AgentGraph Slack app manifest" in output
+    assert "display_information:" in output
+    assert "choose option 1" in output
+
+
+def test_setup_instructions_only_include_callback_inside_manifest() -> None:
+    for instructions in (
+        _admin_setup_instructions(),
+        _member_visible_workspace_instructions(),
+        _member_missing_workspace_instructions(),
+    ):
+        assert instructions.count(DEFAULT_REDIRECT_URI) == 1
+        assert "custom callback" not in instructions
+        assert "manifest registers the callback" not in instructions
+
+
+def test_oauth_client_id_sources(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTGRAPH_SLACK_CLIENT_ID", "environment-client-id")
+    assert _available_oauth_client_id(None, add=False) == "environment-client-id"
+
+    save_platform("slack", _oauth_record())
+    assert _available_oauth_client_id("slack:T1:U1", add=False) == "123.456"
+    assert (
+        _available_oauth_client_id("slack:T1:U1", add=True)
+        == "environment-client-id"
     )
 
 
-def test_oauth_client_id_prompts_after_setup_when_environment_is_missing(
-    tmp_creds: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("AGENTGRAPH_SLACK_CLIENT_ID", raising=False)
-
-    with patch("typer.prompt", return_value="prompted-client-id") as prompt:
-        client_id = _resolve_oauth_client_id(None, add=False)
-
-    assert client_id == "prompted-client-id"
-    prompt.assert_called_once_with("Slack app Client ID")
-
-
-def test_oauth_client_id_reuses_stored_account(
-    tmp_creds: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("AGENTGRAPH_SLACK_CLIENT_ID", raising=False)
-    save_platform("slack", _oauth_record())
-
-    with patch("typer.prompt") as prompt:
-        client_id = _resolve_oauth_client_id("slack:T1:U1", add=False)
-
-    assert client_id == "123.456"
-    prompt.assert_not_called()
-
-
-def test_oauth_setup_instructions_explain_client_id_prompt(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setenv("AGENTGRAPH_SLACK_CLIENT_ID", "123.456")
-    with patch(
-        "agentgraph_connector_slack.auth._pkce_pair",
-        side_effect=RuntimeError("stop after setup"),
-    ), pytest.raises(RuntimeError, match="stop after setup"):
-        run_oauth_flow(workspace_admin=True)
-
-    output = capsys.readouterr().out
-    assert "Slack OAuth (OIDC/PKCE) setup" in output
-    assert "https://api.slack.com/apps" in output
-    assert "Create New App > From a" in output
-    assert "As a target-workspace admin" in output
-    assert "Select the target workspace" in output
-    assert "slack-app-manifest.yaml" in output
-    assert "http://localhost:8766/slack/oauth/callback" in output
-    assert "target workspace's Client ID" in output
-    assert "The manifest registers the callback" in output
-    assert "Only for a custom callback" in output
-    assert "Enter it when prompted" in output
-
-
-def test_non_admin_oauth_instructions_explain_admin_handoff() -> None:
-    instructions = _oauth_setup_instructions(workspace_admin=False)
-
-    assert "Without target-workspace admin permission" in instructions
-    assert "Send the manifest path" in instructions
-    assert "Ask them to create AgentGraph in that target workspace" in instructions
-    assert "use Request approval" in instructions
-    assert "Admin > Apps and workflows > Requests" in instructions
+def test_authorization_instructions_cover_slack_outcomes() -> None:
+    instructions = _authorization_instructions()
+    assert "Allow" in instructions
+    assert "Request approval" in instructions
+    assert "Installation blocked" in instructions
+    assert "Slackbot confirms approval" in instructions
 
 
 @pytest.mark.asyncio

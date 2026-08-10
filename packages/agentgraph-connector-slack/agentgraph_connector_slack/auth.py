@@ -198,7 +198,11 @@ def _wait_for_oauth_callback(
         while result is None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError("Timed out waiting five minutes for Slack OAuth approval")
+                raise TimeoutError(
+                    "Timed out waiting five minutes for Slack authorization. "
+                    "If you requested app approval, rerun this command after Slackbot "
+                    "confirms approval."
+                )
             server.timeout = remaining
             server.handle_request()
     return result
@@ -229,51 +233,86 @@ def _exchange_oauth_code(
     return data
 
 
-def _oauth_setup_instructions(*, workspace_admin: bool) -> str:
+def _manifest_text() -> str:
     manifest_path = Path(__file__).with_name("slack-app-manifest.yaml")
-    common = (
-        "\nSlack OAuth (OIDC/PKCE) setup:\n"
-        "  App manifest:\n"
-        f"     {manifest_path}\n"
-        f"  The manifest registers the callback: {DEFAULT_REDIRECT_URI}\n"
-    )
-    if workspace_admin:
-        role_steps = (
-            "\nAs a target-workspace admin:\n"
-            "  1. Open https://api.slack.com/apps and choose\n"
-            "     Create New App > From a manifest.\n"
-            "  2. Select the target workspace and use the manifest above.\n"
-            "  3. Create the app and approve its required and optional scopes.\n"
-            "  4. In Basic Information > App Credentials, copy the Client ID.\n"
-        )
-    else:
-        role_steps = (
-            "\nWithout target-workspace admin permission:\n"
-            "  1. Send the manifest path and callback above to an admin of the\n"
-            "     workspace you want to connect to.\n"
-            "  2. Ask them to create AgentGraph in that target workspace, approve\n"
-            "     its scopes, and send you the Client ID.\n"
-            "  3. If members may create internal apps there, create it while\n"
-            "     selecting that workspace and use Request approval; an app\n"
-            "     manager reviews Admin > Apps and workflows > Requests.\n"
-        )
-    return common + role_steps + (
-        "\n"
-        "     Enter it when prompted, or set\n"
-        "     AGENTGRAPH_SLACK_CLIENT_ID before running this command.\n"
-        "\n"
-        "After approval, rerun this command with the target workspace's Client ID.\n"
-        "If that workspace is absent from Slack's chooser, the Client ID belongs\n"
-        "to another workspace or your browser is not signed in to the target.\n"
-        "Only for a custom callback: register it in the Slack app first, then set\n"
-        "AGENTGRAPH_SLACK_REDIRECT_URI to that exact URL before continuing.\n"
+    return manifest_path.read_text().rstrip()
+
+
+def _manifest_block() -> str:
+    return f"AgentGraph Slack app manifest:\n\n{_manifest_text()}\n"
+
+
+def _admin_setup_instructions() -> str:
+    return (
+        "\nCreate the AgentGraph Slack app:\n\n"
+        "  1. Open https://api.slack.com/apps\n"
+        "  2. Choose Create New App > From an app manifest.\n"
+        "  3. Select the workspace you want AgentGraph to connect to.\n"
+        "  4. Paste the manifest printed below.\n"
+        "  5. Create and approve the app. Email access is optional.\n"
+        "  6. Open Basic Information > App Credentials and copy the Client ID.\n\n"
+        f"{_manifest_block()}"
     )
 
 
-def _resolve_oauth_client_id(account_id: str | None, *, add: bool) -> str:
-    configured = os.environ.get("AGENTGRAPH_SLACK_CLIENT_ID", "").strip()
-    if configured:
-        return configured
+def _member_creation_instructions() -> str:
+    return (
+        "\nCheck whether you can create the AgentGraph app:\n\n"
+        "  1. Open https://api.slack.com/apps\n"
+        "  2. Choose Create New App > From an app manifest.\n"
+        "  3. At Pick a workspace, look for the workspace you want AgentGraph "
+        "to connect to.\n"
+    )
+
+
+def _member_visible_workspace_instructions() -> str:
+    return (
+        "\nCreate the AgentGraph Slack app:\n\n"
+        "  1. Select that workspace and continue.\n"
+        "  2. Paste the manifest printed below.\n"
+        "  3. Review the configuration and choose Create.\n"
+        "  4. Open Basic Information > App Credentials and copy the Client ID.\n\n"
+        f"{_manifest_block()}"
+    )
+
+
+def _member_missing_workspace_instructions() -> str:
+    return (
+        "\nThe workspace is not available in Slack's app creation list.\n\n"
+        "Ask a Workspace Owner or app manager either to give you permission to\n"
+        "create internal apps, or to create and approve AgentGraph using the\n"
+        "manifest below.\n\n"
+        "Example request:\n\n"
+        "  Hi, I'd like to connect AgentGraph to Slack. AgentGraph indexes Slack\n"
+        "  conversations that I can access into a local knowledge graph.\n\n"
+        "  Could you either give me permission to create an internal Slack app,\n"
+        "  or create and approve AgentGraph using the manifest below?\n\n"
+        "  The required user scopes read public channels, private channels, DMs,\n"
+        "  group DMs, and member profiles. Email access is optional. Once the app\n"
+        "  is approved, please send me its Client ID. No client secret is needed.\n\n"
+        f"{_manifest_block()}\n"
+        "Slack cannot offer app approval until the app exists in the target\n"
+        "workspace. When the admin sends the Client ID, rerun agentgraph auth\n"
+        "slack, answer No to the admin-permission question, and choose option 1.\n"
+    )
+
+
+def _authorization_instructions() -> str:
+    return (
+        "\nSlack may show one of these actions:\n\n"
+        "  Allow\n"
+        "    Continue authorization now.\n\n"
+        "  Request approval\n"
+        "    Submit the request and wait for a Workspace Owner or app manager.\n"
+        "    Rerun this command after Slackbot confirms approval, then enter the\n"
+        "    same Client ID.\n\n"
+        "  Installation blocked\n"
+        "    Contact a Workspace Owner or app manager. Workspace policy does not\n"
+        "    allow members to request this app.\n"
+    )
+
+
+def _available_oauth_client_id(account_id: str | None, *, add: bool) -> str | None:
     if not add:
         try:
             existing = load_slack_creds(account_id)
@@ -281,10 +320,17 @@ def _resolve_oauth_client_id(account_id: str | None, *, add: bool) -> str:
             existing = None
         if isinstance(existing, SlackOAuthCredentials):
             return existing.client_id
+    return os.environ.get("AGENTGRAPH_SLACK_CLIENT_ID", "").strip() or None
 
+
+def _prompt_oauth_client_id() -> str:
     import typer
 
-    return typer.prompt("Slack app Client ID").strip()
+    while True:
+        client_id = typer.prompt("Slack app Client ID").strip()
+        if client_id:
+            return client_id
+        typer.echo("Slack app Client ID cannot be empty.")
 
 
 def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) -> None:
@@ -293,8 +339,8 @@ def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) 
     import typer
 
     typer.echo(
-        "\nChoose a Slack authentication method:\n"
-        "  1. Official Slack user OAuth (OIDC/PKCE) [recommended]\n"
+        "\nChoose how to connect Slack:\n"
+        "  1. Slack user OAuth with PKCE [recommended]\n"
         "  2. Browser session credentials (xoxc token + d cookie) [fallback]\n"
     )
     choice = typer.prompt(
@@ -310,41 +356,89 @@ def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) 
 
 
 def run_guided_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
-    """Ask about workspace permissions before running OAuth setup."""
+    """Resolve an existing client or guide the user through Slack app setup."""
+    import click
     import typer
+
+    client_id = _available_oauth_client_id(account_id, add=add)
+    if client_id is not None:
+        run_oauth_flow(account_id=account_id, add=add, client_id=client_id)
+        return
 
     workspace_admin = typer.confirm(
         "Do you have admin permission in the Slack workspace you want to connect?",
         default=False,
     )
-    run_oauth_flow(account_id=account_id, add=add, workspace_admin=workspace_admin)
+    if workspace_admin:
+        typer.echo(_admin_setup_instructions())
+        run_oauth_flow(
+            account_id=account_id,
+            add=add,
+            client_id=_prompt_oauth_client_id(),
+        )
+        return
+
+    typer.echo(
+        "\nHow would you like to continue?\n\n"
+        "  1. Enter a Client ID provided by a Slack admin\n"
+        "  2. Set up or request the AgentGraph app\n"
+    )
+    choice = typer.prompt(
+        "Choice",
+        type=click.Choice(["1", "2"]),
+        default="1",
+        show_default=False,
+    )
+    if choice == "1":
+        run_oauth_flow(
+            account_id=account_id,
+            add=add,
+            client_id=_prompt_oauth_client_id(),
+        )
+        return
+
+    typer.echo(_member_creation_instructions())
+    workspace_visible = typer.confirm(
+        "Can you see the workspace you want in Slack's Pick a workspace list?",
+        default=False,
+    )
+    if not workspace_visible:
+        typer.echo(_member_missing_workspace_instructions())
+        return
+    typer.echo(_member_visible_workspace_instructions())
+    run_oauth_flow(
+        account_id=account_id,
+        add=add,
+        client_id=_prompt_oauth_client_id(),
+    )
 
 
 def run_oauth_flow(
     account_id: str | None = None,
     add: bool = False,
     *,
-    workspace_admin: bool = False,
+    client_id: str | None = None,
 ) -> None:
     """Authorize a Slack user with PKCE and store rotating credentials."""
     import typer
 
-    typer.echo(_oauth_setup_instructions(workspace_admin=workspace_admin))
-    client_id = _resolve_oauth_client_id(account_id, add=add)
-    redirect_uri = os.environ.get("AGENTGRAPH_SLACK_REDIRECT_URI", DEFAULT_REDIRECT_URI)
+    resolved_client_id = client_id or _available_oauth_client_id(account_id, add=add)
+    if resolved_client_id is None:
+        resolved_client_id = _prompt_oauth_client_id()
     verifier, challenge = _pkce_pair()
     state = secrets.token_urlsafe(32)
     authorize_url = f"{SLACK_AUTHORIZE_URL}?{urlencode({
-        'client_id': client_id,
+        'client_id': resolved_client_id,
         'scope': ','.join(sorted(REQUIRED_SCOPES | OPTIONAL_SCOPES)),
-        'redirect_uri': redirect_uri,
+        'redirect_uri': DEFAULT_REDIRECT_URI,
         'state': state,
         'code_challenge': challenge,
         'code_challenge_method': 'S256',
     })}"
+    typer.echo(_authorization_instructions())
     typer.echo(f"Opening Slack authorization in your browser:\n{authorize_url}")
     webbrowser.open(authorize_url)
-    callback = _wait_for_oauth_callback(redirect_uri)
+    callback = _wait_for_oauth_callback(DEFAULT_REDIRECT_URI)
     if not callback.state or not secrets.compare_digest(callback.state, state):
         raise RuntimeError("Slack OAuth callback state did not match")
     if callback.error:
@@ -355,8 +449,8 @@ def run_oauth_flow(
     data = _exchange_oauth_code(
         code=callback.code,
         verifier=verifier,
-        client_id=client_id,
-        redirect_uri=redirect_uri,
+        client_id=resolved_client_id,
+        redirect_uri=DEFAULT_REDIRECT_URI,
     )
     access_token, refresh_token, expires_in, scopes = _oauth_values(data)
     missing_scopes = validate_required_scopes(scopes)
@@ -396,7 +490,7 @@ def run_oauth_flow(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_at=datetime.now(UTC) + timedelta(seconds=expires_in),
-        client_id=client_id,
+        client_id=resolved_client_id,
         scopes=scopes,
         user_id=user_id,
         team_id=team_id,
