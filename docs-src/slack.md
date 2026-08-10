@@ -66,10 +66,13 @@ authorization request and registered redirect to match exactly.
 AGENTGRAPH_SLACK_REDIRECT_URI=http://localhost:9000/slack/oauth/callback
 ```
 
-Run auth and choose official Slack user OAuth (OIDC/PKCE). AgentGraph prints the app
-setup requirements before opening Slack, validates the returned state, exchanges the
-code with PKCE, and waits at most five minutes for the callback. Use
-`--method oauth` to bypass the chooser.
+Run auth and choose official Slack user OAuth (OIDC/PKCE). AgentGraph asks whether
+you have admin permission in the target workspace. Admins receive direct creation
+and approval steps; non-admins receive a handoff checklist for the target admin and
+the member-request path where available. AgentGraph then opens Slack, validates the
+returned state, exchanges the code with PKCE, and waits at most five minutes for the
+callback. Use `--method oauth` to bypass only the method chooser; the workspace-role
+question still appears.
 
 ```bash
 agentgraph auth slack

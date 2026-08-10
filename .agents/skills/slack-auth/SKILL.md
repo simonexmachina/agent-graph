@@ -19,7 +19,7 @@ agentgraph auth status --json | jq '.[] | select(.provider == "slack")'
 
 The target-workspace admin should approve the app and scopes before sharing its Client ID. If members can create internal apps in that workspace, the user may create it there and click **Request approval**; an app manager reviews **Admin → Apps and workflows → Requests**. If only another workspace appears in OAuth, the supplied Client ID belongs to that other workspace or the browser is not signed in to the target.
 
-3. Start the interactive chooser, select official Slack user OAuth (OIDC/PKCE), and let the user approve in the opened browser:
+3. Start the interactive chooser, select official Slack user OAuth (OIDC/PKCE), answer whether you have admin permission in the target workspace, and follow the role-specific app setup instructions before approving in the opened browser:
 
 ```bash
 agentgraph auth slack

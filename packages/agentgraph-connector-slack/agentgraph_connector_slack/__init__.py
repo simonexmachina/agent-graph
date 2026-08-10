@@ -157,8 +157,8 @@ class SlackConnector(BaseConnector):
     ) -> None:
         from agentgraph_connector_slack.auth import (
             run_cookie_flow,
+            run_guided_oauth_flow,
             run_interactive_auth_flow,
-            run_oauth_flow,
         )
 
         method: str | None = None
@@ -204,7 +204,7 @@ class SlackConnector(BaseConnector):
                 d_cookie=d_cookie,
             )
             return
-        run_oauth_flow(account_id=account_id, add=add)
+        run_guided_oauth_flow(account_id=account_id, add=add)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:

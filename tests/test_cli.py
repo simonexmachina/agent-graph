@@ -731,7 +731,7 @@ def test_auth_remove_reports_corrupt_credentials_file(tmp_creds: Path) -> None:
     assert "Could not parse" in result.output
 
 
-def test_auth_remove_missing_provider_exits_nonzero() -> None:
+def test_auth_remove_missing_provider_exits_nonzero(tmp_creds: Path) -> None:
     result = runner.invoke(app, ["auth", "remove", "slack"])
 
     assert result.exit_code != 0

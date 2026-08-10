@@ -229,22 +229,36 @@ def _exchange_oauth_code(
     return data
 
 
-def _oauth_setup_instructions() -> str:
+def _oauth_setup_instructions(*, workspace_admin: bool) -> str:
     manifest_path = Path(__file__).with_name("slack-app-manifest.yaml")
-    return (
+    common = (
         "\nSlack OAuth (OIDC/PKCE) setup:\n"
-        "  1. Ask an admin of the workspace you want to connect to open\n"
-        "     https://api.slack.com/apps, choose Create New App > From a\n"
-        "     manifest, and select that target workspace. An app created in a\n"
-        "     different workspace cannot authorize this internal-app flow.\n"
-        "     Use this manifest:\n"
+        "  App manifest:\n"
         f"     {manifest_path}\n"
-        "  2. The target-workspace admin approves the app and its scopes, then\n"
-        "     sends you the Client ID. If members may create internal apps in\n"
-        "     that workspace, you can create it there and use Request approval;\n"
-        "     an app manager reviews Admin > Apps and workflows > Requests.\n"
-        f"  3. The manifest registers the callback: {DEFAULT_REDIRECT_URI}\n"
-        "  4. In Basic Information > App Credentials, copy the Client ID.\n"
+        f"  The manifest registers the callback: {DEFAULT_REDIRECT_URI}\n"
+    )
+    if workspace_admin:
+        role_steps = (
+            "\nAs a target-workspace admin:\n"
+            "  1. Open https://api.slack.com/apps and choose\n"
+            "     Create New App > From a manifest.\n"
+            "  2. Select the target workspace and use the manifest above.\n"
+            "  3. Create the app and approve its required and optional scopes.\n"
+            "  4. In Basic Information > App Credentials, copy the Client ID.\n"
+        )
+    else:
+        role_steps = (
+            "\nWithout target-workspace admin permission:\n"
+            "  1. Send the manifest path and callback above to an admin of the\n"
+            "     workspace you want to connect to.\n"
+            "  2. Ask them to create AgentGraph in that target workspace, approve\n"
+            "     its scopes, and send you the Client ID.\n"
+            "  3. If members may create internal apps there, create it while\n"
+            "     selecting that workspace and use Request approval; an app\n"
+            "     manager reviews Admin > Apps and workflows > Requests.\n"
+        )
+    return common + role_steps + (
+        "\n"
         "     Enter it when prompted, or set\n"
         "     AGENTGRAPH_SLACK_CLIENT_ID before running this command.\n"
         "\n"
@@ -292,14 +306,30 @@ def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) 
     if choice == "2":
         run_cookie_flow(account_id=account_id, add=add)
         return
-    run_oauth_flow(account_id=account_id, add=add)
+    run_guided_oauth_flow(account_id=account_id, add=add)
 
 
-def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
+def run_guided_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
+    """Ask about workspace permissions before running OAuth setup."""
+    import typer
+
+    workspace_admin = typer.confirm(
+        "Do you have admin permission in the Slack workspace you want to connect?",
+        default=False,
+    )
+    run_oauth_flow(account_id=account_id, add=add, workspace_admin=workspace_admin)
+
+
+def run_oauth_flow(
+    account_id: str | None = None,
+    add: bool = False,
+    *,
+    workspace_admin: bool = False,
+) -> None:
     """Authorize a Slack user with PKCE and store rotating credentials."""
     import typer
 
-    typer.echo(_oauth_setup_instructions())
+    typer.echo(_oauth_setup_instructions(workspace_admin=workspace_admin))
     client_id = _resolve_oauth_client_id(account_id, add=add)
     redirect_uri = os.environ.get("AGENTGRAPH_SLACK_REDIRECT_URI", DEFAULT_REDIRECT_URI)
     verifier, challenge = _pkce_pair()

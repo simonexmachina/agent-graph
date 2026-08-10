@@ -64,7 +64,7 @@ agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status
 
 # Authenticate connectors/providers
 agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
-agentgraph auth slack [--method oauth|browser] [--add] [--account <account-id>] # interactively chooses OAuth/OIDC or browser fallback when --method is omitted
+agentgraph auth slack [--method oauth|browser] [--add] [--account <account-id>] # chooses auth method, then asks whether the user administers the target workspace and shows role-specific OAuth setup
 agentgraph auth slack --method browser [--xoxc-token <token>] [--d-cookie <cookie>] # explicit browser-session fallback; credential flags imply browser
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
 agentgraph auth remove <provider> [--account <account-id>] [--json] # remove stored credentials; does not delete graph data

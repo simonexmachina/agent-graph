@@ -20,9 +20,11 @@ from agentgraph_connector_slack.auth import (
     SlackBrowserCredentials,
     SlackOAuthCallback,
     SlackOAuthCredentials,
+    _oauth_setup_instructions,
     _resolve_oauth_client_id,
     load_slack_creds,
     refresh_oauth_credentials,
+    run_guided_oauth_flow,
     run_interactive_auth_flow,
     run_oauth_flow,
     slack_headers,
@@ -483,7 +485,7 @@ def test_interactive_auth_chooser_dispatches_selected_method(
 ) -> None:
     with (
         patch("typer.prompt", return_value=choice),
-        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+        patch("agentgraph_connector_slack.auth.run_guided_oauth_flow") as oauth,
         patch("agentgraph_connector_slack.auth.run_cookie_flow") as browser,
     ):
         run_interactive_auth_flow(account_id="slack:T1:U1", add=True)
@@ -491,6 +493,25 @@ def test_interactive_auth_chooser_dispatches_selected_method(
     selected = oauth if selected_flow == "oauth" else browser
     selected.assert_called_once_with(account_id="slack:T1:U1", add=True)
     (browser if selected_flow == "oauth" else oauth).assert_not_called()
+
+
+@pytest.mark.parametrize("workspace_admin", [True, False])
+def test_guided_oauth_passes_workspace_role_to_setup(workspace_admin: bool) -> None:
+    with (
+        patch("typer.confirm", return_value=workspace_admin) as confirm,
+        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+    ):
+        run_guided_oauth_flow(account_id="slack:T1:U1", add=True)
+
+    confirm.assert_called_once_with(
+        "Do you have admin permission in the Slack workspace you want to connect?",
+        default=False,
+    )
+    oauth.assert_called_once_with(
+        account_id="slack:T1:U1",
+        add=True,
+        workspace_admin=workspace_admin,
+    )
 
 
 def test_oauth_client_id_prompts_after_setup_when_environment_is_missing(
@@ -529,23 +550,30 @@ def test_oauth_setup_instructions_explain_client_id_prompt(
         "agentgraph_connector_slack.auth._pkce_pair",
         side_effect=RuntimeError("stop after setup"),
     ), pytest.raises(RuntimeError, match="stop after setup"):
-        run_oauth_flow()
+        run_oauth_flow(workspace_admin=True)
 
     output = capsys.readouterr().out
     assert "Slack OAuth (OIDC/PKCE) setup" in output
     assert "https://api.slack.com/apps" in output
     assert "Create New App > From a" in output
-    assert "manifest, and select that target workspace" in output
-    assert "select that target workspace" in output
-    assert "different workspace cannot authorize" in output
+    assert "As a target-workspace admin" in output
+    assert "Select the target workspace" in output
     assert "slack-app-manifest.yaml" in output
     assert "http://localhost:8766/slack/oauth/callback" in output
-    assert "use Request approval" in output
-    assert "Admin > Apps and workflows > Requests" in output
     assert "target workspace's Client ID" in output
     assert "The manifest registers the callback" in output
     assert "Only for a custom callback" in output
     assert "Enter it when prompted" in output
+
+
+def test_non_admin_oauth_instructions_explain_admin_handoff() -> None:
+    instructions = _oauth_setup_instructions(workspace_admin=False)
+
+    assert "Without target-workspace admin permission" in instructions
+    assert "Send the manifest path" in instructions
+    assert "Ask them to create AgentGraph in that target workspace" in instructions
+    assert "use Request approval" in instructions
+    assert "Admin > Apps and workflows > Requests" in instructions
 
 
 @pytest.mark.asyncio
