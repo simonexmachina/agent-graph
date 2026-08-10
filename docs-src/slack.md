@@ -56,8 +56,9 @@ The app must be approved under the workspace's app management policy. No client
 secret is used by the localhost PKCE flow. During authorization:
 
 - **Allow** completes authorization immediately.
-- **Request approval** submits the app to a Workspace Owner or app manager. Rerun
-  auth with the same Client ID after Slackbot confirms approval.
+- **Request approval** submits the app to a Workspace Owner or app manager.
+  AgentGraph prints copyable content for **Message for your Slack Admin**. Rerun auth
+  with the same Client ID after Slackbot confirms approval.
 - A blocked installation without a request action requires help from a Workspace
   Owner or app manager.
 

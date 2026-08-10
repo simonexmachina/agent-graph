@@ -659,6 +659,9 @@ def test_authorization_instructions_cover_slack_outcomes() -> None:
     assert "Request approval" in instructions
     assert "Installation blocked" in instructions
     assert "Slackbot confirms approval" in instructions
+    assert "Message for your Slack Admin" in instructions
+    assert "I'd like approval to connect AgentGraph to Slack" in instructions
+    assert "https://simonexmachina.github.io/agent-graph/" in instructions
 
 
 @pytest.mark.asyncio

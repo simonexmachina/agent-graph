@@ -39,9 +39,9 @@ and manifest to a Workspace Owner or app manager, then rerun and enter the suppl
 Client ID.
 
 During authorization, click **Allow** when available. If Slack shows **Request
-approval**, submit it and rerun with the same Client ID after Slackbot confirms
-approval. If installation is blocked without a request action, contact a Workspace
-Owner or app manager.
+approval**, use AgentGraph's copyable **Message for your Slack Admin**, submit it,
+and rerun with the same Client ID after Slackbot confirms approval. If installation
+is blocked without a request action, contact a Workspace Owner or app manager.
 
 For explicit OAuth selection, use `agentgraph auth slack --method oauth`.
 

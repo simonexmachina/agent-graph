@@ -73,6 +73,7 @@ def test_slack_docs_cover_admin_approval_configuration_and_revocation() -> None:
         "Enter a Client ID provided by a Slack admin",
         "Pick a workspace",
         "project website",
+        "Message for your Slack Admin",
         "Revoke access",
         "Browser-session fallback",
         "users:read.email",
