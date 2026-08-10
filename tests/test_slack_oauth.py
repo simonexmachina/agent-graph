@@ -662,6 +662,9 @@ def test_authorization_instructions_cover_slack_outcomes() -> None:
     assert "Message for your Slack Admin" in instructions
     assert "I'd like approval to connect AgentGraph to Slack" in instructions
     assert "https://simonexmachina.github.io/agent-graph/" in instructions
+    message = instructions.split("Message for your Slack Admin, you can use:\n\n", 1)[1]
+    message = message.split("\n\n    Rerun this command", 1)[0]
+    assert "\n" not in message
 
 
 @pytest.mark.asyncio
