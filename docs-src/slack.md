@@ -23,6 +23,11 @@ group direct messages, and profiles: `channels:read`, `channels:history`,
 `mpim:history`, and `users:read`. `users:read.email` is optional. A user may decline
 email access and continue with profile enrichment that omits email.
 
+Slack's manifest validator requires the base `users:read` scope to also appear in
+`user_optional` when the `users:read.email` extension is optional. AgentGraph still
+treats `users:read` as operationally required and validates that it was granted;
+only email enrichment may be declined.
+
 The admin must approve the app and its requested scopes under the workspace's app
 management policy. Copy the app's Client ID after creation; no client secret is used
 by the localhost PKCE flow.

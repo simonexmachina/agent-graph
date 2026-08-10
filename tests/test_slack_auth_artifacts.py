@@ -30,7 +30,10 @@ def test_slack_manifest_enables_pkce_rotation_and_scopes() -> None:
     assert settings["token_rotation_enabled"] is True
     assert oauth["redirect_urls"] == [DEFAULT_REDIRECT_URI]
     assert set(scope_config["user"]) == REQUIRED_SCOPES | OPTIONAL_SCOPES
-    assert set(scope_config["user_optional"]) == OPTIONAL_SCOPES
+    # Slack requires the base users:read scope in the optional list when its
+    # users:read.email extension is optional. AgentGraph still validates
+    # users:read as operationally required after authorization.
+    assert set(scope_config["user_optional"]) == OPTIONAL_SCOPES | {"users:read"}
 
 
 def test_slack_manifest_is_in_package_data() -> None:
