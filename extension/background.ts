@@ -164,7 +164,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   chrome.storage.local.remove("agentgraph_meta_cache")
     .then(async () => {
-      const meta = await refreshMeta();
+      const meta = await refreshMeta({ throwOnError: true });
       if (activeTabId !== null) {
         activeUrl = "";
         await onFocus(activeTabId);
@@ -186,7 +186,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "reload_url_patterns") return false;
 
-  refreshMeta()
+  refreshMeta({ throwOnError: true })
     .then(async (meta) => {
       if (activeTabId !== null) {
         activeUrl = "";

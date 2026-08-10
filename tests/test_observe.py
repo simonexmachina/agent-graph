@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -93,6 +94,33 @@ async def test_cli_meta_can_skip_dynamic_connector_patterns() -> None:
     assert result["platforms"] == ["rss"]
     assert result["url_patterns"] == ["https://static.example.com/*"]
     connector.observation_url_patterns.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cli_meta_skips_slow_dynamic_connector_and_returns_remaining_patterns() -> None:
+    from agentgraph.server.cli_api import cli_meta
+
+    slow_connector = MagicMock()
+    slow_connector.source = "rss"
+
+    async def slow_patterns() -> list[str]:
+        await asyncio.sleep(3)
+        return ["https://slow.example.com/*"]
+
+    slow_connector.observation_url_patterns = slow_patterns
+    fast_connector = MagicMock()
+    fast_connector.source = "web"
+    fast_connector.observation_url_patterns = AsyncMock(return_value=["http://localhost:3000/*"])
+    settings = MagicMock(dwell_threshold_seconds=3)
+
+    with (
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[slow_connector, fast_connector]),
+        patch("agentgraph.config.get_settings", return_value=settings),
+        patch("agentgraph.server.cli_api._DYNAMIC_PATTERN_TIMEOUT_SECONDS", 0.01),
+    ):
+        result = await cli_meta()
+
+    assert result["url_patterns"] == ["http://localhost:3000/*"]
 
 
 @pytest.mark.asyncio

@@ -97,11 +97,23 @@ async function resetDefaults(): Promise<void> {
 }
 
 async function reloadMetadata(): Promise<void> {
+  const button = document.getElementById("refresh-metadata") as HTMLButtonElement | null;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  }
+  setStatus("Refreshing observation patterns...");
   try {
-    renderObservationMetadata(await refreshObservationMetadata());
-    setStatus("Observation patterns refreshed", "success");
+    const meta = await refreshObservationMetadata();
+    renderObservationMetadata(meta);
+    setStatus(`Observation patterns refreshed (${meta.url_patterns.length})`, "success");
   } catch (error: unknown) {
     setStatus(error instanceof Error ? error.message : "Failed to refresh observation metadata", "error");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
   }
 }
 

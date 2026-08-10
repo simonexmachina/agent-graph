@@ -87,3 +87,12 @@ test("marks an observation as failed when the report request rejects", async () 
   assert.equal(status.http_status, undefined);
   assert.equal(status.error, "Connection refused");
 });
+
+test("can surface metadata refresh errors to explicit callers", async () => {
+  await configureDwell(new Response(null, { status: 503 }));
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+  await assert.rejects(
+    () => refreshMeta({ throwOnError: true }),
+    /Metadata refresh failed: HTTP 503/,
+  );
+});

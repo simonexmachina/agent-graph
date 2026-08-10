@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -15,6 +16,8 @@ from fastapi import APIRouter, HTTPException, Query
 router = APIRouter(prefix="/api/cli", tags=["cli"])
 
 _WHITESPACE_RE = re.compile(r"\s+")
+_DYNAMIC_PATTERN_TIMEOUT_SECONDS = 2.0
+logger = logging.getLogger(__name__)
 
 
 async def search_entities(
@@ -201,11 +204,19 @@ async def cli_meta(include_dynamic_url_patterns: bool = True) -> dict[str, Any]:
     seen_patterns: list[str] = []
     seen_set: set[str] = set()
     for c in connectors:
-        patterns = (
-            await c.observation_url_patterns()
-            if include_dynamic_url_patterns
-            else c.url_patterns
-        )
+        if include_dynamic_url_patterns:
+            try:
+                patterns = await asyncio.wait_for(
+                    c.observation_url_patterns(), timeout=_DYNAMIC_PATTERN_TIMEOUT_SECONDS
+                )
+            except TimeoutError:
+                logger.warning(
+                    "Timed out loading observation URL patterns for connector %s",
+                    c.source,
+                )
+                continue
+        else:
+            patterns = c.url_patterns
         for p in patterns:
             if p not in seen_set:
                 seen_patterns.append(p)

@@ -85,11 +85,13 @@ async function loadCachedMeta(): Promise<void> {
   }
 }
 
-export async function refreshMeta(): Promise<DwellMeta> {
+export async function refreshMeta(options: { throwOnError?: boolean } = {}): Promise<DwellMeta> {
   try {
     const serverBaseUrl = await getServerBaseUrl();
     const resp = await fetch(getMetaUrl(serverBaseUrl), { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) return { url_patterns: patterns, dwell_threshold_ms: thresholdMs };
+    if (!resp.ok) {
+      throw new Error(`Metadata refresh failed: HTTP ${resp.status}`);
+    }
     const data = await resp.json() as { url_patterns?: string[]; dwell_threshold_ms?: number };
     patterns = data.url_patterns ?? [];
     thresholdMs = data.dwell_threshold_ms ?? DEFAULT_THRESHOLD_MS;
@@ -99,7 +101,8 @@ export async function refreshMeta(): Promise<DwellMeta> {
       fetched_at: Date.now(),
     };
     await chrome.storage.local.set({ [CACHE_KEY]: cache });
-  } catch {
+  } catch (error: unknown) {
+    if (options.throwOnError) throw error;
     // Server not running — keep cached values
   }
 
