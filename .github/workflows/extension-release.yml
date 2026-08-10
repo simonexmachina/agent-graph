@@ -3,7 +3,7 @@ name: Extension Release
 on:
   push:
     tags:
-      - "v*"
+      - "extension-v*"
   workflow_dispatch:
 
 permissions:

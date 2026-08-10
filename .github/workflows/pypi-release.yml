@@ -1,0 +1,51 @@
+name: PyPI Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Verify release versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          uv run python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          root = Path.cwd()
+          expected = os.environ["RELEASE_TAG"].removeprefix("v")
+          projects = [root / "pyproject.toml", *sorted((root / "packages").glob("*/pyproject.toml"))]
+          versions = {
+              path.relative_to(root).as_posix(): tomllib.loads(path.read_text())["project"]["version"]
+              for path in projects
+          }
+          mismatches = {path: version for path, version in versions.items() if version != expected}
+          if mismatches:
+              raise SystemExit(f"Package versions do not match {expected}: {mismatches}")
+          PY
+
+      - name: Build distributions
+        run: uv build --all-packages
+
+      - name: Validate distributions
+        run: uvx twine check dist/*
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
