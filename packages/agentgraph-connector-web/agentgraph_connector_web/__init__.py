@@ -198,7 +198,6 @@ def _not_modified_entity(
         platform_entity_id=str(existing_entity.get("platform_entity_id") or url),
         title=_optional_str(existing_entity.get("title")),
         content=_optional_str(existing_entity.get("content")),
-        updated_at=datetime.now(UTC),
         metadata=metadata,
     )
 

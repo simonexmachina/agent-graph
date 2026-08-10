@@ -36,6 +36,9 @@ async def test_tables_exist(sqlite_backend: SQLiteBackend) -> None:
     assert "persons" not in names
     assert "platform_identities" not in names
 
+    columns = await sqlite_backend._fetchall("PRAGMA table_info(entities)")
+    assert "observed_at" in {row["name"] for row in columns}
+
 
 async def test_insert_person_and_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
     conn = sqlite_backend._conn_or_raise()
@@ -232,7 +235,7 @@ async def test_file_database_uses_separate_read_connection(tmp_path: Path) -> No
         await backend.close()
 
 
-async def test_existing_database_gets_cumulative_dwell_column(tmp_path: Path) -> None:
+async def test_existing_database_gets_observation_and_dwell_columns(tmp_path: Path) -> None:
     db_path = tmp_path / "old-schema.db"
     conn = sqlite3.connect(db_path)
     conn.executescript(
@@ -274,15 +277,19 @@ async def test_existing_database_gets_cumulative_dwell_column(tmp_path: Path) ->
     await migrated.initialize()
     try:
         columns = await migrated._fetchall("PRAGMA table_info(entities)")
-        assert "cumulative_dwell_ms" in {row["name"] for row in columns}
+        column_names = {row["name"] for row in columns}
+        assert "cumulative_dwell_ms" in column_names
+        assert "observed_at" in column_names
 
         entity = await migrated.get_entity_by_platform("gdocs", "test-doc-001")
         assert entity is not None
         assert entity["cumulative_dwell_ms"] == 0
+        assert entity["observed_at"] is None
 
         await migrated.increment_dwell_time("gdocs", "test-doc-001", 1234)
         updated = await migrated.get_entity_by_platform("gdocs", "test-doc-001")
         assert updated is not None
         assert updated["cumulative_dwell_ms"] == 1234
+        assert updated["observed_at"] is not None
     finally:
         await migrated.close()

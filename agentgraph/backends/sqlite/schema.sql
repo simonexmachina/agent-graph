@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS entities (
     created_at         TEXT,  -- ISO8601 UTC
     updated_at         TEXT,  -- ISO8601 UTC
     synced_at          TEXT,  -- ISO8601 UTC
+    observed_at        TEXT,  -- latest recognised browser dwell report, ISO8601 UTC
     last_accessed      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
     bookmarked         INTEGER NOT NULL DEFAULT 0,

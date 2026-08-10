@@ -142,6 +142,16 @@ def test_viewer_renders_recorded_dwell_time_in_entity_detail() -> None:
     assert "detailBody.appendChild(row('Dwell', formatDwell(entity.cumulative_dwell_ms)))" in viewer_html
 
 
+def test_viewer_renders_available_entity_timestamps_in_detail() -> None:
+    """Entity lifecycle and browser observation times are visible in the detail panel."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert "row('Created', formatDate(entity.created_at))" in viewer_html
+    assert "row('Updated', formatDate(entity.updated_at))" in viewer_html
+    assert "row('Accessed', formatDate(entity.last_accessed))" in viewer_html
+    assert "row('Observed', formatDate(entity.observed_at))" in viewer_html
+
+
 def test_viewer_renders_html_content_through_a_safe_reader() -> None:
     """Stored HTML uses the reader pipeline and has an escaped source fallback."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()

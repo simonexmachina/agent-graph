@@ -162,6 +162,30 @@ async def test_upsert_batch_maintains_one_current_fts_row_per_entity(
     assert rows[0]["content"] == "replacement wording"
 
 
+async def test_upsert_preserves_updated_at_when_connector_omits_it(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    original_updated_at = datetime(2026, 6, 8, 1, 23, 45, tzinfo=UTC)
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/unchanged",
+        title="Original title",
+        content="Original content",
+        updated_at=original_updated_at,
+    )
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+
+    unchanged = entity.model_copy(update={"updated_at": None})
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[unchanged]), {}, {})
+
+    stored = await sqlite_backend.get_entity_by_platform(
+        "web", "https://example.com/unchanged"
+    )
+    assert stored is not None
+    assert stored["updated_at"] == "2026-06-08T01:23:45Z"
+
+
 async def test_upsert_batch_skips_fts_rewrites_for_unchanged_text(
     sqlite_backend: SQLiteBackend,
 ) -> None:

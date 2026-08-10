@@ -176,6 +176,7 @@ async def test_fetch_web_entity_uses_document_validators_on_304() -> None:
 
     assert entity.title == "Cached title"
     assert entity.content == "Cached body"
+    assert entity.updated_at is None
     assert entity.metadata["status_code"] == 304
     assert entity.metadata["content_sha256"] == "cached-hash"
     assert entity.metadata["http_etag"] == '"cached"'

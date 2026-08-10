@@ -1097,6 +1097,7 @@ async def test_fetch_feed_hydrates_existing_entries_with_cache_validators(
     assert existing_arg["metadata"]["http_etag"] == '"cached"'
     entry = batch.entities[1]
     assert entry.content == "Cached body"
+    assert entry.updated_at is None
     assert entry.metadata["status_code"] == 304
     assert entry.metadata["http_etag"] == '"cached"'
 

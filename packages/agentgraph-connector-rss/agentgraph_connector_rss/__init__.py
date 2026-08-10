@@ -609,6 +609,7 @@ async def _fetch_entry_document(
         "web_url": str(fetched_metadata.get("web_url") or web_url),
         "link": _metadata_str(metadata, "link") or web_url,
     }
+    not_modified = fetched_metadata.get("status_code") == 304
     return EntityRecord(
         entity_type="Document",
         platform="rss",
@@ -616,7 +617,11 @@ async def _fetch_entry_document(
         title=fetched.title or (fallback.title if fallback else None),
         content=fetched.content or (fallback.content if fallback else None),
         created_at=fallback.created_at if fallback else None,
-        updated_at=fetched.updated_at or (fallback.updated_at if fallback else None),
+        updated_at=(
+            None
+            if not_modified
+            else fetched.updated_at or (fallback.updated_at if fallback else None)
+        ),
         metadata=rss_metadata,
     )
 

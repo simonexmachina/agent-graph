@@ -227,6 +227,35 @@ def test_graph_load_does_not_wait_indefinitely_for_metadata(page: Page) -> None:
     assert elapsed < 1.5
 
 
+def test_viewer_uses_recent_twenty_node_default_state(page: Page) -> None:
+    with _serve_viewer([], []) as url:
+        page.goto(url)
+
+        expect(page).to_have_url(f"{url}?since=24h&limit=20")
+        expect(page.locator("#since-filter")).to_have_value("24h")
+        expect(page.locator("#limit-slider")).to_have_value("20")
+        expect(page.locator("#limit-display")).to_have_text("20")
+
+
+def test_viewer_reset_restores_recent_twenty_node_default_state(page: Page) -> None:
+    with _serve_viewer([], []) as url:
+        page.goto(f"{url}?since=7d&limit=100")
+        page.locator("#reset-btn").click()
+
+        expect(page).to_have_url(f"{url}?since=24h&limit=20")
+        expect(page.locator("#since-filter")).to_have_value("24h")
+        expect(page.locator("#limit-slider")).to_have_value("20")
+
+
+def test_viewer_preserves_explicit_all_time_state(page: Page) -> None:
+    with _serve_viewer([], []) as url:
+        page.goto(f"{url}?since=&limit=50")
+
+        expect(page).to_have_url(f"{url}?since=&limit=50")
+        expect(page.locator("#since-filter")).to_have_value("")
+        expect(page.locator("#limit-slider")).to_have_value("50")
+
+
 def test_list_highlights_selected_entity_and_updates_on_row_click(page: Page) -> None:
     nodes = [_node(1, "First document"), _node(2, "Second document")]
     with _serve_viewer(nodes, []) as url:
@@ -324,9 +353,29 @@ def test_detail_panel_focus_button_focuses_the_displayed_entity(page: Page) -> N
         focus_button.click()
 
         expect(page.locator("#lookup-input")).to_have_value("node-1")
-        expect(page).to_have_url(f"{url}?node_id=node-1&selected_id=node-1")
+        expect(page).to_have_url(
+            f"{url}?since=24h&limit=20&node_id=node-1&selected_id=node-1"
+        )
         expect(page).to_have_title("AgentGraph Viewer | Focus: Focus target")
         expect(focus_button).to_have_attribute("aria-pressed", "true")
+
+
+def test_detail_panel_shows_available_entity_timestamps(page: Page) -> None:
+    timestamped = _node(1, "Timestamped document")
+    timestamped.update(
+        {
+            "created_at": "2026-06-01T01:00:00Z",
+            "updated_at": "2026-06-02T02:00:00Z",
+            "last_accessed": "2026-06-03T03:00:00Z",
+            "observed_at": "2026-06-04T04:00:00Z",
+        }
+    )
+    with _serve_viewer([timestamped], []) as url:
+        _wait_for_graph(page, url, 1)
+        page.evaluate("() => window.__agentGraphViewer.cy.getElementById('node-1').emit('tap')")
+
+        labels = page.locator("#detail-body .detail-label")
+        expect(labels).to_contain_text(["Created", "Updated", "Accessed", "Observed"])
 
 
 @pytest.mark.parametrize("view", ["graph", "list"])
@@ -408,7 +457,9 @@ def test_i_hides_and_shows_url_selected_detail_in_list_mode(page: Page) -> None:
         page.locator("#detail-title").click()
         page.keyboard.press("i")
         expect(page.locator("#detail")).not_to_have_class("open")
-        expect(page).to_have_url(f"{url}?limit=100&node_id=node-1&selected_id=node-1&depth=0&view=list")
+        expect(page).to_have_url(
+            f"{url}?since=24h&limit=100&node_id=node-1&selected_id=node-1&depth=0&view=list"
+        )
         expect(selected_row).to_have_attribute("aria-selected", "true")
 
         page.keyboard.press("i")
