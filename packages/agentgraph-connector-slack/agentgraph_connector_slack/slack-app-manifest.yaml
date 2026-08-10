@@ -1,5 +1,5 @@
 display_information:
-  name: AgentGraph Internal
+  name: AgentGraph
   description: Local Slack indexing for AgentGraph
   background_color: "#1f2937"
 oauth_config:

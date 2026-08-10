@@ -25,6 +25,7 @@ def test_slack_manifest_enables_pkce_rotation_and_scopes() -> None:
     scope_config = cast(dict[str, list[str]], oauth["scopes"])
     settings = cast(dict[str, Any], manifest["settings"])
 
+    assert manifest["display_information"]["name"] == "AgentGraph"
     assert oauth["pkce_enabled"] is True
     assert oauth["token_management_enabled"] is True
     assert settings["token_rotation_enabled"] is True
