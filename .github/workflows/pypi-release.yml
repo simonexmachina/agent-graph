@@ -40,10 +40,16 @@ jobs:
           PY
 
       - name: Build distributions
-        run: uv build --all-packages
+        run: |
+          uv build --package agentgraph-server --out-dir dist/agentgraph-server
+          uv build --package agentgraph-connector-discord --out-dir dist/agentgraph-connector-discord
+          uv build --package agentgraph-connector-google --out-dir dist/agentgraph-connector-google
+          uv build --package agentgraph-connector-rss --out-dir dist/agentgraph-connector-rss
+          uv build --package agentgraph-connector-slack --out-dir dist/agentgraph-connector-slack
+          uv build --package agentgraph-connector-web --out-dir dist/agentgraph-connector-web
 
       - name: Validate distributions
-        run: uvx twine check dist/*
+        run: uvx twine check dist/*/*
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -52,7 +58,7 @@ jobs:
           path: dist/
           retention-days: 1
 
-  publish:
+  publish-server:
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -67,3 +73,33 @@ jobs:
 
       - name: Publish distributions
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/agentgraph-server/
+
+  publish-connectors:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - agentgraph-connector-discord
+          - agentgraph-connector-google
+          - agentgraph-connector-rss
+          - agentgraph-connector-slack
+          - agentgraph-connector-web
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.package }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+
+      - name: Publish distribution
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/${{ matrix.package }}/
