@@ -4,26 +4,42 @@ description = "Create an internal Slack app and authenticate AgentGraph with use
 nav_title = "Slack auth"
 section = "Configuration"
 order = 20
-summary = "Slack user OAuth with PKCE is the default. Workspace admins create and approve an internal app; browser-session credentials remain an explicit fallback."
+summary = "Slack user OAuth with PKCE is the default. The guided flow helps admins create an internal app and helps members request one; browser-session credentials remain an explicit fallback."
 output = "slack.html"
 source_path = "docs-src/slack.md"
 +++
 
-## Create the internal app
+## Start the guided flow
 
-Ask an admin of the workspace AgentGraph will connect to open
-`https://api.slack.com/apps`, choose **Create New App → From a manifest**, select
-that target workspace, and use the packaged manifest at
-`packages/agentgraph-connector-slack/agentgraph_connector_slack/slack-app-manifest.yaml`.
-The manifest enables PKCE, rotating tokens, and registers the default callback
-`http://localhost:8766/slack/oauth/callback`; no additional redirect setup is needed.
+Run auth and choose Slack user OAuth with PKCE. AgentGraph reuses a Client ID stored
+with the selected account or reads `AGENTGRAPH_SLACK_CLIENT_ID`. On first setup it
+asks whether you have admin permission in the workspace you want to connect.
+
+```bash
+agentgraph auth slack
+```
+
+An admin follows the printed steps to open `https://api.slack.com/apps`, choose
+**Create New App → From an app manifest**, select the target workspace, paste the
+printed manifest, approve the app, and enter its Client ID.
+
+A non-admin chooses either **Enter a Client ID provided by a Slack admin** or **Set
+up or request the AgentGraph app**. The second option asks whether the target
+workspace appears in Slack's **Pick a workspace** list. When it appears, the member
+can create AgentGraph from the printed manifest and enter its Client ID. When it does
+not, AgentGraph prints a copyable request for a Workspace Owner or app manager along
+with the complete manifest. Rerun the command and choose the first non-admin option
+after the admin supplies the Client ID.
+
+The packaged manifest enables PKCE and rotating tokens and contains the only
+supported callback, `http://localhost:8766/slack/oauth/callback`.
 
 A newly created, undistributed Slack app belongs to the workspace selected during
 creation and cannot be authorized into a different workspace. Creating AgentGraph in
 a personal or test workspace will therefore make only that workspace eligible in the
-OAuth chooser. The target workspace must have its own admin-created app and Client
-ID. Enabling cross-workspace app distribution is a separate deployment model and is
-outside this internal-app setup.
+OAuth chooser. The target workspace must have its own app and Client ID. Enabling
+cross-workspace app distribution is a separate deployment model and is outside this
+internal-app setup.
 
 The required user scopes cover public channels, private channels, direct messages,
 group direct messages, and profiles: `channels:read`, `channels:history`,
@@ -36,43 +52,35 @@ Slack's manifest validator requires the base `users:read` scope to also appear i
 treats `users:read` as operationally required and validates that it was granted;
 only email enrichment may be declined.
 
-The admin must approve the app and its requested scopes under the workspace's app
-management policy. Copy the app's Client ID after creation; no client secret is used
-by the localhost PKCE flow.
+The app must be approved under the workspace's app management policy. No client
+secret is used by the localhost PKCE flow. During authorization:
 
-The target-workspace admin can approve the app and its required and optional scopes
-before sending you its Client ID. If the workspace permits members to create internal
-apps, you may instead create it while selecting that workspace, click **Request
-approval**, and have a Workspace Owner or app manager review **Admin → Apps and
-workflows → Requests**. If the target workspace does not appear during app creation
-or OAuth, ensure your browser is signed in to it and that the Client ID belongs to an
-app created there.
+- **Allow** completes authorization immediately.
+- **Request approval** submits the app to a Workspace Owner or app manager. Rerun
+  auth with the same Client ID after Slackbot confirms approval.
+- A blocked installation without a request action requires help from a Workspace
+  Owner or app manager.
+
+Slack cannot offer an app approval request until the app exists in the target
+workspace. If the target workspace does not appear during app creation, ensure the
+browser is signed in to it; if it remains absent, use AgentGraph's printed admin
+request.
 
 ## Configure and authorize
 
-AgentGraph prompts for the Client ID on first authorization and stores it with that
-account's rotating credentials. To skip the prompt, set it in the environment or
-AgentGraph config `.env`:
+AgentGraph accepts the Client ID in the guided admin and non-admin flows and stores it
+with that account's rotating credentials. To supply it ahead of time, set it in the
+environment or AgentGraph config `.env`:
 
 ```bash
 AGENTGRAPH_SLACK_CLIENT_ID=1234567890.1234567890
 ```
 
-Only when using a different localhost callback, the admin must register it on the
-Slack app and its exact value must be configured locally. Slack requires the
-authorization request and registered redirect to match exactly.
-
-```bash
-AGENTGRAPH_SLACK_REDIRECT_URI=http://localhost:9000/slack/oauth/callback
-```
-
-Run auth and choose official Slack user OAuth (OIDC/PKCE). AgentGraph asks whether
-you have admin permission in the target workspace. Admins receive direct creation
-and approval steps; non-admins receive a handoff checklist for the target admin and
-the member-request path where available. AgentGraph then opens Slack, validates the
-returned state, exchanges the code with PKCE, and waits at most five minutes for the
-callback. Use `--method oauth` to bypass only the method chooser; the workspace-role
-question still appears.
+AgentGraph opens Slack, validates the returned state, exchanges the code with PKCE,
+and waits at most five minutes for the callback. If an approval request is pending,
+the timeout tells the user to rerun after Slackbot confirms it. Use `--method oauth`
+to bypass only the method chooser; setup questions still appear when no Client ID is
+stored or configured.
 
 ```bash
 agentgraph auth slack

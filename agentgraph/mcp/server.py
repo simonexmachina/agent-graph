@@ -127,7 +127,9 @@ async def authenticate_provider_tool(
     Args:
         provider: Generic auth provider key, such as "google" or "slack".
         args: Connector-owned auth options. Slack accepts
-            ["--method", "oauth|browser"], plus browser credential options.
+            ["--method", "oauth|browser"], plus browser credential options. Slack
+            OAuth through MCP requires a stored Client ID or
+            AGENTGRAPH_SLACK_CLIENT_ID; use the CLI for guided app setup.
         account_id: Existing account identity to replace.
         add: Add another identity and make it the default.
 

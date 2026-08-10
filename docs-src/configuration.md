@@ -30,10 +30,9 @@ Connector configuration that is not a secret, such as RSS feed URLs, is stored i
 OAuth credentials remain in `credentials.json`.
 
 Slack OAuth accepts `AGENTGRAPH_SLACK_CLIENT_ID` or prompts for the Client ID on
-first authorization, then stores it per account. Its callback defaults to
-`http://localhost:8766/slack/oauth/callback`; set `AGENTGRAPH_SLACK_REDIRECT_URI`
-only when the exact override is registered on the internal Slack app. See
-[Slack authentication](/slack.html).
+first authorization, then stores it per account. The packaged app manifest contains
+the fixed callback `http://localhost:8766/slack/oauth/callback`. See [Slack
+authentication](/slack.html).
 
 ## Storage backend
 
@@ -93,12 +92,6 @@ FastEmbed model used for embeddings.
 
 Optional prompt override for Slack OAuth. Use the Client ID of the admin-created
 internal Slack app. AgentGraph stores it per authenticated account.
-
-### `AGENTGRAPH_SLACK_REDIRECT_URI`
-
-Default: `http://localhost:8766/slack/oauth/callback`
-
-Slack OAuth callback. An override must exactly match a redirect registered on the app.
 
 ## Slack workspace filter
 

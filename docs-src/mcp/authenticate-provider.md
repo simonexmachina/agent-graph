@@ -23,6 +23,8 @@ authenticate_provider_tool(provider, args = null, account_id = null, add = false
 - `account_id`: optional existing identity to replace
 - `add`: add another identity and make it the default
 
-Slack OAuth is interactive and waits for the local PKCE callback. Browser credential
-arguments select the explicit fallback. The result reports `authenticated: true` or
-an error string.
+Slack OAuth waits for the local PKCE callback. For MCP, provide
+`AGENTGRAPH_SLACK_CLIENT_ID` or reuse an account with a stored Client ID; use the CLI
+for the guided admin-permission, app-creation, and Client ID prompts. Browser
+credential arguments select the explicit fallback. The result reports
+`authenticated: true` or an error string.

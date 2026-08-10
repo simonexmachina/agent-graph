@@ -49,6 +49,8 @@ def test_slack_auth_skill_documents_oauth_and_explicit_fallback() -> None:
     assert "agentgraph auth slack" in skill
     assert "interactive chooser" in skill
     assert "AGENTGRAPH_SLACK_CLIENT_ID" in skill
+    assert "Enter a Client ID provided by a Slack admin" in skill
+    assert "Pick a workspace" in skill
     assert "--method browser" in skill
     assert "users:read.email" in skill
     assert "agentgraph auth remove slack" in skill
@@ -64,16 +66,20 @@ def test_graph_skill_has_cli_and_mcp_auth_parity() -> None:
 def test_slack_docs_cover_admin_approval_configuration_and_revocation() -> None:
     guide = (ROOT / "docs-src" / "slack.md").read_text()
     for required in (
-        "workspace admin",
+        "admin permission",
         "approve",
         "AGENTGRAPH_SLACK_CLIENT_ID",
-        "AGENTGRAPH_SLACK_REDIRECT_URI",
         DEFAULT_REDIRECT_URI,
+        "Enter a Client ID provided by a Slack admin",
+        "Pick a workspace",
         "Revoke access",
         "Browser-session fallback",
         "users:read.email",
     ):
         assert required in guide
+    assert "AGENTGRAPH_SLACK_REDIRECT_URI" not in guide
+    configuration = (ROOT / "docs-src" / "configuration.md").read_text()
+    assert "AGENTGRAPH_SLACK_REDIRECT_URI" not in configuration
 
 
 def test_mcp_authentication_operation_is_documented() -> None:
