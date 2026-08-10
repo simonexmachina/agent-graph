@@ -21,15 +21,15 @@ agentgraph auth slack
 
 An admin follows the printed steps to open `https://api.slack.com/apps`, choose
 **Create New App → From an app manifest**, select the target workspace, paste the
-printed manifest, approve the app, and enter its Client ID.
+printed manifest into Slack's **JSON** tab, approve the app, and enter its Client ID.
 
 A non-admin chooses either **Enter a Client ID provided by a Slack admin** or **Set
 up or request the AgentGraph app**. The second option asks whether the target
 workspace appears in Slack's **Pick a workspace** list. When it appears, the member
-can create AgentGraph from the printed manifest and enter its Client ID. When it does
-not, AgentGraph prints a copyable request for a Workspace Owner or app manager along
-with the project website and complete manifest. Rerun the command and choose the
-first non-admin option after the admin supplies the Client ID.
+can create AgentGraph from the printed JSON manifest and enter its Client ID. When it
+does not, AgentGraph prints a copyable request for a Workspace Owner or app manager
+along with the project website and complete JSON manifest. Rerun the command and
+choose the first non-admin option after the admin supplies the Client ID.
 
 The packaged manifest enables PKCE and rotating tokens and contains the only
 supported callback, `http://localhost:8766/slack/oauth/callback`.

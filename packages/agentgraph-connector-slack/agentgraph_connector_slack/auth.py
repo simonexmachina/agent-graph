@@ -234,12 +234,12 @@ def _exchange_oauth_code(
 
 
 def _manifest_text() -> str:
-    manifest_path = Path(__file__).with_name("slack-app-manifest.yaml")
+    manifest_path = Path(__file__).with_name("slack-app-manifest.json")
     return manifest_path.read_text().rstrip()
 
 
 def _manifest_block() -> str:
-    return f"AgentGraph Slack app manifest:\n\n{_manifest_text()}\n"
+    return f"AgentGraph Slack app manifest (JSON):\n\n{_manifest_text()}\n"
 
 
 def _admin_setup_instructions() -> str:
@@ -248,7 +248,7 @@ def _admin_setup_instructions() -> str:
         "  1. Open https://api.slack.com/apps\n"
         "  2. Choose Create New App > From an app manifest.\n"
         "  3. Select the workspace you want AgentGraph to connect to.\n"
-        "  4. Paste the manifest printed below.\n"
+        "  4. Select the JSON tab and paste the manifest printed below.\n"
         "  5. Create and approve the app. Email access is optional.\n"
         "  6. Open Basic Information > App Credentials and copy the Client ID.\n\n"
         f"{_manifest_block()}"
@@ -269,7 +269,7 @@ def _member_visible_workspace_instructions() -> str:
     return (
         "\nCreate the AgentGraph Slack app:\n\n"
         "  1. Select that workspace and continue.\n"
-        "  2. Paste the manifest printed below.\n"
+        "  2. Select the JSON tab and paste the manifest printed below.\n"
         "  3. Review the configuration and choose Create.\n"
         "  4. Open Basic Information > App Credentials and copy the Client ID.\n\n"
         f"{_manifest_block()}"
@@ -281,12 +281,12 @@ def _member_missing_workspace_instructions() -> str:
         "\nThe workspace is not available in Slack's app creation list.\n\n"
         "Ask a Workspace Owner or app manager either to give you permission to\n"
         "create internal apps, or to create and approve AgentGraph using the\n"
-        "manifest below.\n\n"
+        "JSON manifest below.\n\n"
         "Example request:\n\n"
         "  Hi, I'd like to connect AgentGraph to Slack. AgentGraph indexes Slack\n"
         "  conversations that I can access into a local knowledge graph.\n\n"
         "  Could you either give me permission to create an internal Slack app,\n"
-        "  or create and approve AgentGraph using the manifest below?\n\n"
+        "  or create and approve AgentGraph using the JSON manifest below?\n\n"
         "  The required user scopes read public channels, private channels, DMs,\n"
         "  group DMs, and member profiles. Email access is optional. Once the app\n"
         "  is approved, please send me its Client ID. No client secret is needed.\n\n"

@@ -547,8 +547,8 @@ def test_guided_oauth_admin_creates_app_and_enters_client_id(
     )
     output = capsys.readouterr().out
     assert "Create the AgentGraph Slack app" in output
-    assert "AgentGraph Slack app manifest" in output
-    assert "display_information:" in output
+    assert "AgentGraph Slack app manifest (JSON)" in output
+    assert '"display_information": {' in output
 
 
 def test_non_admin_can_enter_admin_provided_client_id(
@@ -597,7 +597,8 @@ def test_non_admin_can_create_app_when_workspace_is_visible(
     output = capsys.readouterr().out
     assert "At Pick a workspace" in output
     assert "Select that workspace" in output
-    assert "AgentGraph Slack app manifest" in output
+    assert "AgentGraph Slack app manifest (JSON)" in output
+    assert "Select the JSON tab" in output
 
 
 def test_non_admin_missing_workspace_gets_copyable_admin_request(
@@ -617,12 +618,12 @@ def test_non_admin_missing_workspace_gets_copyable_admin_request(
     oauth.assert_not_called()
     output = capsys.readouterr().out
     assert "The workspace is not available in Slack's app creation list" in output
-    assert "using the manifest below" in output
+    assert "using the JSON manifest below" in output
     assert "Example request" in output
     assert "No client secret is needed" in output
     assert "https://simonexmachina.github.io/agent-graph/" in output
-    assert "AgentGraph Slack app manifest" in output
-    assert "display_information:" in output
+    assert "AgentGraph Slack app manifest (JSON)" in output
+    assert '"display_information": {' in output
     assert "choose option 1" in output
 
 

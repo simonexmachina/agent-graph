@@ -27,7 +27,8 @@ permission in the target workspace.
 
 Admins create AgentGraph at `https://api.slack.com/apps` with **Create New App →
 From an app manifest**, select the target workspace, paste the manifest printed by
-AgentGraph, approve it, and enter its Client ID. The manifest includes the only
+AgentGraph into Slack's **JSON** tab, approve it, and enter its Client ID. The
+manifest includes the only
 supported callback, `http://localhost:8766/slack/oauth/callback`.
 
 Non-admins choose either **Enter a Client ID provided by a Slack admin** or **Set up

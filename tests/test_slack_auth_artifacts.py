@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
 from typing import Any, cast
 
-import yaml
 from agentgraph_connector_slack.auth import (
     DEFAULT_REDIRECT_URI,
     OPTIONAL_SCOPES,
@@ -15,11 +15,11 @@ from agentgraph_connector_slack.auth import (
 
 ROOT = Path(__file__).resolve().parent.parent
 SLACK_PACKAGE = ROOT / "packages" / "agentgraph-connector-slack"
-MANIFEST_PATH = SLACK_PACKAGE / "agentgraph_connector_slack" / "slack-app-manifest.yaml"
+MANIFEST_PATH = SLACK_PACKAGE / "agentgraph_connector_slack" / "slack-app-manifest.json"
 
 
 def test_slack_manifest_enables_pkce_rotation_and_scopes() -> None:
-    raw = yaml.safe_load(MANIFEST_PATH.read_text())
+    raw = json.loads(MANIFEST_PATH.read_text())
     manifest = cast(dict[str, Any], raw)
     oauth = cast(dict[str, Any], manifest["oauth_config"])
     scope_config = cast(dict[str, list[str]], oauth["scopes"])
@@ -40,7 +40,7 @@ def test_slack_manifest_enables_pkce_rotation_and_scopes() -> None:
 def test_slack_manifest_is_in_package_data() -> None:
     config = tomllib.loads((SLACK_PACKAGE / "pyproject.toml").read_text())
     assert config["tool"]["setuptools"]["package-data"]["agentgraph_connector_slack"] == [
-        "slack-app-manifest.yaml"
+        "slack-app-manifest.json"
     ]
 
 
