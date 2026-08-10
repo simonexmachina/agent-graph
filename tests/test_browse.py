@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -661,6 +662,55 @@ async def test_search_with_node_id_intersects_neighbourhood() -> None:
     assert outside_neighbourhood["id"] not in node_ids
     assert in_neighbourhood["id"] in node_ids
     assert focal["id"] in node_ids  # focal always present
+
+
+@pytest.mark.parametrize(
+    ("since", "included_updated_at", "excluded_updated_at"),
+    [
+        (
+            "24h",
+            (datetime.now(UTC) - timedelta(hours=1)).isoformat(),
+            (datetime.now(UTC) - timedelta(hours=25)).isoformat(),
+        ),
+        (
+            "2025-01-02T00:00:00Z",
+            "2025-01-02T00:00:01Z",
+            "2025-01-01T23:59:59Z",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_search_filters_since_using_parsed_timestamps(
+    since: str,
+    included_updated_at: str,
+    excluded_updated_at: str,
+) -> None:
+    """Search supports the same relative and ISO since values as entity listing."""
+    from agentgraph.server.cli_api import cli_browse
+
+    included = _entity(title="Recent match")
+    included["updated_at"] = included_updated_at
+    excluded = _entity(title="Old match")
+    excluded["updated_at"] = excluded_updated_at
+
+    with patch(
+        "agentgraph.server.cli_api.search_entities",
+        AsyncMock(return_value=[included, excluded]),
+    ), patch(
+        "agentgraph.server.cli_api.get_edges_for_entities",
+        AsyncMock(return_value=[]),
+    ):
+        result = await cli_browse(
+            node_id=None,
+            entity_type=[],
+            search="match",
+            platform=None,
+            since=since,
+            depth=2,
+            limit=50,
+        )
+
+    assert [node["id"] for node in result["nodes"]] == [included["id"]]
 
 
 @pytest.mark.asyncio

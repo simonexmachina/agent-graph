@@ -153,7 +153,7 @@ async def query_by_filter(
     authored_by_me: bool = False,
     has_attachments: bool = False,
 ) -> list[EntityResult]:
-    since_dt = _parse_since(since) if since else None
+    since_dt = parse_since(since) if since else None
     authored_by: list[str] | None = _resolve_me() if authored_by_me else None
     results = await get_backend().query_by_filter(
         entity_type, filters, limit, order_by, since_dt, authored_by,
@@ -169,7 +169,7 @@ async def list_entities(
     since: str | None = None,
     limit: int = 50,
 ) -> list[EntityResult]:
-    since_dt = _parse_since(since) if since else None
+    since_dt = parse_since(since) if since else None
     results = await get_backend().list_entities(entity_types, platform, since_dt, limit)
     _enrich_web_url(results)
     return results
@@ -184,7 +184,7 @@ async def list_entities_page(
     order_by: str | None = "last_accessed",
     order_dir: str = "desc",
 ) -> tuple[list[EntityResult], int]:
-    since_dt = _parse_since(since) if since else None
+    since_dt = parse_since(since) if since else None
     results, total = await get_backend().list_entities_page(
         entity_types, platform, since_dt, limit, offset, order_by, order_dir
     )
@@ -234,7 +234,7 @@ def is_http_url(target: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def _parse_since(since: str) -> datetime:
+def parse_since(since: str) -> datetime:
     """Parse a relative duration (12h, 30m, 2d) or ISO timestamp string."""
     m = re.fullmatch(r"(\d+)(h|m|d)", since.strip())
     if m:

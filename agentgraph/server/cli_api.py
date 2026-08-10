@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -113,6 +114,12 @@ async def query_by_filter(
         authored_by_me=authored_by_me,
         has_attachments=has_attachments,
     )
+
+
+def parse_since(since: str) -> datetime:
+    from agentgraph.graph.query import parse_since as impl
+
+    return impl(since)
 
 
 def _normalise_display_text(value: object) -> str | None:
@@ -283,6 +290,21 @@ def _viewer_sort_value(node: dict[str, Any], order_by: str) -> str:
     return value.casefold() if isinstance(value, str) else ""
 
 
+def _viewer_updated_at_on_or_after(node: dict[str, Any], cutoff: datetime) -> bool:
+    updated_at = node.get("updated_at")
+    if not isinstance(updated_at, str):
+        return False
+    try:
+        updated_at_dt = datetime.fromisoformat(updated_at)
+    except ValueError:
+        return False
+    if updated_at_dt.tzinfo is None:
+        updated_at_dt = updated_at_dt.replace(tzinfo=UTC)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=UTC)
+    return updated_at_dt >= cutoff
+
+
 def _page_entities(
     nodes: list[dict[str, Any]],
     page: int,
@@ -370,7 +392,8 @@ async def _resolve_viewer_node_set(
     if platform and (search or neighbourhood_ids is not None):
         nodes = [n for n in nodes if n.get("platform") == platform]
     if since and (search or neighbourhood_ids is not None):
-        nodes = [n for n in nodes if (n.get("updated_at") or "") >= since]
+        cutoff = parse_since(since)
+        nodes = [n for n in nodes if _viewer_updated_at_on_or_after(n, cutoff)]
 
     has_more = len(nodes) > limit
     nodes = nodes[:limit]
