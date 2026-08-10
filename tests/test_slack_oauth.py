@@ -522,6 +522,27 @@ def test_guided_oauth_uses_available_client_id_without_setup() -> None:
     )
 
 
+def test_guided_oauth_uses_command_line_client_id_without_setup() -> None:
+    with (
+        patch("agentgraph_connector_slack.auth._available_oauth_client_id") as available,
+        patch("typer.confirm") as confirm,
+        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+    ):
+        run_guided_oauth_flow(
+            account_id=None,
+            add=True,
+            client_id="command-line-client-id",
+        )
+
+    available.assert_not_called()
+    confirm.assert_not_called()
+    oauth.assert_called_once_with(
+        account_id=None,
+        add=True,
+        client_id="command-line-client-id",
+    )
+
+
 def test_guided_oauth_admin_creates_app_and_enters_client_id(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -624,7 +645,11 @@ def test_non_admin_missing_workspace_gets_copyable_admin_request(
     assert "https://simonexmachina.github.io/agent-graph/" in output
     assert "AgentGraph Slack app manifest (JSON)" in output
     assert '"display_information": {' in output
-    assert "choose option 1" in output
+    assert "agentgraph auth slack --add --client-id <client-id>" in output
+    message = output.split("Example request:\n\n", 1)[1]
+    message = message.split("\n\nAgentGraph Slack app manifest", 1)[0]
+    assert "\n" not in message
+    assert message == message.strip()
 
 
 def test_setup_instructions_only_include_callback_inside_manifest() -> None:

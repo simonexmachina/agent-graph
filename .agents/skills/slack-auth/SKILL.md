@@ -35,8 +35,12 @@ Non-admins choose either **Enter a Client ID provided by a Slack admin** or **Se
 the AgentGraph Slack App**. The setup path checks whether the target workspace
 appears under **Pick a workspace**. If it does, create the app from the printed
 manifest and enter its Client ID. If it does not, send the printed example request
-and manifest to a Workspace Owner or app manager, then rerun and enter the supplied
-Client ID.
+and manifest to a Workspace Owner or app manager, then rerun with the supplied Client
+ID:
+
+```bash
+agentgraph auth slack --add --client-id '<client-id>'
+```
 
 During authorization, click **Allow** when available. If Slack shows **Request
 approval**, use AgentGraph's copyable **Message for your Slack Admin**, submit it,
@@ -72,7 +76,9 @@ case "$TOKEN" in xoxc-*) ;; *) echo "token did not use xoxc prefix" >&2; exit 1;
 agentgraph auth slack --method browser --xoxc-token "$TOKEN" --d-cookie "$COOKIE"
 ```
 
-Supplying `--xoxc-token` or `--d-cookie` without `--method` also infers browser mode for compatibility. Never combine them with `--method oauth`.
+Supplying `--client-id` without `--method` infers OAuth. Supplying `--xoxc-token` or
+`--d-cookie` without `--method` infers browser mode for compatibility. Never combine
+OAuth and browser credential options.
 
 ## Revocation
 

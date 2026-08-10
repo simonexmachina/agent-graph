@@ -49,6 +49,7 @@ def test_slack_auth_skill_documents_oauth_and_explicit_fallback() -> None:
     assert "agentgraph auth slack" in skill
     assert "interactive chooser" in skill
     assert "AGENTGRAPH_SLACK_CLIENT_ID" in skill
+    assert "--add --client-id" in skill
     assert "Enter a Client ID provided by a Slack admin" in skill
     assert "Pick a workspace" in skill
     assert "--method browser" in skill
@@ -69,6 +70,7 @@ def test_slack_docs_cover_admin_approval_configuration_and_revocation() -> None:
         "admin permission",
         "approve",
         "AGENTGRAPH_SLACK_CLIENT_ID",
+        "--add --client-id",
         DEFAULT_REDIRECT_URI,
         "Enter a Client ID provided by a Slack admin",
         "Pick a workspace",

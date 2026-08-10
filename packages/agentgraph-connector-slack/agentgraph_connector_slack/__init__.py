@@ -162,18 +162,19 @@ class SlackConnector(BaseConnector):
         )
 
         method: str | None = None
+        client_id: str | None = None
         xoxc_token: str | None = None
         d_cookie: str | None = None
         index = 0
         while index < len(args):
             arg = args[index]
-            if arg in {"--method", "--xoxc-token", "--d-cookie"}:
+            if arg in {"--method", "--client-id", "--xoxc-token", "--d-cookie"}:
                 if index + 1 >= len(args):
                     raise ValueError(f"{arg} requires a value")
                 value = args[index + 1]
                 index += 1
             elif any(arg.startswith(f"{option}=") for option in (
-                "--method", "--xoxc-token", "--d-cookie"
+                "--method", "--client-id", "--xoxc-token", "--d-cookie"
             )):
                 option, value = arg.split("=", 1)
                 arg = option
@@ -181,6 +182,10 @@ class SlackConnector(BaseConnector):
                 raise ValueError(f"Unknown Slack authentication option: {arg}")
             if arg == "--method":
                 method = value
+            elif arg == "--client-id":
+                client_id = value.strip()
+                if not client_id:
+                    raise ValueError("--client-id requires a non-empty value")
             elif arg == "--xoxc-token":
                 xoxc_token = value
             else:
@@ -192,7 +197,11 @@ class SlackConnector(BaseConnector):
         browser_options = xoxc_token is not None or d_cookie is not None
         if method == "oauth" and browser_options:
             raise ValueError("--xoxc-token and --d-cookie cannot be used with --method oauth")
-        selected_method = method or ("browser" if browser_options else None)
+        if method == "browser" and client_id is not None:
+            raise ValueError("--client-id cannot be used with --method browser")
+        selected_method = method or (
+            "browser" if browser_options else "oauth" if client_id is not None else None
+        )
         if selected_method is None:
             run_interactive_auth_flow(account_id=account_id, add=add)
             return
@@ -204,7 +213,7 @@ class SlackConnector(BaseConnector):
                 d_cookie=d_cookie,
             )
             return
-        run_guided_oauth_flow(account_id=account_id, add=add)
+        run_guided_oauth_flow(account_id=account_id, add=add, client_id=client_id)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:

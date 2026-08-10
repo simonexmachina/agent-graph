@@ -283,18 +283,18 @@ def _member_missing_workspace_instructions() -> str:
         "create internal apps, or to create and approve AgentGraph using the\n"
         "JSON manifest below.\n\n"
         "Example request:\n\n"
-        "  Hi, I'd like to connect AgentGraph to Slack. AgentGraph indexes Slack\n"
-        "  conversations that I can access into a local knowledge graph.\n\n"
-        "  Could you either give me permission to create an internal Slack app,\n"
-        "  or create and approve AgentGraph using the JSON manifest below?\n\n"
-        "  The required user scopes read public channels, private channels, DMs,\n"
-        "  group DMs, and member profiles. Email access is optional. Once the app\n"
-        "  is approved, please send me its Client ID. No client secret is needed.\n\n"
-        "  More information: https://simonexmachina.github.io/agent-graph/\n\n"
+        "Hi, I'd like to connect AgentGraph to Slack. AgentGraph indexes Slack "
+        "conversations that I can access into a local knowledge graph. Could you "
+        "either give me permission to create an internal Slack app, or create and "
+        "approve AgentGraph using the JSON manifest below? The required user scopes "
+        "read public channels, private channels, DMs, group DMs, and member profiles. "
+        "Email access is optional. Once the app is approved, please send me its "
+        "Client ID. No client secret is needed. More information: "
+        "https://simonexmachina.github.io/agent-graph/\n\n"
         f"{_manifest_block()}\n"
         "Slack cannot offer app approval until the app exists in the target\n"
-        "workspace. When the admin sends the Client ID, rerun agentgraph auth\n"
-        "slack, answer No to the admin-permission question, and choose option 1.\n"
+        "workspace. When the admin sends the Client ID, rerun:\n\n"
+        "  agentgraph auth slack --add --client-id <client-id>\n"
     )
 
 
@@ -363,14 +363,19 @@ def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) 
     run_guided_oauth_flow(account_id=account_id, add=add)
 
 
-def run_guided_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
+def run_guided_oauth_flow(
+    account_id: str | None = None,
+    add: bool = False,
+    *,
+    client_id: str | None = None,
+) -> None:
     """Resolve an existing client or guide the user through Slack app setup."""
     import click
     import typer
 
-    client_id = _available_oauth_client_id(account_id, add=add)
-    if client_id is not None:
-        run_oauth_flow(account_id=account_id, add=add, client_id=client_id)
+    resolved_client_id = client_id or _available_oauth_client_id(account_id, add=add)
+    if resolved_client_id is not None:
+        run_oauth_flow(account_id=account_id, add=add, client_id=resolved_client_id)
         return
 
     workspace_admin = typer.confirm(

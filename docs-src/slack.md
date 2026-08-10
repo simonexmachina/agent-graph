@@ -29,7 +29,11 @@ workspace appears in Slack's **Pick a workspace** list. When it appears, the mem
 can create AgentGraph from the printed JSON manifest and enter its Client ID. When it
 does not, AgentGraph prints a copyable request for a Workspace Owner or app manager
 along with the project website and complete JSON manifest. Rerun the command and
-choose the first non-admin option after the admin supplies the Client ID.
+pass the Client ID after the admin supplies it:
+
+```bash
+agentgraph auth slack --add --client-id '<client-id>'
+```
 
 The packaged manifest enables PKCE and rotating tokens and contains the only
 supported callback, `http://localhost:8766/slack/oauth/callback`.
@@ -75,6 +79,13 @@ environment or AgentGraph config `.env`:
 
 ```bash
 AGENTGRAPH_SLACK_CLIENT_ID=1234567890.1234567890
+```
+
+For a new account, the Client ID can instead be supplied directly. `--client-id`
+implies OAuth when `--method` is omitted:
+
+```bash
+agentgraph auth slack --add --client-id 1234567890.1234567890
 ```
 
 AgentGraph opens Slack, validates the returned state, exchanges the code with PKCE,

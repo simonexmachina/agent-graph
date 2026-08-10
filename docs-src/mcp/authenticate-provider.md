@@ -19,12 +19,12 @@ authenticate_provider_tool(provider, args = null, account_id = null, add = false
 
 - `provider`: auth provider key, such as `google`, `slack`, or `discord`
 - `args`: connector-owned options; Slack accepts `--method oauth|browser`,
-  `--xoxc-token`, and `--d-cookie`
+  `--client-id`, `--xoxc-token`, and `--d-cookie`. A Client ID implies OAuth.
 - `account_id`: optional existing identity to replace
 - `add`: add another identity and make it the default
 
-Slack OAuth waits for the local PKCE callback. For MCP, provide
-`AGENTGRAPH_SLACK_CLIENT_ID` or reuse an account with a stored Client ID; use the CLI
-for the guided admin-permission, app-creation, and Client ID prompts. Browser
-credential arguments select the explicit fallback. The result reports
-`authenticated: true` or an error string.
+Slack OAuth waits for the local PKCE callback. For MCP, pass `--client-id`, configure
+`AGENTGRAPH_SLACK_CLIENT_ID`, or reuse an account with a stored Client ID; use the CLI
+for guided admin-permission and app-creation prompts. Browser credential arguments
+select the explicit fallback. The result reports `authenticated: true` or an error
+string.

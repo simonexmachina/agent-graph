@@ -665,6 +665,45 @@ def test_auth_slack_explicit_browser_dispatches_to_connector() -> None:
     )
 
 
+def test_auth_slack_client_id_implies_oauth_and_adds_account() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
+        patch("agentgraph_connector_slack.auth.run_guided_oauth_flow") as oauth,
+    ):
+        result = runner.invoke(
+            app,
+            ["auth", "slack", "--add", "--client-id", "admin-client-id"],
+        )
+
+    assert result.exit_code == 0
+    oauth.assert_called_once_with(
+        account_id=None,
+        add=True,
+        client_id="admin-client-id",
+    )
+
+
+def test_auth_slack_browser_rejects_client_id() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["auth", "slack", "--method", "browser", "--client-id", "client-id"],
+        )
+
+    assert result.exit_code == 1
+    assert "--client-id cannot be used with --method browser" in result.output
+
+
 def test_auth_slack_without_method_runs_interactive_chooser() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
