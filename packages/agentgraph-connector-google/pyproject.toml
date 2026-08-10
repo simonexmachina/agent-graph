@@ -1,5 +1,5 @@
 [project]
-name = "agentgraph-connector-google"
+name = "agent-graph-connector-google"
 version = "0.5.0"
 description = "Google Docs, Sheets, Gmail, and Drive connectors for AgentGraph"
 requires-python = ">=3.12"

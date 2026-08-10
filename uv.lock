@@ -12,11 +12,11 @@ resolution-markers = [
 [manifest]
 members = [
     "agent-graph",
-    "agentgraph-connector-discord",
-    "agentgraph-connector-google",
-    "agentgraph-connector-rss",
-    "agentgraph-connector-slack",
-    "agentgraph-connector-web",
+    "agent-graph-connector-discord",
+    "agent-graph-connector-google",
+    "agent-graph-connector-rss",
+    "agent-graph-connector-slack",
+    "agent-graph-connector-web",
 ]
 
 [[package]]
@@ -24,7 +24,7 @@ name = "agent-graph"
 version = "0.5.0"
 source = { editable = "." }
 dependencies = [
-    { name = "agentgraph-connector-web" },
+    { name = "agent-graph-connector-web" },
     { name = "aiosqlite" },
     { name = "apscheduler" },
     { name = "click" },
@@ -43,26 +43,26 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
-    { name = "agentgraph-connector-discord" },
-    { name = "agentgraph-connector-google" },
-    { name = "agentgraph-connector-rss" },
-    { name = "agentgraph-connector-slack" },
-    { name = "agentgraph-connector-web" },
+    { name = "agent-graph-connector-discord" },
+    { name = "agent-graph-connector-google" },
+    { name = "agent-graph-connector-rss" },
+    { name = "agent-graph-connector-slack" },
+    { name = "agent-graph-connector-web" },
 ]
 discord = [
-    { name = "agentgraph-connector-discord" },
+    { name = "agent-graph-connector-discord" },
 ]
 google = [
-    { name = "agentgraph-connector-google" },
+    { name = "agent-graph-connector-google" },
 ]
 rss = [
-    { name = "agentgraph-connector-rss" },
+    { name = "agent-graph-connector-rss" },
 ]
 slack = [
-    { name = "agentgraph-connector-slack" },
+    { name = "agent-graph-connector-slack" },
 ]
 web = [
-    { name = "agentgraph-connector-web" },
+    { name = "agent-graph-connector-web" },
 ]
 
 [package.dev-dependencies]
@@ -77,17 +77,17 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agentgraph-connector-discord", marker = "extra == 'all'", editable = "packages/agentgraph-connector-discord" },
-    { name = "agentgraph-connector-discord", marker = "extra == 'discord'", editable = "packages/agentgraph-connector-discord" },
-    { name = "agentgraph-connector-google", marker = "extra == 'all'", editable = "packages/agentgraph-connector-google" },
-    { name = "agentgraph-connector-google", marker = "extra == 'google'", editable = "packages/agentgraph-connector-google" },
-    { name = "agentgraph-connector-rss", marker = "extra == 'all'", editable = "packages/agentgraph-connector-rss" },
-    { name = "agentgraph-connector-rss", marker = "extra == 'rss'", editable = "packages/agentgraph-connector-rss" },
-    { name = "agentgraph-connector-slack", marker = "extra == 'all'", editable = "packages/agentgraph-connector-slack" },
-    { name = "agentgraph-connector-slack", marker = "extra == 'slack'", editable = "packages/agentgraph-connector-slack" },
-    { name = "agentgraph-connector-web", editable = "packages/agentgraph-connector-web" },
-    { name = "agentgraph-connector-web", marker = "extra == 'all'", editable = "packages/agentgraph-connector-web" },
-    { name = "agentgraph-connector-web", marker = "extra == 'web'", editable = "packages/agentgraph-connector-web" },
+    { name = "agent-graph-connector-discord", marker = "extra == 'all'", editable = "packages/agentgraph-connector-discord" },
+    { name = "agent-graph-connector-discord", marker = "extra == 'discord'", editable = "packages/agentgraph-connector-discord" },
+    { name = "agent-graph-connector-google", marker = "extra == 'all'", editable = "packages/agentgraph-connector-google" },
+    { name = "agent-graph-connector-google", marker = "extra == 'google'", editable = "packages/agentgraph-connector-google" },
+    { name = "agent-graph-connector-rss", marker = "extra == 'all'", editable = "packages/agentgraph-connector-rss" },
+    { name = "agent-graph-connector-rss", marker = "extra == 'rss'", editable = "packages/agentgraph-connector-rss" },
+    { name = "agent-graph-connector-slack", marker = "extra == 'all'", editable = "packages/agentgraph-connector-slack" },
+    { name = "agent-graph-connector-slack", marker = "extra == 'slack'", editable = "packages/agentgraph-connector-slack" },
+    { name = "agent-graph-connector-web", editable = "packages/agentgraph-connector-web" },
+    { name = "agent-graph-connector-web", marker = "extra == 'all'", editable = "packages/agentgraph-connector-web" },
+    { name = "agent-graph-connector-web", marker = "extra == 'web'", editable = "packages/agentgraph-connector-web" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "apscheduler", specifier = ">=3.11.2" },
     { name = "click", specifier = "<8.4" },
@@ -115,7 +115,7 @@ dev = [
 ]
 
 [[package]]
-name = "agentgraph-connector-discord"
+name = "agent-graph-connector-discord"
 version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-discord" }
 dependencies = [
@@ -130,7 +130,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "agentgraph-connector-google"
+name = "agent-graph-connector-google"
 version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-google" }
 dependencies = [
@@ -149,12 +149,12 @@ requires-dist = [
 ]
 
 [[package]]
-name = "agentgraph-connector-rss"
+name = "agent-graph-connector-rss"
 version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-rss" }
 dependencies = [
     { name = "agent-graph" },
-    { name = "agentgraph-connector-web" },
+    { name = "agent-graph-connector-web" },
     { name = "feedparser" },
     { name = "httpx" },
     { name = "pyyaml" },
@@ -164,7 +164,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "agent-graph", editable = "." },
-    { name = "agentgraph-connector-web", editable = "packages/agentgraph-connector-web" },
+    { name = "agent-graph-connector-web", editable = "packages/agentgraph-connector-web" },
     { name = "feedparser", specifier = ">=6.0.11" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -172,7 +172,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "agentgraph-connector-slack"
+name = "agent-graph-connector-slack"
 version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-slack" }
 dependencies = [
@@ -187,7 +187,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "agentgraph-connector-web"
+name = "agent-graph-connector-web"
 version = "0.5.0"
 source = { editable = "packages/agentgraph-connector-web" }
 dependencies = [

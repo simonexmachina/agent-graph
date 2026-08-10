@@ -24,8 +24,13 @@ def test_release_projects_use_public_names_and_matching_versions() -> None:
         _project(path) for path in sorted((ROOT / "packages").glob("*/pyproject.toml"))
     ]
     assert len(connector_projects) == 5
-    assert all(project["name"].startswith("agentgraph-connector-") for project in connector_projects)
+    assert all(project["name"].startswith("agent-graph-connector-") for project in connector_projects)
     assert all(project["version"] == VERSION for project in connector_projects)
+    connector_requirements = {
+        requirement.split(">=", maxsplit=1)[0]
+        for requirement in root_project["optional-dependencies"]["all"]
+    }
+    assert connector_requirements == {project["name"] for project in connector_projects}
 
 
 def test_connectors_require_the_matching_agent_graph_release_line() -> None:
