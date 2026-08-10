@@ -1,6 +1,6 @@
 [project]
 name = "agentgraph-connector-rss"
-version = "0.5.0"
+version = "0.5.1"
 description = "RSS and Atom connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [

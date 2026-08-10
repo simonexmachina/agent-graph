@@ -1,6 +1,6 @@
 [project]
 name = "agentgraph-connector-web"
-version = "0.5.0"
+version = "0.5.1"
 description = "Generic web page connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
