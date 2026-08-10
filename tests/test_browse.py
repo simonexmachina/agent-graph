@@ -292,6 +292,8 @@ def test_viewer_has_shared_order_controls() -> None:
     assert 'id="viewer-order-select"' in viewer_html
     assert 'value="display_name">Name</option>' in viewer_html
     assert 'value="last_accessed">Last accessed</option>' in viewer_html
+    assert 'value="observed_at">Last observed</option>' in viewer_html
+    assert 'data-sort="observed_at">Last observed</button>' in viewer_html
     assert 'id="viewer-order-direction"' in viewer_html
     assert "function updateViewerOrderControls(params)" in viewer_html
     assert "viewerOrderSelect.addEventListener('change'" in viewer_html

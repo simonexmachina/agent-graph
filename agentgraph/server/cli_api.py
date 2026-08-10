@@ -290,6 +290,7 @@ _VIEWER_ORDER_FIELDS = {
     "platform",
     "updated_at",
     "last_accessed",
+    "observed_at",
     "synced_at",
 }
 

@@ -179,13 +179,13 @@ async def test_list_entities_page_orders_by_visible_table_columns(
     await conn.executemany(
         """
         INSERT INTO entities (
-            id, entity_type, platform, platform_entity_id, title, metadata
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            id, entity_type, platform, platform_entity_id, title, metadata, observed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            ["entity-1", "Document", "zeta", "doc-1", "Zulu", "{}"],
-            ["entity-2", "Message", "alpha", "message-1", "", '{"display_name":"Alpha"}'],
-            ["entity-3", "Channel", "middle", "channel-1", "Middle", "{}"],
+            ["entity-1", "Document", "zeta", "doc-1", "Zulu", "{}", "2026-01-03T00:00:00Z"],
+            ["entity-2", "Message", "alpha", "message-1", "", '{"display_name":"Alpha"}', "2026-01-01T00:00:00Z"],
+            ["entity-3", "Channel", "middle", "channel-1", "Middle", "{}", "2026-01-02T00:00:00Z"],
         ],
     )
 
@@ -198,10 +198,14 @@ async def test_list_entities_page_orders_by_visible_table_columns(
     by_platform, _ = await sqlite_backend.list_entities_page(
         None, None, None, 10, 0, "platform", "asc"
     )
+    by_observed, _ = await sqlite_backend.list_entities_page(
+        None, None, None, 10, 0, "observed_at", "desc"
+    )
 
     assert [entity["id"] for entity in by_name] == ["entity-2", "entity-3", "entity-1"]
     assert [entity["id"] for entity in by_type] == ["entity-3", "entity-1", "entity-2"]
     assert [entity["id"] for entity in by_platform] == ["entity-2", "entity-3", "entity-1"]
+    assert [entity["id"] for entity in by_observed] == ["entity-1", "entity-3", "entity-2"]
 
 
 async def test_list_entities_page_can_omit_ordering(

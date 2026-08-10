@@ -38,7 +38,7 @@ def _fts5_query(text: str) -> str:
     return _FTS5_SPECIAL.sub(" ", text).strip()
 
 
-_VALID_ORDER_BY = {"created_at", "updated_at", "last_accessed", "synced_at"}
+_VALID_ORDER_BY = {"created_at", "updated_at", "last_accessed", "observed_at", "synced_at"}
 _LIST_PAGE_ORDER_BY = {
     **{field: field for field in _VALID_ORDER_BY},
     "display_name": """

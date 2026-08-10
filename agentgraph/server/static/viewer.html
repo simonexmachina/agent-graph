@@ -339,9 +339,10 @@
   #node-list td:nth-child(3) { width: 110px; }
   #node-list td:nth-child(4),
   #node-list td:nth-child(5),
-  #node-list td:nth-child(6) { width: 175px; white-space: nowrap; }
-  #node-list td:nth-child(7) { width: 80px; text-align: right; }
-  #node-list td:nth-child(8) { min-width: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  #node-list td:nth-child(6),
+  #node-list td:nth-child(7) { width: 175px; white-space: nowrap; }
+  #node-list td:nth-child(8) { width: 80px; text-align: right; }
+  #node-list td:nth-child(9) { min-width: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 
   .list-sort {
     width: auto;
@@ -961,6 +962,7 @@
         <option value="platform">Platform</option>
         <option value="updated_at">Updated</option>
         <option value="last_accessed">Last accessed</option>
+        <option value="observed_at">Last observed</option>
         <option value="created_at">Created</option>
       </select>
       <button id="viewer-order-direction" type="button" aria-label="Toggle order direction">DESC</button>
@@ -976,6 +978,7 @@
               <th scope="col"><button class="list-sort" type="button" data-sort="platform">Platform</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="updated_at">Updated</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="last_accessed">Last accessed</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="observed_at">Last observed</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="created_at">Created</button></th>
               <th scope="col">Dwell</th>
               <th scope="col">ID</th>
@@ -1820,6 +1823,7 @@
       addListCell(row, entity.platform || '—');
       addListCell(row, formatDate(entity.updated_at));
       addListCell(row, formatDate(entity.last_accessed));
+      addListCell(row, formatDate(entity.observed_at));
       addListCell(row, formatDate(entity.created_at));
       addListCell(row, formatDwell(entity.cumulative_dwell_ms));
       addListCell(row, entity.id);
