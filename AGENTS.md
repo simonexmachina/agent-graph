@@ -24,8 +24,8 @@ Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli
 
 ## Chrome Extension Publishing
 
-- Publish the Chrome extension only through the GitHub Actions `Extension Release` workflow. Do not upload builds through the Chrome Web Store dashboard.
-- A version bump in `extension/manifest.json`, `extension/package.json`, and `extension/package-lock.json`, followed by a pushed `v*` tag, triggers the release. The workflow creates the GitHub Release and publishes the ZIP to Chrome Web Store.
+- Publish the Chrome extension only through the GitHub Actions `Extension Publish` workflow. Do not upload builds through the Chrome Web Store dashboard.
+- A version bump in `extension/manifest.json`, `extension/package.json`, and `extension/package-lock.json`, followed by a pushed `extension-v*` tag, triggers publishing. The workflow publishes the ZIP to Chrome Web Store and retains it as a workflow artifact; it does not create a GitHub Release.
 - The repository requires `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, and `CWS_REFRESH_TOKEN` Actions secrets for Chrome Web Store publishing.
 
 ## Connector / Core Boundary
