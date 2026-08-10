@@ -238,12 +238,12 @@ def _oauth_setup_instructions() -> str:
         "     and use this manifest:\n"
         f"     {manifest_path}\n"
         "  2. Have the admin create and approve the app and its user scopes.\n"
-        f"  3. Confirm this exact redirect URL is registered: {DEFAULT_REDIRECT_URI}\n"
+        f"  3. The manifest registers the callback: {DEFAULT_REDIRECT_URI}\n"
         "  4. In Basic Information > App Credentials, copy the Client ID.\n"
         "     Enter it when prompted, or set\n"
         "     AGENTGRAPH_SLACK_CLIENT_ID before running this command.\n"
         "\n"
-        "If you registered a different localhost callback, set\n"
+        "Only for a custom callback: register it in the Slack app first, then set\n"
         "AGENTGRAPH_SLACK_REDIRECT_URI to that exact URL before continuing.\n"
     )
 

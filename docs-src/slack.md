@@ -14,8 +14,8 @@ source_path = "docs-src/slack.md"
 Ask a Slack workspace admin to open `https://api.slack.com/apps`, choose **Create
 New App → From a manifest**, select the workspace, and use the packaged manifest at
 `packages/agentgraph-connector-slack/agentgraph_connector_slack/slack-app-manifest.yaml`.
-The manifest enables PKCE, rotating tokens, and the default callback
-`http://localhost:8766/slack/oauth/callback`.
+The manifest enables PKCE, rotating tokens, and registers the default callback
+`http://localhost:8766/slack/oauth/callback`; no additional redirect setup is needed.
 
 The required user scopes cover public channels, private channels, direct messages,
 group direct messages, and profiles: `channels:read`, `channels:history`,
@@ -42,8 +42,9 @@ AgentGraph config `.env`:
 AGENTGRAPH_SLACK_CLIENT_ID=1234567890.1234567890
 ```
 
-If the admin registered a different localhost callback, set its exact value. Slack
-requires the authorization request and registered redirect to match exactly.
+Only when using a different localhost callback, the admin must register it on the
+Slack app and its exact value must be configured locally. Slack requires the
+authorization request and registered redirect to match exactly.
 
 ```bash
 AGENTGRAPH_SLACK_REDIRECT_URI=http://localhost:9000/slack/oauth/callback
