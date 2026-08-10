@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from collections.abc import Mapping, Sequence
@@ -46,6 +47,7 @@ _FEED_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _MAX_FEED_BYTES = 5_000_000
 _MAX_OBSERVATION_ENTRIES_PER_FEED = 8
 _MAX_OBSERVATION_PATTERNS_PER_FEED = 5
+_OBSERVATION_QUERY_TIMEOUT_SECONDS = 0.5
 _TRACKING_QUERY_KEYS = {
     "fbclid",
     "gclid",
@@ -217,17 +219,13 @@ class RssConnector(BaseConnector):
 
         links_by_feed: dict[str, list[str]] = {}
         backend = get_backend()
-        for feed_url in settings.feed_urls:
-            entries = await backend.query_by_filter(
-                "Document",
-                {"platform": self.source, "feed_url": feed_url},
-                _MAX_OBSERVATION_ENTRIES_PER_FEED,
-                "updated_at",
-                None,
-                None,
-            )
+        results = await asyncio.gather(
+            *(_query_observation_entries(backend, self.source, feed_url) for feed_url in settings.feed_urls)
+        )
+        for feed_url, entries in results:
             links_by_feed[feed_url] = _entry_links(entries)
-        self._observation_patterns = derive_observation_url_patterns(links_by_feed)
+        derived_patterns = derive_observation_url_patterns(links_by_feed)
+        self._observation_patterns = list(dict.fromkeys([*settings.feed_urls, *derived_patterns]))
         return self._observation_patterns
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
@@ -766,6 +764,29 @@ def _entry_links(entries: Sequence[Mapping[str, object]]) -> list[str]:
         if link is not None:
             links.append(link)
     return links
+
+
+async def _query_observation_entries(
+    backend: Any,
+    source: str,
+    feed_url: str,
+) -> tuple[str, list[Mapping[str, object]]]:
+    try:
+        entries = await asyncio.wait_for(
+            backend.query_by_filter(
+                "Document",
+                {"platform": source, "feed_url": feed_url},
+                _MAX_OBSERVATION_ENTRIES_PER_FEED,
+                "updated_at",
+                None,
+                None,
+            ),
+            timeout=_OBSERVATION_QUERY_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        logger.debug("Timed out loading RSS observation entries for %s", feed_url)
+        return feed_url, []
+    return feed_url, entries
 
 
 def _entry_links_by_feed(entities: list[EntityRecord]) -> dict[str, list[str]]:
