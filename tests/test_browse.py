@@ -369,12 +369,23 @@ def test_viewer_option_clicking_sole_entity_type_restores_all_types() -> None:
     assert "c.checked = wasSoleSelected || c === cb;" in viewer_html
 
 
-def test_viewer_has_focus_node_reset_control() -> None:
-    """The Focus Node section can be cleared without resetting other filters."""
+def test_viewer_has_sidebar_form_sections_and_submit_controls() -> None:
+    """The sidebar groups its controls and exposes form submission actions."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
-    assert 'id="focus-reset-btn"' in viewer_html
-    assert "refreshGraph({ node_id: null, depth: 1 });" in viewer_html
-    assert "lookupError.style.display = 'none';" in viewer_html
+
+    assert '<form id="sidebar-form">' in viewer_html
+    assert viewer_html.index('id="search-heading"') < viewer_html.index('id="focus-heading"')
+    assert viewer_html.index('id="focus-heading"') < viewer_html.index('id="filter-heading"')
+    assert 'id="search-clear-btn" type="button"' in viewer_html
+    assert 'aria-label="Clear search"' in viewer_html
+    assert 'id="search-go-btn" type="submit"' in viewer_html
+    assert 'id="focus-clear-btn" type="button"' in viewer_html
+    assert 'aria-label="Clear focus node"' in viewer_html
+    assert 'id="lookup-btn" type="submit"' in viewer_html
+    assert viewer_html.index('id="lookup-input"') < viewer_html.index('id="depth-input"')
+    assert 'class="input-shell"' in viewer_html
+    assert 'id="reset-btn"' not in viewer_html
+    assert 'id="refresh-btn"' not in viewer_html
 
 
 def test_viewer_focus_node_placeholder_describes_supported_identifiers() -> None:
@@ -384,15 +395,14 @@ def test_viewer_focus_node_placeholder_describes_supported_identifiers() -> None
     assert 'placeholder="Entity UUID, prefix, or platform reference"' in viewer_html
 
 
-def test_viewer_text_inputs_submit_on_enter_or_blur() -> None:
-    """Text queries wait for an explicit Enter or focus-loss submission."""
+def test_viewer_sidebar_uses_native_form_submission() -> None:
+    """Enter and action controls share the sidebar form submission path."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
 
-    assert "function wireTextInputSubmission(input, submit)" in viewer_html
-    assert "input.addEventListener('keydown'" in viewer_html
-    assert "input.addEventListener('blur', submitIfChanged)" in viewer_html
-    assert "wireTextInputSubmission(\n    searchInput" in viewer_html
-    assert "wireTextInputSubmission(lookupInput" in viewer_html
+    assert "sidebarForm.addEventListener('submit'" in viewer_html
+    assert "event.preventDefault();" in viewer_html
+    assert "sidebarForm.requestSubmit();" in viewer_html
+    assert "function wireTextInputSubmission(input, submit)" not in viewer_html
     assert "searchInput.addEventListener('input'" not in viewer_html
     assert "lookupInput.addEventListener('keydown'" not in viewer_html
 

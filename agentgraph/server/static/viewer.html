@@ -64,6 +64,12 @@
     gap: 16px;
   }
 
+  #sidebar-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
   #sidebar h1 a {
     display: block;
     font-size: 14px;
@@ -84,12 +90,31 @@
     gap: 6px;
   }
 
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sidebar-section + .sidebar-section {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+
+  .sidebar-section h2 {
+    color: var(--text-dim);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   .control-group label.group-label {
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   input[type="text"],
@@ -164,13 +189,51 @@
     color: var(--accent);
   }
 
-  .focus-node-actions {
+  .input-actions {
     display: flex;
     gap: 6px;
   }
 
-  .focus-node-actions button {
-    flex: 1;
+  .input-shell {
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+  }
+
+  .input-shell input {
+    padding-right: 30px;
+  }
+
+  .input-shell input:placeholder-shown + .input-clear {
+    display: none;
+  }
+
+  .input-shell .input-clear {
+    background: transparent;
+    border: 0;
+    height: 100%;
+    padding: 0;
+    position: absolute;
+    right: 1px;
+    top: 0;
+    width: 26px;
+  }
+
+  .input-actions > input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .input-actions button {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .input-clear {
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1;
+    padding-inline: 8px;
   }
 
   /* ── canvas area ────────────────────────────────────────────────────────── */
@@ -802,60 +865,70 @@
   <aside id="sidebar">
     <h1><a href="/viewer">AgentGraph</a></h1>
 
-    <div class="control-group">
-      <label class="group-label">Search</label>
-      <input type="text" id="search-input" placeholder="Search entities…" />
-    </div>
+    <form id="sidebar-form">
+      <section class="sidebar-section" aria-labelledby="search-heading">
+        <h2 id="search-heading">Search</h2>
+        <div class="input-actions">
+          <div class="input-shell">
+            <input type="text" id="search-input" aria-label="Search" placeholder="Search entities…" />
+            <button class="input-clear" id="search-clear-btn" type="button"
+                    aria-label="Clear search" title="Clear search">ⓧ</button>
+          </div>
+          <button id="search-go-btn" type="submit">Go</button>
+        </div>
+      </section>
 
-    <div class="control-group" id="type-filter-group">
-      <label class="group-label">Entity Types</label>
-    </div>
+      <section class="sidebar-section" aria-labelledby="focus-heading">
+        <h2 id="focus-heading">Focus Node</h2>
+        <div class="input-actions">
+          <div class="input-shell">
+            <input type="text" id="lookup-input" aria-label="Focus Node"
+                   placeholder="Entity UUID, prefix, or platform reference" />
+            <button class="input-clear" id="focus-clear-btn" type="button"
+                    aria-label="Clear focus node" title="Clear focus node">ⓧ</button>
+          </div>
+          <button id="lookup-btn" type="submit">Go</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <label for="depth-input" style="font-size:11px; color:#94a3b8; white-space:nowrap;">Depth</label>
+          <input type="number" id="depth-input" min="0" max="4" value="2"
+                 style="width:52px; padding:2px 6px; background:#1e293b; border:1px solid #334155;
+                        border-radius:4px; color:#e2e8f0; font-size:12px;" />
+        </div>
+        <div id="lookup-error" style="display:none; color:#f87171; font-size:11px; margin-top:2px;"></div>
+      </section>
 
-    <div class="control-group">
-      <label class="group-label" for="platform-filter">Platform</label>
-      <select id="platform-filter">
-        <option value="">All platforms</option>
-      </select>
-    </div>
+      <section class="sidebar-section" aria-labelledby="filter-heading">
+        <h2 id="filter-heading">Filter</h2>
 
-    <div class="control-group">
-      <label class="group-label" for="since-filter">Time range</label>
-      <select id="since-filter">
-        <option value="">All time</option>
-        <option value="24h" selected>Last 24 hours</option>
-        <option value="7d">Last 7 days</option>
-      </select>
-    </div>
+        <div class="control-group" id="type-filter-group">
+          <label class="group-label">Entity Types</label>
+        </div>
 
-    <div class="control-group">
-      <label class="group-label">Limit: <span id="limit-display">20</span></label>
-      <div class="range-row">
-        <input type="range" id="limit-slider" min="10" max="1000" value="20" />
-      </div>
-    </div>
+        <div class="control-group">
+          <label class="group-label" for="platform-filter">Platform</label>
+          <select id="platform-filter">
+            <option value="">All platforms</option>
+          </select>
+        </div>
 
-    <hr style="border:none; border-top:1px solid #334155; margin:8px 0;" />
+        <div class="control-group">
+          <label class="group-label" for="since-filter">Time range</label>
+          <select id="since-filter">
+            <option value="">All time</option>
+            <option value="24h">Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+          </select>
+        </div>
 
-    <div class="control-group">
-      <label class="group-label">Focus Node</label>
-      <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
-        <label style="font-size:11px; color:#94a3b8; white-space:nowrap;">Depth</label>
-        <input type="number" id="depth-input" min="0" max="4" value="2"
-               style="width:52px; padding:2px 6px; background:#1e293b; border:1px solid #334155;
-                      border-radius:4px; color:#e2e8f0; font-size:12px;" />
-      </div>
-      <input type="text" id="lookup-input" placeholder="Entity UUID, prefix, or platform reference" />
-      <div class="focus-node-actions">
-        <button id="lookup-btn">Go</button>
-        <button id="focus-reset-btn" type="button">Reset</button>
-      </div>
-      <div id="lookup-error" style="display:none; color:#f87171; font-size:11px; margin-top:2px;"></div>
-    </div>
-
-    <hr style="border:none; border-top:1px solid #334155; margin:8px 0;" />
-
-    <button id="reset-btn">Reset view</button>
-    <button id="refresh-btn">Refresh view</button>
+        <div class="control-group">
+          <label class="group-label" for="limit-slider">Limit: <span id="limit-display">20</span></label>
+          <div class="range-row">
+            <input type="range" id="limit-slider" min="10" max="1000" value="20" />
+          </div>
+        </div>
+      </section>
+    </form>
   </aside>
 
   <!-- ── Canvas ──────────────────────────────────────────────────────────── -->
@@ -1276,13 +1349,12 @@
   const sinceSel      = document.getElementById('since-filter');
   const limitSlider   = document.getElementById('limit-slider');
   const limitDisplay  = document.getElementById('limit-display');
+  const sidebarForm   = document.getElementById('sidebar-form');
   const lookupInput   = document.getElementById('lookup-input');
-  const lookupBtn     = document.getElementById('lookup-btn');
-  const focusResetBtn = document.getElementById('focus-reset-btn');
+  const searchClearBtn = document.getElementById('search-clear-btn');
+  const focusClearBtn = document.getElementById('focus-clear-btn');
   const lookupError   = document.getElementById('lookup-error');
   const depthInput    = document.getElementById('depth-input');
-  const resetBtn      = document.getElementById('reset-btn');
-  const refreshBtn    = document.getElementById('refresh-btn');
   const app           = document.getElementById('app');
   const detail        = document.getElementById('detail');
   const detailTitle   = document.getElementById('detail-title');
@@ -1521,7 +1593,6 @@
   let ALL_TYPES = ['Channel', 'Document', 'Folder', 'Message', 'Person', 'Spreadsheet', 'Thread'];
   let FETCHABLE_PLATFORMS = new Set();
   const DEFAULT_PAGE_TITLE = 'AgentGraph Viewer';
-  const DEFAULT_SINCE = '24h';
   const DEFAULT_LIMIT = 20;
   const DEFAULT_LIST_SORT = 'last_accessed';
   const DEFAULT_LIST_SORT_DIR = 'desc';
@@ -1543,7 +1614,7 @@
     return {
       search:      p.get('search')   || '',
       platform:    p.get('platform') || '',
-      since:       p.has('since')    ? p.get('since') : DEFAULT_SINCE,
+      since:       p.get('since') || '',
       limit:       p.has('limit')    ? Number(p.get('limit')) : DEFAULT_LIMIT,
       node_id:   p.get('node_id') || null,
       selected_id: p.get('selected_id') || null,
@@ -1573,7 +1644,7 @@
     const q = new URLSearchParams();
     if (params.search)    q.set('search', params.search);
     if (params.platform)  q.set('platform', params.platform);
-    q.set('since', params.since || '');
+    if (params.since) q.set('since', params.since);
     if (params.limit) q.set('limit', params.limit);
     if (params.node_id) q.set('node_id', params.node_id);
     if (params.selected_id) q.set('selected_id', params.selected_id);
@@ -1778,34 +1849,6 @@
   }
 
   // ── Event wiring ──────────────────────────────────────────────────────────
-  function wireTextInputSubmission(input, submit) {
-    let lastSubmittedValue = input.value.trim();
-
-    function submitIfChanged() {
-      const value = input.value.trim();
-      if (value === lastSubmittedValue) return;
-      lastSubmittedValue = value;
-      submit();
-    }
-
-    input.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-      submitIfChanged();
-    });
-    input.addEventListener('blur', submitIfChanged);
-
-    return () => {
-      lastSubmittedValue = input.value.trim();
-    };
-  }
-
-  const markSearchInputSubmitted = wireTextInputSubmission(
-    searchInput,
-    () => refreshView(collectParams({}, true)),
-  );
-  const markLookupInputSubmitted = wireTextInputSubmission(lookupInput, () => doLookup());
-
   document.addEventListener('keydown', (event) => {
     const target = event.target;
     if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]')) return;
@@ -1841,25 +1884,6 @@
 
   moreBtn.addEventListener('click', activateMoreResults);
 
-  resetBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    lookupInput.value = '';
-    depthInput.value = 1;
-    syncDepthEnabled();
-    platformSel.value = '';
-    sinceSel.value = DEFAULT_SINCE;
-    limitSlider.value = DEFAULT_LIMIT;
-    limitDisplay.textContent = String(DEFAULT_LIMIT);
-    document.querySelectorAll('.type-filter').forEach(c => c.checked = true);
-    markSearchInputSubmitted();
-    markLookupInputSubmitted();
-    history.replaceState(null, '', window.location.pathname);
-    closeDetail(false);
-    fitGraphToViewport();
-    refreshGraph();
-  });
-
-  refreshBtn.addEventListener('click', () => forceRefreshGraph());
   graphTab.addEventListener('click', () => setView('graph'));
   listTab.addEventListener('click', () => setView('list'));
 
@@ -1900,16 +1924,24 @@
   }
 
   lookupInput.addEventListener('input', syncDepthEnabled);
-  lookupBtn.addEventListener('click', () => {
-    markLookupInputSubmitted();
-    doLookup();
+  sidebarForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (lookupInput.value.trim()) {
+      void doLookup();
+      return;
+    }
+    refreshGraph({ node_id: null });
   });
-  focusResetBtn.addEventListener('click', () => {
+  searchClearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    sidebarForm.requestSubmit();
+  });
+  focusClearBtn.addEventListener('click', () => {
     lookupInput.value = '';
     depthInput.value = 1;
     lookupError.style.display = 'none';
     syncDepthEnabled();
-    refreshGraph({ node_id: null, depth: 1 });
+    sidebarForm.requestSubmit();
   });
   // ── Detail panel ──────────────────────────────────────────────────────────
   function hideDetail() {
@@ -2662,8 +2694,6 @@
     ]);
     const _initial = readUrlState();
     applyUrlState(_initial);
-    markSearchInputSubmitted();
-    markLookupInputSubmitted();
     syncDepthEnabled();
     initList();
     await refreshView(collectParams({}, true));

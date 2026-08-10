@@ -227,33 +227,56 @@ def test_graph_load_does_not_wait_indefinitely_for_metadata(page: Page) -> None:
     assert elapsed < 1.5
 
 
-def test_viewer_uses_recent_twenty_node_default_state(page: Page) -> None:
+def test_viewer_uses_all_time_twenty_node_default_state(page: Page) -> None:
     with _serve_viewer([], []) as url:
         page.goto(url)
 
-        expect(page).to_have_url(f"{url}?since=24h&limit=20")
-        expect(page.locator("#since-filter")).to_have_value("24h")
+        expect(page).to_have_url(f"{url}?limit=20")
+        expect(page.locator("#since-filter")).to_have_value("")
         expect(page.locator("#limit-slider")).to_have_value("20")
         expect(page.locator("#limit-display")).to_have_text("20")
-
-
-def test_viewer_reset_restores_recent_twenty_node_default_state(page: Page) -> None:
-    with _serve_viewer([], []) as url:
-        page.goto(f"{url}?since=7d&limit=100")
-        page.locator("#reset-btn").click()
-
-        expect(page).to_have_url(f"{url}?since=24h&limit=20")
-        expect(page.locator("#since-filter")).to_have_value("24h")
-        expect(page.locator("#limit-slider")).to_have_value("20")
 
 
 def test_viewer_preserves_explicit_all_time_state(page: Page) -> None:
     with _serve_viewer([], []) as url:
         page.goto(f"{url}?since=&limit=50")
 
-        expect(page).to_have_url(f"{url}?since=&limit=50")
+        expect(page).to_have_url(f"{url}?limit=50")
         expect(page.locator("#since-filter")).to_have_value("")
         expect(page.locator("#limit-slider")).to_have_value("50")
+
+
+def test_sidebar_form_submits_and_clears_search_and_focus(page: Page) -> None:
+    nodes = [_node(1, "Focus target")]
+    with _serve_viewer(nodes, []) as url:
+        page.goto(url)
+        expect(page).to_have_url(f"{url}?limit=20")
+        expect(page.locator("#search-clear-btn")).not_to_be_visible()
+        expect(page.locator("#focus-clear-btn")).not_to_be_visible()
+
+        search_input = page.locator("#search-input")
+        search_input.fill("roadmap")
+        expect(page.locator("#search-clear-btn")).to_be_visible()
+        search_input.press("Enter")
+        expect(page).to_have_url(f"{url}?search=roadmap&limit=20")
+
+        search_input.fill("planning")
+        page.locator("#search-go-btn").click()
+        expect(page).to_have_url(f"{url}?search=planning&limit=20")
+
+        page.locator("#search-clear-btn").click()
+        expect(page).to_have_url(f"{url}?limit=20")
+
+        page.locator("#lookup-input").fill("node-1")
+        expect(page.locator("#focus-clear-btn")).to_be_visible()
+        page.locator("#lookup-btn").click()
+        expect(page).to_have_url(f"{url}?limit=20&node_id=node-1&selected_id=node-1")
+
+        page.locator("#focus-clear-btn").click()
+        expect(page.locator("#lookup-input")).to_have_value("")
+        expect(page.locator("#focus-clear-btn")).not_to_be_visible()
+        expect(page.locator("#depth-input")).to_have_value("1")
+        expect(page).to_have_url(f"{url}?limit=20&selected_id=node-1")
 
 
 def test_list_highlights_selected_entity_and_updates_on_row_click(page: Page) -> None:
@@ -354,7 +377,7 @@ def test_detail_panel_focus_button_focuses_the_displayed_entity(page: Page) -> N
 
         expect(page.locator("#lookup-input")).to_have_value("node-1")
         expect(page).to_have_url(
-            f"{url}?since=24h&limit=20&node_id=node-1&selected_id=node-1"
+            f"{url}?limit=20&node_id=node-1&selected_id=node-1"
         )
         expect(page).to_have_title("AgentGraph Viewer | Focus: Focus target")
         expect(focus_button).to_have_attribute("aria-pressed", "true")
@@ -458,7 +481,7 @@ def test_i_hides_and_shows_url_selected_detail_in_list_mode(page: Page) -> None:
         page.keyboard.press("i")
         expect(page.locator("#detail")).not_to_have_class("open")
         expect(page).to_have_url(
-            f"{url}?since=24h&limit=100&node_id=node-1&selected_id=node-1&depth=0&view=list"
+            f"{url}?limit=100&node_id=node-1&selected_id=node-1&depth=0&view=list"
         )
         expect(selected_row).to_have_attribute("aria-selected", "true")
 
