@@ -255,6 +255,22 @@
     overflow: hidden;
   }
 
+  #viewer-order {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 7;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  #viewer-order label { white-space: nowrap; }
+  #viewer-order select { width: auto; min-width: 128px; padding: 6px 8px; }
+  #viewer-order button { width: auto; min-width: 48px; padding: 6px 8px; }
+
   .view-tab {
     width: auto;
     border: 0;
@@ -937,6 +953,18 @@
       <button class="view-tab" id="graph-tab" role="tab" aria-selected="true">Graph</button>
       <button class="view-tab" id="list-tab" role="tab" aria-selected="false">List</button>
     </div>
+    <div id="viewer-order" aria-label="Viewer ordering">
+      <label for="viewer-order-select">Order by</label>
+      <select id="viewer-order-select">
+        <option value="display_name">Name</option>
+        <option value="entity_type">Type</option>
+        <option value="platform">Platform</option>
+        <option value="updated_at">Updated</option>
+        <option value="last_accessed">Last accessed</option>
+        <option value="created_at">Created</option>
+      </select>
+      <button id="viewer-order-direction" type="button" aria-label="Toggle order direction">DESC</button>
+    </div>
     <div id="cy"></div>
     <div id="list-view">
       <div id="node-table">
@@ -1369,6 +1397,8 @@
   const listBody      = document.getElementById('node-list-body');
   const listEmpty     = document.getElementById('list-empty');
   const moreBtn       = document.getElementById('more-btn');
+  const viewerOrderSelect = document.getElementById('viewer-order-select');
+  const viewerOrderDirection = document.getElementById('viewer-order-direction');
 
   // ── Fetch helpers ─────────────────────────────────────────────────────────
   function showSpinner() { spinner.classList.add('active'); }
@@ -1755,6 +1785,12 @@
     });
   }
 
+  function updateViewerOrderControls(params) {
+    viewerOrderSelect.value = params.sort;
+    viewerOrderDirection.textContent = params.sort_dir.toUpperCase();
+    viewerOrderDirection.setAttribute('aria-label', `Toggle order direction (currently ${params.sort_dir.toUpperCase()})`);
+  }
+
   function addListCell(row, value) {
     const cell = document.createElement('td');
     cell.textContent = value;
@@ -1771,6 +1807,7 @@
     listBody.replaceChildren();
     listEmpty.hidden = rawNodes.length > 0;
     updateListSortHeaders(params);
+    updateViewerOrderControls(params);
 
     rawNodes.forEach(entity => {
       const row = document.createElement('tr');
@@ -1836,6 +1873,15 @@
   }
 
   function initList() {
+    updateViewerOrderControls(readUrlState());
+    viewerOrderSelect.addEventListener('change', () => {
+      refreshView(collectParams({ view: 'list', sort: viewerOrderSelect.value }, true));
+    });
+    viewerOrderDirection.addEventListener('click', () => {
+      const current = readUrlState();
+      const sortDir = current.sort_dir === 'asc' ? 'desc' : 'asc';
+      refreshView(collectParams({ view: 'list', sort_dir: sortDir }, true));
+    });
     document.querySelectorAll('.list-sort').forEach(button => {
       button.addEventListener('click', () => {
         const sort = button.dataset.sort;

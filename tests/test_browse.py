@@ -284,6 +284,20 @@ def test_viewer_persists_list_sort_in_url_state() -> None:
     assert "const sortDir = current.sort === sort && current.sort_dir === 'asc' ? 'desc' : 'asc';" in viewer_html
 
 
+def test_viewer_has_shared_order_controls() -> None:
+    """The viewer exposes the list sort fields and direction at the top right."""
+    viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
+
+    assert 'id="viewer-order"' in viewer_html
+    assert 'id="viewer-order-select"' in viewer_html
+    assert 'value="display_name">Name</option>' in viewer_html
+    assert 'value="last_accessed">Last accessed</option>' in viewer_html
+    assert 'id="viewer-order-direction"' in viewer_html
+    assert "function updateViewerOrderControls(params)" in viewer_html
+    assert "viewerOrderSelect.addEventListener('change'" in viewer_html
+    assert "const sortDir = current.sort_dir === 'asc' ? 'desc' : 'asc';" in viewer_html
+
+
 def test_viewer_persists_selected_entity_detail_in_url_state() -> None:
     """Opening a detail panel is shareable and is restored from the URL."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
