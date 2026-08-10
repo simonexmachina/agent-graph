@@ -536,6 +536,9 @@ def test_oauth_setup_instructions_explain_client_id_prompt(
     assert "Create New App > From a manifest" in output
     assert "slack-app-manifest.yaml" in output
     assert "http://localhost:8766/slack/oauth/callback" in output
+    assert "click Request approval" in output
+    assert "Admin > Apps and workflows > Requests" in output
+    assert "After approval, rerun this command" in output
     assert "The manifest registers the callback" in output
     assert "Only for a custom callback" in output
     assert "Enter it when prompted" in output

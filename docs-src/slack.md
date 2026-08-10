@@ -32,6 +32,13 @@ The admin must approve the app and its requested scopes under the workspace's ap
 management policy. Copy the app's Client ID after creation; no client secret is used
 by the localhost PKCE flow.
 
+If Slack blocks the authorization, click **Request approval** on the Slack page, add
+context for the request, and submit it. A Workspace Owner or appointed app manager
+can open **Admin → Apps and workflows → Requests**, review the requested required and
+optional scopes, and approve it. After approval, rerun `agentgraph auth slack`. If
+the request button is unavailable, ask a Workspace Owner directly; the workspace may
+have disabled member app requests.
+
 ## Configure and authorize
 
 AgentGraph prompts for the Client ID on first authorization and stores it with that

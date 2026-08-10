@@ -17,6 +17,8 @@ agentgraph auth status --json | jq '.[] | select(.provider == "slack")'
 
 2. The workspace admin opens `https://api.slack.com/apps`, chooses **Create New App → From a manifest**, selects the workspace, and uses the packaged AgentGraph manifest. The manifest registers the default `http://localhost:8766/slack/oauth/callback`. Only a custom `AGENTGRAPH_SLACK_REDIRECT_URI` must be added to the Slack app manually. AgentGraph reads `AGENTGRAPH_SLACK_CLIENT_ID`, reuses a stored account value, or prompts for the Client ID.
 
+If Slack blocks installation, the user clicks **Request approval** on the authorization page and submits context. A Workspace Owner or app manager reviews it under **Admin → Apps and workflows → Requests**, selects allowed optional scopes, and approves it. If the request action is unavailable, the user must contact a Workspace Owner because member app requests may be disabled. Rerun auth after approval.
+
 3. Start the interactive chooser, select official Slack user OAuth (OIDC/PKCE), and let the user approve in the opened browser:
 
 ```bash
