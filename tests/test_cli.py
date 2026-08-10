@@ -15,10 +15,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from agentgraph_connector_google.provider import (
+    GOOGLE_OAUTH_CLIENT_ID,
+    GOOGLE_OAUTH_CLIENT_SECRET,
+    GoogleCredentials,
+)
 from typer.testing import CliRunner
 
 from agentgraph.auth.credentials import (
-    GoogleCredentials,
     load_platform,
     load_platform_account,
     load_platform_accounts,
@@ -412,10 +416,15 @@ class _FakeGoogleConnector:
     url_patterns: list[str] = []
 
     @classmethod
-    def run_auth_flow(cls) -> None:
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
         google_auth = cast(Any, import_module("agentgraph_connector_google.auth"))
-        run_oauth_flow = cast(Callable[[], None], google_auth.run_oauth_flow)
-        run_oauth_flow()
+        run_oauth_flow = cast(Callable[..., None], google_auth.run_oauth_flow)
+        run_oauth_flow(account_id=account_id, add=add, args=args)
 
     @classmethod
     async def verify_auth(cls) -> tuple[str, str | None]:
@@ -491,9 +500,13 @@ class _FakeGoogleToken:
 
 class _FakeGoogleFlow:
     captured_client_config: dict[str, Any] | None = None
+    last_instance: _FakeGoogleFlow | None = None
 
     def __init__(self) -> None:
         self.credentials = _FakeGoogleToken()
+        self.code_verifier = "pkce-verifier"
+        self.fetch_token = MagicMock()
+        type(self).last_instance = self
 
     @classmethod
     def from_client_config(
@@ -508,9 +521,6 @@ class _FakeGoogleFlow:
 
     def authorization_url(self, *, access_type: str, prompt: str) -> tuple[str, None]:
         return ("https://accounts.google.test/auth", None)
-
-    def fetch_token(self, *, code: str) -> None:
-        return None
 
 
 class _FakeUserInfoResponse:
@@ -535,6 +545,24 @@ def _fake_wait_for_callback(port: int) -> str:
 
 def _fake_webbrowser_open(url: str) -> bool:
     return True
+
+
+def _install_fake_google_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
+    _FakeGoogleFlow.last_instance = None
+    flow_module = ModuleType("google_auth_oauthlib.flow")
+    flow_module.__dict__["Flow"] = _FakeGoogleFlow
+    package_module = ModuleType("google_auth_oauthlib")
+    monkeypatch.setitem(sys.modules, "google_auth_oauthlib", package_module)
+    monkeypatch.setitem(sys.modules, "google_auth_oauthlib.flow", flow_module)
+
+    requests_module = ModuleType("requests")
+    requests_module.__dict__["get"] = _fake_requests_get
+    monkeypatch.setitem(sys.modules, "requests", requests_module)
+    monkeypatch.setattr("agentgraph_connector_google.auth._find_free_port", lambda: 9999)
+    monkeypatch.setattr(
+        "agentgraph_connector_google.auth._wait_for_callback", _fake_wait_for_callback
+    )
+    monkeypatch.setattr("webbrowser.open", _fake_webbrowser_open)
 
 
 @asynccontextmanager
@@ -578,6 +606,8 @@ def test_auth_provider_dispatches_to_connector() -> None:
 
 
 def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:
+    from agentgraph_connector_slack import SlackConnector
+
     captured: dict[str, object] = {}
 
     def fake_cookie_flow(
@@ -596,7 +626,7 @@ def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:
 
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
-        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[SlackConnector()]),
         patch("agentgraph_connector_slack.auth.run_cookie_flow", side_effect=fake_cookie_flow),
     ):
         result = runner.invoke(
@@ -764,9 +794,7 @@ def test_connector_command_does_not_poll_after_validation_error() -> None:
         patch("agentgraph.connectors.registry.get_connector", return_value=_InvalidRssConnector()),
         patch("agentgraph.cli_query.queue_connector_poll") as queue_poll,
     ):
-        result = runner.invoke(
-            app, ["connector", "rss", "add", "https://example.com/not-a-feed"]
-        )
+        result = runner.invoke(app, ["connector", "rss", "add", "https://example.com/not-a-feed"])
 
     assert result.exit_code == 1
     assert "Not a valid RSS/Atom feed" in result.output
@@ -988,7 +1016,6 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
         "google",
         GoogleCredentials(
             client_id="stored-client-id",
-            client_secret="stored-client-secret",
             access_token="old-access-token",
             refresh_token="old-refresh-token",
             user_email="old@example.com",
@@ -1007,7 +1034,7 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
     monkeypatch.setitem(sys.modules, "requests", requests_module)
 
     monkeypatch.setattr(
-        "agentgraph.auth.google_provider.verify_google_auth",
+        "agentgraph_connector_google.auth.verify_google_auth",
         lambda: (
             "invalid",
             "Google refresh token was rejected (RefreshError) - run: agentgraph auth google",
@@ -1030,17 +1057,78 @@ def test_auth_google_invalid_existing_credentials_reuses_client_config(
 
     assert result.exit_code == 0
     assert "Google credentials need re-authentication" in result.output
-    assert "saved OAuth client ID and secret" in result.output
+    assert "packaged OAuth client" in result.output
     assert "Google OAuth client ID" not in result.output
     assert _FakeGoogleFlow.captured_client_config is not None
     installed = _FakeGoogleFlow.captured_client_config["installed"]
-    assert installed["client_id"] == "stored-client-id"
-    assert installed["client_secret"] == "stored-client-secret"
+    assert installed["client_id"] == GOOGLE_OAUTH_CLIENT_ID
+    assert installed["client_secret"] == GOOGLE_OAUTH_CLIENT_SECRET
 
     saved = load_platform("google")
     assert saved is not None
     assert saved["access_token"] == "new-access-token"
     assert saved["refresh_token"] == "new-refresh-token"
+
+
+def test_auth_google_uses_packaged_client_without_prompt(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _FakeGoogleFlow.captured_client_config = None
+    _install_fake_google_oauth(monkeypatch)
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector()],
+        ),
+    ):
+        result = runner.invoke(app, ["auth", "google"])
+
+    assert result.exit_code == 0
+    assert "Google OAuth client" not in result.output
+    assert _FakeGoogleFlow.captured_client_config is not None
+    installed = _FakeGoogleFlow.captured_client_config["installed"]
+    assert installed["client_id"] == GOOGLE_OAUTH_CLIENT_ID
+    assert installed["client_secret"] == GOOGLE_OAUTH_CLIENT_SECRET
+    assert _FakeGoogleFlow.last_instance is not None
+    _FakeGoogleFlow.last_instance.fetch_token.assert_called_once_with(code="auth-code")
+    saved = load_platform("google")
+    assert saved is not None
+    assert saved["client_id"] == GOOGLE_OAUTH_CLIENT_ID
+    assert "client_secret" not in saved
+
+
+def test_auth_google_rejects_client_id_override() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector()],
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["auth", "google", "--client-id", "override-client-id"],
+        )
+
+    assert result.exit_code == 2
+    assert "unrecognized arguments: --client-id override-client-id" in result.output
+
+
+def test_auth_google_rejects_unknown_provider_option() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector()],
+        ),
+    ):
+        result = runner.invoke(app, ["auth", "google", "--unknown"])
+
+    assert result.exit_code == 2
+    assert "unrecognized arguments: --unknown" in result.output
 
 
 def test_auth_google_valid_credentials_can_skip_reauth(
@@ -1051,14 +1139,13 @@ def test_auth_google_valid_credentials_can_skip_reauth(
         "google",
         GoogleCredentials(
             client_id="stored-client-id",
-            client_secret="stored-client-secret",
             access_token="access-token",
             refresh_token="refresh-token",
             user_email="user@example.com",
         ),
     )
     monkeypatch.setattr(
-        "agentgraph.auth.google_provider.verify_google_auth",
+        "agentgraph_connector_google.auth.verify_google_auth",
         lambda: ("ok", "user@example.com"),
     )
 

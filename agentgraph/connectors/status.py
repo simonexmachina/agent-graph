@@ -30,6 +30,37 @@ def auth_provider_connectors(
     return grouped
 
 
+def run_auth_provider_flow(
+    connectors: list[BaseConnector],
+    provider: str,
+    *,
+    account_id: str | None = None,
+    add: bool = False,
+    args: list[str] | None = None,
+) -> None:
+    """Dispatch an authentication flow through a provider's representative connector."""
+    grouped = auth_provider_connectors(connectors)
+    members = grouped.get(provider)
+    if not members:
+        available = ", ".join(sorted(grouped))
+        raise ValueError(f"Unknown auth provider {provider!r}. Available: {available}")
+
+    connector_cls = type(members[0])
+    provider_args = args or []
+    try:
+        connector_cls.run_auth_flow(
+            account_id=account_id,
+            add=add,
+            args=provider_args,
+        )
+    except TypeError:
+        if provider_args:
+            raise ValueError(
+                f"{provider!r} does not accept auth options: {' '.join(provider_args)}"
+            ) from None
+        connector_cls.run_auth_flow()
+
+
 def _list_accounts(connector: BaseConnector) -> list[object]:
     list_accounts = getattr(type(connector), "list_accounts", None)
     if callable(list_accounts):

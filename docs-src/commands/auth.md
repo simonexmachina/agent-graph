@@ -12,13 +12,14 @@ source_path = "docs-src/commands/auth.md"
 ## Synopsis
 
 ```bash
-agentgraph auth PLATFORM [--xoxc-token TOKEN] [--d-cookie VALUE]
+agentgraph auth PLATFORM [--account ACCOUNT_ID] [--add] [PROVIDER_OPTIONS]
 agentgraph auth remove PLATFORM [--account ACCOUNT_ID] [--json]
 ```
 
 ## Notes
 
 - `PLATFORM` is the auth label, such as `google`, `slack`, or `discord`
+- Google uses AgentGraph's packaged Desktop OAuth client
 - for Slack, `--xoxc-token` and `--d-cookie` skip the interactive prompt
 - `agentgraph auth remove PLATFORM` removes stored credentials for that provider; it does not delete indexed graph data
 - `--account` removes one stored account for multi-account providers

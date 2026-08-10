@@ -148,6 +148,47 @@ async def remove_auth_provider_tool(provider: str, account_id: str | None = None
 
 
 @mcp.tool()
+async def authenticate_provider_tool(
+    provider: str,
+    account_id: str | None = None,
+    add: bool = False,
+    args: list[str] | None = None,
+) -> str:
+    """Authenticate a credential-backed provider through its connector-owned flow.
+
+    This is the MCP equivalent of:
+        agentgraph auth <provider> [--account <account-id>] [--add] [provider options]
+
+    Slack accepts ``args=["--xoxc-token", "...", "--d-cookie", "..."]`` for
+    non-interactive setup.
+    """
+    import contextlib
+    import io
+
+    from agentgraph.connectors.registry import bootstrap, get_all_connectors
+    from agentgraph.connectors.status import run_auth_provider_flow
+
+    def _run() -> str:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            run_auth_provider_flow(
+                get_all_connectors(),
+                provider,
+                account_id=account_id,
+                add=add,
+                args=args,
+            )
+        return output.getvalue()
+
+    bootstrap()
+    try:
+        output = await asyncio.to_thread(_run)
+    except ValueError as exc:
+        return json.dumps({"provider": provider, "authenticated": False, "error": str(exc)})
+    return json.dumps({"provider": provider, "authenticated": True, "output": output})
+
+
+@mcp.tool()
 async def run_connector_command_tool(source: str, args: list[str]) -> str:
     """
     Run a connector-owned command.

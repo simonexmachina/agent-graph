@@ -63,7 +63,7 @@ agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--jso
 agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[]
 
 # Authenticate connectors/providers
-agentgraph auth google [--add] [--account <account-id>]   # Google OAuth2; use when Google auth_status is missing/invalid
+agentgraph auth google [--add] [--account <account-id>] # uses AgentGraph's packaged OAuth client
 agentgraph auth slack [--add] [--account <account-id>]    # Slack cookie credentials
 agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
 agentgraph auth remove <provider> [--account <account-id>] [--json] # remove stored credentials; does not delete graph data
@@ -87,6 +87,7 @@ When using AgentGraph through MCP instead of the CLI, use these equivalent tools
 ```text
 agentgraph connectors              -> list_connectors_tool(verify)
 agentgraph auth [--json] status    -> list_auth_providers_tool(verify) # credential-backed providers only
+agentgraph auth <provider> ...     -> authenticate_provider_tool(provider, account_id, add, args)
 agentgraph auth remove ...         -> remove_auth_provider_tool(provider, account_id)
 agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
 agentgraph search ...              -> search_entities_tool(...)

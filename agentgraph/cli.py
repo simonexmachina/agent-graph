@@ -39,13 +39,6 @@ def _readable_credentials() -> Iterator[None]:
         raise typer.Exit(code=1) from exc
 
 
-def _run_auth_flow(connector_cls: type[BaseConnector], account_id: str | None, add: bool) -> None:
-    try:
-        connector_cls.run_auth_flow(account_id=account_id, add=add)
-    except TypeError:
-        connector_cls.run_auth_flow()
-
-
 def _status_label(status: str) -> str:
     return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(
         status, status
@@ -76,16 +69,14 @@ def _parse_auth_args(
     json: bool,
     verify: bool,
     add: bool,
-    xoxc_token: str | None,
-    d_cookie: str | None,
-) -> tuple[list[str], str | None, bool, bool, bool, str | None, str | None, str | None]:
+    provider_args: list[str] | None = None,
+) -> tuple[list[str], str | None, bool, bool, bool, list[str], str | None]:
     positionals: list[str] = []
     parsed_account = account
     parsed_json = json
     parsed_verify = verify
     parsed_add = add
-    parsed_xoxc_token = xoxc_token
-    parsed_d_cookie = d_cookie
+    parsed_provider_args = list(provider_args or [])
     error: str | None = None
     i = 0
     while i < len(args):
@@ -104,27 +95,16 @@ def _parse_auth_args(
             i += 1
         elif arg.startswith("--account="):
             parsed_account = arg.split("=", 1)[1]
-        elif arg == "--xoxc-token":
-            if i + 1 >= len(args):
-                error = "--xoxc-token requires a token"
-                break
-            parsed_xoxc_token = args[i + 1]
-            i += 1
-        elif arg.startswith("--xoxc-token="):
-            parsed_xoxc_token = arg.split("=", 1)[1]
-        elif arg == "--d-cookie":
-            if i + 1 >= len(args):
-                error = "--d-cookie requires a cookie value"
-                break
-            parsed_d_cookie = args[i + 1]
-            i += 1
-        elif arg.startswith("--d-cookie="):
-            parsed_d_cookie = arg.split("=", 1)[1]
         elif arg.startswith("-"):
-            error = f"Unknown option for auth: {arg}"
-            break
+            if not positionals or positionals[0] in ("status", "remove"):
+                error = f"Unknown option for auth: {arg}"
+                break
+            parsed_provider_args.append(arg)
         else:
-            positionals.append(arg)
+            if len(positionals) == 1 and positionals[0] not in ("status", "remove"):
+                parsed_provider_args.append(arg)
+            else:
+                positionals.append(arg)
         i += 1
     return (
         positionals,
@@ -132,8 +112,7 @@ def _parse_auth_args(
         parsed_json,
         parsed_verify,
         parsed_add,
-        parsed_xoxc_token,
-        parsed_d_cookie,
+        parsed_provider_args,
         error,
     )
 
@@ -154,12 +133,6 @@ def auth(
     account: str | None = typer.Option(
         None, "--account", help="Re-authenticate a specific account ID"
     ),
-    xoxc_token: str | None = typer.Option(
-        None, "--xoxc-token", help="Slack xoxc- token (skips interactive prompt)"
-    ),
-    d_cookie: str | None = typer.Option(
-        None, "--d-cookie", help="Slack d cookie value (skips interactive prompt)"
-    ),
 ) -> None:
     """Show auth status or authenticate a provider."""
     (
@@ -168,8 +141,7 @@ def auth(
         parsed_json,
         parsed_verify,
         parsed_add,
-        parsed_xoxc_token,
-        parsed_d_cookie,
+        parsed_provider_args,
         parse_error,
     ) = _parse_auth_args(
         auth_args or [],
@@ -177,8 +149,6 @@ def auth(
         json=json,
         verify=verify,
         add=add,
-        xoxc_token=xoxc_token,
-        d_cookie=d_cookie,
     )
     if parse_error is not None:
         typer.echo(parse_error, err=True)
@@ -225,10 +195,14 @@ def auth(
 
     if target not in (None, "status"):
         from agentgraph.connectors.registry import bootstrap, get_all_connectors
-        from agentgraph.connectors.status import auth_provider_connectors
+        from agentgraph.connectors.status import (
+            auth_provider_connectors,
+            run_auth_provider_flow,
+        )
 
         bootstrap()
-        grouped = auth_provider_connectors(get_all_connectors())
+        all_connectors = get_all_connectors()
+        grouped = auth_provider_connectors(all_connectors)
         seen = {label: connectors[0] for label, connectors in grouped.items()}
 
         if target not in seen:
@@ -236,22 +210,18 @@ def auth(
             typer.echo(f"Unknown auth target '{target}'. Available: {available}", err=True)
             raise typer.Exit(code=1)
 
-        if target == "slack" and (parsed_xoxc_token is not None or parsed_d_cookie is not None):
-            from agentgraph_connector_slack.auth import (
-                run_cookie_flow,  # type: ignore[import-not-found]
-            )
-
-            with _readable_credentials():
-                run_cookie_flow(
+        with _readable_credentials():
+            try:
+                run_auth_provider_flow(
+                    all_connectors,
+                    target,
                     account_id=parsed_account,
                     add=parsed_add,
-                    xoxc_token=parsed_xoxc_token,
-                    d_cookie=parsed_d_cookie,
+                    args=parsed_provider_args,
                 )
-            return
-
-        with _readable_credentials():
-            _run_auth_flow(type(seen[target]), parsed_account, parsed_add)
+            except ValueError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(code=2) from exc
         return
 
     from agentgraph.connectors.registry import bootstrap, get_all_connectors

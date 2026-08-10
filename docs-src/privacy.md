@@ -17,7 +17,10 @@ AgentGraph is an open-source application that you install and run locally on you
 ## Data collection and storage
 
 - Indexed content is stored in a local SQLite database.
-- Credentials are stored in `credentials.json` inside the AgentGraph config directory.
+- Provider tokens are stored in `credentials.json` inside the AgentGraph config directory.
+- Google uses Desktop OAuth client credentials packaged with AgentGraph. The client ID is
+  recorded with each account for token refresh; the packaged client secret is used only
+  in memory and is not copied into the user's `credentials.json`.
 - AgentGraph does not operate a hosted service and does not send indexed content to a server controlled by the project.
 
 ## Browser extension data flow

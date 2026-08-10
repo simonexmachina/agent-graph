@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from datetime import datetime
 from typing import Any, cast
 
 from pydantic import BaseModel
@@ -19,19 +18,6 @@ from agentgraph.config import CONFIG_DIR, CREDENTIALS_FILE
 
 class CredentialsFileError(ValueError):
     """The credentials file exists but could not be read as valid storage."""
-
-
-class GoogleCredentials(BaseModel):
-    """Google OAuth2 credentials stored under the 'google' platform key."""
-
-    client_id: str
-    client_secret: str
-    access_token: str
-    refresh_token: str
-    token_uri: str = "https://oauth2.googleapis.com/token"
-    token_expiry: datetime | None = None
-    user_email: str | None = None
-    display_name: str | None = None
 
 
 class PlatformAccounts(BaseModel):

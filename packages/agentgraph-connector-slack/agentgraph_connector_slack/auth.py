@@ -2,7 +2,23 @@
 
 from __future__ import annotations
 
+import argparse
+from typing import NoReturn, cast
+
 from pydantic import BaseModel
+
+
+class _AuthArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        raise ValueError(message)
+
+
+def cookie_options_from_args(args: list[str]) -> tuple[str | None, str | None]:
+    parser = _AuthArgumentParser(add_help=False, prog="agentgraph auth slack")
+    parser.add_argument("--xoxc-token")
+    parser.add_argument("--d-cookie")
+    parsed = parser.parse_args(args)
+    return cast(str | None, parsed.xoxc_token), cast(str | None, parsed.d_cookie)
 
 
 class SlackCredentials(BaseModel):

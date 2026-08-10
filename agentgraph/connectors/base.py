@@ -235,7 +235,12 @@ class BaseConnector(ABC):
     """
 
     @classmethod
-    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
         """Run the interactive authentication flow for this connector."""
         raise NotImplementedError(f"{cls.__name__} does not have an auth flow")
 

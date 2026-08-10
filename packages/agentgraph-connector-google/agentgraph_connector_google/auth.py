@@ -5,20 +5,38 @@
 
 from __future__ import annotations
 
+import argparse
 import socket
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import NoReturn
 from urllib.parse import parse_qs, urlparse
 
 import typer
 
 from agentgraph.auth.credentials import (
-    GoogleCredentials,
     load_platform_accounts,
     save_platform,
     upsert_platform_account,
 )
-from agentgraph.auth.google_provider import GOOGLE_SCOPES
+from agentgraph_connector_google.provider import (
+    GOOGLE_OAUTH_CLIENT_ID,
+    GOOGLE_OAUTH_CLIENT_SECRET,
+    GOOGLE_SCOPES,
+    GOOGLE_TOKEN_URI,
+    GoogleCredentials,
+    verify_google_auth,
+)
+
+
+class _AuthArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        raise ValueError(message)
+
+
+def _validate_args(args: list[str]) -> None:
+    parser = _AuthArgumentParser(add_help=False, prog="agentgraph auth google")
+    parser.parse_args(args)
 
 
 def _find_free_port() -> int:
@@ -27,14 +45,20 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
-def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
+def run_oauth_flow(
+    account_id: str | None = None,
+    add: bool = False,
+    args: list[str] | None = None,
+) -> None:
     """Interactive OAuth2 browser flow. Stores credentials on completion."""
-    from agentgraph.auth.google_provider import verify_google_auth
+    _validate_args(args or [])
 
     existing_accounts = load_platform_accounts("google")
     existing_data = None
     if account_id is not None:
-        existing_data = next((item for item in existing_accounts if item.get("account_id") == account_id), None)
+        existing_data = next(
+            (item for item in existing_accounts if item.get("account_id") == account_id), None
+        )
     elif existing_accounts and not add:
         existing_data = existing_accounts[0]
     existing = GoogleCredentials(**existing_data) if existing_data else None
@@ -59,21 +83,13 @@ def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
                 return
         else:
             typer.echo(f"\nGoogle credentials need re-authentication: {detail or status}.")
-            typer.echo("Re-opening browser consent using the saved OAuth client ID and secret.")
+            typer.echo("Re-opening browser consent using AgentGraph's packaged OAuth client.")
 
-        typer.echo(f"Re-authenticating as {existing.user_email or 'existing account'} with updated scopes.")
-        client_id = existing.client_id or typer.prompt("Google OAuth client ID")
-        client_secret = existing.client_secret or typer.prompt("Google OAuth client secret", hide_input=True)
-    else:
         typer.echo(
-            "\nCreate (or reuse) a Desktop OAuth client:"
-            "\n  https://console.cloud.google.com/apis/credentials"
-            "\nFirst-time setup also needs the Docs, Sheets, Drive, and Gmail APIs enabled,"
-            "\nand your email added as a Test user under OAuth consent screen → Audience."
-            "\n"
+            f"Re-authenticating as {existing.user_email or 'existing account'} with updated scopes."
         )
-        client_id = typer.prompt("Google OAuth client ID")
-        client_secret = typer.prompt("Google OAuth client secret", hide_input=True)
+
+    client_id = GOOGLE_OAUTH_CLIENT_ID
 
     port = _find_free_port()
     redirect_uri = f"http://localhost:{port}"
@@ -83,10 +99,10 @@ def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
     client_config = {
         "installed": {
             "client_id": client_id,
-            "client_secret": client_secret,
+            "client_secret": GOOGLE_OAUTH_CLIENT_SECRET,
             "redirect_uris": [redirect_uri],
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
+            "token_uri": GOOGLE_TOKEN_URI,
         }
     }
 
@@ -129,16 +145,19 @@ def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
 
     creds = GoogleCredentials(
         client_id=client_id,
-        client_secret=client_secret,
         access_token=token.token or "",
         refresh_token=token.refresh_token or "",
         token_expiry=token.expiry,
         user_email=user_email,
         display_name=display_name,
     )
-    resolved_account_id = account_id or (user_email.lower() if user_email else f"google:{len(existing_accounts) + 1}")
+    resolved_account_id = account_id or (
+        user_email.lower() if user_email else f"google:{len(existing_accounts) + 1}"
+    )
     if not add and len(existing_accounts) <= 1 and account_id is None:
-        save_platform("google", {**creds.model_dump(mode="json"), "account_id": resolved_account_id})
+        save_platform(
+            "google", {**creds.model_dump(mode="json"), "account_id": resolved_account_id}
+        )
     else:
         upsert_platform_account("google", resolved_account_id, creds, make_default=True)
     from agentgraph.config import CREDENTIALS_FILE

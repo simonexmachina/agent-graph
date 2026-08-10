@@ -136,9 +136,21 @@ class SlackConnector(BaseConnector):
     onboard_prompt = "Set up Slack?"
 
     @classmethod
-    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
-        from agentgraph_connector_slack.auth import run_cookie_flow
-        run_cookie_flow(account_id=account_id, add=add)
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
+        from agentgraph_connector_slack.auth import cookie_options_from_args, run_cookie_flow
+
+        xoxc_token, d_cookie = cookie_options_from_args(args or [])
+        run_cookie_flow(
+            account_id=account_id,
+            add=add,
+            xoxc_token=xoxc_token,
+            d_cookie=d_cookie,
+        )
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:

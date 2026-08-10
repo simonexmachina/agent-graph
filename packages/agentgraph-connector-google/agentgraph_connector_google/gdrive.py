@@ -14,14 +14,6 @@ from typing import Any
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
-from agentgraph.auth.google_provider import (
-    get_credentials as google_credentials,
-)
-from agentgraph.auth.google_provider import (
-    get_user_email,
-    list_google_accounts,
-    verify_google_auth,
-)
 from agentgraph.connectors.base import (
     BaseConnector,
     ConnectorAccount,
@@ -32,6 +24,14 @@ from agentgraph.connectors.base import (
     PersonRecord,
     ResourceType,
     SourceReference,
+)
+from agentgraph_connector_google.provider import (
+    get_credentials as google_credentials,
+)
+from agentgraph_connector_google.provider import (
+    get_user_email,
+    list_google_accounts,
+    verify_google_auth,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,9 +84,14 @@ class DriveChangesConnector(BaseConnector):
     auth_description = "Google Drive: Document entities for non-native files (PDFs, etc.) and Folder entities listing their contents; polls the Drive Changes API to keep gdocs and gsheets current."
 
     @classmethod
-    def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
+    def run_auth_flow(
+        cls,
+        account_id: str | None = None,
+        add: bool = False,
+        args: list[str] | None = None,
+    ) -> None:
         from agentgraph_connector_google.auth import run_oauth_flow
-        run_oauth_flow(account_id=account_id, add=add)
+        run_oauth_flow(account_id=account_id, add=add, args=args)
 
     @classmethod
     def get_authenticated_user(cls) -> str | None:
