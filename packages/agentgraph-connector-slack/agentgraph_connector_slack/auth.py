@@ -11,6 +11,7 @@ import time
 import webbrowser
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 from urllib.parse import parse_qs, urlencode, urlparse
 from weakref import WeakKeyDictionary
@@ -228,11 +229,49 @@ def _exchange_oauth_code(
     return data
 
 
+def _oauth_setup_instructions() -> str:
+    manifest_path = Path(__file__).with_name("slack-app-manifest.yaml")
+    return (
+        "\nSlack OAuth (OIDC/PKCE) setup:\n"
+        "  1. Ask a Slack workspace admin to create an internal app from:\n"
+        f"     {manifest_path}\n"
+        "  2. Have the admin approve the app and its requested user scopes.\n"
+        f"  3. Register this exact redirect URL: {DEFAULT_REDIRECT_URI}\n"
+        "  4. Set AGENTGRAPH_SLACK_CLIENT_ID to the app's Client ID.\n"
+        "\n"
+        "If you registered a different localhost callback, set\n"
+        "AGENTGRAPH_SLACK_REDIRECT_URI to that exact URL before continuing.\n"
+    )
+
+
+def run_interactive_auth_flow(account_id: str | None = None, add: bool = False) -> None:
+    """Prompt for a Slack authentication method and run the selected flow."""
+    import click
+    import typer
+
+    typer.echo(
+        "\nChoose a Slack authentication method:\n"
+        "  1. Official Slack user OAuth (OIDC/PKCE) [recommended]\n"
+        "  2. Browser session credentials (xoxc token + d cookie) [fallback]\n"
+    )
+    choice = typer.prompt(
+        "Authentication method",
+        type=click.Choice(["1", "2"]),
+        default="1",
+        show_default=False,
+    )
+    if choice == "2":
+        run_cookie_flow(account_id=account_id, add=add)
+        return
+    run_oauth_flow(account_id=account_id, add=add)
+
+
 def run_oauth_flow(account_id: str | None = None, add: bool = False) -> None:
     """Authorize a Slack user with PKCE and store rotating credentials."""
     _ = add
     import typer
 
+    typer.echo(_oauth_setup_instructions())
     client_id = os.environ.get("AGENTGRAPH_SLACK_CLIENT_ID")
     if not client_id:
         raise RuntimeError(

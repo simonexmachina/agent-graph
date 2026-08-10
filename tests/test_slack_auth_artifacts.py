@@ -43,6 +43,7 @@ def test_slack_manifest_is_in_package_data() -> None:
 def test_slack_auth_skill_documents_oauth_and_explicit_fallback() -> None:
     skill = (ROOT / ".agents" / "skills" / "slack-auth" / "SKILL.md").read_text()
     assert "agentgraph auth slack" in skill
+    assert "interactive chooser" in skill
     assert "AGENTGRAPH_SLACK_CLIENT_ID" in skill
     assert "--method browser" in skill
     assert "users:read.email" in skill

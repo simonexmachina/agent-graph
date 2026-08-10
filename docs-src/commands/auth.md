@@ -20,7 +20,8 @@ agentgraph auth remove PLATFORM [--account ACCOUNT_ID] [--json]
 ## Notes
 
 - `PLATFORM` is the auth label, such as `google`, `slack`, or `discord`
-- Slack defaults to `--method oauth`; browser credential options imply `--method browser`
+- Slack prompts between official user OAuth (OIDC/PKCE) and browser-session credentials when `--method` is omitted
+- `--method oauth` selects OAuth without the chooser; browser credential options imply `--method browser`
 - `--xoxc-token` and `--d-cookie` are rejected with explicit `--method oauth`
 - status account rows include `auth_method`
 - `agentgraph auth remove PLATFORM` removes stored credentials for that provider; it does not delete indexed graph data

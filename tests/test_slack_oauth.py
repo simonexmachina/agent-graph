@@ -22,6 +22,7 @@ from agentgraph_connector_slack.auth import (
     SlackOAuthCredentials,
     load_slack_creds,
     refresh_oauth_credentials,
+    run_interactive_auth_flow,
     run_oauth_flow,
     slack_headers,
     validate_required_scopes,
@@ -467,11 +468,43 @@ def test_reauth_replaces_method_and_other_identity_remains_mixed(
     assert accounts["slack:T2:U2"]["auth_method"] == "browser"
 
 
-def test_connector_defaults_to_oauth() -> None:
-    with patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth:
+def test_connector_no_args_opens_interactive_chooser() -> None:
+    with patch("agentgraph_connector_slack.auth.run_interactive_auth_flow") as interactive:
         SlackConnector.run_auth_flow(account_id="slack:T1:U1", add=True)
 
-    oauth.assert_called_once_with(account_id="slack:T1:U1", add=True)
+    interactive.assert_called_once_with(account_id="slack:T1:U1", add=True)
+
+
+@pytest.mark.parametrize(("choice", "selected_flow"), [("1", "oauth"), ("2", "browser")])
+def test_interactive_auth_chooser_dispatches_selected_method(
+    choice: str,
+    selected_flow: str,
+) -> None:
+    with (
+        patch("typer.prompt", return_value=choice),
+        patch("agentgraph_connector_slack.auth.run_oauth_flow") as oauth,
+        patch("agentgraph_connector_slack.auth.run_cookie_flow") as browser,
+    ):
+        run_interactive_auth_flow(account_id="slack:T1:U1", add=True)
+
+    selected = oauth if selected_flow == "oauth" else browser
+    selected.assert_called_once_with(account_id="slack:T1:U1", add=True)
+    (browser if selected_flow == "oauth" else oauth).assert_not_called()
+
+
+def test_oauth_flow_prints_setup_before_requiring_client_id(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("AGENTGRAPH_SLACK_CLIENT_ID", raising=False)
+
+    with pytest.raises(RuntimeError, match="AGENTGRAPH_SLACK_CLIENT_ID is required"):
+        run_oauth_flow()
+
+    output = capsys.readouterr().out
+    assert "Slack OAuth (OIDC/PKCE) setup" in output
+    assert "slack-app-manifest.yaml" in output
+    assert "http://localhost:8766/slack/oauth/callback" in output
 
 
 @pytest.mark.asyncio

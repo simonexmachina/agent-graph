@@ -17,11 +17,13 @@ agentgraph auth status --json | jq '.[] | select(.provider == "slack")'
 
 2. Confirm `AGENTGRAPH_SLACK_CLIENT_ID` is set for the admin-created internal app. The app must use the AgentGraph manifest and register the exact redirect URI. The default is `http://localhost:8766/slack/oauth/callback`; `AGENTGRAPH_SLACK_REDIRECT_URI` may override it.
 
-3. Start OAuth and let the user approve in the opened browser:
+3. Start the interactive chooser, select official Slack user OAuth (OIDC/PKCE), and let the user approve in the opened browser:
 
 ```bash
 agentgraph auth slack
 ```
+
+For non-interactive OAuth selection, use `agentgraph auth slack --method oauth`.
 
 Use `--add` for another identity or `--account slack:<team>:<user>` to replace that identity's current method. Verify `auth_method` afterward:
 

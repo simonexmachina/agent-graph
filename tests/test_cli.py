@@ -665,6 +665,21 @@ def test_auth_slack_explicit_browser_dispatches_to_connector() -> None:
     )
 
 
+def test_auth_slack_without_method_runs_interactive_chooser() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[SlackConnector()],
+        ),
+        patch("agentgraph_connector_slack.auth.run_interactive_auth_flow") as interactive,
+    ):
+        result = runner.invoke(app, ["auth", "slack", "--add"])
+
+    assert result.exit_code == 0
+    interactive.assert_called_once_with(account_id=None, add=True)
+
+
 def test_auth_remove_deletes_provider_credentials(tmp_creds: Path) -> None:
     save_platform("slack", {"xoxc_token": "xoxc-test", "d_cookie": "cookie"})
 

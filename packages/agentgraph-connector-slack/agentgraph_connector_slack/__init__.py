@@ -144,9 +144,9 @@ class SlackConnector(BaseConnector):
 
     @classmethod
     def run_auth_flow(cls, account_id: str | None = None, add: bool = False) -> None:
-        from agentgraph_connector_slack.auth import run_oauth_flow
+        from agentgraph_connector_slack.auth import run_interactive_auth_flow
 
-        run_oauth_flow(account_id=account_id, add=add)
+        run_interactive_auth_flow(account_id=account_id, add=add)
 
     @classmethod
     def run_auth_flow_with_args(
@@ -155,7 +155,11 @@ class SlackConnector(BaseConnector):
         account_id: str | None = None,
         add: bool = False,
     ) -> None:
-        from agentgraph_connector_slack.auth import run_cookie_flow, run_oauth_flow
+        from agentgraph_connector_slack.auth import (
+            run_cookie_flow,
+            run_interactive_auth_flow,
+            run_oauth_flow,
+        )
 
         method: str | None = None
         xoxc_token: str | None = None
@@ -188,7 +192,10 @@ class SlackConnector(BaseConnector):
         browser_options = xoxc_token is not None or d_cookie is not None
         if method == "oauth" and browser_options:
             raise ValueError("--xoxc-token and --d-cookie cannot be used with --method oauth")
-        selected_method = method or ("browser" if browser_options else "oauth")
+        selected_method = method or ("browser" if browser_options else None)
+        if selected_method is None:
+            run_interactive_auth_flow(account_id=account_id, add=add)
+            return
         if selected_method == "browser":
             run_cookie_flow(
                 account_id=account_id,
