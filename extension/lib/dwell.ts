@@ -48,6 +48,13 @@ interface DwellEntry {
   started_at: number;
   fires_at: number;
 }
+
+interface ReportResult {
+  ok: boolean;
+  http_status?: number;
+  error?: string;
+}
+
 const pending = new Map<number, DwellEntry>();
 const observations = new Map<number, ObservationStatus>();
 
@@ -140,7 +147,18 @@ export function startDwell(
     if (obs && obs.matches) {
       obs.state = "sending";
       obs.threshold_reported_at = Date.now();
-      void sendReportDwell(obs.url, thresholdMs, obs.meta || {});
+      void sendReportDwell(obs.url, thresholdMs, obs.meta || {}).then((result) => {
+        if (observations.get(tabId) !== obs || obs.state !== "sending") return;
+
+        obs.http_status = result.http_status;
+        if (result.ok) {
+          obs.state = "sent";
+          obs.sent_at = Date.now();
+        } else {
+          obs.state = "failed";
+          obs.error = result.error;
+        }
+      });
     }
   }, thresholdMs);
 
@@ -195,15 +213,28 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
 // Server request
 // ---------------------------------------------------------------------------
 
-export async function sendReportDwell(url: string, dwellMs: number, meta: Record<string, string>): Promise<void> {
-  const serverBaseUrl = await getServerBaseUrl();
-  const response = await fetch(getReportDwellUrl(serverBaseUrl), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, dwell_ms: dwellMs, meta: Object.keys(meta).length ? meta : undefined }),
-  });
-  if (!response.ok) {
-    console.error(`POST /report-dwell failed with HTTP ${response.status}`);
+export async function sendReportDwell(
+  url: string,
+  dwellMs: number,
+  meta: Record<string, string>,
+): Promise<ReportResult> {
+  try {
+    const serverBaseUrl = await getServerBaseUrl();
+    const response = await fetch(getReportDwellUrl(serverBaseUrl), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, dwell_ms: dwellMs, meta: Object.keys(meta).length ? meta : undefined }),
+    });
+    if (!response.ok) {
+      const error = `HTTP ${response.status}`;
+      console.error(`POST /report-dwell failed with ${error}`);
+      return { ok: false, http_status: response.status, error };
+    }
+    return { ok: true, http_status: response.status };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`POST /report-dwell failed: ${message}`);
+    return { ok: false, error: message };
   }
 }
 
