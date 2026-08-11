@@ -178,6 +178,9 @@ class SQLiteBackend(StorageBackend):
         if "observed_at" not in columns:
             await conn.execute("ALTER TABLE entities ADD COLUMN observed_at TEXT")
         await conn.execute(
+            "UPDATE entities SET entity_type = 'Email' WHERE entity_type = 'Thread'"
+        )
+        await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_bookmarked ON entities(bookmarked)"
         )
         await conn.execute(

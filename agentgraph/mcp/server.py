@@ -321,10 +321,10 @@ async def search_entities_tool(
     IMPORTANT — attachments: chat photos, images, and uploaded files are
     stored as attachments on Message entities (in metadata.attachments).
     Gmail email attachments are represented as Gmail Document stubs referenced
-    by the owning Thread and can be downloaded with download_entity_tool.
+    by the owning Email and can be downloaded with download_entity_tool.
     If the user asks about chat uploads, search Message entities or use
     query_by_filter_tool with has_attachments=True. If the user asks about
-    Gmail attachments, inspect the Thread's referenced Document stubs.
+    Gmail attachments, inspect the Email's referenced Document stubs.
 
     Args:
         query: Natural-language search query.
@@ -753,12 +753,12 @@ async def query_by_filter_tool(
           uploaded files, query Message (not Document) and set
           has_attachments=True.
       - Document: text documents such as Google Docs, plus Gmail attachment
-          stubs referenced by their owning Thread. Gmail attachment Document
+          stubs referenced by their owning Email. Gmail attachment Document
           stubs can be passed to download_entity_tool.
       - Spreadsheet: Google Sheets or Excel files.
       - Folder: a Google Drive folder containing other entities.
       - Channel: a chat channel or DM thread (Discord, Slack, etc.).
-      - Thread: an email thread (Gmail).
+      - Email: an email thread (Gmail).
       - Task: a task or to-do item (e.g. from a project tracker).
       - Project: a project or repository container.
 

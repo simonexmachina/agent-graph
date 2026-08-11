@@ -755,7 +755,7 @@ async def test_browse_nodes_include_display_name_from_title() -> None:
     from agentgraph.server.cli_api import cli_browse
 
     thread = _entity(
-        entity_type="Thread",
+        entity_type="Email",
         platform="gmail",
         title="Quarterly planning sync with vendor and finance",
     )
@@ -984,7 +984,7 @@ async def test_browse_nodes_can_skip_ordering_for_graph_view() -> None:
     with patch("agentgraph.server.cli_api.list_entities_page", mock_page):
         await cli_browse_nodes(
             search=None,
-            entity_type=["Message", "Thread"],
+            entity_type=["Message", "Email"],
             platform=None,
             since=None,
             node_id=None,
@@ -998,7 +998,7 @@ async def test_browse_nodes_can_skip_ordering_for_graph_view() -> None:
         )
 
     mock_page.assert_awaited_once_with(
-        entity_types=["Message", "Thread"],
+        entity_types=["Message", "Email"],
         platform=None,
         since=None,
         limit=50,

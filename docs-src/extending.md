@@ -62,7 +62,7 @@ AgentGraph is designed to be extended with new connectors.
     </tr>
     <tr>
       <td>Gmail</td>
-      <td>Thread</td>
+      <td>Email</td>
       <td>Google OAuth</td>
       <td>Browser dwell plus background poll and ingest</td>
     </tr>
@@ -288,7 +288,7 @@ async def _fetch_changes_since(cursor: str | None) -> tuple[EntityBatch, str]:
 
 ### Output model
 
-- `EntityRecord` for messages, documents, channels, folders, spreadsheets, and threads.
+- `EntityRecord` for messages, documents, channels, folders, spreadsheets, and emails.
 - `PersonRecord` for authors and participants.
 - `EdgeRecord` for authored, posted-in, replied-to, mentions, references, and similar relationships.
 

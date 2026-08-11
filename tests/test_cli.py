@@ -201,7 +201,7 @@ def test_query_exits_when_server_unavailable() -> None:
 
     with patch("agentgraph.cli_query._get", side_effect=SystemExit(1)), pytest.raises(SystemExit):
         cmd_query(
-            entity_type="Thread",
+            entity_type="Email",
             filters={},
             limit=5,
             order_by="updated_at",
@@ -267,7 +267,7 @@ def test_server_unavailable_exits_nonzero() -> None:
         pytest.raises(SystemExit) as exc,
     ):
         cmd_query(
-            entity_type="Thread",
+            entity_type="Email",
             filters={},
             limit=5,
             order_by="updated_at",
@@ -290,7 +290,7 @@ def test_cli_server_requests_use_short_connect_timeout() -> None:
 
     with patch("httpx.get", return_value=response) as get:
         cmd_query(
-            entity_type="Thread",
+            entity_type="Email",
             filters={},
             limit=5,
             order_by="updated_at",

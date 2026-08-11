@@ -15,7 +15,11 @@ from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
 from agentgraph_connector_slack import SlackConnector, _parse_mentions
 
-from agentgraph.connectors.base import EntityBatch, SourceReference
+from agentgraph.connectors.base import (
+    EntityBatch,
+    RESOURCE_TYPE_TO_ENTITY_TYPE,
+    SourceReference,
+)
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -150,6 +154,13 @@ def test_parse_mentions_multiple() -> None:
 
 def test_parse_mentions_no_false_positives() -> None:
     assert _parse_mentions("<#CABC|general>") == []
+
+
+def test_gmail_thread_resource_maps_to_email_entity() -> None:
+    connector = GmailConnector()
+
+    assert RESOURCE_TYPE_TO_ENTITY_TYPE["thread"] == "Email"
+    assert connector.normalise_fetch_id("thread-123", "Email") == ("thread-123", "thread")
 
 
 # ---------------------------------------------------------------------------
@@ -484,6 +495,7 @@ def test_gmail_thread_to_items_preserves_html_body() -> None:
     entity, _persons, _edges, _attachment_stubs = _thread_to_items(thread)
 
     assert entity is not None
+    assert entity.entity_type == "Email"
     assert entity.metadata["content_type"] == "text/html"
     assert entity.content is not None
     assert "<p>Hello <strong>world</strong></p>" in entity.content

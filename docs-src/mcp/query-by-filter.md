@@ -19,4 +19,4 @@ query_by_filter_tool(entity_type, filters=None, since=None, authored_by_me=False
 
 - `Message` is the correct entity type for chat-style uploaded files and images
 - `has_attachments=True` only applies to `Message`
-- Gmail email attachments are represented as Gmail `Document` stubs referenced by the owning `Thread`
+- Gmail email attachments are represented as Gmail `Document` stubs referenced by the owning `Email`

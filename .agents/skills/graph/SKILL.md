@@ -112,7 +112,8 @@ agentgraph install-skill ...       -> install_skill_tool(skill, target, force)
 | Type | Contains |
 |---|---|
 | `Message` | Chat messages (Discord, Slack). **Chat images and file uploads are attachments on Message entities** — stored in `metadata.attachments` (JSON array with `url`, `filename`, `content_type`, `width`, `height`). Use `--has-attachments` to filter to messages with files. |
-| `Document` | Text documents (Google Docs, etc.) and Gmail attachment stubs. Gmail attachment stubs are referenced by their owning `Thread` and can be downloaded with `agentgraph download`. |
+| `Document` | Text documents (Google Docs, etc.) and Gmail attachment stubs. Gmail attachment stubs are referenced by their owning `Email` and can be downloaded with `agentgraph download`. |
+| `Email` | Gmail email threads. |
 | `Channel` | Chat channels and DM threads. |
 | `Task` | Tasks or to-do items. |
 | `Project` | Project/repository containers. |

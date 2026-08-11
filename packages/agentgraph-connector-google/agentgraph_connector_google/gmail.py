@@ -1,4 +1,4 @@
-"""Gmail connector — ingests email threads as Thread entities."""
+"""Gmail connector — ingests email threads as Email entities."""
 
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false
@@ -234,7 +234,7 @@ class GmailConnector(BaseConnector):
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     sync_horizon_days: int = 90  # How far back to look on the initial bulk ingest
     url_patterns = ["https://mail.google.com/*"]
-    auth_description = "Gmail conversations (last 90 days by default): Thread entities containing full message bodies with senders, recipients, and cc participants."
+    auth_description = "Gmail conversations (last 90 days by default): Email entities containing full message bodies with senders, recipients, and cc participants."
     auth_label = "google"
 
     @classmethod
@@ -666,7 +666,7 @@ def _thread_to_items(
 
     label_ids: list[str] = messages[0].get("labelIds", [])
     entity = EntityRecord(
-        entity_type="Thread",
+        entity_type="Email",
         platform="gmail",
         platform_entity_id=thread_id,
         title=subject,
@@ -730,7 +730,7 @@ async def _list_threads(
 
 
 async def _get_known_thread_ids(thread_ids: set[str]) -> set[str]:
-    """Return the subset of thread_ids already stored as gmail Thread entities."""
+    """Return the subset of thread IDs already stored as Gmail Email entities."""
     from agentgraph.core.context import get_backend
 
     backend = get_backend()

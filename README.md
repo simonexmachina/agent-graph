@@ -148,7 +148,7 @@ agentgraph delete <entity-id>
 ```
 
 Gmail attachments are indexed as `Document` stub entities referenced by the
-owning `Thread`. Re-fetch the thread, traverse one hop to find the attachment
+owning `Email`. Re-fetch the email thread, traverse one hop to find the attachment
 document, then pass that document ID to `agentgraph download`.
 
 ### Sync and connectors
@@ -183,7 +183,7 @@ Included connectors:
 | Google Docs | Document | Google OAuth | Browser dwell plus Drive-backed refresh |
 | Google Sheets | Spreadsheet | Google OAuth | Browser dwell plus Drive-backed refresh |
 | Google Drive | Folder, Document | Google OAuth | Browser dwell for folders and files, plus Drive changes polling |
-| Gmail | Thread, Document stubs for attachments | Google OAuth | Browser dwell plus background poll and ingest |
+| Gmail | Email, Document stubs for attachments | Google OAuth | Browser dwell plus background poll and ingest |
 | RSS | Folder, Document | Feed URLs | Background poll and ingest; `add` validates feeds and queues a poll |
 
 AgentGraph is designed to be extended. Custom connectors live in separate packages, register through the connector entry point, and implement the shared `BaseConnector` interface. See [Extending](docs-src/extending.md).

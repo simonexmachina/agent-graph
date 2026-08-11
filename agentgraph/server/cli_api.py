@@ -444,7 +444,7 @@ async def _resolve_viewer_node_set(
     else:
         edges = await get_edges_for_entities(list(visible_ids))
         # When search + entity_type active, pull in adjacent nodes of those types so that
-        # e.g. searching for a Thread also surfaces the Persons connected to it.
+        # e.g. searching for an Email also surfaces the Persons connected to it.
         if search and entity_type:
             allowed = set(entity_type)
             neighbour_ids = {

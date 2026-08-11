@@ -25,7 +25,7 @@ ENTITY_TYPES: tuple[str, ...] = (
     "Message",
     "Person",
     "Spreadsheet",
-    "Thread",
+    "Email",
 )
 
 # Broad URL extractor — classify_url does fine-grained matching
@@ -39,7 +39,7 @@ RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
     "folder":      "Folder",
     "message":     "Message",
     "spreadsheet": "Spreadsheet",
-    "thread":      "Thread",
+    "thread":      "Email",
 }
 
 
@@ -340,7 +340,7 @@ class BaseConnector(ABC):
             "Spreadsheet": "spreadsheet",
             "Channel": "channel",
             "Message": "message",
-            "Thread": "thread",
+            "Email": "thread",
         }
         return resource_id, resource_type_map.get(entity_type, "document")  # type: ignore[return-value]
 

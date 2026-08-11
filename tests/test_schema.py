@@ -222,7 +222,7 @@ async def test_list_entities_page_can_omit_ordering(
         AsyncMock(return_value=[]),
     ) as fetchall:
         await sqlite_backend.list_entities_page(
-            ["Message", "Thread"], None, None, 50, 0, None, "desc"
+            ["Message", "Email"], None, None, 50, 0, None, "desc"
         )
 
     assert fetchall.await_args is not None
@@ -239,7 +239,7 @@ async def test_file_database_uses_separate_read_connection(tmp_path: Path) -> No
         await backend.close()
 
 
-async def test_existing_database_gets_observation_and_dwell_columns(tmp_path: Path) -> None:
+async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_path: Path) -> None:
     db_path = tmp_path / "old-schema.db"
     conn = sqlite3.connect(db_path)
     conn.executescript(
@@ -270,7 +270,7 @@ async def test_existing_database_gets_observation_and_dwell_columns(tmp_path: Pa
     conn.execute(
         """
         INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, content)
-        VALUES (?, 'Document', 'gdocs', 'test-doc-001', 'Test Document', 'Some content')
+        VALUES (?, 'Thread', 'gmail', 'test-thread-001', 'Test Email', 'Some content')
         """,
         ["entity-1"],
     )
@@ -285,13 +285,14 @@ async def test_existing_database_gets_observation_and_dwell_columns(tmp_path: Pa
         assert "cumulative_dwell_ms" in column_names
         assert "observed_at" in column_names
 
-        entity = await migrated.get_entity_by_platform("gdocs", "test-doc-001")
+        entity = await migrated.get_entity_by_platform("gmail", "test-thread-001")
         assert entity is not None
+        assert entity["entity_type"] == "Email"
         assert entity["cumulative_dwell_ms"] == 0
         assert entity["observed_at"] is None
 
-        await migrated.increment_dwell_time("gdocs", "test-doc-001", 1234)
-        updated = await migrated.get_entity_by_platform("gdocs", "test-doc-001")
+        await migrated.increment_dwell_time("gmail", "test-thread-001", 1234)
+        updated = await migrated.get_entity_by_platform("gmail", "test-thread-001")
         assert updated is not None
         assert updated["cumulative_dwell_ms"] == 1234
         assert updated["observed_at"] is not None
