@@ -197,7 +197,7 @@ class FetchPolicy:
         Return FIRST_VISIT, INCREMENTAL, or FRESH based on last sync time.
         - FIRST_VISIT: never synced
         - INCREMENTAL: synced but data is stale
-        - FRESH: synced recently, only update last_accessed
+        - FRESH: synced recently, skip a redundant fetch
         """
         if last_synced_at is None:
             return self.FIRST_VISIT

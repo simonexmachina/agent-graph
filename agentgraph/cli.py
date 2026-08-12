@@ -701,7 +701,7 @@ def query(
         "created_at",
         "--order-by",
         "-o",
-        help="Column to sort by (created_at, updated_at, last_accessed)",
+        help="Column to sort by (created_at, updated_at, observed_at, synced_at)",
     ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:

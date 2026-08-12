@@ -578,11 +578,10 @@ def _thread_to_items(
     first_headers = messages[0].get("payload", {}).get("headers", [])
     subject = _get_header(first_headers, "Subject") or "(no subject)"
 
-    thread_created_at: datetime | None = None
-    import contextlib
-
-    with contextlib.suppress(Exception):
-        thread_created_at = parsedate_to_datetime(_get_header(first_headers, "Date"))
+    message_times = [_message_internal_date(message) for message in messages]
+    source_times = [value for value in message_times if value is not None]
+    thread_created_at = min(source_times) if source_times else None
+    thread_updated_at = max(source_times) if source_times else None
 
     content_blocks: list[str] = []
     persons: list[PersonRecord] = []
@@ -672,7 +671,7 @@ def _thread_to_items(
         title=subject,
         content=content,
         created_at=thread_created_at,
-        updated_at=datetime.now(UTC),
+        updated_at=thread_updated_at,
         metadata={
             "message_count": len(messages),
             "snippet": thread.get("snippet", ""),
@@ -682,6 +681,14 @@ def _thread_to_items(
         },
     )
     return entity, persons, edges, attachment_stubs
+
+
+def _message_internal_date(message: dict[str, Any]) -> datetime | None:
+    value = message.get("internalDate")
+    try:
+        return datetime.fromtimestamp(int(str(value)) / 1000, UTC)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 async def _list_threads(

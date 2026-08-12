@@ -175,17 +175,11 @@ def gdocs_connector() -> GoogleDocsConnector:
 
 @pytest.mark.asyncio
 async def test_gdocs_fetch_fresh_returns_empty_batch(gdocs_connector: GoogleDocsConnector) -> None:
-    """When data is fresh, connector returns empty batch and touches last_accessed."""
-    with (
-        patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
-        patch(
-            "agentgraph_connector_google.gdocs._touch_last_accessed", new=AsyncMock()
-        ) as mock_touch,
-    ):
+    """When data is fresh, connector returns an empty batch without mutation."""
+    with patch.object(gdocs_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())):
         batch = await gdocs_connector.fetch("document", "doc-abc")
 
     assert batch == EntityBatch()
-    mock_touch.assert_awaited_once_with("doc-abc")
 
 
 @pytest.mark.asyncio
@@ -231,6 +225,8 @@ async def test_gdocs_fetch_doc_adds_download_metadata(monkeypatch: pytest.Monkey
             {
                 "name": "Tax Return 2025",
                 "owners": [{"emailAddress": "owner@example.com", "displayName": "Owner"}],
+                "createdTime": "2025-01-02T03:04:05Z",
+                "modifiedTime": "2026-02-03T04:05:06Z",
             },
             b"<html><body><h1>Tax Return 2025</h1></body></html>",
         ),
@@ -247,6 +243,8 @@ async def test_gdocs_fetch_doc_adds_download_metadata(monkeypatch: pytest.Monkey
     assert isinstance(download_url, str)
     assert download_url.endswith("/export?mimeType=text/html")
     assert entity.metadata["web_url"] == "https://docs.google.com/document/d/doc-123/view"
+    assert entity.created_at == datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
+    assert entity.updated_at == datetime(2026, 2, 3, 4, 5, 6, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -401,14 +399,10 @@ def gmail_connector() -> GmailConnector:
 @pytest.mark.asyncio
 async def test_slack_fetch_fresh_returns_empty_batch(slack_connector: SlackConnector) -> None:
     """When channel data is fresh, connector returns empty batch."""
-    with (
-        patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())),
-        patch("agentgraph_connector_slack._touch_last_accessed", new=AsyncMock()) as mock_touch,
-    ):
+    with patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=_recent_dt())):
         batch = await slack_connector.fetch("channel", "T123/C12345")
 
     assert batch == EntityBatch()
-    mock_touch.assert_awaited_once_with("T123/C12345")
 
 
 @pytest.mark.asyncio
@@ -473,6 +467,7 @@ def test_gmail_thread_to_items_preserves_html_body() -> None:
             {
                 "id": "19ec9bf00171a35f",
                 "labelIds": ["INBOX"],
+                "internalDate": "1781515560000",
                 "payload": {
                     "headers": [
                         {"name": "Subject", "value": "HTML email"},
@@ -501,6 +496,8 @@ def test_gmail_thread_to_items_preserves_html_body() -> None:
     assert "<p>Hello <strong>world</strong></p>" in entity.content
     assert "Plain &lt;body&gt;" not in entity.content
     assert "<strong>From:</strong> Sender &lt;sender@example.com&gt;" in entity.content
+    assert entity.created_at == datetime(2026, 6, 15, 9, 26, tzinfo=UTC)
+    assert entity.updated_at == datetime(2026, 6, 15, 9, 26, tzinfo=UTC)
 
 
 def test_gmail_thread_to_items_adds_attachment_document_stubs() -> None:

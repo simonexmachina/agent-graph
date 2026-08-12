@@ -89,7 +89,7 @@ async def list_entities_page(
     since: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    order_by: str | None = "last_accessed",
+    order_by: str | None = "observed_at",
     order_dir: str = "desc",
 ) -> tuple[list[dict[str, Any]], int]:
     from agentgraph.graph.query import list_entities_page as impl
@@ -101,7 +101,7 @@ async def query_by_filter(
     entity_type: str,
     filters: dict[str, str],
     limit: int = 50,
-    order_by: str = "last_accessed",
+    order_by: str = "observed_at",
     since: str | None = None,
     authored_by_me: bool = False,
     has_attachments: bool = False,
@@ -289,7 +289,6 @@ _VIEWER_ORDER_FIELDS = {
     "entity_type",
     "platform",
     "updated_at",
-    "last_accessed",
     "observed_at",
     "synced_at",
 }
@@ -343,7 +342,7 @@ async def _resolve_viewer_node_set(
     *,
     page: int | None = None,
     page_size: int | None = None,
-    order_by: str = "last_accessed",
+    order_by: str = "observed_at",
     order_dir: str = "desc",
     ordered: bool = True,
 ) -> tuple[list[dict[str, Any]], int, bool]:
@@ -494,7 +493,7 @@ async def cli_browse_nodes(
     limit: int = Query(default=50, ge=1, le=1000),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=50, ge=1, le=1000),
-    sort: str = Query(default="last_accessed"),
+    sort: str = Query(default="observed_at"),
     sort_dir: str = Query(default="desc"),
     ordered: bool = Query(default=True),
 ) -> dict[str, Any]:
@@ -555,7 +554,7 @@ async def cli_browse(
 async def cli_query(
     entity_type: str,
     limit: int = Query(default=50, ge=1, le=500),
-    order_by: str = Query(default="last_accessed"),
+    order_by: str = Query(default="observed_at"),
     since: str | None = Query(default=None),
     mine: bool = Query(default=False),
     has_attachments: bool = Query(default=False),

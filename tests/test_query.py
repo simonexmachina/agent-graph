@@ -74,7 +74,6 @@ def _mock_backend(**method_overrides: Any) -> Any:
         "traverse_graph": AsyncMock(return_value={"nodes": [], "edges": []}),
         "query_by_filter": AsyncMock(return_value=[]),
         "list_entities": AsyncMock(return_value=[]),
-        "touch_last_accessed_by_ids": AsyncMock(return_value=None),
         "get_platform_last_synced_at": AsyncMock(return_value=None),
         "get_platforms_last_synced_at": AsyncMock(return_value={}),
         "set_entity_bookmarked": AsyncMock(return_value=_entity(title="Bookmarked Doc")),
