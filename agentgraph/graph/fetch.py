@@ -51,3 +51,51 @@ async def fetch_entity_by_id(entity_id: str) -> dict[str, Any]:
     if ref is None:
         raise ValueError(f"Entity not found: {entity_id}")
     return await fetch_entity(platform=ref[0], resource_id=ref[1])
+
+
+async def fetch_url(url: str, meta: dict[str, str] | None = None) -> dict[str, Any]:
+    """Fetch an HTTP(S) URL through observation resolution, with web fallback."""
+    from agentgraph.connectors.registry import bootstrap, get_connector
+    from agentgraph.graph.upsert import upsert_batch
+    from agentgraph.server.router import classify_observation_url
+
+    bootstrap()
+    ref = await classify_observation_url(url)
+    connector = get_connector(ref.source) if ref is not None else get_connector("web")
+    if connector is None:
+        raise ValueError("No connector available to fetch this URL")
+
+    fetch_meta = dict(meta or {})
+    if ref is not None and ref.fetch_meta:
+        fetch_meta.update(ref.fetch_meta)
+    resource_type = ref.resource_type if ref is not None else "document"
+    resource_id = ref.resource_id if ref is not None else url
+    batch = await connector.fetch(
+        resource_type=resource_type,
+        resource_id=resource_id,
+        meta=fetch_meta or None,
+    )
+    if batch.entities or batch.persons or batch.edges:
+        await upsert_batch(batch)
+
+    backend = get_backend()
+    entity = None
+    if ref is not None:
+        entity = await backend.get_entity_by_platform(ref.source, ref.resource_id)
+    if entity is None:
+        for candidate in batch.entities:
+            entity = await backend.get_entity_by_platform(
+                candidate.platform, candidate.platform_entity_id
+            )
+            if entity is not None:
+                break
+
+    return {
+        "source": ref.source if ref is not None else "web",
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "entity": entity,
+        "entities": len(batch.entities),
+        "persons": len(batch.persons),
+        "edges": len(batch.edges),
+    }

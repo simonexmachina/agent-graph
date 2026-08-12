@@ -41,7 +41,7 @@ def viewer_url(host: str, port: int) -> str:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global _scheduler
     from agentgraph.backends import get_backend_class
-    from agentgraph.config import get_settings
+    from agentgraph.config import get_config_paths, get_settings
     from agentgraph.connectors.registry import bootstrap
     from agentgraph.logging import configure_logging
 
@@ -64,7 +64,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_sync(_scheduler)
     _scheduler.start()
 
-    logger.info("AgentGraph server started (backend=%s)", settings.backend)
+    logger.info(
+        "AgentGraph server started (backend=%s, config_dir=%s)",
+        settings.backend,
+        get_config_paths()[0],
+    )
     logger.info("Web viewer: %s", viewer_url(settings.server_host, settings.server_port))
     yield
 
@@ -108,6 +112,16 @@ class ReportDwellRequest(BaseModel):
     meta: dict[str, str] | None = None
 
 
+class ExtensionPageRequest(BaseModel):
+    url: str
+    meta: dict[str, str] | None = None
+    entity_id: str | None = None
+
+
+class ExtensionBookmarkRequest(ExtensionPageRequest):
+    bookmarked: bool
+
+
 @app.post("/report-dwell", status_code=202)
 async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
     """
@@ -120,6 +134,58 @@ async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
 
     result = await record_dwell_time(req.url, req.dwell_ms, req.meta)
     return result
+
+
+@app.post("/api/extension/fetch")
+async def extension_fetch(req: ExtensionPageRequest) -> dict[str, Any]:
+    """Fetch the active browser URL through its connector."""
+    from agentgraph.graph.fetch import fetch_url
+
+    try:
+        return await fetch_url(req.url, req.meta)
+    except (ValueError, RuntimeError) as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/extension/page")
+async def extension_page(req: ExtensionPageRequest) -> dict[str, Any]:
+    """Return the existing graph entity for the active browser URL."""
+    from agentgraph.server.cli_api import get_entity_by_url
+
+    entity = await get_entity_by_url(req.url)
+    return {"entity": entity}
+
+
+@app.post("/api/extension/bookmark")
+async def extension_bookmark(req: ExtensionBookmarkRequest) -> dict[str, Any]:
+    """Set bookmark state for the active browser URL."""
+    from agentgraph.graph.bookmark import set_entity_bookmark
+    from agentgraph.graph.fetch import fetch_url
+    from agentgraph.graph.query import get_entity_by_url
+
+    try:
+        entity = await get_entity_by_url(req.url)
+        if entity is None and req.entity_id is not None:
+            from agentgraph.graph.query import get_entity
+
+            entity = await get_entity(req.entity_id)
+        if entity is None and not req.bookmarked:
+            raise ValueError("Page is not indexed")
+        if entity is None:
+            fetched = await fetch_url(req.url, req.meta)
+            result = fetched.get("entity")
+            if not isinstance(result, dict):
+                raise ValueError("Page was fetched but no graph entity was created")
+            result = await set_entity_bookmark(result["id"], True)
+        else:
+            result = await set_entity_bookmark(entity["id"], req.bookmarked)
+        return {"entity": result}
+    except ValueError as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/viewer", include_in_schema=False)
