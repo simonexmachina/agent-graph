@@ -35,6 +35,17 @@ interface ObservationStatusResponse {
   error?: string;
 }
 
+interface PageEntity {
+  id: string;
+  bookmarked?: boolean;
+}
+
+interface PageActionResponse {
+  ok: boolean;
+  entity?: PageEntity | null;
+  error?: string;
+}
+
 async function checkHealth(): Promise<boolean> {
   try {
     const serverBaseUrl = await getServerBaseUrl();
@@ -61,6 +72,36 @@ async function getObservationStatus(): Promise<ObservationStatus | null> {
   }) as ObservationStatusResponse;
   if (!response.ok) throw new Error(response.error ?? "Failed to get observation status");
   return response.status ?? null;
+}
+
+async function pageAction(
+  action: "page" | "fetch" | "bookmark",
+  bookmarked?: boolean,
+  entityId?: string,
+): Promise<PageActionResponse> {
+  return await chrome.runtime.sendMessage({
+    type: "extension_page_action",
+    action,
+    bookmarked,
+    entity_id: entityId,
+  }) as PageActionResponse;
+}
+
+function setPageActionStatus(message: string, variant: "neutral" | "success" | "error" = "neutral"): void {
+  const status = document.getElementById("page-action-status");
+  if (!status) return;
+  status.textContent = message;
+  status.className = `status status--${variant === "neutral" ? "unknown" : variant === "success" ? "ok" : "error"}`;
+}
+
+function setBookmarkState(entity: PageEntity | null, enabled: boolean): void {
+  const button = document.getElementById("toggle-bookmark") as HTMLButtonElement | null;
+  if (!button) return;
+  button.disabled = !enabled;
+  const bookmarked = Boolean(entity?.bookmarked);
+  button.textContent = bookmarked ? "Remove bookmark" : "Bookmark";
+  button.dataset.bookmarked = bookmarked ? "true" : "false";
+  if (entity) button.dataset.entityId = entity.id;
 }
 
 function setDot(healthy: boolean | null): void {
@@ -136,6 +177,55 @@ async function render(): Promise<void> {
   if (patternCountEl) patternCountEl.textContent = String(meta?.url_patterns.length ?? 0);
 
   setObservationStatus(observationStatus);
+
+  const fetchButton = document.getElementById("fetch-page") as HTMLButtonElement | null;
+  const isHttpPage = activeUrl?.startsWith("http://") || activeUrl?.startsWith("https://") || false;
+  if (fetchButton) fetchButton.disabled = !isHttpPage;
+  if (!isHttpPage) {
+    setBookmarkState(null, false);
+    setPageActionStatus("Active tab is not an HTTP(S) page");
+    return;
+  }
+
+  const response = await pageAction("page");
+  if (!response.ok) {
+    setBookmarkState(null, true);
+    setPageActionStatus(response.error ?? "Could not read page state", "error");
+    return;
+  }
+  setBookmarkState(response.entity ?? null, true);
+  setPageActionStatus(response.entity ? "Page is indexed" : "Page is not indexed");
+}
+
+async function runPageAction(action: "fetch" | "bookmark"): Promise<void> {
+  const fetchButton = document.getElementById("fetch-page") as HTMLButtonElement | null;
+  const bookmarkButton = document.getElementById("toggle-bookmark") as HTMLButtonElement | null;
+  if (fetchButton) fetchButton.disabled = true;
+  if (bookmarkButton) bookmarkButton.disabled = true;
+  setPageActionStatus(action === "fetch" ? "Fetching page…" : "Updating bookmark…");
+  try {
+    const desired = action === "bookmark" ? bookmarkButton?.dataset.bookmarked !== "true" : undefined;
+    const response = await pageAction(action, desired, bookmarkButton?.dataset.entityId);
+    if (!response.ok) throw new Error(response.error ?? "Page action failed");
+    if (response.entity) {
+      setBookmarkState(response.entity, true);
+      if (bookmarkButton) bookmarkButton.dataset.entityId = response.entity.id;
+    }
+    setPageActionStatus(action === "fetch" ? "Page fetched" : desired ? "Page bookmarked" : "Bookmark removed", "success");
+    if (action === "fetch") {
+      const refreshed = await pageAction("page");
+      if (refreshed.ok) {
+        setBookmarkState(refreshed.entity ?? null, true);
+        if (bookmarkButton && refreshed.entity) bookmarkButton.dataset.entityId = refreshed.entity.id;
+      }
+    }
+  } catch (error: unknown) {
+    setPageActionStatus(error instanceof Error ? error.message : "Page action failed", "error");
+    if (bookmarkButton) bookmarkButton.disabled = false;
+  } finally {
+    if (fetchButton) fetchButton.disabled = false;
+    if (bookmarkButton && bookmarkButton.dataset.bookmarked !== undefined) bookmarkButton.disabled = false;
+  }
 }
 
 async function reloadPatterns(): Promise<void> {
@@ -166,7 +256,12 @@ document.getElementById("open-options")?.addEventListener("click", () => {
   });
 });
 
+document.getElementById("fetch-page")?.addEventListener("click", () => {
+  runPageAction("fetch").catch(console.error);
+});
+
+document.getElementById("toggle-bookmark")?.addEventListener("click", () => {
+  runPageAction("bookmark").catch(console.error);
+});
+
 render().catch(console.error);
-setInterval(() => {
-  render().catch(console.error);
-}, 1000);

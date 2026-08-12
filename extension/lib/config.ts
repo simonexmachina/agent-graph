@@ -52,6 +52,18 @@ export function getReportDwellUrl(serverBaseUrl: string): string {
   return `${serverBaseUrl}/report-dwell`;
 }
 
+export function getExtensionPageUrl(serverBaseUrl: string): string {
+  return `${serverBaseUrl}/api/extension/page`;
+}
+
+export function getExtensionFetchUrl(serverBaseUrl: string): string {
+  return `${serverBaseUrl}/api/extension/fetch`;
+}
+
+export function getExtensionBookmarkUrl(serverBaseUrl: string): string {
+  return `${serverBaseUrl}/api/extension/bookmark`;
+}
+
 export async function getServerBaseUrl(): Promise<string> {
   const result = await chrome.storage.local.get(SERVER_BASE_URL_KEY);
   const storedValue = result[SERVER_BASE_URL_KEY];

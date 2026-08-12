@@ -14,6 +14,7 @@ import {
   refreshMeta,
   updateMeta,
 } from "./lib/dwell.js";
+import { getExtensionBookmarkUrl, getExtensionFetchUrl, getExtensionPageUrl, getServerBaseUrl } from "./lib/config.js";
 
 // Gmail metadata extracted by the content script, keyed by tab ID.
 const gmailMetaByTab = new Map<number, Record<string, string>>();
@@ -157,6 +158,47 @@ chrome.runtime.onMessage.addListener((message, sender) => {
       void onFocus(tabId);
     }
   }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== "extension_page_action") return false;
+
+  chrome.tabs.query({ active: true, currentWindow: true })
+    .then(async ([tab]) => {
+      const url = tab?.url;
+      if (!url || !/^https?:\/\//.test(url)) {
+        sendResponse({ ok: false, error: "The active tab is not an HTTP(S) page" });
+        return;
+      }
+      let meta = { ...(gmailMetaByTab.get(tab.id ?? -1) ?? {}) };
+      if (tab.id != null && url.includes("mail.google.com")) {
+        meta = { ...meta, ...(await fetchGmailMetaFromTab(tab.id)) };
+      }
+      const base = await getServerBaseUrl();
+      const endpoint = message.action === "fetch" ? getExtensionFetchUrl(base)
+        : message.action === "page" ? getExtensionPageUrl(base)
+        : getExtensionBookmarkUrl(base);
+      const body = message.action === "bookmark"
+        ? {
+            url,
+            meta: Object.keys(meta).length ? meta : undefined,
+            entity_id: typeof message.entity_id === "string" ? message.entity_id : undefined,
+            bookmarked: Boolean(message.bookmarked),
+          }
+        : { url, meta: Object.keys(meta).length ? meta : undefined };
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail ?? `HTTP ${response.status}`);
+      sendResponse({ ok: true, ...data });
+    })
+    .catch((error: unknown) => {
+      sendResponse({ ok: false, error: error instanceof Error ? error.message : "Request failed" });
+    });
+  return true;
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
