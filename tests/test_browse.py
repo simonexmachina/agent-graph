@@ -59,7 +59,6 @@ def _mock_backend(**overrides: Any) -> Any:
         "get_edges_for_entities": AsyncMock(return_value=[]),
         "traverse_graph": AsyncMock(return_value={"nodes": [], "edges": []}),
         "list_entities": AsyncMock(return_value=[]),
-        "touch_last_accessed_by_ids": AsyncMock(return_value=None),
     }
     for name, value in {**defaults, **overrides}.items():
         setattr(backend, name, value)
@@ -148,7 +147,6 @@ def test_viewer_renders_available_entity_timestamps_in_detail() -> None:
 
     assert "row('Created', formatDate(entity.created_at))" in viewer_html
     assert "row('Updated', formatDate(entity.updated_at))" in viewer_html
-    assert "row('Accessed', formatDate(entity.last_accessed))" in viewer_html
     assert "row('Observed', formatDate(entity.observed_at))" in viewer_html
 
 
@@ -291,7 +289,6 @@ def test_viewer_has_shared_order_controls() -> None:
     assert 'id="viewer-order"' in viewer_html
     assert 'id="viewer-order-select"' in viewer_html
     assert 'value="display_name">Name</option>' in viewer_html
-    assert 'value="last_accessed">Last accessed</option>' in viewer_html
     assert 'value="observed_at">Last observed</option>' in viewer_html
     assert 'data-sort="observed_at">Last observed</button>' in viewer_html
     assert 'id="viewer-order-direction"' in viewer_html
@@ -992,7 +989,7 @@ async def test_browse_nodes_can_skip_ordering_for_graph_view() -> None:
             limit=50,
             page=1,
             size=50,
-            sort="last_accessed",
+            sort="observed_at",
             sort_dir="desc",
             ordered=False,
         )

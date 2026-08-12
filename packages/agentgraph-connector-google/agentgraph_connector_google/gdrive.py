@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -275,7 +275,7 @@ def _list_drive_folder_sync(folder_id: str, account_id: str | None = None) -> En
     # Get folder metadata
     meta: dict[str, Any] = service.files().get(
         fileId=folder_id,
-        fields="id,name",
+        fields="id,name,createdTime,modifiedTime",
     ).execute()
     folder_name: str = meta.get("name", "")
 
@@ -301,6 +301,8 @@ def _list_drive_folder_sync(folder_id: str, account_id: str | None = None) -> En
         platform="gdrive",
         platform_entity_id=folder_id,
         title=folder_name,
+        created_at=_parse_drive_time(meta.get("createdTime")),
+        updated_at=_parse_drive_time(meta.get("modifiedTime")),
         metadata=_file_metadata(
             web_url=f"https://drive.google.com/drive/folders/{folder_id}",
             mime_type="application/vnd.google-apps.folder",
@@ -378,7 +380,7 @@ async def _fetch_drive_file(file_id: str, account_id: str | None = None) -> Enti
             None,
             lambda: service.files().get(
                 fileId=file_id,
-                fields="id,name,mimeType,owners,webViewLink,webContentLink",
+                fields="id,name,mimeType,owners,webViewLink,webContentLink,createdTime,modifiedTime",
             ).execute(),
         )
     except HttpError as exc:
@@ -433,6 +435,8 @@ async def _fetch_drive_file(file_id: str, account_id: str | None = None) -> Enti
         platform="gdrive",
         platform_entity_id=file_id,
         title=title,
+        created_at=_parse_drive_time(file_meta.get("createdTime")),
+        updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
         metadata=_file_metadata(
             web_url=web_link,
             download_url=download_link,
@@ -444,6 +448,12 @@ async def _fetch_drive_file(file_id: str, account_id: str | None = None) -> Enti
     batch = EntityBatch(entities=[entity], persons=owner_persons, edges=edges)
     batch.add_stubs_from(entity)
     return batch
+
+
+def _parse_drive_time(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def _web_url_for_file(file_id: str) -> str:

@@ -179,14 +179,12 @@ export function cancelDwell(tabId: number): void {
     if (elapsed > 0) {
       const meta = entry?.meta || obs.meta || {};
 
-      // If we already reported the threshold dwell, only report the additional duration
+      // A visit becomes an observation only after it reaches the dwell threshold.
       if (obs.threshold_reported_at) {
         const remaining = elapsed - thresholdMs;
         if (remaining > 0) {
           void sendReportDwell(obs.url, remaining, meta);
         }
-      } else {
-        void sendReportDwell(obs.url, elapsed, meta);
       }
     }
     // Prevent double-reporting if cancelDwell is called multiple times

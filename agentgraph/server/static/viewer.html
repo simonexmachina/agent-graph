@@ -961,7 +961,6 @@
         <option value="entity_type">Type</option>
         <option value="platform">Platform</option>
         <option value="updated_at">Updated</option>
-        <option value="last_accessed">Last accessed</option>
         <option value="observed_at">Last observed</option>
         <option value="created_at">Created</option>
       </select>
@@ -977,7 +976,6 @@
               <th scope="col"><button class="list-sort" type="button" data-sort="entity_type">Type</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="platform">Platform</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="updated_at">Updated</button></th>
-              <th scope="col"><button class="list-sort" type="button" data-sort="last_accessed">Last accessed</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="observed_at">Last observed</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="created_at">Created</button></th>
               <th scope="col">Dwell</th>
@@ -1627,7 +1625,7 @@
   let FETCHABLE_PLATFORMS = new Set();
   const DEFAULT_PAGE_TITLE = 'AgentGraph Viewer';
   const DEFAULT_LIMIT = 20;
-  const DEFAULT_LIST_SORT = 'last_accessed';
+  const DEFAULT_LIST_SORT = 'observed_at';
   const DEFAULT_LIST_SORT_DIR = 'desc';
 
   function focusedNodeTitle(nodeId) {
@@ -1822,7 +1820,6 @@
       addListCell(row, entity.entity_type || '—');
       addListCell(row, entity.platform || '—');
       addListCell(row, formatDate(entity.updated_at));
-      addListCell(row, formatDate(entity.last_accessed));
       addListCell(row, formatDate(entity.observed_at));
       addListCell(row, formatDate(entity.created_at));
       addListCell(row, formatDwell(entity.cumulative_dwell_ms));
@@ -2338,9 +2335,6 @@
     }
     if (entity.updated_at) {
       detailBody.appendChild(row('Updated', formatDate(entity.updated_at)));
-    }
-    if (entity.last_accessed) {
-      detailBody.appendChild(row('Accessed', formatDate(entity.last_accessed)));
     }
     if (entity.observed_at) {
       detailBody.appendChild(row('Observed', formatDate(entity.observed_at)));

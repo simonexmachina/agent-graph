@@ -298,8 +298,7 @@ class DiscordConnector(BaseConnector):
         decision = self.fetch_policy.decide(last_sync)
 
         if decision == FetchPolicy.FRESH:
-            logger.debug("discord/%s is fresh — updating last_accessed only", resource_id)
-            await _touch_last_accessed(resource_id)
+            logger.debug("discord/%s is fresh", resource_id)
             return EntityBatch()
 
         after_snowflake: str | None = None
@@ -339,12 +338,6 @@ class DiscordConnector(BaseConnector):
             except Exception:
                 logger.exception("discord poll: failed to fetch channel %s", channel_id)
         return combined, cursor
-
-
-async def _touch_last_accessed(channel_id: str) -> None:
-    from agentgraph.core.context import get_backend
-
-    await get_backend().upsert_stub_entity("Channel", "discord", channel_id)
 
 
 async def _fetch_user(
@@ -531,7 +524,6 @@ async def _fetch_channel(
             platform="discord",
             platform_entity_id=channel_id,
             title=f"#{channel_name}",
-            updated_at=datetime.now(UTC),
             metadata=channel_meta,
         ))
 

@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any
 
-from agentgraph.connectors.base import ResourceType
+from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE, ResourceType
 from agentgraph.server.router import classify_observation_url
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,11 @@ async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None
 
     try:
         backend = get_backend()
+        await backend.upsert_stub_entity(
+            RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type],
+            ref.source,
+            ref.resource_id,
+        )
         await backend.increment_dwell_time(ref.source, ref.resource_id, dwell_ms)
         logger.debug(
             "Recorded dwell time: +%dms for %s %s/%s",

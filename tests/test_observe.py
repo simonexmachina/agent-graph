@@ -128,6 +128,7 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
     from agentgraph.server.dwell import record_dwell_time
 
     backend = MagicMock()
+    backend.upsert_stub_entity = AsyncMock()
     backend.increment_dwell_time = AsyncMock()
     set_backend(backend)
     ref = SourceReference(
@@ -145,6 +146,7 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
         result = await record_dwell_time("https://example.com/articles/known", 15_000)
 
     assert result == {"status": "accepted", "source": "rss", "resource_type": "document"}
+    backend.upsert_stub_entity.assert_awaited_once_with("Document", "rss", "entry/known")
     backend.increment_dwell_time.assert_awaited_once_with("rss", "entry/known", 15_000)
 
 

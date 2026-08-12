@@ -301,8 +301,7 @@ class SlackConnector(BaseConnector):
         decision = self.fetch_policy.decide(last_sync)
 
         if decision == FetchPolicy.FRESH:
-            logger.debug("slack/%s is fresh — updating last_accessed only", resource_id)
-            await _touch_last_accessed(resource_id)
+            logger.debug("slack/%s is fresh", resource_id)
             return EntityBatch()
 
         oldest: str | None = None
@@ -334,17 +333,6 @@ class SlackConnector(BaseConnector):
             except Exception:
                 logger.exception("slack poll: failed to fetch channel %s", channel_id)
         return combined, cursor
-
-
-async def _touch_last_accessed(channel_id: str) -> None:
-    from agentgraph.core.context import get_backend
-
-    backend = get_backend()
-    entity = await backend.get_entity_by_platform("slack", channel_id)
-    if entity:
-        # Re-upsert the same entity to bump last_accessed via the normal path.
-        # The cheapest way is just a stub upsert which only updates last_accessed.
-        await backend.upsert_stub_entity("Channel", "slack", channel_id)
 
 
 async def _fetch_thread_replies(
@@ -486,7 +474,6 @@ async def _fetch_channel(channel_ref: str, oldest: str | None = None, account_id
             platform="slack",
             platform_entity_id=channel_ref,
             title=f"#{channel_name}",
-            updated_at=datetime.now(UTC),
             metadata=channel_meta,
         )
         entities.append(channel_entity)

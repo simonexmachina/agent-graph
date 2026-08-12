@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
@@ -169,8 +169,7 @@ class GoogleSheetsConnector(BaseConnector):
         decision = self.fetch_policy.decide(last_sync)
 
         if decision == FetchPolicy.FRESH:
-            logger.debug("gsheets/%s is fresh — updating last_accessed only", resource_id)
-            await _touch_last_accessed(resource_id)
+            logger.debug("gsheets/%s is fresh", resource_id)
             return EntityBatch()
 
         logger.info("Fetching Google Sheet %s (policy=%s)", resource_id, decision)
@@ -188,12 +187,6 @@ class GoogleSheetsConnector(BaseConnector):
         from agentgraph_connector_google.gdrive import download_drive_file
 
         return await download_drive_file(resource_id, output_path)
-
-
-async def _touch_last_accessed(spreadsheet_id: str) -> None:
-    from agentgraph.core.context import get_backend
-
-    await get_backend().touch_last_accessed("gsheets", spreadsheet_id)
 
 
 def _extract_xlsx(data: bytes) -> tuple[str, str]:
@@ -235,7 +228,7 @@ async def _fetch_excel_via_drive(
         None,
         lambda: drive_service.files().get(
             fileId=spreadsheet_id,
-            fields="name,owners",
+            fields="name,owners,createdTime,modifiedTime",
         ).execute(),
     )
     title: str = file_meta.get("name", "")
@@ -278,7 +271,8 @@ async def _fetch_excel_via_drive(
         title=title,
         content=content,
         metadata=_metadata(spreadsheet_id, account_id),
-        updated_at=datetime.now(UTC),
+        created_at=_parse_drive_time(file_meta.get("createdTime")),
+        updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
     )
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
     batch.add_stubs_from(entity)
@@ -338,7 +332,7 @@ async def _fetch_sheet(spreadsheet_id: str, account_id: str | None = None) -> En
             None,
             lambda: drive_service.files().get(
                 fileId=spreadsheet_id,
-                fields="owners,mimeType,webViewLink,webContentLink",
+                fields="owners,mimeType,webViewLink,webContentLink,createdTime,modifiedTime",
             ).execute(),
         )
         for owner in file_meta.get("owners", []):
@@ -375,9 +369,16 @@ async def _fetch_sheet(spreadsheet_id: str, account_id: str | None = None) -> En
         title=title,
         content=content,
         metadata=metadata,
-        updated_at=datetime.now(UTC),
+        created_at=_parse_drive_time(file_meta.get("createdTime")),
+        updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
     )
 
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
     batch.add_stubs_from(entity)
     return batch
+
+
+def _parse_drive_time(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))

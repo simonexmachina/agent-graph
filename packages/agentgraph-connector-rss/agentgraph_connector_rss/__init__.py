@@ -178,7 +178,12 @@ class RssConnector(BaseConnector):
     async def resolve_observation_url(self, url: str) -> SourceReference | None:
         configured_feed = self.resolve_url(url)
         if configured_feed is not None:
-            return configured_feed
+            return SourceReference(
+                source=self.source,
+                resource_type="folder",
+                resource_id=f"feed/{_feed_id(url)}",
+                fetch_meta={"feed_url": url},
+            )
 
         normalised_url = normalise_article_url(url)
         if normalised_url is None:
