@@ -38,7 +38,7 @@ def _fts5_query(text: str) -> str:
     return _FTS5_SPECIAL.sub(" ", text).strip()
 
 
-_VALID_ORDER_BY = {"created_at", "updated_at", "last_accessed", "observed_at", "synced_at"}
+_VALID_ORDER_BY = {"created_at", "updated_at", "observed_at", "synced_at"}
 _LIST_PAGE_ORDER_BY = {
     **{field: field for field in _VALID_ORDER_BY},
     "display_name": """
@@ -125,6 +125,14 @@ class SQLiteBackend(StorageBackend):
         if self._db_path != ":memory:":
             await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
+        legacy_table = await self._conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'entities'"
+        )
+        if await legacy_table.fetchone():
+            cursor = await self._conn.execute("PRAGMA table_info(entities)")
+            existing_columns = {row["name"] for row in await cursor.fetchall()}
+            if "observed_at" not in existing_columns:
+                await self._conn.execute("ALTER TABLE entities ADD COLUMN observed_at TEXT")
         await self._conn.executescript(_SCHEMA_SQL)
 
         await self._run_migrations()
@@ -166,7 +174,10 @@ class SQLiteBackend(StorageBackend):
     async def _run_migrations(self) -> None:
         conn = self._conn_or_raise()
         cursor = await conn.execute("PRAGMA table_info(entities)")
-        columns = {row["name"] for row in await cursor.fetchall()}
+        entity_columns = {
+            str(row["name"]): bool(row["notnull"]) for row in await cursor.fetchall()
+        }
+        columns = set(entity_columns)
         if "cumulative_dwell_ms" not in columns:
             await conn.execute(
                 "ALTER TABLE entities ADD COLUMN cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0"
@@ -177,6 +188,10 @@ class SQLiteBackend(StorageBackend):
             )
         if "observed_at" not in columns:
             await conn.execute("ALTER TABLE entities ADD COLUMN observed_at TEXT")
+            entity_columns["observed_at"] = False
+        observed_not_null = entity_columns["observed_at"]
+        if "last_accessed" in columns or not observed_not_null:
+            await self._rebuild_entities_for_observed_at("last_accessed" in columns)
         await conn.execute(
             "UPDATE entities SET entity_type = 'Email' WHERE entity_type = 'Thread'"
         )
@@ -187,13 +202,16 @@ class SQLiteBackend(StorageBackend):
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_synced_at ON entities(platform, synced_at)"
         )
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_entities_last_accessed_id ON entities(last_accessed DESC, id ASC)"
+            "CREATE INDEX IF NOT EXISTS idx_entities_observed_at ON entities(observed_at)"
         )
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_entities_type_last_accessed ON entities(entity_type, last_accessed DESC)"
+            "CREATE INDEX IF NOT EXISTS idx_entities_observed_at_id ON entities(observed_at DESC, id ASC)"
         )
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_entities_type_last_accessed_id ON entities(entity_type, last_accessed DESC, id ASC)"
+            "CREATE INDEX IF NOT EXISTS idx_entities_type_observed_at ON entities(entity_type, observed_at DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_type_observed_at_id ON entities(entity_type, observed_at DESC, id ASC)"
         )
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_type_created_at ON entities(entity_type, created_at DESC)"
@@ -202,11 +220,61 @@ class SQLiteBackend(StorageBackend):
             "CREATE INDEX IF NOT EXISTS idx_entities_type_updated_at ON entities(entity_type, updated_at DESC)"
         )
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_entities_platform_last_accessed_id ON entities(platform, last_accessed DESC, id ASC)"
+            "CREATE INDEX IF NOT EXISTS idx_entities_platform_observed_at_id ON entities(platform, observed_at DESC, id ASC)"
         )
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_last_accessed ON entities(platform, entity_type, last_accessed DESC)"
+            "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC)"
         )
+
+    async def _rebuild_entities_for_observed_at(self, has_last_accessed: bool) -> None:
+        """Replace the legacy nullable/access-based entity timestamp schema."""
+        conn = self._conn_or_raise()
+        fallback = "COALESCE(observed_at, last_accessed, ?)" if has_last_accessed else "COALESCE(observed_at, ?)"
+        await conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            await conn.execute("BEGIN")
+            await conn.execute(
+                """
+                CREATE TABLE entities_new (
+                    id TEXT PRIMARY KEY,
+                    entity_type TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    platform_entity_id TEXT NOT NULL,
+                    title TEXT,
+                    content TEXT,
+                    content_embedding BLOB,
+                    metadata TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT,
+                    updated_at TEXT,
+                    synced_at TEXT,
+                    observed_at TEXT NOT NULL,
+                    cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
+                    bookmarked INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE (platform, platform_entity_id)
+                )
+                """
+            )
+            await conn.execute(
+                f"""
+                INSERT INTO entities_new
+                    (id, entity_type, platform, platform_entity_id, title, content,
+                     content_embedding, metadata, created_at, updated_at, synced_at,
+                     observed_at, cumulative_dwell_ms, bookmarked)
+                SELECT id, entity_type, platform, platform_entity_id, title, content,
+                       content_embedding, metadata, created_at, updated_at, synced_at,
+                       {fallback}, cumulative_dwell_ms, bookmarked
+                FROM entities
+                """,
+                [_now()],
+            )
+            await conn.execute("DROP TABLE entities")
+            await conn.execute("ALTER TABLE entities_new RENAME TO entities")
+            await conn.execute("COMMIT")
+        except Exception:
+            await conn.execute("ROLLBACK")
+            raise
+        finally:
+            await conn.execute("PRAGMA foreign_keys=ON")
 
     async def _fetchall(self, sql: str, params: list[Any] | None = None) -> list[Any]:
         conn = self._read_conn_or_raise()
@@ -317,9 +385,12 @@ class SQLiteBackend(StorageBackend):
             )
             if existing_id is not None:
                 existing_cursor = await conn.execute(
-                    "SELECT title, content FROM entities WHERE id = ?", [existing_id]
+                    "SELECT title, content, content_embedding, metadata, observed_at FROM entities WHERE id = ?",
+                    [existing_id],
                 )
                 existing_row = await existing_cursor.fetchone()
+                if existing_row is None:
+                    raise RuntimeError(f"Person entity {existing_id!r} disappeared during upsert")
                 existing_title = str(existing_row[0]) if existing_row and existing_row[0] else ""
                 existing_content = str(existing_row[1]) if existing_row and existing_row[1] else ""
                 fts_title = p.display_name if p.display_name is not None else existing_title
@@ -327,6 +398,17 @@ class SQLiteBackend(StorageBackend):
                     p.canonical_email if p.canonical_email is not None else existing_content
                 )
                 rewrite_fts = fts_title != existing_title or fts_content != existing_content
+                existing_metadata = json.loads(existing_row[3] or "{}") if existing_row else {}
+                merged_metadata = {**existing_metadata, **meta}
+                new_title = p.display_name if p.display_name is not None else existing_row[0]
+                new_content = p.canonical_email if p.canonical_email is not None else existing_row[1]
+                new_embedding = emb_blob if emb_blob is not None else existing_row[2]
+                changed = (
+                    new_title != existing_row[0]
+                    or new_content != existing_row[1]
+                    or new_embedding != existing_row[2]
+                    or merged_metadata != existing_metadata
+                )
                 await conn.execute(
                     """
                     UPDATE entities
@@ -334,7 +416,7 @@ class SQLiteBackend(StorageBackend):
                         content = COALESCE(?, content),
                         content_embedding = COALESCE(?, content_embedding),
                         metadata = json_patch(metadata, ?),
-                        last_accessed = ?
+                        observed_at = ?
                     WHERE id = ?
                     """,
                     [
@@ -342,7 +424,7 @@ class SQLiteBackend(StorageBackend):
                         p.canonical_email,
                         emb_blob,
                         json.dumps(meta),
-                        now,
+                        now if changed else existing_row[4],
                         existing_id,
                     ],
                 )
@@ -352,7 +434,7 @@ class SQLiteBackend(StorageBackend):
                     """
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, content,
-                         content_embedding, metadata, last_accessed)
+                         content_embedding, metadata, observed_at)
                     VALUES (?, 'Person', 'canonical', ?, ?, ?, ?, ?, ?)
                     RETURNING id
                     """,
@@ -425,10 +507,10 @@ class SQLiteBackend(StorageBackend):
             if e.is_stub:
                 cursor = await conn.execute(
                     """
-                    INSERT INTO entities (id, entity_type, platform, platform_entity_id, last_accessed)
+                    INSERT INTO entities (id, entity_type, platform, platform_entity_id, observed_at)
                     VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
-                        last_accessed = EXCLUDED.last_accessed
+                        entity_type = entities.entity_type
                     RETURNING id
                     """,
                     [_new_id(), e.entity_type, e.platform, e.platform_entity_id, now],
@@ -436,14 +518,15 @@ class SQLiteBackend(StorageBackend):
             else:
                 existing_cursor = await conn.execute(
                     """
-                    SELECT id, title, content FROM entities
+                    SELECT id, entity_type, title, content, content_embedding, metadata, created_at,
+                           updated_at, observed_at FROM entities
                     WHERE platform = ? AND platform_entity_id = ?
                     """,
                     [e.platform, e.platform_entity_id],
                 )
                 existing_row = await existing_cursor.fetchone()
-                existing_title = str(existing_row[1]) if existing_row and existing_row[1] else ""
-                existing_content = str(existing_row[2]) if existing_row and existing_row[2] else ""
+                existing_title = str(existing_row[2]) if existing_row and existing_row[2] else ""
+                existing_content = str(existing_row[3]) if existing_row and existing_row[3] else ""
                 fts_title = e.title if e.title is not None else existing_title
                 fts_content = e.content if e.content is not None else existing_content
                 rewrite_fts = (
@@ -455,11 +538,30 @@ class SQLiteBackend(StorageBackend):
                 emb_blob = pack_embedding(embedding) if embedding else None
                 created = e.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if e.created_at else None
                 updated = e.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ") if e.updated_at else None
+                metadata = dict(e.metadata)
+                if existing_row is None:
+                    changed = True
+                    observed_at = now
+                else:
+                    target_type = e.entity_type if existing_row[1] == "Document" else existing_row[1]
+                    target_title = e.title if e.title is not None else existing_row[2]
+                    target_content = e.content if e.content is not None else existing_row[3]
+                    target_embedding = emb_blob if emb_blob is not None else existing_row[4]
+                    target_updated = updated if updated is not None else existing_row[7]
+                    changed = (
+                        target_type != existing_row[1]
+                        or target_title != existing_row[2]
+                        or target_content != existing_row[3]
+                        or target_embedding != existing_row[4]
+                        or metadata != json.loads(existing_row[5] or "{}")
+                        or target_updated != existing_row[7]
+                    )
+                    observed_at = now if changed else existing_row[8]
                 cursor = await conn.execute(
                     """
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, content,
-                         content_embedding, metadata, created_at, updated_at, synced_at, last_accessed)
+                         content_embedding, metadata, created_at, updated_at, synced_at, observed_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
                         entity_type       = CASE WHEN entities.entity_type = 'Document' THEN EXCLUDED.entity_type ELSE entities.entity_type END,
@@ -468,8 +570,8 @@ class SQLiteBackend(StorageBackend):
                         content_embedding = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
                         metadata          = EXCLUDED.metadata,
                         updated_at        = COALESCE(EXCLUDED.updated_at, entities.updated_at),
-                        synced_at         = EXCLUDED.last_accessed,
-                        last_accessed     = EXCLUDED.last_accessed
+                        synced_at         = EXCLUDED.synced_at,
+                        observed_at       = ?
                     RETURNING id
                     """,
                     [
@@ -480,11 +582,12 @@ class SQLiteBackend(StorageBackend):
                         e.title,
                         e.content,
                         emb_blob,
-                        json.dumps(dict(e.metadata)),
+                        json.dumps(metadata),
                         created,
                         updated,
                         now,
-                        now,
+                        observed_at,
+                        observed_at,
                     ],
                 )
 
@@ -571,7 +674,7 @@ class SQLiteBackend(StorageBackend):
             if not target_id:
                 logger.warning("Skipping edge %s — target not resolved", edge.edge_type)
                 continue
-            await conn.execute(
+            edge_cursor = await conn.execute(
                 """
                 INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id, platform, properties, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -587,6 +690,11 @@ class SQLiteBackend(StorageBackend):
                     now,
                 ],
             )
+            if edge_cursor.rowcount:
+                await conn.execute(
+                    "UPDATE entities SET observed_at = ? WHERE id IN (?, ?)",
+                    [now, source_id, target_id],
+                )
 
     async def merge_person_entities(
         self,
@@ -612,7 +720,7 @@ class SQLiteBackend(StorageBackend):
                 cursor = await conn.execute(
                     f"""
                     SELECT id, entity_type, platform, platform_entity_id,
-                           title, content, metadata, last_accessed
+                           title, content, metadata, observed_at
                     FROM entities
                     WHERE id IN ({placeholders})
                     """,
@@ -668,18 +776,13 @@ class SQLiteBackend(StorageBackend):
                     (by_id[eid]["content"] for eid in duplicate_ids if by_id[eid]["content"]),
                     None,
                 )
-                last_accessed_values = [
-                    value for value in (by_id[eid]["last_accessed"] for eid in all_ids) if value
-                ]
-                last_accessed = max(last_accessed_values) if last_accessed_values else _now()
-
                 await conn.execute(
                     """
                     UPDATE entities
-                    SET title = ?, content = ?, metadata = ?, last_accessed = ?
+                    SET title = ?, content = ?, metadata = ?, observed_at = ?
                     WHERE id = ?
                     """,
-                    [title, content, json.dumps(merged_metadata), last_accessed, primary_entity_id],
+                    [title, content, json.dumps(merged_metadata), _now(), primary_entity_id],
                 )
 
                 dup_placeholders = ",".join("?" * len(duplicate_ids))
@@ -743,11 +846,11 @@ class SQLiteBackend(StorageBackend):
         cursor = await self._conn_or_raise().execute(
             """
             UPDATE entities
-            SET bookmarked = ?, last_accessed = ?
+            SET bookmarked = ?, observed_at = ?
             WHERE id = ?
             RETURNING id, entity_type, platform, platform_entity_id,
                       title, content, metadata, created_at, updated_at, synced_at,
-                      observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                      observed_at, cumulative_dwell_ms, bookmarked
             """,
             [1 if bookmarked else 0, now, entity_id],
         )
@@ -769,7 +872,7 @@ class SQLiteBackend(StorageBackend):
                     WHERE id = ?
                     RETURNING id, entity_type, platform, platform_entity_id,
                               title, content, metadata, created_at, updated_at, synced_at,
-                              observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                              observed_at, cumulative_dwell_ms, bookmarked
                     """,
                     [entity_id],
                 )
@@ -889,7 +992,7 @@ class SQLiteBackend(StorageBackend):
                     f"""
                     SELECT id, entity_type, platform, platform_entity_id,
                            title, content, metadata, created_at, updated_at, synced_at,
-                           observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                           observed_at, cumulative_dwell_ms, bookmarked
                     FROM entities WHERE id IN ({placeholders})
                     """,
                     id_list,
@@ -918,7 +1021,7 @@ class SQLiteBackend(StorageBackend):
             """
             SELECT id, entity_type, platform, platform_entity_id,
                    title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                   observed_at, cumulative_dwell_ms, bookmarked
             FROM entities WHERE id = ?
             """,
             [entity_id],
@@ -933,7 +1036,7 @@ class SQLiteBackend(StorageBackend):
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
                    title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                   observed_at, cumulative_dwell_ms, bookmarked
             FROM entities WHERE id IN ({placeholders})
             """,
             entity_ids,
@@ -945,7 +1048,7 @@ class SQLiteBackend(StorageBackend):
             """
             SELECT id, entity_type, platform, platform_entity_id,
                    title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                   observed_at, cumulative_dwell_ms, bookmarked
             FROM entities WHERE id LIKE ?
             """,
             [f"{prefix}%"],
@@ -959,7 +1062,7 @@ class SQLiteBackend(StorageBackend):
             """
             SELECT id, entity_type, platform, platform_entity_id,
                    title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                   observed_at, cumulative_dwell_ms, bookmarked
             FROM entities WHERE platform = ? AND platform_entity_id = ?
             """,
             [platform, platform_entity_id],
@@ -991,10 +1094,10 @@ class SQLiteBackend(StorageBackend):
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
                    title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                   observed_at, cumulative_dwell_ms, bookmarked
             FROM entities
             {where}
-            ORDER BY last_accessed DESC
+            ORDER BY observed_at DESC
             LIMIT ?
             """,
             params,
@@ -1012,7 +1115,7 @@ class SQLiteBackend(StorageBackend):
         order_dir: str,
     ) -> tuple[list[EntityResult], int]:
         order_by_sql = (
-            _LIST_PAGE_ORDER_BY.get(order_by, "last_accessed") if order_by is not None else None
+            _LIST_PAGE_ORDER_BY.get(order_by, "observed_at") if order_by is not None else None
         )
         if order_dir.upper() not in {"ASC", "DESC"}:
             order_dir = "DESC"
@@ -1040,7 +1143,7 @@ class SQLiteBackend(StorageBackend):
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
                    title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                   observed_at, cumulative_dwell_ms, bookmarked
             FROM entities
             {where}
             {order_clause}
@@ -1061,7 +1164,7 @@ class SQLiteBackend(StorageBackend):
         has_attachments: bool = False,
     ) -> list[EntityResult]:
         if order_by not in _VALID_ORDER_BY:
-            order_by = "last_accessed"
+            order_by = "observed_at"
 
         params: list[Any] = [entity_type]
         extra_clauses: list[str] = []
@@ -1107,7 +1210,7 @@ class SQLiteBackend(StorageBackend):
                 f"""
                 SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
                        e.title, e.content, e.metadata, e.created_at, e.updated_at,
-                       e.synced_at, e.observed_at, e.last_accessed,
+                       e.synced_at, e.observed_at,
                        e.cumulative_dwell_ms, e.bookmarked
                 FROM entities e
                 {authored_join}
@@ -1196,7 +1299,7 @@ class SQLiteBackend(StorageBackend):
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
                        title, content, metadata, created_at, updated_at, synced_at,
-                       observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                       observed_at, cumulative_dwell_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 frontier,
@@ -1241,7 +1344,7 @@ class SQLiteBackend(StorageBackend):
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
                        title, content, metadata, created_at, updated_at, synced_at,
-                       observed_at, last_accessed, cumulative_dwell_ms, bookmarked
+                       observed_at, cumulative_dwell_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 unvisited,
@@ -1264,10 +1367,10 @@ class SQLiteBackend(StorageBackend):
     ) -> str:
         cursor = await self._conn_or_raise().execute(
             """
-            INSERT INTO entities (id, entity_type, platform, platform_entity_id, last_accessed)
+            INSERT INTO entities (id, entity_type, platform, platform_entity_id, observed_at)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
-                last_accessed = EXCLUDED.last_accessed
+                entity_type = entities.entity_type
             RETURNING id
             """,
             [_new_id(), entity_type, platform, platform_entity_id, _now()],
@@ -1278,7 +1381,7 @@ class SQLiteBackend(StorageBackend):
         return row[0]
 
     async def insert_references_edge(self, source_id: str, target_id: str) -> None:
-        await self._execute(
+        cursor = await self._conn_or_raise().execute(
             """
             INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id, platform, properties)
             VALUES (?, 'references', ?, ?, 'cross', '{}')
@@ -1286,6 +1389,11 @@ class SQLiteBackend(StorageBackend):
             """,
             [_new_id(), source_id, target_id],
         )
+        if cursor.rowcount:
+            await self._execute(
+                "UPDATE entities SET observed_at = ? WHERE id IN (?, ?)",
+                [_now(), source_id, target_id],
+            )
 
     # --- GC ---
 
@@ -1303,7 +1411,7 @@ class SQLiteBackend(StorageBackend):
             await conn.execute("BEGIN")
             try:
                 cursor = await conn.execute(
-                    "SELECT id FROM entities WHERE last_accessed < ? AND bookmarked = 0",
+                    "SELECT id FROM entities WHERE observed_at < ? AND bookmarked = 0",
                     [cutoff],
                 )
                 to_delete = [row[0] for row in await cursor.fetchall()]
@@ -1404,23 +1512,6 @@ class SQLiteBackend(StorageBackend):
             [platform, platform_entity_id],
         )
 
-    async def touch_last_accessed(self, platform: str, platform_entity_id: str) -> None:
-        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        await self._execute(
-            "UPDATE entities SET last_accessed = ? WHERE platform = ? AND platform_entity_id = ?",
-            [now, platform, platform_entity_id],
-        )
-
-    async def touch_last_accessed_by_ids(self, entity_ids: list[str]) -> None:
-        if not entity_ids:
-            return
-        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        placeholders = ",".join("?" * len(entity_ids))
-        await self._execute(
-            f"UPDATE entities SET last_accessed = ? WHERE id IN ({placeholders})",
-            [now, *entity_ids],
-        )
-
     async def get_entity_type(self, platform: str, platform_entity_id: str) -> str | None:
         return await self._fetchval(
             "SELECT entity_type FROM entities WHERE platform = ? AND platform_entity_id = ?",
@@ -1454,7 +1545,6 @@ def _row_to_entity(row: Any) -> EntityResult:
         "updated_at": row["updated_at"],
         "synced_at": row["synced_at"] if "synced_at" in keys else None,
         "observed_at": row["observed_at"] if "observed_at" in keys else None,
-        "last_accessed": row["last_accessed"] if "last_accessed" in keys else None,
         "cumulative_dwell_ms": row["cumulative_dwell_ms"] if "cumulative_dwell_ms" in keys else 0,
         "bookmarked": bool(row["bookmarked"]) if "bookmarked" in keys else False,
         "score": row["score"] if "score" in keys else None,

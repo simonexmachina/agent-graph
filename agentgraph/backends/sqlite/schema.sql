@@ -15,8 +15,7 @@ CREATE TABLE IF NOT EXISTS entities (
     created_at         TEXT,  -- ISO8601 UTC
     updated_at         TEXT,  -- ISO8601 UTC
     synced_at          TEXT,  -- ISO8601 UTC
-    observed_at        TEXT,  -- latest recognised browser dwell report, ISO8601 UTC
-    last_accessed      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    observed_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
     bookmarked         INTEGER NOT NULL DEFAULT 0,
     UNIQUE (platform, platform_entity_id)
@@ -56,14 +55,14 @@ CREATE INDEX IF NOT EXISTS idx_entities_type         ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_platform     ON entities(platform);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_eid ON entities(platform, platform_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_synced_at ON entities(platform, synced_at);
-CREATE INDEX IF NOT EXISTS idx_entities_last_accessed ON entities(last_accessed);
-CREATE INDEX IF NOT EXISTS idx_entities_last_accessed_id ON entities(last_accessed DESC, id ASC);
-CREATE INDEX IF NOT EXISTS idx_entities_type_last_accessed ON entities(entity_type, last_accessed DESC);
-CREATE INDEX IF NOT EXISTS idx_entities_type_last_accessed_id ON entities(entity_type, last_accessed DESC, id ASC);
+CREATE INDEX IF NOT EXISTS idx_entities_observed_at ON entities(observed_at);
+CREATE INDEX IF NOT EXISTS idx_entities_observed_at_id ON entities(observed_at DESC, id ASC);
+CREATE INDEX IF NOT EXISTS idx_entities_type_observed_at ON entities(entity_type, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entities_type_observed_at_id ON entities(entity_type, observed_at DESC, id ASC);
 CREATE INDEX IF NOT EXISTS idx_entities_type_created_at ON entities(entity_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_entities_type_updated_at ON entities(entity_type, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_entities_platform_last_accessed_id ON entities(platform, last_accessed DESC, id ASC);
-CREATE INDEX IF NOT EXISTS idx_entities_platform_type_last_accessed ON entities(platform, entity_type, last_accessed DESC);
+CREATE INDEX IF NOT EXISTS idx_entities_platform_observed_at_id ON entities(platform, observed_at DESC, id ASC);
+CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC);
 
 -- Edge indexes
 CREATE INDEX IF NOT EXISTS idx_edges_source  ON edges(source_entity_id);

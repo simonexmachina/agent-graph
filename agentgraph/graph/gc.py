@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def run_gc() -> int:
     """
-    Delete entities where last_accessed < now() - retention_days.
+    Delete entities where observed_at < now() - retention_days.
     Edges are removed via ON DELETE CASCADE.
     Returns the total number of rows deleted.
     """

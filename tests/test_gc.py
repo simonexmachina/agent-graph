@@ -33,14 +33,14 @@ async def test_sqlite_gc_removes_stale_entities_edges_and_fts(
 
     await conn.execute(
         """
-        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, last_accessed)
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, observed_at)
         VALUES (?, 'Document', 'gdrive', 'old-file', 'Old file', ?)
         """,
         [stale_id, stale_time],
     )
     await conn.execute(
         """
-        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, last_accessed)
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, observed_at)
         VALUES (?, 'Document', 'gdrive', 'new-file', 'New file', ?)
         """,
         [fresh_id, fresh_time],
@@ -90,7 +90,7 @@ async def test_sqlite_gc_keeps_bookmarked_stale_entities(
     await conn.execute(
         """
         INSERT INTO entities (
-            id, entity_type, platform, platform_entity_id, title, last_accessed, bookmarked
+            id, entity_type, platform, platform_entity_id, title, observed_at, bookmarked
         )
         VALUES (?, 'Document', 'gdrive', 'old-file', 'Old file', ?, 1)
         """,
@@ -127,10 +127,13 @@ async def test_sqlite_set_entity_bookmarked_returns_updated_entity(
         [entity_id],
     )
 
+    before = await sqlite_backend.get_entity_by_id(entity_id)
     entity = await sqlite_backend.set_entity_bookmarked(entity_id, True)
 
     assert entity["id"] == entity_id
     assert entity["bookmarked"] is True
+    assert before is not None
+    assert entity["observed_at"] >= before["observed_at"]
 
 
 async def test_sqlite_delete_entity_removes_entity_edges_and_fts(
@@ -226,3 +229,5 @@ async def test_sqlite_migration_adds_bookmarked_before_index(tmp_path: Path) -> 
 
     assert "bookmarked" in {row["name"] for row in columns}
     assert "idx_entities_bookmarked" in {row["name"] for row in indexes}
+    observed_column = next(row for row in columns if row["name"] == "observed_at")
+    assert observed_column["notnull"] == 1

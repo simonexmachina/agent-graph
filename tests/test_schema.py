@@ -162,13 +162,13 @@ async def test_schema_has_platform_synced_at_index(sqlite_backend: SQLiteBackend
     )
     names = {row["name"] for row in rows}
     assert "idx_entities_platform_synced_at" in names
-    assert "idx_entities_type_last_accessed" in names
+    assert "idx_entities_type_observed_at" in names
     assert "idx_entities_type_created_at" in names
     assert "idx_entities_type_updated_at" in names
-    assert "idx_entities_platform_type_last_accessed" in names
-    assert "idx_entities_last_accessed_id" in names
-    assert "idx_entities_type_last_accessed_id" in names
-    assert "idx_entities_platform_last_accessed_id" in names
+    assert "idx_entities_platform_type_observed_at" in names
+    assert "idx_entities_observed_at_id" in names
+    assert "idx_entities_type_observed_at_id" in names
+    assert "idx_entities_platform_observed_at_id" in names
 
 
 async def test_list_entities_page_orders_by_visible_table_columns(
@@ -269,10 +269,12 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
     )
     conn.execute(
         """
-        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, content)
-        VALUES (?, 'Thread', 'gmail', 'test-thread-001', 'Test Email', 'Some content')
-        """,
-        ["entity-1"],
+            INSERT INTO entities (
+                id, entity_type, platform, platform_entity_id, title, content, last_accessed
+            )
+            VALUES (?, 'Thread', 'gmail', 'test-thread-001', 'Test Email', 'Some content', ?)
+            """,
+        ["entity-1", "2020-01-02T03:04:05Z"],
     )
     conn.commit()
     conn.close()
@@ -289,7 +291,7 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
         assert entity is not None
         assert entity["entity_type"] == "Email"
         assert entity["cumulative_dwell_ms"] == 0
-        assert entity["observed_at"] is None
+        assert entity["observed_at"] == "2020-01-02T03:04:05Z"
 
         await migrated.increment_dwell_time("gmail", "test-thread-001", 1234)
         updated = await migrated.get_entity_by_platform("gmail", "test-thread-001")

@@ -186,6 +186,49 @@ async def test_upsert_preserves_updated_at_when_connector_omits_it(
     assert stored["updated_at"] == "2026-06-08T01:23:45Z"
 
 
+async def test_identical_upsert_preserves_observed_at(sqlite_backend: SQLiteBackend) -> None:
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/unchanged",
+        title="Original title",
+        content="Original content",
+    )
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+    await sqlite_backend._execute(
+        "UPDATE entities SET observed_at = ? WHERE platform = ? AND platform_entity_id = ?",
+        ["2020-01-01T00:00:00Z", "web", "https://example.com/unchanged"],
+    )
+
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+
+    stored = await sqlite_backend.get_entity_by_platform("web", "https://example.com/unchanged")
+    assert stored is not None
+    assert stored["observed_at"] == "2020-01-01T00:00:00Z"
+
+
+async def test_changed_upsert_refreshes_observed_at(sqlite_backend: SQLiteBackend) -> None:
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/changed",
+        title="Original title",
+        content="Original content",
+    )
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+    await sqlite_backend._execute(
+        "UPDATE entities SET observed_at = ? WHERE platform = ? AND platform_entity_id = ?",
+        ["2020-01-01T00:00:00Z", "web", "https://example.com/changed"],
+    )
+
+    changed = entity.model_copy(update={"content": "Changed content"})
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[changed]), {}, {})
+
+    stored = await sqlite_backend.get_entity_by_platform("web", "https://example.com/changed")
+    assert stored is not None
+    assert stored["observed_at"] > "2020-01-01T00:00:00Z"
+
+
 async def test_upsert_batch_skips_fts_rewrites_for_unchanged_text(
     sqlite_backend: SQLiteBackend,
 ) -> None:
@@ -382,7 +425,7 @@ async def test_unify_persons_merges_edges_and_identity_metadata_sqlite(
         "Message",
         filters={},
         limit=10,
-        order_by="last_accessed",
+        order_by="observed_at",
         since=None,
         authored_by=["T1/U1"],
     )

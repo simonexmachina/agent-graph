@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # Knowledge graph
     retention_days: int = Field(
         default=90,
-        description="Days since last_accessed before an entity is garbage collected",
+        description="Days since observed_at before an entity is garbage collected",
     )
     embedding_model: str = Field(
         default="BAAI/bge-small-en-v1.5",

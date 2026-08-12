@@ -65,9 +65,6 @@ async def search_entities(
         embedding, query, entity_types, limit, min_score, platform=platform
     )
     _enrich_web_url(results)
-    if results:
-        ids = [r["id"] for r in results]
-        asyncio.create_task(backend.touch_last_accessed_by_ids(ids))
     return results
 
 
@@ -148,7 +145,7 @@ async def query_by_filter(
     entity_type: str,
     filters: dict[str, str],
     limit: int = 50,
-    order_by: str = "last_accessed",
+    order_by: str = "observed_at",
     since: str | None = None,
     authored_by_me: bool = False,
     has_attachments: bool = False,
@@ -181,7 +178,7 @@ async def list_entities_page(
     since: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    order_by: str | None = "last_accessed",
+    order_by: str | None = "observed_at",
     order_dir: str = "desc",
 ) -> tuple[list[EntityResult], int]:
     since_dt = parse_since(since) if since else None
