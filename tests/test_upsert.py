@@ -162,7 +162,7 @@ async def test_upsert_batch_maintains_one_current_fts_row_per_entity(
     assert rows[0]["content"] == "replacement wording"
 
 
-async def test_upsert_preserves_updated_at_when_connector_omits_it(
+async def test_upsert_preserves_source_updated_at_when_connector_omits_it(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     original_updated_at = datetime(2026, 6, 8, 1, 23, 45, tzinfo=UTC)
@@ -172,18 +172,18 @@ async def test_upsert_preserves_updated_at_when_connector_omits_it(
         platform_entity_id="https://example.com/unchanged",
         title="Original title",
         content="Original content",
-        updated_at=original_updated_at,
+        source_updated_at=original_updated_at,
     )
     await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
 
-    unchanged = entity.model_copy(update={"updated_at": None})
+    unchanged = entity.model_copy(update={"source_updated_at": None})
     await sqlite_backend.upsert_batch(EntityBatch(entities=[unchanged]), {}, {})
 
     stored = await sqlite_backend.get_entity_by_platform(
         "web", "https://example.com/unchanged"
     )
     assert stored is not None
-    assert stored["updated_at"] == "2026-06-08T01:23:45Z"
+    assert stored["source_updated_at"] == "2026-06-08T01:23:45Z"
 
 
 async def test_identical_upsert_preserves_observed_at(sqlite_backend: SQLiteBackend) -> None:
@@ -207,7 +207,42 @@ async def test_identical_upsert_preserves_observed_at(sqlite_backend: SQLiteBack
     assert stored["observed_at"] == "2020-01-01T00:00:00Z"
 
 
-async def test_changed_upsert_refreshes_observed_at(sqlite_backend: SQLiteBackend) -> None:
+async def test_owned_entity_resolves_parent_without_becoming_observed(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    source_time = datetime(2026, 6, 8, 1, 23, 45, tzinfo=UTC)
+    channel = EntityRecord(
+        entity_type="Channel",
+        platform="slack",
+        platform_entity_id="T/C",
+    )
+    message = EntityRecord(
+        entity_type="Message",
+        platform="slack",
+        platform_entity_id="T/C/1",
+        content="hello",
+        source_created_at=source_time,
+        source_updated_at=source_time,
+        retention_policy="owned",
+        retention_parent_platform_entity_id="T/C",
+    )
+
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[channel, message]), {}, {})
+
+    stored_channel = await sqlite_backend.get_entity_by_platform("slack", "T/C")
+    stored_message = await sqlite_backend.get_entity_by_platform("slack", "T/C/1")
+    assert stored_channel is not None
+    assert stored_message is not None
+    assert stored_channel["observed_at"] is None
+    assert stored_message["observed_at"] is None
+    assert stored_message["retention_policy"] == "owned"
+    assert stored_message["retention_parent_id"] == stored_channel["id"]
+    assert stored_message["source_created_at"] == "2026-06-08T01:23:45Z"
+
+
+async def test_changed_upsert_refreshes_updated_at_but_not_observed_at(
+    sqlite_backend: SQLiteBackend,
+) -> None:
     entity = EntityRecord(
         entity_type="Document",
         platform="web",
@@ -217,8 +252,14 @@ async def test_changed_upsert_refreshes_observed_at(sqlite_backend: SQLiteBacken
     )
     await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
     await sqlite_backend._execute(
-        "UPDATE entities SET observed_at = ? WHERE platform = ? AND platform_entity_id = ?",
-        ["2020-01-01T00:00:00Z", "web", "https://example.com/changed"],
+        "UPDATE entities SET observed_at = ?, updated_at = ? "
+        "WHERE platform = ? AND platform_entity_id = ?",
+        [
+            "2020-01-01T00:00:00Z",
+            "2020-01-01T00:00:00Z",
+            "web",
+            "https://example.com/changed",
+        ],
     )
 
     changed = entity.model_copy(update={"content": "Changed content"})
@@ -226,7 +267,8 @@ async def test_changed_upsert_refreshes_observed_at(sqlite_backend: SQLiteBacken
 
     stored = await sqlite_backend.get_entity_by_platform("web", "https://example.com/changed")
     assert stored is not None
-    assert stored["observed_at"] > "2020-01-01T00:00:00Z"
+    assert stored["observed_at"] == "2020-01-01T00:00:00Z"
+    assert stored["updated_at"] > "2020-01-01T00:00:00Z"
 
 
 async def test_upsert_batch_skips_fts_rewrites_for_unchanged_text(

@@ -45,6 +45,23 @@ def test_web_config_round_trips_toml(
     ]
 
 
+def test_web_config_uses_env_directory_after_config_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dir = tmp_path / "custom-config"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[connectors.web]\nobservation_urls = ["https://custom.example/*"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
+
+    from agentgraph_connector_web.config import load_web_settings
+
+    assert load_web_settings().observation_urls == ["https://custom.example/*"]
+
+
 def test_web_config_round_trips_yaml_and_preserves_other_connectors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -253,7 +270,7 @@ async def test_fetch_web_entity_does_not_update_unchanged_200_response() -> None
             existing_entity=existing,
         )
 
-    assert entity.updated_at is None
+    assert entity.source_updated_at is None
     assert entity.metadata["status_code"] == 200
     assert entity.metadata["http_etag"] == '"refreshed"'
 
@@ -295,7 +312,7 @@ async def test_fetch_web_entity_uses_document_validators_on_304() -> None:
 
     assert entity.title == "Cached title"
     assert entity.content == "Cached body"
-    assert entity.updated_at is None
+    assert entity.source_updated_at is None
     assert entity.metadata["status_code"] == 304
     assert entity.metadata["content_sha256"] == "cached-hash"
     assert entity.metadata["http_etag"] == '"cached"'

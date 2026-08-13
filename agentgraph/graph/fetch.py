@@ -60,7 +60,7 @@ async def fetch_url(url: str, meta: dict[str, str] | None = None) -> dict[str, A
     from agentgraph.server.router import classify_observation_url
 
     bootstrap()
-    ref = await classify_observation_url(url)
+    ref = await classify_observation_url(url, meta=meta)
     connector = get_connector(ref.source) if ref is not None else get_connector("web")
     if connector is None:
         raise ValueError("No connector available to fetch this URL")

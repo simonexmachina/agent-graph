@@ -1147,6 +1147,48 @@ async def test_mcp_connector_command_queues_requested_poll() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_connector_command_queues_requested_ingest_for_account() -> None:
+    from agentgraph.mcp.server import run_connector_command_tool
+
+    class Connector:
+        source = "gmail"
+
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "queued", "source": cls.source, "account_id": "user@example.com"}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(ingest=True, ingest_account_id="user@example.com")
+
+    created: list[Any] = []
+
+    def fake_create_task(coro: Any) -> MagicMock:
+        created.append(coro)
+        coro.close()
+        return MagicMock()
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task),
+    ):
+        result = await run_connector_command_tool("gmail", ["ingest", "--account", "user@example.com"])
+
+    assert json.loads(result)["ingest"] == {
+        "source": "gmail",
+        "status": "started",
+        "account_id": "user@example.com",
+    }
+    assert len(created) == 1
+
+
+@pytest.mark.asyncio
 async def test_mcp_connector_command_does_not_poll_after_validation_error() -> None:
     from agentgraph.mcp.server import run_connector_command_tool
 
@@ -1309,46 +1351,6 @@ async def test_mcp_poll_connectors_tool_reports_unknown_source() -> None:
         patch("agentgraph.connectors.registry.get_connector", return_value=None),
     ):
         result = await poll_connectors_tool("missing")
-
-    parsed = json.loads(result)
-    assert "error" in parsed
-
-
-@pytest.mark.asyncio
-async def test_mcp_ingest_connector_tool_starts_ingest_task() -> None:
-    from agentgraph.mcp.server import ingest_connector_tool
-
-    class Connector:
-        source = "rss"
-
-    created: list[Any] = []
-
-    def fake_create_task(coro: Any) -> MagicMock:
-        created.append(coro)
-        coro.close()
-        return MagicMock()
-
-    with (
-        patch("agentgraph.connectors.registry.bootstrap"),
-        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
-        patch("agentgraph.server.sync.run_ingest", new=AsyncMock()),
-        patch("agentgraph.mcp.server.asyncio.create_task", side_effect=fake_create_task),
-    ):
-        result = await ingest_connector_tool("rss")
-
-    assert json.loads(result) == {"source": "rss", "status": "started"}
-    assert len(created) == 1
-
-
-@pytest.mark.asyncio
-async def test_mcp_ingest_connector_tool_reports_unknown_source() -> None:
-    from agentgraph.mcp.server import ingest_connector_tool
-
-    with (
-        patch("agentgraph.connectors.registry.bootstrap"),
-        patch("agentgraph.connectors.registry.get_connector", return_value=None),
-    ):
-        result = await ingest_connector_tool("missing")
 
     parsed = json.loads(result)
     assert "error" in parsed

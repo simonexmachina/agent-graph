@@ -198,6 +198,13 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
+    async def record_observation(
+        self, platform: str, platform_entity_id: str, dwell_ms: int
+    ) -> None:
+        """Record direct observation and dwell for an observable entity."""
+        ...
+
+    @abstractmethod
     async def get_last_synced_at(
         self, platform: str, platform_entity_id: str
     ) -> datetime | None: ...

@@ -45,12 +45,12 @@ The Google connector currently requests these content scopes:
 | --- | --- | --- |
 | `gmail.readonly` | Restricted | Read messages and threads for local indexing and search. |
 | `drive.readonly` | Restricted | Discover and download the user's existing Drive corpus for local indexing and search. |
-| `spreadsheets.readonly` | Sensitive | Read spreadsheet values for local indexing and search. |
-| `documents.readonly` | Sensitive | Currently requested, but apparently unnecessary because Google Docs are exported through the Drive API. |
 
-Remove `documents.readonly` from the application and consent-screen declaration
-unless the implementation begins calling the Google Docs API. Google requires
-the narrowest scopes that support the feature.
+The Docs connector exports documents through the Drive API, and the Sheets API
+accepts `drive.readonly` for read operations. Do not add `documents.readonly` or
+`spreadsheets.readonly` while `drive.readonly` remains requested: Google omits
+these redundant scopes from the token response, which also causes strict OAuth
+clients to reject the response as a scope change.
 
 Keep `drive.readonly` only if indexing the user's existing Drive corpus remains a
 core feature. Google prefers the non-sensitive `drive.file` scope, but that grants

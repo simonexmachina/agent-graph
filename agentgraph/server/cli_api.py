@@ -288,6 +288,8 @@ _VIEWER_ORDER_FIELDS = {
     "display_name",
     "entity_type",
     "platform",
+    "source_created_at",
+    "source_updated_at",
     "updated_at",
     "observed_at",
     "synced_at",
@@ -691,6 +693,7 @@ async def cli_poll(
 @router.post("/ingest")
 async def cli_ingest(
     source: str = Query(...),
+    account_id: str | None = Query(default=None),
 ) -> dict[str, Any]:
     """Kick off a background bulk ingest for a connector and return immediately."""
     from agentgraph.connectors.registry import get_connector
@@ -700,8 +703,9 @@ async def cli_ingest(
     if connector is None:
         raise HTTPException(status_code=404, detail=f"No connector registered for source '{source}'")
 
-    asyncio.create_task(run_ingest(connector))
-    return {"source": source, "status": "started"}
+    account_ids = [account_id] if account_id is not None else None
+    asyncio.create_task(run_ingest(connector, account_ids=account_ids))
+    return {"source": source, "status": "started", "account_id": account_id}
 
 
 @router.post("/fetch-entity")

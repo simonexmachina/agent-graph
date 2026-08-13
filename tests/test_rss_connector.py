@@ -989,7 +989,8 @@ async def test_fetch_feed_hydrates_entry_documents_when_requested(
     assert entry.platform == "rss"
     assert entry.title == "Full First Post"
     assert entry.content == "Full article body"
-    assert entry.created_at is not None
+    assert entry.source_created_at is not None
+    assert entry.source_updated_at is None
     assert entry.metadata["feed_url"] == "https://example.com/feed.xml"
     assert entry.metadata["web_url"] == "https://example.com/first"
     assert entry.metadata["http_etag"] == '"fresh"'
@@ -1097,7 +1098,7 @@ async def test_fetch_feed_hydrates_existing_entries_with_cache_validators(
     assert existing_arg["metadata"]["http_etag"] == '"cached"'
     entry = batch.entities[1]
     assert entry.content == "Cached body"
-    assert entry.updated_at is None
+    assert entry.source_updated_at is None
     assert entry.metadata["status_code"] == 304
     assert entry.metadata["http_etag"] == '"cached"'
 

@@ -147,6 +147,8 @@ def test_viewer_renders_available_entity_timestamps_in_detail() -> None:
 
     assert "row('Created', formatDate(entity.created_at))" in viewer_html
     assert "row('Updated', formatDate(entity.updated_at))" in viewer_html
+    assert "row('Source created', formatDate(entity.source_created_at))" in viewer_html
+    assert "row('Source updated', formatDate(entity.source_updated_at))" in viewer_html
     assert "row('Observed', formatDate(entity.observed_at))" in viewer_html
 
 
@@ -289,10 +291,12 @@ def test_viewer_has_shared_order_controls() -> None:
     assert 'id="viewer-order"' in viewer_html
     assert 'id="viewer-order-select"' in viewer_html
     assert 'value="display_name">Name</option>' in viewer_html
-    assert 'value="observed_at">Last observed</option>' in viewer_html
-    assert 'data-sort="observed_at">Last observed</button>' in viewer_html
+    assert 'value="observed_at">Observed</option>' in viewer_html
+    assert 'data-sort="observed_at">Observed</button>' in viewer_html
     assert 'id="viewer-order-direction"' in viewer_html
+    assert '>↓</button>' in viewer_html
     assert "function updateViewerOrderControls(params)" in viewer_html
+    assert "viewerOrderDirection.textContent = params.sort_dir === 'asc' ? '↑' : '↓';" in viewer_html
     assert "viewerOrderSelect.addEventListener('change'" in viewer_html
     assert "const sortDir = current.sort_dir === 'asc' ? 'desc' : 'asc';" in viewer_html
 

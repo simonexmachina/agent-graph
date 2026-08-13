@@ -49,7 +49,9 @@ def save_rss_config(data: Any) -> None:
 
 
 def _load_rss_config() -> dict[str, Any] | None:
-    from agentgraph.config import CONFIG_FILE, CONFIG_YAML_FILE
+    from agentgraph.config import get_config_paths
+
+    _, CONFIG_FILE, CONFIG_YAML_FILE, _, _ = get_config_paths()
 
     yaml_config = _load_rss_yaml_config(CONFIG_YAML_FILE)
     if yaml_config is not None:
@@ -96,7 +98,9 @@ def _extract_rss_config(raw: dict[Any, Any]) -> dict[str, Any] | None:
 
 
 def _write_rss_config(config: dict[str, Any]) -> None:
-    from agentgraph.config import CONFIG_DIR, CONFIG_FILE, CONFIG_YAML_FILE
+    from agentgraph.config import get_config_paths
+
+    CONFIG_DIR, CONFIG_FILE, CONFIG_YAML_FILE, _, _ = get_config_paths()
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if CONFIG_YAML_FILE.exists():
@@ -110,7 +114,9 @@ def _write_rss_config(config: dict[str, Any]) -> None:
 
 
 def _rss_config_write_path() -> Path:
-    from agentgraph.config import CONFIG_FILE, CONFIG_YAML_FILE
+    from agentgraph.config import get_config_paths
+
+    _, CONFIG_FILE, CONFIG_YAML_FILE, _, _ = get_config_paths()
 
     return CONFIG_YAML_FILE if CONFIG_YAML_FILE.exists() else CONFIG_FILE
 

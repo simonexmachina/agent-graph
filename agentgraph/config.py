@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
+from dotenv import dotenv_values
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _default_config_dir() -> Path:
     raw = os.environ.get("AGENTGRAPH_CONFIG_DIR")
+    if not raw:
+        dotenv_value = dotenv_values(".env").get("AGENTGRAPH_CONFIG_DIR")
+        raw = dotenv_value if isinstance(dotenv_value, str) else None
     return Path(raw).expanduser() if raw else Path.home() / ".agentgraph"
 
 
@@ -19,6 +24,29 @@ CONFIG_FILE = CONFIG_DIR / "config.toml"
 CONFIG_YAML_FILE = CONFIG_DIR / "config.yaml"
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
 DEFAULT_SQLITE_PATH = str(CONFIG_DIR / "agentgraph.db")
+_INITIAL_CONFIG_DIR = CONFIG_DIR
+
+
+def get_config_paths() -> tuple[Path, Path, Path, Path, Path]:
+    """Return paths for the currently selected AgentGraph config directory.
+
+    The module-level constants remain for compatibility, while this helper
+    avoids stale paths when an embedding process sets the environment after
+    importing AgentGraph.
+    """
+    config_dir = _default_config_dir()
+    if config_dir == _INITIAL_CONFIG_DIR:
+        return CONFIG_DIR, CONFIG_FILE, CONFIG_YAML_FILE, CREDENTIALS_FILE, Path(DEFAULT_SQLITE_PATH)
+    # Keep direct constant overrides working for embedders and tests.
+    if "AGENTGRAPH_CONFIG_DIR" not in os.environ and CONFIG_DIR != _INITIAL_CONFIG_DIR:
+        return CONFIG_DIR, CONFIG_FILE, CONFIG_YAML_FILE, CREDENTIALS_FILE, Path(DEFAULT_SQLITE_PATH)
+    return (
+        config_dir,
+        config_dir / "config.toml",
+        config_dir / "config.yaml",
+        config_dir / "credentials.json",
+        config_dir / "agentgraph.db",
+    )
 
 
 class Settings(BaseSettings):
@@ -37,7 +65,7 @@ class Settings(BaseSettings):
         description="Persistence backend: 'sqlite' | any installed plugin",
     )
     backend_sqlite_path: str = Field(
-        default=DEFAULT_SQLITE_PATH,
+        default_factory=lambda: str(get_config_paths()[-1]),
         description="Path to SQLite database file (only used when backend='sqlite')",
     )
     backend_sqlite_vector_mode: str = Field(
@@ -62,7 +90,10 @@ class Settings(BaseSettings):
     # Knowledge graph
     retention_days: int = Field(
         default=90,
-        description="Days since observed_at before an entity is garbage collected",
+        description=(
+            "Retention window for observable entities, based on observed_at or local "
+            "created_at when never observed"
+        ),
     )
     embedding_model: str = Field(
         default="BAAI/bge-small-en-v1.5",
@@ -78,6 +109,12 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = Field(default="INFO")
     log_file: Path = Field(default=Path("/tmp/agentgraph.log"))
+
+    def __init__(self, **values: Any) -> None:
+        # Resolve the config-directory .env at instantiation time as well as
+        # at module import time, since callers may set the environment first.
+        values.setdefault("_env_file", [str(get_config_paths()[0] / ".env"), ".env"])
+        super().__init__(**values)
 
 
 _settings: Settings | None = None

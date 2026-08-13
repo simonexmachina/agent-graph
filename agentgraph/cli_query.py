@@ -499,21 +499,16 @@ def queue_connector_poll(source: str) -> dict[str, str | None]:
     return {"source": source, "status": "skipped", "reason": reason}
 
 
-def cmd_ingest(source: str, as_json: bool) -> None:
+def queue_connector_ingest(source: str, account_id: str | None = None) -> dict[str, Any]:
+    """Queue a connector-owned historical ingest through the server."""
     try:
-        result = _post("/ingest", params={"source": source})
+        params: dict[str, Any] = {"source": source}
+        if account_id is not None:
+            params["account_id"] = account_id
+        return cast(dict[str, Any], _post("/ingest", params=params))
     except httpx.HTTPStatusError as exc:
         try:
             detail = exc.response.json().get("detail", str(exc))
         except Exception:
             detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
-    if as_json:
-        console.print_json(json.dumps(result, default=str))
-        return
-
-    console.print(
-        f"[green]Ingest started[/green] for [bold]{result.get('source')}[/bold] — "
-        "progress in server logs (agentgraph serve)"
-    )
+        raise ValueError(str(detail)) from exc

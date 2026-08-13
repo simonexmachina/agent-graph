@@ -271,8 +271,8 @@ async def _fetch_excel_via_drive(
         title=title,
         content=content,
         metadata=_metadata(spreadsheet_id, account_id),
-        created_at=_parse_drive_time(file_meta.get("createdTime")),
-        updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
+        source_created_at=_parse_drive_time(file_meta.get("createdTime")),
+        source_updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
     )
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)
     batch.add_stubs_from(entity)
@@ -369,8 +369,8 @@ async def _fetch_sheet(spreadsheet_id: str, account_id: str | None = None) -> En
         title=title,
         content=content,
         metadata=metadata,
-        created_at=_parse_drive_time(file_meta.get("createdTime")),
-        updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
+        source_created_at=_parse_drive_time(file_meta.get("createdTime")),
+        source_updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
     )
 
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)

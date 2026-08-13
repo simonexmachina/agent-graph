@@ -76,6 +76,15 @@ def _snowflake_to_dt(snowflake: str) -> datetime:
     return datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
 
 
+def _parse_discord_time(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return None
+
+
 def _snowflake_after(dt: datetime) -> str:
     """Return the smallest snowflake ID that is strictly after dt."""
     ts_ms = int(dt.timestamp() * 1000) - 1420070400000
@@ -417,9 +426,12 @@ async def _fetch_thread_messages(
             platform="discord",
             platform_entity_id=f"{thread_id}:{msg_id}",
             content=content,
-            created_at=_snowflake_to_dt(msg_id),
-            updated_at=_snowflake_to_dt(msg_id),
+            source_created_at=_snowflake_to_dt(msg_id),
+            source_updated_at=_parse_discord_time(msg.get("edited_timestamp"))
+            or _snowflake_to_dt(msg_id),
             metadata=meta,
+            retention_policy="owned",
+            retention_parent_platform_entity_id=parent_channel_id,
         ))
 
         edges.append(EdgeRecord(
@@ -562,9 +574,12 @@ async def _fetch_channel(
                 platform="discord",
                 platform_entity_id=f"{channel_id}:{msg_id}",
                 content=content,
-                created_at=_snowflake_to_dt(msg_id),
-                updated_at=_snowflake_to_dt(msg_id),
+                source_created_at=_snowflake_to_dt(msg_id),
+                source_updated_at=_parse_discord_time(msg.get("edited_timestamp"))
+                or _snowflake_to_dt(msg_id),
                 metadata=meta,
+                retention_policy="owned",
+                retention_parent_platform_entity_id=channel_id,
             ))
 
             edges.append(EdgeRecord(

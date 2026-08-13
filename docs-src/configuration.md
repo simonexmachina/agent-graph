@@ -83,7 +83,9 @@ Seconds of focus before a fetch is triggered.
 
 Default: `90`
 
-Days before an unvisited entity is garbage collected.
+Retention window for directly observable entities. Never-observed entities use their local
+insertion time; Messages follow their parent and Persons follow graph connectivity. See
+[Entity retention](retention.html).
 
 ### `AGENTGRAPH_EMBEDDING_MODEL`
 

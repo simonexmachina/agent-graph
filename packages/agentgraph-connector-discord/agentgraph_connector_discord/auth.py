@@ -144,9 +144,10 @@ def run_token_flow(account_id: str | None = None, add: bool = False) -> None:
         typer.echo("Warning: token format looks unexpected — double-check the value.")
 
     username = _save_token(bot_token)
-    from agentgraph.config import CREDENTIALS_FILE
+    from agentgraph.config import get_config_paths
 
-    msg = f"\nDiscord credentials saved to {CREDENTIALS_FILE}"
+    _, _, _, credentials_file, _ = get_config_paths()
+    msg = f"\nDiscord credentials saved to {credentials_file}"
     if username:
         msg += f" (bot: {username})"
     else:

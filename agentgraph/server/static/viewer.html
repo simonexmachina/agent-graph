@@ -960,11 +960,11 @@
         <option value="display_name">Name</option>
         <option value="entity_type">Type</option>
         <option value="platform">Platform</option>
-        <option value="updated_at">Updated</option>
-        <option value="observed_at">Last observed</option>
+        <option value="observed_at">Observed</option>
         <option value="created_at">Created</option>
+        <option value="updated_at">Updated</option>
       </select>
-      <button id="viewer-order-direction" type="button" aria-label="Toggle order direction">DESC</button>
+      <button id="viewer-order-direction" type="button" aria-label="Toggle order direction">↓</button>
     </div>
     <div id="cy"></div>
     <div id="list-view">
@@ -975,9 +975,9 @@
               <th scope="col"><button class="list-sort" type="button" data-sort="display_name">Name</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="entity_type">Type</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="platform">Platform</button></th>
-              <th scope="col"><button class="list-sort" type="button" data-sort="updated_at">Updated</button></th>
-              <th scope="col"><button class="list-sort" type="button" data-sort="observed_at">Last observed</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="observed_at">Observed</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="created_at">Created</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="updated_at">Updated</button></th>
               <th scope="col">Dwell</th>
               <th scope="col">ID</th>
             </tr>
@@ -1788,7 +1788,7 @@
 
   function updateViewerOrderControls(params) {
     viewerOrderSelect.value = params.sort;
-    viewerOrderDirection.textContent = params.sort_dir.toUpperCase();
+    viewerOrderDirection.textContent = params.sort_dir === 'asc' ? '↑' : '↓';
     viewerOrderDirection.setAttribute('aria-label', `Toggle order direction (currently ${params.sort_dir.toUpperCase()})`);
   }
 
@@ -1819,9 +1819,9 @@
       addListCell(row, truncateListName(name));
       addListCell(row, entity.entity_type || '—');
       addListCell(row, entity.platform || '—');
-      addListCell(row, formatDate(entity.updated_at));
       addListCell(row, formatDate(entity.observed_at));
       addListCell(row, formatDate(entity.created_at));
+      addListCell(row, formatDate(entity.updated_at));
       addListCell(row, formatDwell(entity.cumulative_dwell_ms));
       addListCell(row, entity.id);
       row.addEventListener('click', () => showEntityDetail(entity.id));
@@ -2330,16 +2330,15 @@
       detailBody.appendChild(renderContent(entity));
     }
 
-    if (entity.created_at) {
-      detailBody.appendChild(row('Created', formatDate(entity.created_at)));
+    detailBody.appendChild(row('Observed', formatDate(entity.observed_at)));
+    detailBody.appendChild(row('Created', formatDate(entity.created_at)));
+    detailBody.appendChild(row('Updated', formatDate(entity.updated_at)));
+    if (entity.source_created_at) {
+      detailBody.appendChild(row('Source created', formatDate(entity.source_created_at)));
     }
-    if (entity.updated_at) {
-      detailBody.appendChild(row('Updated', formatDate(entity.updated_at)));
+    if (entity.source_updated_at) {
+      detailBody.appendChild(row('Source updated', formatDate(entity.source_updated_at)));
     }
-    if (entity.observed_at) {
-      detailBody.appendChild(row('Observed', formatDate(entity.observed_at)));
-    }
-
     if (Number(entity.cumulative_dwell_ms || 0) > 0) {
       detailBody.appendChild(row('Dwell', formatDwell(entity.cumulative_dwell_ms)));
     }

@@ -175,7 +175,12 @@ class RssConnector(BaseConnector):
             resource_id=url,
         )
 
-    async def resolve_observation_url(self, url: str) -> SourceReference | None:
+    async def resolve_observation_url(
+        self,
+        url: str,
+        meta: dict[str, str] | None = None,
+    ) -> SourceReference | None:
+        _ = meta
         configured_feed = self.resolve_url(url)
         if configured_feed is not None:
             return SourceReference(
@@ -594,8 +599,8 @@ def _entry_to_entity(
         platform_entity_id=entity_id,
         title=title,
         content="\n\n".join(content_parts),
-        created_at=published,
-        updated_at=_parse_entry_datetime(entry.get("updated")) or published,
+        source_created_at=published,
+        source_updated_at=_parse_entry_datetime(entry.get("updated")),
         metadata=metadata,
     )
 
@@ -626,11 +631,12 @@ async def _fetch_entry_document(
         platform_entity_id=platform_entity_id,
         title=fetched.title or (fallback.title if fallback else None),
         content=fetched.content or (fallback.content if fallback else None),
-        created_at=fallback.created_at if fallback else None,
-        updated_at=(
+        source_created_at=fallback.source_created_at if fallback else None,
+        source_updated_at=(
             None
             if not_modified
-            else fetched.updated_at or (fallback.updated_at if fallback else None)
+            else fetched.source_updated_at
+            or (fallback.source_updated_at if fallback else None)
         ),
         metadata=rss_metadata,
     )

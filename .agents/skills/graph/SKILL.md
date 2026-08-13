@@ -23,7 +23,7 @@ agentgraph edges <entity-id|platform/ref> [--type <edge-type>] [--direction in|o
 agentgraph traverse <entity-id|platform/ref> --resolve [--depth N] [--json]
 
 # Filter entities by type and metadata
-agentgraph query --type <entity-type> [--filter key=value] [--since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|last_accessed] [--json]
+agentgraph query --type <entity-type> [--filter key=value] [--since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|source_created_at|source_updated_at|observed_at|synced_at] [--json]
 
 # Trigger a connector fetch for a platform entity (by platform + platform-specific ID)
 agentgraph fetch <platform> <resource-id> [--json]
@@ -46,9 +46,6 @@ agentgraph unify-persons <primary-person-id> <duplicate-person-id>... [--json]
 # Queue a background poll for one or all connectors
 agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, rss — omit for all; reports already_running and skipped auth failures
 
-# Run a one-shot bulk ingest for a connector (all data within the retention window, beyond what poll covers)
-agentgraph ingest <source> [--json]   # e.g. gmail, rss
-
 # List installed connectors and their sync status; credential fields are null for connectors like RSS/web
 agentgraph connectors [--verify] [--json] # auth_provider, auth_status/auth_detail when applicable, auth_verified, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
 
@@ -58,6 +55,7 @@ agentgraph connector <source> --help
 agentgraph connector rss add <feed-url> [feed-url...] [--json] # validates feeds, rejects non-feeds without saving, and queues an RSS poll
 agentgraph connector rss remove <feed-url> [feed-url...] [--json] # removes exact configured feed URLs
 agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
+agentgraph connector gmail ingest [--account <account-id>] [--json] # queue an optional 90-day Gmail historical backfill; omit --account for all authenticated Google accounts
 
 # Show credential-backed auth provider state (dedupes shared providers like Google); add --verify for live provider API checks
 agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[] including auth_method
@@ -100,7 +98,6 @@ agentgraph fetch ...               -> fetch_entity_tool(platform, resource_id)
 agentgraph fetch-entity ...        -> fetch_entity_by_id_tool(entity_id)
 agentgraph download ...            -> download_entity_tool(entity_id, output_path)
 agentgraph poll [source]           -> poll_connectors_tool(source) # returns polled, already_running, and skipped lists
-agentgraph ingest <source>         -> ingest_connector_tool(source)
 agentgraph bookmark ...            -> bookmark_entity_tool(entity_id, bookmarked)
 agentgraph delete ...              -> delete_entity_tool(entity_id)
 agentgraph unify-persons ...       -> unify_persons_tool(primary_entity_id, duplicate_entity_ids)

@@ -114,6 +114,96 @@ async def test_sqlite_gc_keeps_bookmarked_stale_entities(
     assert fts_count == 1
 
 
+async def test_sqlite_gc_uses_created_at_for_never_observed_entities(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    stale_time = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    await sqlite_backend._execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, created_at, updated_at
+        ) VALUES ('never-observed', 'Document', 'web', 'https://example.com/old', ?, ?)
+        """,
+        [stale_time, stale_time],
+    )
+
+    assert await sqlite_backend.gc_entities(90) == 1
+    assert await sqlite_backend.get_entity_by_id("never-observed") is None
+
+
+async def test_sqlite_gc_cascades_owned_messages_and_removes_orphan_people(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    stale_time = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    await conn.execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, created_at, updated_at,
+            observed_at, retention_policy
+        ) VALUES ('channel', 'Channel', 'slack', 'T/C', ?, ?, ?, 'observed')
+        """,
+        [stale_time, stale_time, stale_time],
+    )
+    await conn.execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, retention_policy,
+            retention_parent_id
+        ) VALUES ('message', 'Message', 'slack', 'T/C/1', 'owned', 'channel')
+        """
+    )
+    await conn.execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, retention_policy
+        ) VALUES ('person', 'Person', 'canonical', 'person@example.com', 'connected')
+        """
+    )
+    await conn.execute(
+        """
+        INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id, platform)
+        VALUES ('authored', 'authored', 'person', 'message', 'slack')
+        """
+    )
+
+    assert await sqlite_backend.gc_entities(90) == 3
+    assert await sqlite_backend._fetchval("SELECT count(*) FROM entities") == 0
+
+
+async def test_sqlite_gc_detaches_bookmarked_owned_child(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    stale_time = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    await conn.execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, created_at, updated_at,
+            observed_at
+        ) VALUES ('channel', 'Channel', 'discord', 'channel', ?, ?, ?)
+        """,
+        [stale_time, stale_time, stale_time],
+    )
+    await conn.execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, retention_policy,
+            retention_parent_id, bookmarked
+        ) VALUES ('message', 'Message', 'discord', 'channel:message', 'owned', 'channel', 1)
+        """
+    )
+
+    assert await sqlite_backend.gc_entities(90) == 1
+    message = await sqlite_backend.get_entity_by_id("message")
+    assert message is not None
+    assert message["retention_parent_id"] is None
+
+    await sqlite_backend.set_entity_bookmarked("message", False)
+    assert await sqlite_backend.gc_entities(90) == 1
+    assert await sqlite_backend.get_entity_by_id("message") is None
+
+
 async def test_sqlite_set_entity_bookmarked_returns_updated_entity(
     sqlite_backend: SQLiteBackend,
 ) -> None:
@@ -133,7 +223,38 @@ async def test_sqlite_set_entity_bookmarked_returns_updated_entity(
     assert entity["id"] == entity_id
     assert entity["bookmarked"] is True
     assert before is not None
-    assert entity["observed_at"] >= before["observed_at"]
+    assert entity["observed_at"] is None
+    assert entity["updated_at"] >= before["updated_at"]
+
+
+async def test_record_observation_only_marks_observable_entities(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    await conn.execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id)
+        VALUES ('channel', 'Channel', 'slack', 'T/C')
+        """
+    )
+    await conn.execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, retention_policy,
+            retention_parent_id
+        ) VALUES ('message', 'Message', 'slack', 'T/C/1', 'owned', 'channel')
+        """
+    )
+
+    await sqlite_backend.record_observation("slack", "T/C", 1000)
+    await sqlite_backend.record_observation("slack", "T/C/1", 1000)
+
+    channel = await sqlite_backend.get_entity_by_id("channel")
+    message = await sqlite_backend.get_entity_by_id("message")
+    assert channel is not None and channel["observed_at"] is not None
+    assert channel["cumulative_dwell_ms"] == 1000
+    assert message is not None and message["observed_at"] is None
+    assert message["cumulative_dwell_ms"] == 0
 
 
 async def test_sqlite_delete_entity_removes_entity_edges_and_fts(
@@ -230,4 +351,6 @@ async def test_sqlite_migration_adds_bookmarked_before_index(tmp_path: Path) -> 
     assert "bookmarked" in {row["name"] for row in columns}
     assert "idx_entities_bookmarked" in {row["name"] for row in indexes}
     observed_column = next(row for row in columns if row["name"] == "observed_at")
-    assert observed_column["notnull"] == 1
+    assert observed_column["notnull"] == 0
+    assert next(row for row in columns if row["name"] == "created_at")["notnull"] == 1
+    assert next(row for row in columns if row["name"] == "updated_at")["notnull"] == 1

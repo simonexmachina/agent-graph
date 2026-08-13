@@ -1,4 +1,4 @@
-"""Garbage collection: remove entities not accessed within retention window."""
+"""Garbage collection for observed, owned, and graph-connected entities."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 async def run_gc() -> int:
     """
-    Delete entities where observed_at < now() - retention_days.
-    Edges are removed via ON DELETE CASCADE.
+    Delete expired observable entities, cascade owned children, and remove
+    unbookmarked connected entities that no longer have graph edges.
     Returns the total number of rows deleted.
     """
     settings = get_settings()

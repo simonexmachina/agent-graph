@@ -54,7 +54,9 @@ def remove_observation_urls(urls: list[str]) -> tuple[WebConfig, list[str]]:
 
 
 def save_web_config(config: WebConfig) -> None:
-    from agentgraph.config import CONFIG_DIR, CONFIG_FILE, CONFIG_YAML_FILE
+    from agentgraph.config import get_config_paths
+
+    CONFIG_DIR, CONFIG_FILE, CONFIG_YAML_FILE, _, _ = get_config_paths()
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     payload = config.model_dump(mode="json")
@@ -91,7 +93,9 @@ def save_web_config(config: WebConfig) -> None:
 
 
 def _load_web_config() -> dict[str, Any] | None:
-    from agentgraph.config import CONFIG_FILE, CONFIG_YAML_FILE
+    from agentgraph.config import get_config_paths
+
+    _, CONFIG_FILE, CONFIG_YAML_FILE, _, _ = get_config_paths()
 
     if CONFIG_YAML_FILE.exists():
         raw = _load_yaml_root(CONFIG_YAML_FILE)

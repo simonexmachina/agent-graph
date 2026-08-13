@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 # All resource_type values understood by the connector layer.
 # Each value maps to a distinct fetch strategy within a connector.
 ResourceType = Literal["channel", "dm", "document", "folder", "message", "spreadsheet", "thread"]
+RetentionPolicy = Literal["observed", "owned", "connected"]
 
 # All valid entity_type values stored in the DB.
 ENTITY_TYPES: tuple[str, ...] = (
@@ -56,6 +57,8 @@ class ConnectorCommandEffects:
     """Side effects requested after a connector command succeeds."""
 
     poll: bool = False
+    ingest: bool = False
+    ingest_account_id: str | None = None
 
 
 class PersonRecord(BaseModel):
@@ -72,10 +75,12 @@ class EntityRecord(BaseModel):
     platform_entity_id: str
     title: str | None = None
     content: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    source_created_at: datetime | None = None
+    source_updated_at: datetime | None = None
     metadata: dict[str, str | int | float | bool | None] = {}
     is_stub: bool = False     # True → placeholder pending a full fetch; preserves synced_at=NULL
+    retention_policy: RetentionPolicy = "observed"
+    retention_parent_platform_entity_id: str | None = None
 
 
 class EdgeRecord(BaseModel):
@@ -373,13 +378,18 @@ class BaseConnector(ABC):
         _ = url
         return None
 
-    async def resolve_observation_url(self, url: str) -> SourceReference | None:
+    async def resolve_observation_url(
+        self,
+        url: str,
+        meta: dict[str, str] | None = None,
+    ) -> SourceReference | None:
         """Resolve a URL observed by the browser extension.
 
         Connectors can override this when resolution requires an async lookup or
         fetch metadata that must accompany a targeted fetch. The default keeps
         existing synchronous URL resolvers usable for observations.
         """
+        _ = meta
         return self.resolve_url(url)
 
     async def observation_url_patterns(self) -> list[str]:

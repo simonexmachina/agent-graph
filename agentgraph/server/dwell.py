@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None = None) -> dict[str, Any]:
     """Classify url and increment its cumulative dwell time in the backend."""
-    ref = await classify_observation_url(url)
+    ref = await classify_observation_url(url, meta=meta)
     if ref is None:
         logger.debug("report-dwell: unrecognised URL %s", url)
         return {"status": "ignored", "reason": "unrecognised URL"}
@@ -29,7 +29,7 @@ async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None
             ref.source,
             ref.resource_id,
         )
-        await backend.increment_dwell_time(ref.source, ref.resource_id, dwell_ms)
+        await backend.record_observation(ref.source, ref.resource_id, dwell_ms)
         logger.debug(
             "Recorded dwell time: +%dms for %s %s/%s",
             dwell_ms, ref.source, ref.resource_type, ref.resource_id

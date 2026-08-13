@@ -32,14 +32,17 @@ def classify_url(url: str) -> SourceReference | None:
     return None
 
 
-async def classify_observation_url(url: str) -> SourceReference | None:
+async def classify_observation_url(
+    url: str,
+    meta: dict[str, str] | None = None,
+) -> SourceReference | None:
     """Resolve a browser-observed URL through connector-owned async resolvers."""
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
 
     normalised_url = normalise_url_for_matching(url)
     bootstrap()
     for connector in get_all_connectors():
-        ref = await connector.resolve_observation_url(normalised_url)
+        ref = await connector.resolve_observation_url(normalised_url, meta=meta)
         if ref is not None:
             return ref
     return None

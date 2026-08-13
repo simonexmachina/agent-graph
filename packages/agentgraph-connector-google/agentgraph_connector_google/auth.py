@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import socket
+import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import NoReturn
@@ -160,12 +161,28 @@ def run_oauth_flow(
         )
     else:
         upsert_platform_account("google", resolved_account_id, creds, make_default=True)
-    from agentgraph.config import CREDENTIALS_FILE
+    from agentgraph.config import get_config_paths
 
-    msg = f"Google credentials saved to {CREDENTIALS_FILE}"
+    _, _, _, credentials_file, _ = get_config_paths()
+    msg = f"Google credentials saved to {credentials_file}"
     if user_email:
         msg += f" (authenticated as {user_email})"
     typer.echo(msg)
+    command = f"agentgraph connector gmail ingest --account {resolved_account_id}"
+    start_backfill = sys.stdin.isatty() and typer.confirm(
+        "Start Gmail historical backfill for this account now?", default=False
+    )
+    if start_backfill:
+        try:
+            from agentgraph.cli_query import queue_connector_ingest
+
+            queue_connector_ingest("gmail", account_id=resolved_account_id)
+            typer.echo("Gmail backfill queued - progress in server logs (agentgraph serve)")
+        except Exception as exc:
+            typer.echo(f"Could not queue Gmail backfill: {exc}", err=True)
+            typer.echo(f"Run later: {command}")
+    else:
+        typer.echo(f"Run later to import Gmail history: {command}")
 
 
 def _wait_for_callback(port: int) -> str:

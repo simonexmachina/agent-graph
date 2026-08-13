@@ -389,8 +389,9 @@ def test_detail_panel_shows_available_entity_timestamps(page: Page) -> None:
         {
             "created_at": "2026-06-01T01:00:00Z",
             "updated_at": "2026-06-02T02:00:00Z",
-            "last_accessed": "2026-06-03T03:00:00Z",
-            "observed_at": "2026-06-04T04:00:00Z",
+            "source_created_at": "2026-05-30T03:00:00Z",
+            "source_updated_at": "2026-05-31T04:00:00Z",
+            "observed_at": "2026-06-04T05:00:00Z",
         }
     )
     with _serve_viewer([timestamped], []) as url:
@@ -398,7 +399,20 @@ def test_detail_panel_shows_available_entity_timestamps(page: Page) -> None:
         page.evaluate("() => window.__agentGraphViewer.cy.getElementById('node-1').emit('tap')")
 
         labels = page.locator("#detail-body .detail-label")
-        expect(labels).to_contain_text(["Created", "Updated", "Accessed", "Observed"])
+        expect(labels).to_contain_text(
+            ["Observed", "Created", "Updated", "Source created", "Source updated"]
+        )
+
+
+def test_detail_panel_keeps_lifecycle_timestamp_rows_when_observed_is_missing(page: Page) -> None:
+    node = _node(1, "Unobserved document")
+    with _serve_viewer([node], []) as url:
+        _wait_for_graph(page, url, 1)
+        page.evaluate("() => window.__agentGraphViewer.cy.getElementById('node-1').emit('tap')")
+
+        labels = page.locator("#detail-body .detail-label")
+        expect(labels).to_contain_text(["Observed", "Created", "Updated"])
+        expect(page.locator("#detail-body .detail-value").filter(has_text="—")).to_have_count(3)
 
 
 @pytest.mark.parametrize("view", ["graph", "list"])

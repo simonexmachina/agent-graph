@@ -121,6 +121,20 @@ class _InvalidAuthConnector(_MissingAuthConnector):
         return ("invalid", "token expired")
 
 
+class _IngestConnector(_ScheduledConnector):
+    source: ClassVar[str] = "ingest"
+
+    def __init__(self) -> None:
+        self.accounts: list[str | None] = []
+
+    def poll_account_ids(self) -> list[str | None]:
+        return ["first@example.com", "second@example.com"]
+
+    async def ingest(self, account_id: str | None = None) -> EntityBatch:
+        self.accounts.append(account_id)
+        return EntityBatch()
+
+
 @pytest.fixture(autouse=True)
 def clear_sync_backoff() -> None:
     sync.clear_poll_backoff()
@@ -226,6 +240,24 @@ async def test_schedule_poll_connector_reports_invalid_auth() -> None:
         "reason": "authentication invalid: token expired",
     }
     poll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_scopes_to_explicit_account() -> None:
+    connector = _IngestConnector()
+
+    await sync.run_ingest(connector, account_ids=["second@example.com"])
+
+    assert connector.accounts == ["second@example.com"]
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_uses_all_accounts_without_explicit_scope() -> None:
+    connector = _IngestConnector()
+
+    await sync.run_ingest(connector)
+
+    assert connector.accounts == ["first@example.com", "second@example.com"]
 
 
 def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:

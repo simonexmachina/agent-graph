@@ -7,6 +7,7 @@ import html
 import json
 import re
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import ClassVar, cast
 from urllib.parse import urldefrag, urlparse
@@ -94,7 +95,12 @@ class WebConnector(BaseConnector):
             resource_id=_canonical_url(url),
         )
 
-    async def resolve_observation_url(self, url: str) -> SourceReference | None:
+    async def resolve_observation_url(
+        self,
+        url: str,
+        meta: dict[str, str] | None = None,
+    ) -> SourceReference | None:
+        _ = meta
         normalized = _canonical_url(url)
         for rule in load_web_settings().observation_urls:
             if _matches_observation_rule(normalized, rule):
@@ -173,11 +179,7 @@ async def _fetch_web_entity(
             platform_entity_id=final_url,
             title=parsed.title,
             content=parsed.content,
-            updated_at=(
-                None
-                if existing_metadata.get("content_sha256") == content_sha256
-                else datetime.now(UTC)
-            ),
+            source_updated_at=_parse_http_date(response.headers.get("last-modified")),
             metadata={
                 "url": url,
                 "final_url": final_url,
@@ -220,6 +222,16 @@ def _response_cache_metadata(headers: httpx.Headers) -> dict[str, str]:
     if last_modified:
         metadata["http_last_modified"] = last_modified
     return metadata
+
+
+def _parse_http_date(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def _entity_metadata(entity: dict[str, object] | None) -> dict[str, object]:

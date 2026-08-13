@@ -19,6 +19,7 @@ from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from agentgraph.connectors.base import (
     BaseConnector,
     ConnectorAccount,
+    ConnectorCommandEffects,
     EdgeRecord,
     EntityBatch,
     EntityRecord,
@@ -59,6 +60,30 @@ _MIME_EXTENSIONS: dict[str, str] = {
     "text/html": ".html",
     "text/plain": ".txt",
 }
+
+
+def _gmail_usage() -> str:
+    return "Usage: agentgraph connector gmail ingest [--account <account-id>]"
+
+
+def _gmail_help() -> str:
+    return (
+        "Usage: agentgraph connector gmail ingest [--account <account-id>]\n\n"
+        "Queue a historical Gmail backfill for the last 90 days. Without --account, "
+        "backfills every authenticated Google account."
+    )
+
+
+def _parse_ingest_args(args: list[str]) -> str | None:
+    if not args:
+        return None
+    if len(args) == 2 and args[0] == "--account" and args[1]:
+        return args[1]
+    if len(args) == 1 and args[0].startswith("--account="):
+        account_id = args[0].split("=", 1)[1]
+        if account_id:
+            return account_id
+    raise ValueError(_gmail_usage())
 
 
 def _build_service(account_id: str | None = None) -> Any:
@@ -196,6 +221,8 @@ def _extract_attachments(
                     title=filename or attachment_id,
                     metadata=metadata,
                     is_stub=True,
+                    retention_policy="owned",
+                    retention_parent_platform_entity_id=thread_id,
                 )
             )
         for child in part.get("parts", []):
@@ -289,8 +316,55 @@ class GmailConnector(BaseConnector):
             resource_id=match.group("thread_id"),
         )
 
+    async def resolve_observation_url(
+        self,
+        url: str,
+        meta: dict[str, str] | None = None,
+    ) -> SourceReference | None:
+        """Resolve opaque Gmail URLs to the canonical API thread ID."""
+        ref = self.resolve_url(url)
+        thread_id = (meta or {}).get("gmail_thread_id")
+        if ref is not None and thread_id and _GMAIL_THREAD_ID_RE.fullmatch(thread_id):
+            return SourceReference(
+                source=self.source,
+                resource_type="thread",
+                resource_id=thread_id,
+                fetch_meta={"gmail_thread_id": thread_id},
+            )
+        return ref
+
     def entity_url(self, platform_entity_id: str) -> str | None:
         return f"https://mail.google.com/mail/u/0/#all/{platform_entity_id}"
+
+    @classmethod
+    def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+        if not args or args[0] != "ingest":
+            raise ValueError(_gmail_usage())
+        account_id = _parse_ingest_args(args[1:])
+        return {"status": "queued", "source": cls.source, "account_id": account_id}
+
+    @classmethod
+    def cli_help(cls) -> str:
+        return _gmail_help()
+
+    @classmethod
+    def format_cli_result(cls, result: dict[str, Any]) -> str:
+        account_id = result.get("account_id")
+        scope = f" for {account_id}" if account_id else " for all authenticated accounts"
+        return f"Gmail backfill queued{scope} - progress in server logs (agentgraph serve)"
+
+    @classmethod
+    def command_effects(
+        cls,
+        args: list[str],
+        result: dict[str, Any],
+    ) -> ConnectorCommandEffects:
+        _ = args
+        account_id = result.get("account_id")
+        return ConnectorCommandEffects(
+            ingest=True,
+            ingest_account_id=account_id if isinstance(account_id, str) else None,
+        )
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         import asyncio
@@ -670,8 +744,8 @@ def _thread_to_items(
         platform_entity_id=thread_id,
         title=subject,
         content=content,
-        created_at=thread_created_at,
-        updated_at=thread_updated_at,
+        source_created_at=thread_created_at,
+        source_updated_at=thread_updated_at,
         metadata={
             "message_count": len(messages),
             "snippet": thread.get("snippet", ""),

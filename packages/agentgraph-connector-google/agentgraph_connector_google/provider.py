@@ -14,8 +14,6 @@ GOOGLE_OAUTH_CLIENT_ID = "243010728161-k5ms99bjeg9n1ub464fgl4lbaf4dtp2q.apps.goo
 GOOGLE_OAUTH_CLIENT_SECRET = "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"
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 GOOGLE_SCOPES = [
-    "https://www.googleapis.com/auth/documents.readonly",
-    "https://www.googleapis.com/auth/spreadsheets.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/userinfo.email",

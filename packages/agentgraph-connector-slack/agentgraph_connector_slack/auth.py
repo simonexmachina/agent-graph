@@ -518,9 +518,10 @@ def run_oauth_flow(
     from agentgraph.auth.credentials import upsert_platform_account
 
     upsert_platform_account("slack", resolved_account_id, credentials, make_default=True)
-    from agentgraph.config import CREDENTIALS_FILE
+    from agentgraph.config import get_config_paths
 
-    typer.echo(f"Slack OAuth credentials saved to {CREDENTIALS_FILE} ({resolved_account_id})")
+    _, _, _, credentials_file, _ = get_config_paths()
+    typer.echo(f"Slack OAuth credentials saved to {credentials_file} ({resolved_account_id})")
 
 
 async def refresh_oauth_credentials(
@@ -664,9 +665,10 @@ def run_cookie_flow(
         )
     else:
         upsert_platform_account("slack", resolved_account_id, creds, make_default=True)
-    from agentgraph.config import CREDENTIALS_FILE
+    from agentgraph.config import get_config_paths
 
-    msg = f"\nSlack credentials saved to {CREDENTIALS_FILE}"
+    _, _, _, credentials_file, _ = get_config_paths()
+    msg = f"\nSlack credentials saved to {credentials_file}"
     if user_id:
         label = f"{team_name} / {user_id}" if team_name else user_id
         msg += f" (authenticated as {label})"

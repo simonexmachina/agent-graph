@@ -165,6 +165,9 @@ async def test_schema_has_platform_synced_at_index(sqlite_backend: SQLiteBackend
     assert "idx_entities_type_observed_at" in names
     assert "idx_entities_type_created_at" in names
     assert "idx_entities_type_updated_at" in names
+    assert "idx_entities_type_source_created_at" in names
+    assert "idx_entities_type_source_updated_at" in names
+    assert "idx_entities_retention_parent" in names
     assert "idx_entities_platform_type_observed_at" in names
     assert "idx_entities_observed_at_id" in names
     assert "idx_entities_type_observed_at_id" in names
@@ -286,14 +289,26 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
         column_names = {row["name"] for row in columns}
         assert "cumulative_dwell_ms" in column_names
         assert "observed_at" in column_names
+        assert "source_created_at" in column_names
+        assert "source_updated_at" in column_names
+        assert "retention_policy" in column_names
+        assert "retention_parent_id" in column_names
+
+        by_name = {row["name"]: row for row in columns}
+        assert by_name["created_at"]["notnull"] == 1
+        assert by_name["updated_at"]["notnull"] == 1
+        assert by_name["observed_at"]["notnull"] == 0
 
         entity = await migrated.get_entity_by_platform("gmail", "test-thread-001")
         assert entity is not None
         assert entity["entity_type"] == "Email"
         assert entity["cumulative_dwell_ms"] == 0
-        assert entity["observed_at"] == "2020-01-02T03:04:05Z"
+        assert entity["created_at"] == "2020-01-02T03:04:05Z"
+        assert entity["updated_at"] == "2020-01-02T03:04:05Z"
+        assert entity["observed_at"] is None
+        assert entity["retention_policy"] == "observed"
 
-        await migrated.increment_dwell_time("gmail", "test-thread-001", 1234)
+        await migrated.record_observation("gmail", "test-thread-001", 1234)
         updated = await migrated.get_entity_by_platform("gmail", "test-thread-001")
         assert updated is not None
         assert updated["cumulative_dwell_ms"] == 1234

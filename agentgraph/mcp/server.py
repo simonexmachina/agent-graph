@@ -234,6 +234,16 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             from agentgraph.server.sync import schedule_poll_connector
 
             result["poll"] = await schedule_poll_connector(connector)
+        if effects.ingest:
+            from agentgraph.server.sync import run_ingest
+
+            account_ids = [effects.ingest_account_id] if effects.ingest_account_id else None
+            asyncio.create_task(run_ingest(connector, account_ids=account_ids))
+            result["ingest"] = {
+                "source": connector.source,
+                "status": "started",
+                "account_id": effects.ingest_account_id,
+            }
         return json.dumps(result, default=str)
     except (NotImplementedError, OSError, ValueError) as exc:
         return json.dumps({"error": str(exc)})
@@ -556,38 +566,6 @@ async def poll_connectors_tool(source: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# ingest_connector — trigger background bulk ingest
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool()
-async def ingest_connector_tool(source: str) -> str:
-    """
-    Trigger a background one-shot bulk ingest for a connector.
-
-    This is the MCP equivalent of:
-        agentgraph ingest <source>
-
-    Args:
-        source: Connector source to ingest.
-
-    Returns:
-        JSON object with source and status, or an error if the connector source
-        is not registered.
-    """
-    from agentgraph.connectors.registry import bootstrap, get_connector
-    from agentgraph.server.sync import run_ingest
-
-    bootstrap()
-    connector = get_connector(source)
-    if connector is None:
-        return json.dumps({"error": f"No connector registered for source {source!r}"})
-
-    asyncio.create_task(run_ingest(connector))
-    return json.dumps({"source": source, "status": "started"})
-
-
-# ---------------------------------------------------------------------------
 # download_entity — authenticated source-file download
 # ---------------------------------------------------------------------------
 
@@ -782,7 +760,9 @@ async def query_by_filter_tool(
             Ignored for non-Message entity types. Gmail attachments are
             Document stubs instead.
         limit: Maximum number of results (default 50).
-        order_by: Column to sort by descending (default "created_at").
+        order_by: Date column to sort by descending: created_at, updated_at,
+            source_created_at, source_updated_at, observed_at, or synced_at
+            (default "created_at").
         refresh: If true, let connectors refresh or enrich connector-owned
             presentation metadata before returning. Defaults to false to keep
             queries responsive.

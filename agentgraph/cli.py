@@ -305,6 +305,13 @@ def connector_command(
             from agentgraph.cli_query import queue_connector_poll
 
             result["poll"] = queue_connector_poll(connector.source)
+        if effects.ingest:
+            from agentgraph.cli_query import queue_connector_ingest
+
+            result["ingest"] = queue_connector_ingest(
+                connector.source,
+                account_id=effects.ingest_account_id,
+            )
     except NotImplementedError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
@@ -369,11 +376,12 @@ def serve(
     """Start the AgentGraph backend server."""
     import uvicorn
 
-    from agentgraph.config import get_settings
+    from agentgraph.config import get_config_paths, get_settings
     from agentgraph.logging import configure_logging
 
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_file)
+    typer.echo(f"AgentGraph config directory: {get_config_paths()[0]}")
     uvicorn.run(
         "agentgraph.server.app:app",
         host=settings.server_host,
@@ -670,17 +678,6 @@ def poll(
 
 
 @app.command()
-def ingest(
-    source: str = typer.Argument(..., help="Connector source to ingest (e.g. gmail, rss)"),
-    json: bool = typer.Option(False, "--json", help="Output as JSON"),
-) -> None:
-    """Run a one-shot bulk ingest for a connector (all data within the retention window)."""
-    from agentgraph.cli_query import cmd_ingest
-
-    cmd_ingest(source=source, as_json=json)
-
-
-@app.command()
 def query(
     entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
     filter: list[str] = typer.Option(
@@ -701,7 +698,10 @@ def query(
         "created_at",
         "--order-by",
         "-o",
-        help="Column to sort by (created_at, updated_at, observed_at, synced_at)",
+        help=(
+            "Column to sort by (created_at, updated_at, source_created_at, "
+            "source_updated_at, observed_at, synced_at)"
+        ),
     ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:

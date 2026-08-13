@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -55,6 +55,7 @@ def test_help() -> None:
     assert "bookmark" in result.output
     assert "delete" in result.output
     assert "unify-persons" in result.output
+    assert "ingest" not in result.output
 
 
 def test_bookmark_command_dispatches_to_cli_query() -> None:
@@ -502,6 +503,7 @@ class _FakeGoogleToken:
 
 class _FakeGoogleFlow:
     captured_client_config: dict[str, Any] | None = None
+    captured_scopes: list[str] | None = None
     last_instance: _FakeGoogleFlow | None = None
 
     def __init__(self) -> None:
@@ -519,6 +521,7 @@ class _FakeGoogleFlow:
         redirect_uri: str,
     ) -> _FakeGoogleFlow:
         cls.captured_client_config = client_config
+        cls.captured_scopes = scopes
         return cls()
 
     def authorization_url(self, *, access_type: str, prompt: str) -> tuple[str, None]:
@@ -878,6 +881,56 @@ def test_connector_command_queues_requested_poll() -> None:
     queue_poll.assert_called_once_with("rss")
 
 
+def test_connector_command_queues_requested_ingest_for_account() -> None:
+    class _IngestingGmailConnector(_FakeRssConnector):
+        source = "gmail"
+
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "queued", "source": cls.source, "account_id": "user@example.com"}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(ingest=True, ingest_account_id="user@example.com")
+
+    ingest_result = {"source": "gmail", "status": "started", "account_id": "user@example.com"}
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=_IngestingGmailConnector()),
+        patch("agentgraph.cli_query.queue_connector_ingest", return_value=ingest_result) as queue_ingest,
+    ):
+        result = runner.invoke(app, ["connector", "gmail", "ingest", "--account", "user@example.com", "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["ingest"] == ingest_result
+    queue_ingest.assert_called_once_with("gmail", account_id="user@example.com")
+
+
+def test_gmail_connector_ingest_command_parses_account_scope() -> None:
+    from agentgraph_connector_google.gmail import GmailConnector
+
+    assert GmailConnector.run_cli_command(["ingest"]) == {
+        "status": "queued",
+        "source": "gmail",
+        "account_id": None,
+    }
+    assert GmailConnector.run_cli_command(["ingest", "--account=user@example.com"])[
+        "account_id"
+    ] == "user@example.com"
+    assert GmailConnector.command_effects(
+        ["ingest", "--account", "user@example.com"],
+        GmailConnector.run_cli_command(["ingest", "--account", "user@example.com"]),
+    ) == ConnectorCommandEffects(ingest=True, ingest_account_id="user@example.com")
+
+    with pytest.raises(ValueError, match="Usage: agentgraph connector gmail ingest"):
+        GmailConnector.run_cli_command(["ingest", "--unexpected"])
+
+
 def test_connector_command_does_not_poll_after_validation_error() -> None:
     class _InvalidRssConnector(_FakeRssConnector):
         @classmethod
@@ -1193,6 +1246,7 @@ def test_auth_google_uses_packaged_client_without_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _FakeGoogleFlow.captured_client_config = None
+    _FakeGoogleFlow.captured_scopes = None
     _install_fake_google_oauth(monkeypatch)
 
     with (
@@ -1210,12 +1264,48 @@ def test_auth_google_uses_packaged_client_without_prompt(
     installed = _FakeGoogleFlow.captured_client_config["installed"]
     assert installed["client_id"] == GOOGLE_OAUTH_CLIENT_ID
     assert installed["client_secret"] == GOOGLE_OAUTH_CLIENT_SECRET
+    assert _FakeGoogleFlow.captured_scopes == [
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "openid",
+    ]
     assert _FakeGoogleFlow.last_instance is not None
     _FakeGoogleFlow.last_instance.fetch_token.assert_called_once_with(code="auth-code")
     saved = load_platform("google")
     assert saved is not None
     assert saved["client_id"] == GOOGLE_OAUTH_CLIENT_ID
     assert "client_secret" not in saved
+    assert "Run later to import Gmail history" in result.output
+    assert "agentgraph connector gmail ingest --account new@example.com" in result.output
+
+
+def test_auth_google_queues_gmail_backfill_for_new_account(
+    tmp_creds: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_google_oauth(monkeypatch)
+    monkeypatch.setattr(
+        "agentgraph_connector_google.auth.sys",
+        SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)),
+    )
+    queued = {"source": "gmail", "status": "started", "account_id": "new@example.com"}
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeGoogleConnector()],
+        ),
+        patch("agentgraph_connector_google.auth.typer.confirm", return_value=True),
+        patch("agentgraph.cli_query.queue_connector_ingest", return_value=queued) as queue_ingest,
+    ):
+        result = runner.invoke(app, ["auth", "google"], input="y\n")
+
+    assert result.exit_code == 0
+    queue_ingest.assert_called_once_with("gmail", account_id="new@example.com")
+    assert "Gmail backfill queued" in result.output
 
 
 def test_auth_google_rejects_client_id_override() -> None:

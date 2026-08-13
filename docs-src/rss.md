@@ -91,6 +91,11 @@ The prefixes are only an extension-side eligibility filter. The server attribute
 only when the observed, normalized URL exactly matches a configured feed or previously indexed
 RSS entry. Unknown pages under a matching article prefix are ignored.
 
+Observing the exact configured feed URL updates the feed `Folder`, whose stored ID is derived as
+`feed/{feed_hash}`. Observing an article URL updates only the existing RSS `Document` whose
+`metadata.web_url` exactly matches the normalized URL. Polling and hydration do not count as
+observations or extend observation-based retention. See [Entity retention](retention.html).
+
 ## Query articles
 
 RSS entries are indexed as `Document` entities with `platform=rss`.

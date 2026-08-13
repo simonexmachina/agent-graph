@@ -38,7 +38,14 @@ def _fts5_query(text: str) -> str:
     return _FTS5_SPECIAL.sub(" ", text).strip()
 
 
-_VALID_ORDER_BY = {"created_at", "updated_at", "observed_at", "synced_at"}
+_VALID_ORDER_BY = {
+    "created_at",
+    "updated_at",
+    "source_created_at",
+    "source_updated_at",
+    "observed_at",
+    "synced_at",
+}
 _LIST_PAGE_ORDER_BY = {
     **{field: field for field in _VALID_ORDER_BY},
     "display_name": """
@@ -189,9 +196,18 @@ class SQLiteBackend(StorageBackend):
         if "observed_at" not in columns:
             await conn.execute("ALTER TABLE entities ADD COLUMN observed_at TEXT")
             entity_columns["observed_at"] = False
-        observed_not_null = entity_columns["observed_at"]
-        if "last_accessed" in columns or not observed_not_null:
-            await self._rebuild_entities_for_observed_at("last_accessed" in columns)
+        needs_retention_migration = (
+            "last_accessed" in columns
+            or not entity_columns.get("created_at", False)
+            or not entity_columns.get("updated_at", False)
+            or entity_columns.get("observed_at", False)
+            or "source_created_at" not in columns
+            or "source_updated_at" not in columns
+            or "retention_policy" not in columns
+            or "retention_parent_id" not in columns
+        )
+        if needs_retention_migration:
+            await self._rebuild_entities_for_retention(columns)
         await conn.execute(
             "UPDATE entities SET entity_type = 'Email' WHERE entity_type = 'Thread'"
         )
@@ -220,16 +236,71 @@ class SQLiteBackend(StorageBackend):
             "CREATE INDEX IF NOT EXISTS idx_entities_type_updated_at ON entities(entity_type, updated_at DESC)"
         )
         await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_type_source_created_at ON entities(entity_type, source_created_at DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_type_source_updated_at ON entities(entity_type, source_updated_at DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_retention_parent ON entities(retention_parent_id)"
+        )
+        await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_observed_at_id ON entities(platform, observed_at DESC, id ASC)"
         )
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC)"
         )
 
-    async def _rebuild_entities_for_observed_at(self, has_last_accessed: bool) -> None:
-        """Replace the legacy nullable/access-based entity timestamp schema."""
+    async def _rebuild_entities_for_retention(self, columns: set[str]) -> None:
+        """Best-effort migration from source-based timestamps to lifecycle timestamps."""
         conn = self._conn_or_raise()
-        fallback = "COALESCE(observed_at, last_accessed, ?)" if has_last_accessed else "COALESCE(observed_at, ?)"
+        now_sql = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
+        if "source_created_at" in columns:
+            local_created = f"COALESCE(created_at, {now_sql})"
+            source_created = "source_created_at"
+        else:
+            legacy_access = "last_accessed, " if "last_accessed" in columns else ""
+            local_created = f"COALESCE(observed_at, {legacy_access}synced_at, {now_sql})"
+            source_created = "created_at" if "created_at" in columns else "NULL"
+
+        if "source_updated_at" in columns:
+            local_updated = f"COALESCE(updated_at, {local_created})"
+            source_updated = "source_updated_at"
+        else:
+            local_updated = (
+                "CASE "
+                "WHEN synced_at IS NOT NULL AND synced_at > COALESCE(observed_at, '') "
+                "THEN synced_at "
+                f"ELSE {local_created} END"
+            )
+            source_updated = "updated_at" if "updated_at" in columns else "NULL"
+
+        if "retention_policy" in columns:
+            retention_policy = "retention_policy"
+        else:
+            retention_policy = (
+                "CASE entity_type WHEN 'Person' THEN 'connected' "
+                "WHEN 'Message' THEN 'owned' ELSE 'observed' END"
+            )
+
+        if "retention_parent_id" in columns:
+            retention_parent = "retention_parent_id"
+        else:
+            retention_parent = (
+                "CASE WHEN entity_type = 'Message' THEN "
+                "(SELECT target_entity_id FROM edges "
+                "WHERE source_entity_id = entities.id AND edge_type = 'posted_in' LIMIT 1) "
+                "ELSE NULL END"
+            )
+
+        observed = "NULL"
+        if "observed_at" in columns and "cumulative_dwell_ms" in columns:
+            observed = (
+                "CASE WHEN entity_type IN ('Channel', 'Document', 'Email', 'Folder', 'Spreadsheet') "
+                "AND cumulative_dwell_ms > 0 THEN observed_at ELSE NULL END"
+            )
+        dwell = "cumulative_dwell_ms" if "cumulative_dwell_ms" in columns else "0"
+        bookmarked = "bookmarked" if "bookmarked" in columns else "0"
         await conn.execute("PRAGMA foreign_keys=OFF")
         try:
             await conn.execute("BEGIN")
@@ -244,10 +315,15 @@ class SQLiteBackend(StorageBackend):
                     content TEXT,
                     content_embedding BLOB,
                     metadata TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT,
-                    updated_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    source_created_at TEXT,
+                    source_updated_at TEXT,
                     synced_at TEXT,
-                    observed_at TEXT NOT NULL,
+                    observed_at TEXT,
+                    retention_policy TEXT NOT NULL DEFAULT 'observed'
+                        CHECK (retention_policy IN ('observed', 'owned', 'connected')),
+                    retention_parent_id TEXT REFERENCES entities_new(id) ON DELETE CASCADE,
                     cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
                     bookmarked INTEGER NOT NULL DEFAULT 0,
                     UNIQUE (platform, platform_entity_id)
@@ -258,14 +334,15 @@ class SQLiteBackend(StorageBackend):
                 f"""
                 INSERT INTO entities_new
                     (id, entity_type, platform, platform_entity_id, title, content,
-                     content_embedding, metadata, created_at, updated_at, synced_at,
-                     observed_at, cumulative_dwell_ms, bookmarked)
+                     content_embedding, metadata, created_at, updated_at,
+                     source_created_at, source_updated_at, synced_at, observed_at,
+                     retention_policy, retention_parent_id, cumulative_dwell_ms, bookmarked)
                 SELECT id, entity_type, platform, platform_entity_id, title, content,
-                       content_embedding, metadata, created_at, updated_at, synced_at,
-                       {fallback}, cumulative_dwell_ms, bookmarked
+                       content_embedding, metadata, {local_created}, {local_updated},
+                       {source_created}, {source_updated}, synced_at, {observed},
+                       {retention_policy}, {retention_parent}, {dwell}, {bookmarked}
                 FROM entities
                 """,
-                [_now()],
             )
             await conn.execute("DROP TABLE entities")
             await conn.execute("ALTER TABLE entities_new RENAME TO entities")
@@ -385,7 +462,7 @@ class SQLiteBackend(StorageBackend):
             )
             if existing_id is not None:
                 existing_cursor = await conn.execute(
-                    "SELECT title, content, content_embedding, metadata, observed_at FROM entities WHERE id = ?",
+                    "SELECT title, content, content_embedding, metadata, updated_at FROM entities WHERE id = ?",
                     [existing_id],
                 )
                 existing_row = await existing_cursor.fetchone()
@@ -416,7 +493,7 @@ class SQLiteBackend(StorageBackend):
                         content = COALESCE(?, content),
                         content_embedding = COALESCE(?, content_embedding),
                         metadata = json_patch(metadata, ?),
-                        observed_at = ?
+                        updated_at = ?
                     WHERE id = ?
                     """,
                     [
@@ -434,8 +511,8 @@ class SQLiteBackend(StorageBackend):
                     """
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, content,
-                         content_embedding, metadata, observed_at)
-                    VALUES (?, 'Person', 'canonical', ?, ?, ?, ?, ?, ?)
+                         content_embedding, metadata, retention_policy)
+                    VALUES (?, 'Person', 'canonical', ?, ?, ?, ?, ?, 'connected')
                     RETURNING id
                     """,
                     [
@@ -445,7 +522,6 @@ class SQLiteBackend(StorageBackend):
                         p.canonical_email,
                         emb_blob,
                         json.dumps(meta),
-                        now,
                     ],
                 )
                 row = await cursor.fetchone()
@@ -504,29 +580,61 @@ class SQLiteBackend(StorageBackend):
         fts_entries: dict[str, tuple[str, str]] = {}
         now = _now()
         for e in entities:
+            parent_id: str | None = None
+            if e.retention_policy == "owned":
+                parent_ref = e.retention_parent_platform_entity_id
+                if not parent_ref:
+                    raise ValueError(
+                        f"Owned entity {e.platform}:{e.platform_entity_id} has no retention parent"
+                    )
+                parent_id = id_map.get(parent_ref)
+                if parent_id is None:
+                    parent_id = await self._resolve_existing_entity_id(conn, e.platform, parent_ref)
+                if parent_id is None:
+                    raise ValueError(
+                        f"Retention parent {e.platform}:{parent_ref} is not available"
+                    )
+            elif e.retention_parent_platform_entity_id is not None:
+                raise ValueError(
+                    f"Entity {e.platform}:{e.platform_entity_id} has a parent but is not owned"
+                )
+
             if e.is_stub:
                 cursor = await conn.execute(
                     """
-                    INSERT INTO entities (id, entity_type, platform, platform_entity_id, observed_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO entities
+                        (id, entity_type, platform, platform_entity_id, title, metadata,
+                         retention_policy, retention_parent_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
                         entity_type = entities.entity_type
                     RETURNING id
                     """,
-                    [_new_id(), e.entity_type, e.platform, e.platform_entity_id, now],
+                    [
+                        _new_id(),
+                        e.entity_type,
+                        e.platform,
+                        e.platform_entity_id,
+                        e.title,
+                        json.dumps(dict(e.metadata)),
+                        e.retention_policy,
+                        parent_id,
+                    ],
                 )
             else:
                 existing_cursor = await conn.execute(
                     """
-                    SELECT id, entity_type, title, content, content_embedding, metadata, created_at,
-                           updated_at, observed_at FROM entities
+                    SELECT id, entity_type, title, content, content_embedding, metadata,
+                           updated_at, source_created_at, source_updated_at,
+                           retention_policy, retention_parent_id
+                    FROM entities
                     WHERE platform = ? AND platform_entity_id = ?
                     """,
                     [e.platform, e.platform_entity_id],
                 )
                 existing_row = await existing_cursor.fetchone()
-                existing_title = str(existing_row[2]) if existing_row and existing_row[2] else ""
-                existing_content = str(existing_row[3]) if existing_row and existing_row[3] else ""
+                existing_title = str(existing_row["title"]) if existing_row and existing_row["title"] else ""
+                existing_content = str(existing_row["content"]) if existing_row and existing_row["content"] else ""
                 fts_title = e.title if e.title is not None else existing_title
                 fts_content = e.content if e.content is not None else existing_content
                 rewrite_fts = (
@@ -536,42 +644,72 @@ class SQLiteBackend(StorageBackend):
                 )
                 embedding = embeddings.get(e.platform_entity_id)
                 emb_blob = pack_embedding(embedding) if embedding else None
-                created = e.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if e.created_at else None
-                updated = e.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ") if e.updated_at else None
+                source_created = (
+                    e.source_created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    if e.source_created_at
+                    else None
+                )
+                source_updated = (
+                    e.source_updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    if e.source_updated_at
+                    else None
+                )
                 metadata = dict(e.metadata)
                 if existing_row is None:
                     changed = True
-                    observed_at = now
+                    local_updated = now
                 else:
-                    target_type = e.entity_type if existing_row[1] == "Document" else existing_row[1]
-                    target_title = e.title if e.title is not None else existing_row[2]
-                    target_content = e.content if e.content is not None else existing_row[3]
-                    target_embedding = emb_blob if emb_blob is not None else existing_row[4]
-                    target_updated = updated if updated is not None else existing_row[7]
-                    changed = (
-                        target_type != existing_row[1]
-                        or target_title != existing_row[2]
-                        or target_content != existing_row[3]
-                        or target_embedding != existing_row[4]
-                        or metadata != json.loads(existing_row[5] or "{}")
-                        or target_updated != existing_row[7]
+                    target_type = (
+                        e.entity_type
+                        if existing_row["entity_type"] == "Document"
+                        else existing_row["entity_type"]
                     )
-                    observed_at = now if changed else existing_row[8]
+                    target_title = e.title if e.title is not None else existing_row["title"]
+                    target_content = e.content if e.content is not None else existing_row["content"]
+                    target_embedding = (
+                        emb_blob if emb_blob is not None else existing_row["content_embedding"]
+                    )
+                    target_source_created = (
+                        source_created
+                        if source_created is not None
+                        else existing_row["source_created_at"]
+                    )
+                    target_source_updated = (
+                        source_updated
+                        if source_updated is not None
+                        else existing_row["source_updated_at"]
+                    )
+                    changed = (
+                        target_type != existing_row["entity_type"]
+                        or target_title != existing_row["title"]
+                        or target_content != existing_row["content"]
+                        or target_embedding != existing_row["content_embedding"]
+                        or metadata != json.loads(existing_row["metadata"] or "{}")
+                        or target_source_created != existing_row["source_created_at"]
+                        or target_source_updated != existing_row["source_updated_at"]
+                        or e.retention_policy != existing_row["retention_policy"]
+                        or parent_id != existing_row["retention_parent_id"]
+                    )
+                    local_updated = now if changed else str(existing_row["updated_at"])
                 cursor = await conn.execute(
                     """
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, content,
-                         content_embedding, metadata, created_at, updated_at, synced_at, observed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         content_embedding, metadata, source_created_at, source_updated_at,
+                         synced_at, retention_policy, retention_parent_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
                         entity_type       = CASE WHEN entities.entity_type = 'Document' THEN EXCLUDED.entity_type ELSE entities.entity_type END,
                         title             = COALESCE(EXCLUDED.title, entities.title),
                         content           = COALESCE(EXCLUDED.content, entities.content),
                         content_embedding = COALESCE(EXCLUDED.content_embedding, entities.content_embedding),
                         metadata          = EXCLUDED.metadata,
-                        updated_at        = COALESCE(EXCLUDED.updated_at, entities.updated_at),
+                        source_created_at = COALESCE(EXCLUDED.source_created_at, entities.source_created_at),
+                        source_updated_at = COALESCE(EXCLUDED.source_updated_at, entities.source_updated_at),
                         synced_at         = EXCLUDED.synced_at,
-                        observed_at       = ?
+                        retention_policy  = EXCLUDED.retention_policy,
+                        retention_parent_id = EXCLUDED.retention_parent_id,
+                        updated_at        = ?
                     RETURNING id
                     """,
                     [
@@ -583,11 +721,12 @@ class SQLiteBackend(StorageBackend):
                         e.content,
                         emb_blob,
                         json.dumps(metadata),
-                        created,
-                        updated,
+                        source_created,
+                        source_updated,
                         now,
-                        observed_at,
-                        observed_at,
+                        e.retention_policy,
+                        parent_id,
+                        local_updated,
                     ],
                 )
 
@@ -674,7 +813,7 @@ class SQLiteBackend(StorageBackend):
             if not target_id:
                 logger.warning("Skipping edge %s — target not resolved", edge.edge_type)
                 continue
-            edge_cursor = await conn.execute(
+            await conn.execute(
                 """
                 INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id, platform, properties, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -690,11 +829,6 @@ class SQLiteBackend(StorageBackend):
                     now,
                 ],
             )
-            if edge_cursor.rowcount:
-                await conn.execute(
-                    "UPDATE entities SET observed_at = ? WHERE id IN (?, ?)",
-                    [now, source_id, target_id],
-                )
 
     async def merge_person_entities(
         self,
@@ -779,7 +913,7 @@ class SQLiteBackend(StorageBackend):
                 await conn.execute(
                     """
                     UPDATE entities
-                    SET title = ?, content = ?, metadata = ?, observed_at = ?
+                    SET title = ?, content = ?, metadata = ?, updated_at = ?
                     WHERE id = ?
                     """,
                     [title, content, json.dumps(merged_metadata), _now(), primary_entity_id],
@@ -846,11 +980,13 @@ class SQLiteBackend(StorageBackend):
         cursor = await self._conn_or_raise().execute(
             """
             UPDATE entities
-            SET bookmarked = ?, observed_at = ?
+            SET bookmarked = ?, updated_at = ?
             WHERE id = ?
             RETURNING id, entity_type, platform, platform_entity_id,
-                      title, content, metadata, created_at, updated_at, synced_at,
-                      observed_at, cumulative_dwell_ms, bookmarked
+                      title, content, metadata, created_at, updated_at,
+                      source_created_at, source_updated_at, synced_at, observed_at,
+                      retention_policy, retention_parent_id,
+                      cumulative_dwell_ms, bookmarked
             """,
             [1 if bookmarked else 0, now, entity_id],
         )
@@ -866,20 +1002,32 @@ class SQLiteBackend(StorageBackend):
             conn = self._conn_or_raise()
             await conn.execute("BEGIN")
             try:
+                await conn.execute(
+                    """
+                    UPDATE entities
+                    SET retention_parent_id = NULL, updated_at = ?
+                    WHERE retention_parent_id = ? AND bookmarked = 1
+                    """,
+                    [_now(), entity_id],
+                )
                 cursor = await conn.execute(
                     """
                     DELETE FROM entities
                     WHERE id = ?
                     RETURNING id, entity_type, platform, platform_entity_id,
-                              title, content, metadata, created_at, updated_at, synced_at,
-                              observed_at, cumulative_dwell_ms, bookmarked
+                              title, content, metadata, created_at, updated_at,
+                              source_created_at, source_updated_at, synced_at, observed_at,
+                              retention_policy, retention_parent_id,
+                              cumulative_dwell_ms, bookmarked
                     """,
                     [entity_id],
                 )
                 row = await cursor.fetchone()
                 if row is None:
                     raise ValueError(f"Entity {entity_id!r} not found")
-                await conn.execute("DELETE FROM entities_fts WHERE id = ?", [entity_id])
+                await conn.execute(
+                    "DELETE FROM entities_fts WHERE id NOT IN (SELECT id FROM entities)"
+                )
                 await conn.execute("COMMIT")
             except Exception:
                 await conn.execute("ROLLBACK")
@@ -991,8 +1139,10 @@ class SQLiteBackend(StorageBackend):
                 cursor = await conn.execute(
                     f"""
                     SELECT id, entity_type, platform, platform_entity_id,
-                           title, content, metadata, created_at, updated_at, synced_at,
-                           observed_at, cumulative_dwell_ms, bookmarked
+                           title, content, metadata, created_at, updated_at,
+                           source_created_at, source_updated_at, synced_at, observed_at,
+                           retention_policy, retention_parent_id,
+                           cumulative_dwell_ms, bookmarked
                     FROM entities WHERE id IN ({placeholders})
                     """,
                     id_list,
@@ -1020,8 +1170,10 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, cumulative_dwell_ms, bookmarked
+                   title, content, metadata, created_at, updated_at,
+                   source_created_at, source_updated_at, synced_at, observed_at,
+                   retention_policy, retention_parent_id,
+                   cumulative_dwell_ms, bookmarked
             FROM entities WHERE id = ?
             """,
             [entity_id],
@@ -1035,8 +1187,10 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, cumulative_dwell_ms, bookmarked
+                   title, content, metadata, created_at, updated_at,
+                   source_created_at, source_updated_at, synced_at, observed_at,
+                   retention_policy, retention_parent_id,
+                   cumulative_dwell_ms, bookmarked
             FROM entities WHERE id IN ({placeholders})
             """,
             entity_ids,
@@ -1047,8 +1201,10 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, cumulative_dwell_ms, bookmarked
+                   title, content, metadata, created_at, updated_at,
+                   source_created_at, source_updated_at, synced_at, observed_at,
+                   retention_policy, retention_parent_id,
+                   cumulative_dwell_ms, bookmarked
             FROM entities WHERE id LIKE ?
             """,
             [f"{prefix}%"],
@@ -1061,8 +1217,10 @@ class SQLiteBackend(StorageBackend):
         row = await self._fetchone(
             """
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, cumulative_dwell_ms, bookmarked
+                   title, content, metadata, created_at, updated_at,
+                   source_created_at, source_updated_at, synced_at, observed_at,
+                   retention_policy, retention_parent_id,
+                   cumulative_dwell_ms, bookmarked
             FROM entities WHERE platform = ? AND platform_entity_id = ?
             """,
             [platform, platform_entity_id],
@@ -1093,8 +1251,10 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, cumulative_dwell_ms, bookmarked
+                   title, content, metadata, created_at, updated_at,
+                   source_created_at, source_updated_at, synced_at, observed_at,
+                   retention_policy, retention_parent_id,
+                   cumulative_dwell_ms, bookmarked
             FROM entities
             {where}
             ORDER BY observed_at DESC
@@ -1142,8 +1302,10 @@ class SQLiteBackend(StorageBackend):
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at, synced_at,
-                   observed_at, cumulative_dwell_ms, bookmarked
+                   title, content, metadata, created_at, updated_at,
+                   source_created_at, source_updated_at, synced_at, observed_at,
+                   retention_policy, retention_parent_id,
+                   cumulative_dwell_ms, bookmarked
             FROM entities
             {where}
             {order_clause}
@@ -1210,7 +1372,9 @@ class SQLiteBackend(StorageBackend):
                 f"""
                 SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
                        e.title, e.content, e.metadata, e.created_at, e.updated_at,
+                       e.source_created_at, e.source_updated_at,
                        e.synced_at, e.observed_at,
+                       e.retention_policy, e.retention_parent_id,
                        e.cumulative_dwell_ms, e.bookmarked
                 FROM entities e
                 {authored_join}
@@ -1298,8 +1462,10 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at, synced_at,
-                       observed_at, cumulative_dwell_ms, bookmarked
+                       title, content, metadata, created_at, updated_at,
+                       source_created_at, source_updated_at, synced_at, observed_at,
+                       retention_policy, retention_parent_id,
+                       cumulative_dwell_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 frontier,
@@ -1343,8 +1509,10 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at, synced_at,
-                       observed_at, cumulative_dwell_ms, bookmarked
+                       title, content, metadata, created_at, updated_at,
+                       source_created_at, source_updated_at, synced_at, observed_at,
+                       retention_policy, retention_parent_id,
+                       cumulative_dwell_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 unvisited,
@@ -1367,13 +1535,13 @@ class SQLiteBackend(StorageBackend):
     ) -> str:
         cursor = await self._conn_or_raise().execute(
             """
-            INSERT INTO entities (id, entity_type, platform, platform_entity_id, observed_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO entities (id, entity_type, platform, platform_entity_id)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
                 entity_type = entities.entity_type
             RETURNING id
             """,
-            [_new_id(), entity_type, platform, platform_entity_id, _now()],
+            [_new_id(), entity_type, platform, platform_entity_id],
         )
         row = await cursor.fetchone()
         if row is None:
@@ -1381,7 +1549,7 @@ class SQLiteBackend(StorageBackend):
         return row[0]
 
     async def insert_references_edge(self, source_id: str, target_id: str) -> None:
-        cursor = await self._conn_or_raise().execute(
+        await self._conn_or_raise().execute(
             """
             INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id, platform, properties)
             VALUES (?, 'references', ?, ?, 'cross', '{}')
@@ -1389,16 +1557,10 @@ class SQLiteBackend(StorageBackend):
             """,
             [_new_id(), source_id, target_id],
         )
-        if cursor.rowcount:
-            await self._execute(
-                "UPDATE entities SET observed_at = ? WHERE id IN (?, ?)",
-                [_now(), source_id, target_id],
-            )
 
     # --- GC ---
 
     async def gc_entities(self, retention_days: int) -> int:
-        cutoff = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         # SQLite doesn't have interval arithmetic; compute cutoff in Python
         from datetime import timedelta
 
@@ -1410,24 +1572,58 @@ class SQLiteBackend(StorageBackend):
             conn = self._conn_or_raise()
             await conn.execute("BEGIN")
             try:
-                cursor = await conn.execute(
-                    "SELECT id FROM entities WHERE observed_at < ? AND bookmarked = 0",
-                    [cutoff],
+                before_cursor = await conn.execute("SELECT count(*) FROM entities")
+                before_row = await before_cursor.fetchone()
+                before_count = int(before_row[0]) if before_row else 0
+                expired_sql = """
+                    retention_policy = 'observed'
+                    AND bookmarked = 0
+                    AND COALESCE(observed_at, created_at) < ?
+                """
+
+                # A bookmarked owned child survives parent collection as a detached entity.
+                await conn.execute(
+                    f"""
+                    UPDATE entities
+                    SET retention_parent_id = NULL, updated_at = ?
+                    WHERE bookmarked = 1
+                      AND retention_parent_id IN (
+                          SELECT id FROM entities WHERE {expired_sql}
+                      )
+                    """,
+                    [_now(), cutoff],
                 )
-                to_delete = [row[0] for row in await cursor.fetchall()]
-                if to_delete:
-                    placeholders = ",".join("?" * len(to_delete))
-                    await conn.execute(
-                        f"DELETE FROM entities WHERE id IN ({placeholders})", to_delete
-                    )
-                    await conn.execute(
-                        f"DELETE FROM entities_fts WHERE id IN ({placeholders})", to_delete
-                    )
+                await conn.execute(f"DELETE FROM entities WHERE {expired_sql}", [cutoff])
+                await conn.execute(
+                    """
+                    DELETE FROM entities
+                    WHERE retention_policy = 'owned'
+                      AND retention_parent_id IS NULL
+                      AND bookmarked = 0
+                    """
+                )
+                await conn.execute(
+                    """
+                    DELETE FROM entities
+                    WHERE retention_policy = 'connected'
+                      AND bookmarked = 0
+                      AND NOT EXISTS (
+                          SELECT 1 FROM edges
+                          WHERE source_entity_id = entities.id OR target_entity_id = entities.id
+                      )
+                    """
+                )
+                await conn.execute(
+                    "DELETE FROM entities_fts WHERE id NOT IN (SELECT id FROM entities)"
+                )
+                after_cursor = await conn.execute("SELECT count(*) FROM entities")
+                after_row = await after_cursor.fetchone()
+                after_count = int(after_row[0]) if after_row else 0
                 await conn.execute("COMMIT")
             except Exception:
                 await conn.execute("ROLLBACK")
                 raise
-        return len(to_delete)
+        return before_count - after_count
 
     # --- Observations ---
 
@@ -1454,14 +1650,30 @@ class SQLiteBackend(StorageBackend):
     async def increment_dwell_time(
         self, platform: str, platform_entity_id: str, dwell_ms: int
     ) -> None:
-        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = _now()
         await self._execute(
             """
             UPDATE entities
-            SET cumulative_dwell_ms = cumulative_dwell_ms + ?, observed_at = ?
+            SET cumulative_dwell_ms = cumulative_dwell_ms + ?, updated_at = ?
             WHERE platform = ? AND platform_entity_id = ?
             """,
             [dwell_ms, now, platform, platform_entity_id],
+        )
+
+    async def record_observation(
+        self, platform: str, platform_entity_id: str, dwell_ms: int
+    ) -> None:
+        now = _now()
+        await self._execute(
+            """
+            UPDATE entities
+            SET cumulative_dwell_ms = cumulative_dwell_ms + ?,
+                observed_at = ?,
+                updated_at = CASE WHEN ? > 0 THEN ? ELSE updated_at END
+            WHERE platform = ? AND platform_entity_id = ?
+              AND retention_policy = 'observed'
+            """,
+            [dwell_ms, now, dwell_ms, now, platform, platform_entity_id],
         )
 
     async def get_last_synced_at(self, platform: str, platform_entity_id: str) -> datetime | None:
@@ -1543,8 +1755,12 @@ def _row_to_entity(row: Any) -> EntityResult:
         "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "source_created_at": row["source_created_at"] if "source_created_at" in keys else None,
+        "source_updated_at": row["source_updated_at"] if "source_updated_at" in keys else None,
         "synced_at": row["synced_at"] if "synced_at" in keys else None,
         "observed_at": row["observed_at"] if "observed_at" in keys else None,
+        "retention_policy": row["retention_policy"] if "retention_policy" in keys else "observed",
+        "retention_parent_id": row["retention_parent_id"] if "retention_parent_id" in keys else None,
         "cumulative_dwell_ms": row["cumulative_dwell_ms"] if "cumulative_dwell_ms" in keys else 0,
         "bookmarked": bool(row["bookmarked"]) if "bookmarked" in keys else False,
         "score": row["score"] if "score" in keys else None,

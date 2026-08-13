@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -119,6 +119,16 @@ async def _fetch_user(client: httpx.AsyncClient, user_id: str, account_id: str |
 
 def _ts_to_dt(ts: str) -> datetime:
     return datetime.fromtimestamp(float(ts), tz=UTC)
+
+
+def _edited_at(message: dict[str, Any]) -> datetime | None:
+    edited = message.get("edited")
+    if not isinstance(edited, dict):
+        return None
+    edited_ts = cast(dict[str, object], edited).get("ts")
+    if not isinstance(edited_ts, str) or not edited_ts:
+        return None
+    return _ts_to_dt(edited_ts)
 
 
 def _parse_mentions(text: str) -> list[str]:
@@ -379,9 +389,11 @@ async def _fetch_thread_replies(
             platform="slack",
             platform_entity_id=_message_ref(team_id, channel_id, ts),
             content=text,
-            created_at=_ts_to_dt(ts),
-            updated_at=_ts_to_dt(ts),
+            source_created_at=_ts_to_dt(ts),
+            source_updated_at=_edited_at(reply),
             metadata=reply_meta,
+            retention_policy="owned",
+            retention_parent_platform_entity_id=channel_ref,
         ))
 
         edges.append(EdgeRecord(
@@ -507,9 +519,11 @@ async def _fetch_channel(channel_ref: str, oldest: str | None = None, account_id
                 platform="slack",
                 platform_entity_id=_message_ref(team_id, channel_id, ts),
                 content=text,
-                created_at=_ts_to_dt(ts),
-                updated_at=_ts_to_dt(ts),
+                source_created_at=_ts_to_dt(ts),
+                source_updated_at=_edited_at(msg),
                 metadata=msg_meta,
+                retention_policy="owned",
+                retention_parent_platform_entity_id=channel_ref,
             )
             entities.append(msg_entity)
 

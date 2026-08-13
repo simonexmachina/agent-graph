@@ -197,11 +197,14 @@ async def poll_connector(connector: BaseConnector) -> None:
         logger.debug("poll %s total elapsed %.1fs", source, perf_counter() - started)
 
 
-async def run_ingest(connector: BaseConnector) -> None:
+async def run_ingest(
+    connector: BaseConnector,
+    account_ids: list[str] | None = None,
+) -> None:
     source = connector.source
     started = perf_counter()
     try:
-        for account_id in connector.poll_account_ids():
+        for account_id in account_ids if account_ids is not None else connector.poll_account_ids():
             scope_started = perf_counter()
             scope = _sync_scope(source, account_id)
             logger.info("ingest %s — starting", scope)

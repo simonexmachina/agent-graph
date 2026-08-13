@@ -12,10 +12,15 @@ CREATE TABLE IF NOT EXISTS entities (
     content            TEXT,
     content_embedding  BLOB,  -- raw float32 bytes: struct.pack('{n}f', *vec)
     metadata           TEXT NOT NULL DEFAULT '{}',
-    created_at         TEXT,  -- ISO8601 UTC
-    updated_at         TEXT,  -- ISO8601 UTC
+    created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    source_created_at  TEXT,
+    source_updated_at  TEXT,
     synced_at          TEXT,  -- ISO8601 UTC
-    observed_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    observed_at        TEXT,
+    retention_policy   TEXT NOT NULL DEFAULT 'observed'
+                       CHECK (retention_policy IN ('observed', 'owned', 'connected')),
+    retention_parent_id TEXT REFERENCES entities(id) ON DELETE CASCADE,
     cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
     bookmarked         INTEGER NOT NULL DEFAULT 0,
     UNIQUE (platform, platform_entity_id)

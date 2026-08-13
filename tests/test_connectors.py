@@ -13,11 +13,11 @@ from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
 from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
-from agentgraph_connector_slack import SlackConnector, _parse_mentions
+from agentgraph_connector_slack import SlackConnector, _edited_at, _parse_mentions
 
 from agentgraph.connectors.base import (
-    EntityBatch,
     RESOURCE_TYPE_TO_ENTITY_TYPE,
+    EntityBatch,
     SourceReference,
 )
 
@@ -163,6 +163,23 @@ def test_gmail_thread_resource_maps_to_email_entity() -> None:
     assert connector.normalise_fetch_id("thread-123", "Email") == ("thread-123", "thread")
 
 
+@pytest.mark.asyncio
+async def test_gmail_observation_uses_dom_thread_id_for_opaque_url() -> None:
+    connector = GmailConnector()
+
+    ref = await connector.resolve_observation_url(
+        "https://mail.google.com/mail/u/0/#inbox/FMfcgzQhVrDqdZqlbQxsFHmWxPVSqDnD",
+        meta={"gmail_thread_id": "19e63ac7401ac0fe"},
+    )
+
+    assert ref == SourceReference(
+        source="gmail",
+        resource_type="thread",
+        resource_id="19e63ac7401ac0fe",
+        fetch_meta={"gmail_thread_id": "19e63ac7401ac0fe"},
+    )
+
+
 # ---------------------------------------------------------------------------
 # GoogleDocsConnector.fetch — FetchPolicy branching (no real Google API)
 # ---------------------------------------------------------------------------
@@ -243,8 +260,8 @@ async def test_gdocs_fetch_doc_adds_download_metadata(monkeypatch: pytest.Monkey
     assert isinstance(download_url, str)
     assert download_url.endswith("/export?mimeType=text/html")
     assert entity.metadata["web_url"] == "https://docs.google.com/document/d/doc-123/view"
-    assert entity.created_at == datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
-    assert entity.updated_at == datetime(2026, 2, 3, 4, 5, 6, tzinfo=UTC)
+    assert entity.source_created_at == datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
+    assert entity.source_updated_at == datetime(2026, 2, 3, 4, 5, 6, tzinfo=UTC)
 
 
 @pytest.mark.asyncio
@@ -396,6 +413,13 @@ def gmail_connector() -> GmailConnector:
     return GmailConnector()
 
 
+def test_slack_edit_timestamp_is_optional_source_update_time() -> None:
+    assert _edited_at({"ts": "1710000000.000000"}) is None
+    assert _edited_at({"edited": {"ts": "1710000001.000000"}}) == datetime.fromtimestamp(
+        1710000001, tz=UTC
+    )
+
+
 @pytest.mark.asyncio
 async def test_slack_fetch_fresh_returns_empty_batch(slack_connector: SlackConnector) -> None:
     """When channel data is fresh, connector returns empty batch."""
@@ -496,8 +520,8 @@ def test_gmail_thread_to_items_preserves_html_body() -> None:
     assert "<p>Hello <strong>world</strong></p>" in entity.content
     assert "Plain &lt;body&gt;" not in entity.content
     assert "<strong>From:</strong> Sender &lt;sender@example.com&gt;" in entity.content
-    assert entity.created_at == datetime(2026, 6, 15, 9, 26, tzinfo=UTC)
-    assert entity.updated_at == datetime(2026, 6, 15, 9, 26, tzinfo=UTC)
+    assert entity.source_created_at == datetime(2026, 6, 15, 9, 26, tzinfo=UTC)
+    assert entity.source_updated_at == datetime(2026, 6, 15, 9, 26, tzinfo=UTC)
 
 
 def test_gmail_thread_to_items_adds_attachment_document_stubs() -> None:
@@ -558,6 +582,8 @@ def test_gmail_thread_to_items_adds_attachment_document_stubs() -> None:
     assert attachment.platform_entity_id == "attachment/19ec9bf00171a35f/ANGjdJ8"
     assert attachment.title == "Lot 10 Variation.pdf"
     assert attachment.is_stub is True
+    assert attachment.retention_policy == "owned"
+    assert attachment.retention_parent_platform_entity_id == "19ec9bf00171a35e"
     assert attachment.metadata["gmail_thread_id"] == "19ec9bf00171a35e"
     assert attachment.metadata["gmail_message_id"] == "19ec9bf00171a35f"
     assert attachment.metadata["gmail_attachment_id"] == "ANGjdJ8"

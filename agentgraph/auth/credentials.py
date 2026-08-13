@@ -9,11 +9,20 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from pathlib import Path
 from typing import Any, cast
 
 from pydantic import BaseModel
 
-from agentgraph.config import CONFIG_DIR, CREDENTIALS_FILE
+from agentgraph.config import CONFIG_DIR, CREDENTIALS_FILE, get_config_paths
+
+
+def _credential_paths() -> tuple[Path, Path]:
+    """Resolve credentials dynamically while preserving local path overrides."""
+    if "AGENTGRAPH_CONFIG_DIR" in os.environ:
+        config_dir, _, _, credentials_file, _ = get_config_paths()
+        return config_dir, credentials_file
+    return CONFIG_DIR, CREDENTIALS_FILE
 
 
 class CredentialsFileError(ValueError):
@@ -26,34 +35,36 @@ class PlatformAccounts(BaseModel):
 
 
 def _load_all_credentials() -> dict[str, Any]:
-    if not CREDENTIALS_FILE.exists():
+    _, credentials_file = _credential_paths()
+    if not credentials_file.exists():
         return {}
     try:
-        data = json.loads(CREDENTIALS_FILE.read_text())
+        data = json.loads(credentials_file.read_text())
     except Exception as exc:
         # Never fall back to "no credentials" here: callers would treat a
         # damaged file as a first-time setup and overwrite every platform.
         raise CredentialsFileError(
-            f"Could not parse {CREDENTIALS_FILE}: {exc}. "
+            f"Could not parse {credentials_file}: {exc}. "
             "Fix or move the file aside, then re-run auth for each platform."
         ) from exc
     if not isinstance(data, dict):
         raise CredentialsFileError(
-            f"Expected a JSON object at the top level of {CREDENTIALS_FILE}, got {type(data).__name__}."
+            f"Expected a JSON object at the top level of {credentials_file}, got {type(data).__name__}."
         )
     return cast(dict[str, Any], data)
 
 
 def _write_all_credentials(raw: dict[str, Any]) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config_dir, credentials_file = _credential_paths()
+    config_dir.mkdir(parents=True, exist_ok=True)
     # Write via a temp file in the same directory and rename, so a concurrent
     # writer can never leave a shorter document overlaid on a longer one.
-    fd, tmp_name = tempfile.mkstemp(dir=CONFIG_DIR, prefix=".credentials-", suffix=".json")
+    fd, tmp_name = tempfile.mkstemp(dir=config_dir, prefix=".credentials-", suffix=".json")
     try:
         with os.fdopen(fd, "w") as handle:
             json.dump(raw, handle, indent=2, default=str)
         os.chmod(tmp_name, 0o600)
-        os.replace(tmp_name, CREDENTIALS_FILE)
+        os.replace(tmp_name, credentials_file)
     except BaseException:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
@@ -64,8 +75,9 @@ def _validate_accounts(platform: str, val: dict[str, Any]) -> PlatformAccounts:
     try:
         return PlatformAccounts.model_validate(val)
     except Exception as exc:
+        _, credentials_file = _credential_paths()
         raise CredentialsFileError(
-            f"Stored '{platform}' credentials in {CREDENTIALS_FILE} are malformed: {exc}. "
+            f"Stored '{platform}' credentials in {credentials_file} are malformed: {exc}. "
             f"Fix the file or re-run auth for {platform}."
         ) from exc
 

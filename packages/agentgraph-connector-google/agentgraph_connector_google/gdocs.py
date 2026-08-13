@@ -238,8 +238,8 @@ async def _fetch_doc(doc_id: str, account_id: str | None = None) -> EntityBatch:
         title=title,
         content=content,
         metadata=_metadata(doc_id, account_id),
-        created_at=_parse_drive_time(file_meta.get("createdTime")),
-        updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
+        source_created_at=_parse_drive_time(file_meta.get("createdTime")),
+        source_updated_at=_parse_drive_time(file_meta.get("modifiedTime")),
     )
 
     batch = EntityBatch(entities=[entity], persons=persons, edges=edges)

@@ -62,3 +62,48 @@ def test_explicit_sqlite_path_overrides_config_dir_default(
         monkeypatch.delenv("AGENTGRAPH_CONFIG_DIR", raising=False)
         monkeypatch.delenv("AGENTGRAPH_BACKEND_SQLITE_PATH", raising=False)
         importlib.reload(config)
+
+
+def test_config_dir_is_resolved_after_module_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dir = tmp_path / "agentgraph"
+    config_dir.mkdir()
+    (config_dir / ".env").write_text("AGENTGRAPH_SERVER_PORT=9123\n", encoding="utf-8")
+    monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
+    monkeypatch.delenv("AGENTGRAPH_BACKEND_SQLITE_PATH", raising=False)
+
+    settings = config.Settings()
+    resolved_dir, config_file, _, _, database_file = config.get_config_paths()
+
+    assert resolved_dir == config_dir
+    assert config_file == config_dir / "config.toml"
+    assert settings.server_port == 9123
+    assert settings.backend_sqlite_path == str(database_file)
+
+
+def test_memory_sqlite_path_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTGRAPH_BACKEND_SQLITE_PATH", ":memory:")
+    assert config.Settings().backend_sqlite_path == ":memory:"
+
+
+def test_config_dir_can_come_from_project_dotenv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dir = tmp_path / "dotenv-config"
+    config_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AGENTGRAPH_CONFIG_DIR", raising=False)
+    (tmp_path / ".env").write_text(
+        f"AGENTGRAPH_CONFIG_DIR={config_dir}\n",
+        encoding="utf-8",
+    )
+
+    resolved_dir, _, _, _, database_file = config.get_config_paths()
+
+    assert resolved_dir == config_dir
+    assert database_file == config_dir / "agentgraph.db"

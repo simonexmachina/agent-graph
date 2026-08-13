@@ -41,6 +41,18 @@ def test_load_returns_none_when_no_file(tmp_creds: Path) -> None:
     assert load_platform("slack") is None
 
 
+def test_credentials_use_env_config_dir_after_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dir = tmp_path / "custom-config"
+    monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
+
+    save_platform("slack", {"xoxc_token": "xoxc-test"})
+
+    assert (config_dir / "credentials.json").exists()
+
+
 def test_save_and_load_roundtrip(tmp_creds: Path) -> None:
     save_platform("slack", {"xoxc_token": "xoxc-test", "d_cookie": "abc123", "user_id": None})
     data = load_platform("slack")

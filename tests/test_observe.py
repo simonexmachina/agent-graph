@@ -129,7 +129,7 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
 
     backend = MagicMock()
     backend.upsert_stub_entity = AsyncMock()
-    backend.increment_dwell_time = AsyncMock()
+    backend.record_observation = AsyncMock()
     set_backend(backend)
     ref = SourceReference(
         source="rss",
@@ -147,7 +147,33 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
 
     assert result == {"status": "accepted", "source": "rss", "resource_type": "document"}
     backend.upsert_stub_entity.assert_awaited_once_with("Document", "rss", "entry/known")
-    backend.increment_dwell_time.assert_awaited_once_with("rss", "entry/known", 15_000)
+    backend.record_observation.assert_awaited_once_with("rss", "entry/known", 15_000)
+
+
+@pytest.mark.asyncio
+async def test_dwell_passes_metadata_to_observation_resolution() -> None:
+    from agentgraph.server.dwell import record_dwell_time
+
+    backend = MagicMock()
+    backend.upsert_stub_entity = AsyncMock()
+    backend.record_observation = AsyncMock()
+    set_backend(backend)
+    ref = SourceReference(source="gmail", resource_type="thread", resource_id="api-thread")
+    settings = MagicMock(dwell_threshold_seconds=60)
+    meta = {"gmail_thread_id": "api-thread"}
+
+    with (
+        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)) as classify,
+        patch("agentgraph.config.get_settings", return_value=settings),
+    ):
+        result = await record_dwell_time("https://mail.google.com/mail/u/0/#inbox/opaque", 15_000, meta)
+
+    assert result["status"] == "accepted"
+    classify.assert_awaited_once_with(
+        "https://mail.google.com/mail/u/0/#inbox/opaque",
+        meta=meta,
+    )
+    backend.upsert_stub_entity.assert_awaited_once_with("Email", "gmail", "api-thread")
 
 
 @pytest.mark.asyncio
