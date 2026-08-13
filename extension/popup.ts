@@ -11,12 +11,6 @@ interface DwellMeta {
   dwell_threshold_ms: number;
 }
 
-interface ReloadResponse {
-  ok: boolean;
-  meta?: DwellMeta;
-  error?: string;
-}
-
 interface ObservationStatus {
   url: string;
   matches: boolean;
@@ -45,6 +39,8 @@ interface PageActionResponse {
   entity?: PageEntity | null;
   error?: string;
 }
+
+let displayedObservationStatus: ObservationStatus | null = null;
 
 async function checkHealth(): Promise<boolean> {
   try {
@@ -177,6 +173,7 @@ async function render(): Promise<void> {
   if (patternCountEl) patternCountEl.textContent = String(meta?.url_patterns.length ?? 0);
 
   setObservationStatus(observationStatus);
+  displayedObservationStatus = observationStatus;
 
   const fetchButton = document.getElementById("fetch-page") as HTMLButtonElement | null;
   const isHttpPage = activeUrl?.startsWith("http://") || activeUrl?.startsWith("https://") || false;
@@ -228,28 +225,6 @@ async function runPageAction(action: "fetch" | "bookmark"): Promise<void> {
   }
 }
 
-async function reloadPatterns(): Promise<void> {
-  const button = document.getElementById("reload-patterns") as HTMLButtonElement | null;
-  if (button) button.disabled = true;
-
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "reload_url_patterns" }) as ReloadResponse;
-    if (!response.ok) throw new Error(response.error ?? "Failed to reload URL patterns");
-
-    const patternCountEl = document.getElementById("pattern-count");
-    if (patternCountEl && response.meta) {
-      patternCountEl.textContent = String(response.meta.url_patterns.length);
-    }
-    setObservationStatus(await getObservationStatus());
-  } finally {
-    if (button) button.disabled = false;
-  }
-}
-
-document.getElementById("reload-patterns")?.addEventListener("click", () => {
-  reloadPatterns().catch(console.error);
-});
-
 document.getElementById("open-options")?.addEventListener("click", () => {
   chrome.runtime.openOptionsPage().catch(async () => {
     await chrome.tabs.create({ url: chrome.runtime.getURL("options.html") });
@@ -265,3 +240,8 @@ document.getElementById("toggle-bookmark")?.addEventListener("click", () => {
 });
 
 render().catch(console.error);
+setInterval(() => {
+  if (displayedObservationStatus?.state === "waiting") {
+    setObservationStatus(displayedObservationStatus);
+  }
+}, 250);
