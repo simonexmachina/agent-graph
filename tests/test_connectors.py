@@ -13,7 +13,7 @@ from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
 from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
-from agentgraph_connector_slack import SlackConnector, _edited_at, _parse_mentions
+from agentgraph_connector_slack import SlackConnector, _edited_at, _fetch_channel, _parse_mentions
 
 from agentgraph.connectors.base import (
     RESOURCE_TYPE_TO_ENTITY_TYPE,
@@ -24,6 +24,14 @@ from agentgraph.connectors.base import (
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+
+class _FakeSlackAsyncClientContext:
+    async def __aenter__(self) -> MagicMock:
+        return MagicMock()
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
 
 
 def _recent_dt() -> datetime:
@@ -426,6 +434,44 @@ def test_slack_edit_timestamp_is_optional_source_update_time() -> None:
     assert _edited_at({"edited": {"ts": "1710000001.000000"}}) == datetime.fromtimestamp(
         1710000001, tz=UTC
     )
+
+
+@pytest.mark.asyncio
+async def test_slack_fetch_uses_counterpart_name_for_direct_message() -> None:
+    channel_info = {"id": "D123", "is_im": True, "user": "U456"}
+    user_info = {"id": "U456", "name": "alex", "profile": {"display_name": "Alex Chen"}}
+    with (
+        patch("agentgraph_connector_slack.httpx.AsyncClient", return_value=_FakeSlackAsyncClientContext()),
+        patch("agentgraph_connector_slack._fetch_channel_info", new=AsyncMock(return_value=channel_info)),
+        patch("agentgraph_connector_slack._fetch_user", new=AsyncMock(return_value=user_info)),
+        patch("agentgraph_connector_slack._api_get", new=AsyncMock(return_value={"messages": []})),
+    ):
+        batch = await _fetch_channel("T123/D123")
+
+    assert batch.entities[0].title == "Alex Chen"
+
+
+@pytest.mark.asyncio
+async def test_slack_fetch_uses_participant_names_for_group_direct_message() -> None:
+    channel_info = {"id": "G123", "is_mpim": True, "members": ["U_SELF", "U456", "U789"]}
+    with (
+        patch("agentgraph_connector_slack.httpx.AsyncClient", return_value=_FakeSlackAsyncClientContext()),
+        patch("agentgraph_connector_slack._fetch_channel_info", new=AsyncMock(return_value=channel_info)),
+        patch(
+            "agentgraph_connector_slack._authenticated_user_id", return_value="U_SELF"
+        ),
+        patch(
+            "agentgraph_connector_slack._fetch_user",
+            new=AsyncMock(side_effect=[
+                {"id": "U456", "profile": {"real_name": "Alex Chen"}},
+                {"id": "U789", "name": "jamie"},
+            ]),
+        ),
+        patch("agentgraph_connector_slack._api_get", new=AsyncMock(return_value={"messages": []})),
+    ):
+        batch = await _fetch_channel("T123/G123", account_id="slack:T123/U_SELF")
+
+    assert batch.entities[0].title == "Alex Chen, jamie"
 
 
 @pytest.mark.asyncio

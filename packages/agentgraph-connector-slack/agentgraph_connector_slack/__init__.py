@@ -143,6 +143,74 @@ def _parse_channel_mentions(text: str) -> list[str]:
     return re.findall(r"<#([A-Z0-9]+)(?:\|[^>]*)?>", text)
 
 
+def _user_display_name(user_info: dict[str, Any]) -> str | None:
+    """Return the most useful human-readable Slack user name."""
+    profile_value = user_info.get("profile")
+    if isinstance(profile_value, dict):
+        profile = cast(dict[str, Any], profile_value)
+        for field in ("display_name", "real_name"):
+            value = profile.get(field)
+            if isinstance(value, str) and value:
+                return value
+    for field in ("real_name", "name"):
+        value = user_info.get(field)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _authenticated_user_id(account_id: str | None) -> str | None:
+    try:
+        return load_slack_creds(account_id).user_id
+    except RuntimeError:
+        return None
+
+
+async def _channel_title(
+    client: httpx.AsyncClient,
+    channel_info: dict[str, Any],
+    account_id: str | None = None,
+) -> str:
+    """Build a readable title for Slack channels, including DMs without names."""
+    channel_name = channel_info.get("name")
+    if isinstance(channel_name, str) and channel_name:
+        return f"#{channel_name}"
+
+    if channel_info.get("is_im"):
+        user_id = channel_info.get("user")
+        if isinstance(user_id, str) and user_id:
+            try:
+                user_info = await _fetch_user(client, user_id, account_id=account_id)
+                display_name = _user_display_name(user_info)
+                if display_name:
+                    return display_name
+            except Exception:
+                logger.debug("Could not fetch DM participant %s", user_id)
+        return "Direct message"
+
+    if channel_info.get("is_mpim"):
+        current_user_id = _authenticated_user_id(account_id)
+        member_ids = channel_info.get("members")
+        if isinstance(member_ids, list):
+            names: list[str] = []
+            for member_id in cast(list[Any], member_ids):
+                if not isinstance(member_id, str) or member_id == current_user_id:
+                    continue
+                try:
+                    user_info = await _fetch_user(client, member_id, account_id=account_id)
+                    display_name = _user_display_name(user_info)
+                    if display_name:
+                        names.append(display_name)
+                except Exception:
+                    logger.debug("Could not fetch group DM participant %s", member_id)
+            if names:
+                return ", ".join(names)
+        return "Group direct message"
+
+    channel_id = channel_info.get("id")
+    return f"#{channel_id}" if isinstance(channel_id, str) and channel_id else "#unknown"
+
+
 class SlackConnector(BaseConnector):
     source = "slack"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
@@ -474,7 +542,7 @@ async def _fetch_channel(channel_ref: str, oldest: str | None = None, account_id
     async with httpx.AsyncClient(timeout=30) as client:
         # Channel entity
         channel_info = await _fetch_channel_info(client, channel_id, account_id=account_id)
-        channel_name = channel_info.get("name", channel_id)
+        channel_title = await _channel_title(client, channel_info, account_id=account_id)
 
         channel_meta: dict[str, Any] = {"team_id": team_id, "channel_id": channel_id}
         if team_id:
@@ -485,7 +553,7 @@ async def _fetch_channel(channel_ref: str, oldest: str | None = None, account_id
             entity_type="Channel",
             platform="slack",
             platform_entity_id=channel_ref,
-            title=f"#{channel_name}",
+            title=channel_title,
             metadata=channel_meta,
         )
         entities.append(channel_entity)
