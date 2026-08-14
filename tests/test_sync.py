@@ -270,3 +270,24 @@ def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:
     _, _, kwargs = scheduler.add_job.mock_calls[0]
     assert kwargs["id"] == "sync_scheduled"
     assert kwargs["name"] == "poll connector scheduled"
+
+
+def test_setup_sync_overrides_connector_interval() -> None:
+    scheduler = MagicMock()
+
+    with patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_ScheduledConnector()]):
+        sync.setup_sync(scheduler, poll_interval_seconds=120)
+
+    args, kwargs = scheduler.add_job.call_args
+    assert args[1] == "interval"
+    assert kwargs["seconds"] == 120
+
+
+def test_setup_sync_can_disable_polling() -> None:
+    scheduler = MagicMock()
+
+    with patch("agentgraph.connectors.registry.get_all_connectors") as get_connectors:
+        sync.setup_sync(scheduler, poll_interval_seconds=0)
+
+    get_connectors.assert_not_called()
+    scheduler.add_job.assert_not_called()

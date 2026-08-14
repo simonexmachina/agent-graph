@@ -67,7 +67,7 @@ class StorageBackend(ABC):
         entity_id: str,
         bookmarked: bool,
     ) -> EntityResult:
-        """Set or clear GC protection for an entity and return the updated entity."""
+        """Set or clear expiration protection for an entity and return the updated entity."""
         ...
 
     @abstractmethod
@@ -175,10 +175,10 @@ class StorageBackend(ABC):
     @abstractmethod
     async def insert_references_edge(self, source_id: str, target_id: str) -> None: ...
 
-    # --- GC ---
+    # --- Expiration ---
 
     @abstractmethod
-    async def gc_entities(self, retention_days: int) -> int: ...
+    async def expire_entities(self, retention_days: float, dry_run: bool = False) -> int: ...
 
     # --- Sync state ---
 
@@ -202,6 +202,18 @@ class StorageBackend(ABC):
         self, platform: str, platform_entity_id: str, dwell_ms: int
     ) -> None:
         """Record direct observation and dwell for an observable entity."""
+        ...
+
+    @abstractmethod
+    async def record_observation_once(
+        self,
+        platform: str,
+        platform_entity_id: str,
+        observation_id: str,
+        url: str,
+        dwell_ms: int,
+    ) -> bool:
+        """Record an observation event once and return whether it was new."""
         ...
 
     @abstractmethod

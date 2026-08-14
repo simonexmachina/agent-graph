@@ -23,7 +23,7 @@ aliases = ["commands.html"]
 - [`fetch`](/commands/fetch.html) - trigger connector fetch by platform and platform ID.
 - [`fetch-entity`](/commands/fetch-entity.html) - re-fetch by internal entity UUID.
 - [`download`](/commands/download.html) - download the source file for a graph entity.
-- [`bookmark`](/commands/bookmark.html) - protect an entity or URL from garbage collection.
+- [`bookmark`](/commands/bookmark.html) - protect an entity or URL from expiration.
 - [`delete`](/commands/delete.html) - remove an entity and its connected edges.
 
 ## Sync and connectors

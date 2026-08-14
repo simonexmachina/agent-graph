@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+from uuid import UUID
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 from fastapi import FastAPI, Request
@@ -18,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agentgraph.core.context import clear_backend, set_backend
-from agentgraph.graph.gc import run_gc
+from agentgraph.graph.expiration import run_expiration
 from agentgraph.server.cli_api import router as cli_router
 from agentgraph.server.graph_api import router as graph_router
 from agentgraph.server.sync import setup_sync, shutdown_poll_tasks
@@ -60,8 +61,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     bootstrap()
 
     _scheduler = AsyncIOScheduler()
-    _scheduler.add_job(run_gc, "cron", hour=3, minute=0, id="gc")
-    setup_sync(_scheduler)
+    _scheduler.add_job(run_expiration, "cron", hour=3, minute=0, id="expiration")
+    setup_sync(_scheduler, poll_interval_seconds=settings.poll_interval_seconds)
     _scheduler.start()
 
     logger.info(
@@ -109,6 +110,8 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 class ReportDwellRequest(BaseModel):
     url: str
     dwell_ms: int
+    observation_id: UUID
+    observed: bool
     meta: dict[str, str] | None = None
 
 
@@ -125,14 +128,18 @@ class ExtensionBookmarkRequest(ExtensionPageRequest):
 @app.post("/report-dwell", status_code=202)
 async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
     """
-    Receive an incremental dwell time report (either upon hitting the threshold
-    or when a tab loses focus/closes). Records the cumulative dwell time in the
-    database for ranking, and dispatches a background connector fetch if the
-    dwell time meets the threshold.
+    Receive either the extension's one threshold-crossed observation event or a
+    later dwell-only update. New observation IDs dispatch a fetch exactly once.
     """
     from agentgraph.server.dwell import record_dwell_time
 
-    result = await record_dwell_time(req.url, req.dwell_ms, req.meta)
+    result = await record_dwell_time(
+        req.url,
+        req.dwell_ms,
+        str(req.observation_id),
+        req.observed,
+        req.meta,
+    )
     return result
 
 
@@ -178,7 +185,10 @@ async def extension_bookmark(req: ExtensionBookmarkRequest) -> dict[str, Any]:
             result = fetched.get("entity")
             if not isinstance(result, dict):
                 raise ValueError("Page was fetched but no graph entity was created")
-            result = await set_entity_bookmark(result["id"], True)
+            result_id = result.get("id")
+            if not isinstance(result_id, str):
+                raise ValueError("Page was fetched but its graph entity has no valid ID")
+            result = await set_entity_bookmark(result_id, True)
         else:
             result = await set_entity_bookmark(entity["id"], req.bookmarked)
         return {"entity": result}

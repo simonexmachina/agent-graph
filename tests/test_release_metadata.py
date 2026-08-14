@@ -4,7 +4,6 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.5.1"
 

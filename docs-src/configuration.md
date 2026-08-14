@@ -79,6 +79,14 @@ Default: `3`
 
 Seconds of focus before a fetch is triggered.
 
+### `AGENTGRAPH_POLL_INTERVAL_SECONDS`
+
+Default: unset (each connector uses its own interval)
+
+Override the background polling interval for all connectors. Set it to a positive
+number of seconds to use one shared interval, or set it to `0` to disable scheduled
+polling. Manual polls triggered with `agentgraph poll` are still available.
+
 ### `AGENTGRAPH_RETENTION_DAYS`
 
 Default: `90`

@@ -1,4 +1,4 @@
-"""Tests for backend-level garbage collection behavior."""
+"""Tests for backend-level expiration behavior."""
 
 # pyright: reportPrivateUsage=false, reportUnknownMemberType=false, reportUnknownVariableType=false
 
@@ -12,6 +12,37 @@ from pathlib import Path
 import pytest
 
 from agentgraph.backends.sqlite.backend import SQLiteBackend
+from agentgraph.graph.expiration import parse_retention_window
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_days"),
+    [("30m", 30 / (24 * 60)), ("12h", 0.5), ("30d", 30.0), ("2w", 14.0)],
+)
+def test_parse_retention_window(value: str, expected_days: float) -> None:
+    assert parse_retention_window(value) == pytest.approx(expected_days)
+
+
+def test_parse_retention_window_accepts_timestamp() -> None:
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    assert parse_retention_window("2026-08-01T12:00:00Z", now=now) == pytest.approx(13.0)
+
+
+def test_parse_retention_window_accepts_viewer_timestamp() -> None:
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    assert parse_retention_window("01/08/2026, 12:00:00", now=now) == pytest.approx(13.0)
+
+
+def test_parse_retention_window_rejects_future_timestamp() -> None:
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    with pytest.raises(ValueError, match="must be in the past"):
+        parse_retention_window("2026-08-15T00:00:00Z", now=now)
+
+
+@pytest.mark.parametrize("value", ["", "0d", "-1d", "30", "30months"])
+def test_parse_retention_window_rejects_invalid_values(value: str) -> None:
+    with pytest.raises(ValueError):
+        parse_retention_window(value)
 
 
 @pytest.fixture()
@@ -22,7 +53,7 @@ async def sqlite_backend() -> AsyncGenerator[SQLiteBackend, None]:
     await backend.close()
 
 
-async def test_sqlite_gc_removes_stale_entities_edges_and_fts(
+async def test_sqlite_expiration_removes_stale_entities_edges_and_fts(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     conn = sqlite_backend._conn_or_raise()
@@ -57,7 +88,7 @@ async def test_sqlite_gc_removes_stale_entities_edges_and_fts(
         ["edge-1", stale_id, fresh_id],
     )
 
-    deleted = await sqlite_backend.gc_entities(90)
+    deleted = await sqlite_backend.expire_entities(90)
     assert deleted == 1
 
     stale_count = await sqlite_backend._fetchval(
@@ -80,7 +111,38 @@ async def test_sqlite_gc_removes_stale_entities_edges_and_fts(
     assert fts_count == 0
 
 
-async def test_sqlite_gc_keeps_bookmarked_stale_entities(
+async def test_sqlite_expiration_dry_run_does_not_change_storage(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    stale_time = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    await sqlite_backend._execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, observed_at)
+        VALUES ('dry-run-stale', 'Document', 'web', 'old', ?)
+        """,
+        [stale_time],
+    )
+
+    assert await sqlite_backend.expire_entities(90, dry_run=True) == 1
+    assert await sqlite_backend.get_entity_by_id("dry-run-stale") is not None
+
+
+async def test_sqlite_expiration_expires_entity_at_cutoff_boundary(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    cutoff = datetime.now(UTC).replace(microsecond=0)
+    await sqlite_backend._execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, observed_at)
+        VALUES ('boundary-stale', 'Document', 'web', 'boundary', ?)
+        """,
+        [cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")],
+    )
+
+    assert await sqlite_backend.expire_entities(0, dry_run=True) == 1
+
+
+async def test_sqlite_expiration_keeps_bookmarked_stale_entities(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     conn = sqlite_backend._conn_or_raise()
@@ -101,7 +163,7 @@ async def test_sqlite_gc_keeps_bookmarked_stale_entities(
         [stale_id, "Old file", "stale content"],
     )
 
-    deleted = await sqlite_backend.gc_entities(90)
+    deleted = await sqlite_backend.expire_entities(90)
     assert deleted == 0
 
     entity = await sqlite_backend.get_entity_by_id(stale_id)
@@ -114,7 +176,7 @@ async def test_sqlite_gc_keeps_bookmarked_stale_entities(
     assert fts_count == 1
 
 
-async def test_sqlite_gc_uses_created_at_for_never_observed_entities(
+async def test_sqlite_expiration_uses_created_at_for_never_observed_entities(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     stale_time = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -127,11 +189,11 @@ async def test_sqlite_gc_uses_created_at_for_never_observed_entities(
         [stale_time, stale_time],
     )
 
-    assert await sqlite_backend.gc_entities(90) == 1
+    assert await sqlite_backend.expire_entities(90) == 1
     assert await sqlite_backend.get_entity_by_id("never-observed") is None
 
 
-async def test_sqlite_gc_cascades_owned_messages_and_removes_orphan_people(
+async def test_sqlite_expiration_cascades_owned_messages_and_removes_orphan_people(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     conn = sqlite_backend._conn_or_raise()
@@ -167,11 +229,11 @@ async def test_sqlite_gc_cascades_owned_messages_and_removes_orphan_people(
         """
     )
 
-    assert await sqlite_backend.gc_entities(90) == 3
+    assert await sqlite_backend.expire_entities(90) == 3
     assert await sqlite_backend._fetchval("SELECT count(*) FROM entities") == 0
 
 
-async def test_sqlite_gc_detaches_bookmarked_owned_child(
+async def test_sqlite_expiration_detaches_bookmarked_owned_child(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     conn = sqlite_backend._conn_or_raise()
@@ -194,13 +256,13 @@ async def test_sqlite_gc_detaches_bookmarked_owned_child(
         """
     )
 
-    assert await sqlite_backend.gc_entities(90) == 1
+    assert await sqlite_backend.expire_entities(90) == 1
     message = await sqlite_backend.get_entity_by_id("message")
     assert message is not None
     assert message["retention_parent_id"] is None
 
     await sqlite_backend.set_entity_bookmarked("message", False)
-    assert await sqlite_backend.gc_entities(90) == 1
+    assert await sqlite_backend.expire_entities(90) == 1
     assert await sqlite_backend.get_entity_by_id("message") is None
 
 
@@ -255,6 +317,35 @@ async def test_record_observation_only_marks_observable_entities(
     assert channel["cumulative_dwell_ms"] == 1000
     assert message is not None and message["observed_at"] is None
     assert message["cumulative_dwell_ms"] == 0
+
+
+async def test_record_observation_once_is_idempotent(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    conn = sqlite_backend._conn_or_raise()
+    await conn.execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id)
+        VALUES ('email', 'Email', 'gmail', 'thread-1')
+        """
+    )
+
+    first = await sqlite_backend.record_observation_once(
+        "gmail", "thread-1", "observation-1", "https://mail.google.com/thread-1", 3000
+    )
+    duplicate = await sqlite_backend.record_observation_once(
+        "gmail", "thread-1", "observation-1", "https://mail.google.com/thread-1", 3000
+    )
+
+    email = await sqlite_backend.get_entity_by_id("email")
+    assert first is True
+    assert duplicate is False
+    assert email is not None
+    assert email["cumulative_dwell_ms"] == 3000
+    observations = await sqlite_backend._fetchall(
+        "SELECT id FROM observations WHERE id = ?", ["observation-1"]
+    )
+    assert len(observations) == 1
 
 
 async def test_sqlite_delete_entity_removes_entity_edges_and_fts(

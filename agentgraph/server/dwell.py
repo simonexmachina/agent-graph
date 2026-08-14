@@ -12,14 +12,19 @@ from agentgraph.server.router import classify_observation_url
 logger = logging.getLogger(__name__)
 
 
-async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None = None) -> dict[str, Any]:
-    """Classify url and increment its cumulative dwell time in the backend."""
+async def record_dwell_time(
+    url: str,
+    dwell_ms: int,
+    observation_id: str,
+    observed: bool,
+    meta: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Record either a new observation or a dwell-only update."""
     ref = await classify_observation_url(url, meta=meta)
     if ref is None:
         logger.debug("report-dwell: unrecognised URL %s", url)
         return {"status": "ignored", "reason": "unrecognised URL"}
 
-    from agentgraph.config import get_settings
     from agentgraph.core.context import get_backend
 
     try:
@@ -29,18 +34,34 @@ async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None
             ref.source,
             ref.resource_id,
         )
-        await backend.record_observation(ref.source, ref.resource_id, dwell_ms)
+        observation_created = False
+        if observed:
+            observation_created = await backend.record_observation_once(
+                ref.source,
+                ref.resource_id,
+                observation_id,
+                url,
+                dwell_ms,
+            )
+        else:
+            await backend.increment_dwell_time(ref.source, ref.resource_id, dwell_ms)
         logger.debug(
-            "Recorded dwell time: +%dms for %s %s/%s",
-            dwell_ms, ref.source, ref.resource_type, ref.resource_id
+            "Recorded %s: +%dms for %s %s/%s (observation_id=%s)",
+            "observation" if observed else "dwell update",
+            dwell_ms,
+            ref.source,
+            ref.resource_type,
+            ref.resource_id,
+            observation_id,
         )
 
-        # Dispatch background connector fetch if the dwell time meets the threshold
-        threshold_ms = get_settings().dwell_threshold_seconds * 1000
-        if dwell_ms >= threshold_ms:
+        if observation_created:
             logger.info(
-                "Dwell threshold met (%dms >= %dms): dispatching fetch for %s %s/%s",
-                dwell_ms, threshold_ms, ref.source, ref.resource_type, ref.resource_id
+                "New observation %s: dispatching fetch for %s %s/%s",
+                observation_id,
+                ref.source,
+                ref.resource_type,
+                ref.resource_id,
             )
             fetch_meta = dict(meta or {})
             fetch_meta.update(ref.fetch_meta or {})
@@ -48,7 +69,12 @@ async def record_dwell_time(url: str, dwell_ms: int, meta: dict[str, str] | None
                 _dispatch(ref.source, ref.resource_type, ref.resource_id, fetch_meta or None)
             )
 
-        return {"status": "accepted", "source": ref.source, "resource_type": ref.resource_type}
+        return {
+            "status": "accepted",
+            "source": ref.source,
+            "resource_type": ref.resource_type,
+            "observation_created": observation_created,
+        }
     except Exception:
         logger.exception("Failed to record dwell time for %s", url)
         return {"status": "error", "reason": "internal backend error"}

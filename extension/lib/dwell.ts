@@ -23,6 +23,7 @@ export interface DwellMeta {
 }
 
 export interface ObservationStatus {
+  observation_id?: string;
   url: string;
   matches: boolean;
   state: "not_matched" | "waiting" | "sending" | "sent" | "failed" | "canceled";
@@ -42,6 +43,7 @@ let thresholdMs: number = DEFAULT_THRESHOLD_MS;
 
 // Per-tab: { timer, url, meta }
 interface DwellEntry {
+  observation_id: string;
   timer: ReturnType<typeof setTimeout>;
   url: string;
   meta: Record<string, string>;
@@ -131,7 +133,9 @@ export function startDwell(
 
   const startedAt = Date.now();
   const firesAt = startedAt + thresholdMs;
+  const observationId = crypto.randomUUID();
   observations.set(tabId, {
+    observation_id: observationId,
     url,
     matches: true,
     state: "waiting",
@@ -147,7 +151,13 @@ export function startDwell(
     if (obs && obs.matches) {
       obs.state = "sending";
       obs.threshold_reported_at = Date.now();
-      void sendReportDwell(obs.url, thresholdMs, obs.meta || {}).then((result) => {
+      void sendReportDwell(
+        obs.url,
+        thresholdMs,
+        observationId,
+        true,
+        obs.meta || {},
+      ).then((result) => {
         if (observations.get(tabId) !== obs || obs.state !== "sending") return;
 
         obs.http_status = result.http_status;
@@ -162,7 +172,14 @@ export function startDwell(
     }
   }, thresholdMs);
 
-  pending.set(tabId, { timer, url, meta, started_at: startedAt, fires_at: firesAt });
+  pending.set(tabId, {
+    observation_id: observationId,
+    timer,
+    url,
+    meta,
+    started_at: startedAt,
+    fires_at: firesAt,
+  });
 }
 
 export function cancelDwell(tabId: number): void {
@@ -180,10 +197,16 @@ export function cancelDwell(tabId: number): void {
       const meta = entry?.meta || obs.meta || {};
 
       // A visit becomes an observation only after it reaches the dwell threshold.
-      if (obs.threshold_reported_at) {
+      if (obs.threshold_reported_at && obs.observation_id) {
         const remaining = elapsed - thresholdMs;
         if (remaining > 0) {
-          void sendReportDwell(obs.url, remaining, meta);
+          void sendReportDwell(
+            obs.url,
+            remaining,
+            obs.observation_id,
+            false,
+            meta,
+          );
         }
       }
     }
@@ -193,8 +216,8 @@ export function cancelDwell(tabId: number): void {
   }
 }
 
-/** Update pending meta for a tab (e.g. Gmail message ID arrives after focus). */
-export function updateMeta(tabId: number, extra: Record<string, string>): void {
+/** Update pending meta and report whether this tab already has an observation. */
+export function updateMeta(tabId: number, extra: Record<string, string>): boolean {
   const entry = pending.get(tabId);
   if (entry) {
     Object.assign(entry.meta, extra);
@@ -205,6 +228,7 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
   } else if (obs) {
     obs.meta = { ...extra };
   }
+  return entry !== undefined || obs !== undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +238,8 @@ export function updateMeta(tabId: number, extra: Record<string, string>): void {
 export async function sendReportDwell(
   url: string,
   dwellMs: number,
+  observationId: string,
+  observed: boolean,
   meta: Record<string, string>,
 ): Promise<ReportResult> {
   try {
@@ -221,7 +247,13 @@ export async function sendReportDwell(
     const response = await fetch(getReportDwellUrl(serverBaseUrl), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, dwell_ms: dwellMs, meta: Object.keys(meta).length ? meta : undefined }),
+      body: JSON.stringify({
+        url,
+        dwell_ms: dwellMs,
+        observation_id: observationId,
+        observed,
+        meta: Object.keys(meta).length ? meta : undefined,
+      }),
     });
     if (!response.ok) {
       const error = `HTTP ${response.status}`;

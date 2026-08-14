@@ -199,7 +199,7 @@ Settings are read from environment variables and from a `.env` file in the confi
 | `AGENTGRAPH_SERVER_HOST` | `127.0.0.1` | Server bind address |
 | `AGENTGRAPH_SERVER_PORT` | `8765` | Server port |
 | `AGENTGRAPH_DWELL_THRESHOLD_SECONDS` | `3` | Seconds of focus before a fetch is triggered |
-| `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unobserved or stale entity is garbage collected; see [Entity retention](docs-src/retention.md) |
+| `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unobserved or stale entity expires; see [Entity retention](docs-src/retention.md) |
 | `AGENTGRAPH_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | FastEmbed model used for embeddings |
 | `AGENTGRAPH_SLACK_CLIENT_ID` | prompt/stored account | Optional Client ID override for the admin-created internal Slack OAuth app |
 | `AGENTGRAPH_SLACK_REDIRECT_URI` | `http://localhost:8766/slack/oauth/callback` | Exact Slack OAuth callback registered on the app |

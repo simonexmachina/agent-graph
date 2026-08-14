@@ -29,6 +29,7 @@ function findAttrValue(
   pattern: RegExp,
 ): string | undefined {
   for (const el of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
+    if (el.getClientRects().length === 0 || el.closest('[aria-hidden="true"]')) continue;
     const value = el.getAttribute(attr);
     if (value && pattern.test(value)) return value;
   }

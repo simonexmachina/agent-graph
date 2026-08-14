@@ -224,12 +224,24 @@ async def run_ingest(
         logger.debug("ingest %s total elapsed %.1fs", source, perf_counter() - started)
 
 
-def setup_sync(scheduler: AsyncIOScheduler) -> None:
-    """Register a poll job for every connector that has poll_interval set."""
+def setup_sync(
+    scheduler: AsyncIOScheduler,
+    *,
+    poll_interval_seconds: float | None = None,
+) -> None:
+    """Register scheduled poll jobs, optionally overriding connector intervals."""
     from agentgraph.connectors.registry import get_all_connectors
 
+    if poll_interval_seconds == 0:
+        logger.info("Background connector polling is disabled by configuration")
+        return
+
     for connector in get_all_connectors():
-        interval = connector.poll_interval
+        interval = (
+            timedelta(seconds=poll_interval_seconds)
+            if poll_interval_seconds is not None
+            else connector.poll_interval
+        )
         if interval is None:
             continue
         total_seconds = int(interval.total_seconds())

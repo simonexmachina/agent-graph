@@ -5,22 +5,11 @@
 const CACHE_KEY = "agentgraph_meta_cache";
 
 import { getHealthUrl, getServerBaseUrl } from "./lib/config.js";
+import { type ObservationStatus, refreshPendingObservation } from "./lib/observation-status.js";
 
 interface DwellMeta {
   url_patterns: string[];
   dwell_threshold_ms: number;
-}
-
-interface ObservationStatus {
-  url: string;
-  matches: boolean;
-  state: "not_matched" | "waiting" | "sending" | "sent" | "failed" | "canceled";
-  threshold_ms: number;
-  started_at?: number;
-  fires_at?: number;
-  sent_at?: number;
-  http_status?: number;
-  error?: string;
 }
 
 interface ObservationStatusResponse {
@@ -41,6 +30,7 @@ interface PageActionResponse {
 }
 
 let displayedObservationStatus: ObservationStatus | null = null;
+let observationRefreshInFlight = false;
 
 async function checkHealth(): Promise<boolean> {
   try {
@@ -129,8 +119,7 @@ function formatObservationStatus(status: ObservationStatus | null): { text: stri
   }
 
   if (status.state === "sent") {
-    const suffix = status.http_status == null ? "" : ` (HTTP ${status.http_status})`;
-    return { text: `Observation sent${suffix}`, className: "status status--ok" };
+    return { text: "Observation sent", className: "status status--ok" };
   }
 
   if (status.state === "failed") {
@@ -150,6 +139,20 @@ function setObservationStatus(status: ObservationStatus | null): void {
   const rendered = formatObservationStatus(status);
   statusEl.textContent = rendered.text;
   statusEl.className = rendered.className;
+}
+
+async function refreshDisplayedObservationStatus(): Promise<void> {
+  if (observationRefreshInFlight) return;
+  observationRefreshInFlight = true;
+  try {
+    displayedObservationStatus = await refreshPendingObservation(
+      displayedObservationStatus,
+      getObservationStatus,
+    );
+    setObservationStatus(displayedObservationStatus);
+  } finally {
+    observationRefreshInFlight = false;
+  }
 }
 
 async function render(): Promise<void> {
@@ -241,7 +244,5 @@ document.getElementById("toggle-bookmark")?.addEventListener("click", () => {
 
 render().catch(console.error);
 setInterval(() => {
-  if (displayedObservationStatus?.state === "waiting") {
-    setObservationStatus(displayedObservationStatus);
-  }
+  refreshDisplayedObservationStatus().catch(console.error);
 }, 250);

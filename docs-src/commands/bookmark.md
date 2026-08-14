@@ -4,7 +4,7 @@ description = "CLI reference for agentgraph bookmark."
 nav_title = "bookmark"
 section = "Reference"
 order = 19
-summary = "`agentgraph bookmark` marks an entity or URL so garbage collection will not remove it, even after the retention window."
+summary = "`agentgraph bookmark` marks an entity or URL so expiration will not remove it, even after the retention window."
 output = "commands/bookmark.html"
 source_path = "docs-src/commands/bookmark.md"
 +++
@@ -17,7 +17,7 @@ agentgraph bookmark TARGET [--remove] [--json]
 
 ## Use it for
 
-- preserving an entity that should survive retention-window garbage collection
+- preserving an entity that should survive retention-window expiration
 - retrieving and preserving an HTTP(S) URL
 - removing bookmark protection from an existing entity
 - protecting useful search results before old data is pruned

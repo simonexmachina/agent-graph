@@ -1,6 +1,6 @@
 +++
 title = "Entity retention"
-description = "How AgentGraph observations, timestamps, bookmarks, and garbage collection determine entity retention."
+description = "How AgentGraph observations, timestamps, bookmarks, and expiration determine entity retention."
 nav_title = "Retention"
 section = "Reference"
 order = 5
@@ -38,9 +38,24 @@ A stub is not a separate retention category. It follows the policy of the entity
 
 Google Drive Folder contents are not owned children: a file can remain useful independently or belong to multiple folders. Removing a Folder therefore removes `contains` edges but does not delete its files.
 
-## Garbage collection
+## Expiration
 
-The server runs garbage collection daily at 03:00 using `AGENTGRAPH_RETENTION_DAYS`, which defaults to 90 days.
+The server runs expiration daily at 03:00 using `AGENTGRAPH_RETENTION_DAYS`, which defaults to 90 days.
+
+To preview collection without changing the database, run the standalone script with a
+human-readable retention window:
+
+```bash
+uv run python scripts/expiration_dry_run.py --retention 30d
+```
+
+The script also accepts minutes, hours, and weeks, such as `30m`, `12h`, and `2w`.
+An ISO-8601 timestamp or a date copied from the viewer can be used to calculate the
+retention period from a specific date, for example
+`--retention 2026-08-01T00:00:00Z` or
+`--retention '14/08/2026, 09:51:54'`. Viewer-formatted dates are interpreted in the
+script's local timezone. It logs the number of entities that would be removed and
+rolls back the transaction.
 
 1. Delete unbookmarked observed-policy entities whose effective retention timestamp is outside the window.
 2. Cascade deletion to their unbookmarked owned children.
@@ -69,7 +84,7 @@ Every `created_at` value below is the non-null local insertion time. Connector s
 
 ### Slack
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | `Channel` | Set when its Slack channel URL is observed. | Set when first inserted, including as a stub. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
 | `Message` | Not set directly; observation of its parent Channel determines retention. | Set when first inserted. | Owned by its Channel and deleted with it, subject to bookmark detachment. |
@@ -77,7 +92,7 @@ Every `created_at` value below is the non-null local insertion time. Connector s
 
 ### Discord
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | `Channel` | Set when its Discord channel URL is observed. | Set when first inserted, including as a stub. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
 | `Message` | Not set directly; observation of its parent Channel determines retention. | Set when first inserted. | Owned by its Channel and deleted with it, subject to bookmark detachment. |
@@ -85,7 +100,7 @@ Every `created_at` value below is the non-null local insertion time. Connector s
 
 ### Gmail
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | `Email` | Set when its Gmail thread URL is observed. | Set when first inserted, including as a stub. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
 | Attachment `Document` | Not set directly; observation of its parent Email determines retention. | Set when its attachment stub is first inserted. | Owned by its Email and deleted with it, subject to bookmark detachment. |
@@ -93,7 +108,7 @@ Every `created_at` value below is the non-null local insertion time. Connector s
 
 ### Google Drive
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | `Folder` | Set when its exact Drive folder URL is observed. | Set when first inserted, including as a stub. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. Deletion removes `contains` edges, not contained entities. |
 | `Document` | Set when its exact Drive file URL is observed. | Set when first inserted, including as a stub. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
@@ -102,21 +117,21 @@ Every `created_at` value below is the non-null local insertion time. Connector s
 
 ### Google Docs
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | `Document` | Set when its exact Google Docs URL is observed. | Set when first inserted, including as a stub. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
 | `Person` | Not set directly; Document observations preserve it through graph edges. | Set when first inserted. | Connected policy; deleted only after all edges are gone. |
 
 ### Google Sheets
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | `Spreadsheet` | Set when its exact Google Sheets URL is observed. | Set when first inserted, including as a stub. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
 | `Person` | Not set directly; Spreadsheet observations preserve it through graph edges. | Set when first inserted. | Connected policy; deleted only after all edges are gone. |
 
 ### RSS
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | Feed `Folder` | Set when the exact configured feed URL resolves to that feed and is observed. | Set when the feed is first inserted. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
 | Entry `Document` | Set when its article URL resolves to that RSS entry and is observed. | Set when the entry is first inserted, before optional hydration. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |
@@ -124,6 +139,6 @@ Every `created_at` value below is the non-null local insertion time. Connector s
 
 ### Web
 
-| Entity type | `observed_at` | `created_at` | Garbage collection |
+| Entity type | `observed_at` | `created_at` | Expiration |
 | --- | --- | --- | --- |
 | `Document` | Set when its exact recognized web URL is observed. | Set when first inserted, including through `ingest`, `fetch`, or `fetch-entity`. | According to target type: observed policy using `COALESCE(observed_at, created_at)`. |

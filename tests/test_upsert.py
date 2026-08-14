@@ -1,4 +1,4 @@
-"""Tests for the entity/edge upsert layer and GC."""
+"""Tests for the entity/edge upsert layer and expiration."""
 
 from __future__ import annotations
 

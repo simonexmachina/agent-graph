@@ -86,6 +86,14 @@ class Settings(BaseSettings):
         default=1.0,
         description="How often the dwell evaluator scans for mature focus events",
     )
+    poll_interval_seconds: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Global background connector poll interval in seconds. If unset, each "
+            "connector uses its own interval; 0 disables scheduled polling."
+        ),
+    )
 
     # Knowledge graph
     retention_days: int = Field(

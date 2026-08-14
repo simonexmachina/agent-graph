@@ -599,7 +599,7 @@ async def download_entity_tool(entity_id: str, output_path: str | None = None) -
 
 
 # ---------------------------------------------------------------------------
-# bookmark_entity — protect an entity from garbage collection
+# bookmark_entity — protect an entity from expiration
 # ---------------------------------------------------------------------------
 
 

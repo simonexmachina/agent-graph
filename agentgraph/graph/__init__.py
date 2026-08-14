@@ -1,1 +1,1 @@
-"""Knowledge graph operations: upsert, identity resolution, GC."""
+"""Knowledge graph operations: upsert, identity resolution, expiration."""

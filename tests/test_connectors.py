@@ -164,20 +164,28 @@ def test_gmail_thread_resource_maps_to_email_entity() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gmail_observation_uses_dom_thread_id_for_opaque_url() -> None:
+async def test_gmail_observation_resolves_message_id_over_stale_dom_thread_id() -> None:
     connector = GmailConnector()
 
-    ref = await connector.resolve_observation_url(
-        "https://mail.google.com/mail/u/0/#inbox/FMfcgzQhVrDqdZqlbQxsFHmWxPVSqDnD",
-        meta={"gmail_thread_id": "19e63ac7401ac0fe"},
-    )
+    with patch(
+        "agentgraph_connector_google.gmail._resolve_thread_id_by_message_id",
+        new=AsyncMock(return_value="19ff5129584f3514"),
+    ) as resolve_thread_id:
+        ref = await connector.resolve_observation_url(
+            "https://mail.google.com/mail/u/0/#inbox/FMfcgzQhVrDqdZqlbQxsFHmWxPVSqDnD",
+            meta={
+                "gmail_message_id": "19ff5129584f3514",
+                "gmail_thread_id": "19ff8cacfd22db3d",
+            },
+        )
 
     assert ref == SourceReference(
         source="gmail",
         resource_type="thread",
-        resource_id="19e63ac7401ac0fe",
-        fetch_meta={"gmail_thread_id": "19e63ac7401ac0fe"},
+        resource_id="19ff5129584f3514",
+        fetch_meta={"gmail_thread_id": "19ff5129584f3514"},
     )
+    resolve_thread_id.assert_awaited_once_with("19ff5129584f3514", account_id=None)
 
 
 # ---------------------------------------------------------------------------

@@ -323,6 +323,19 @@ class GmailConnector(BaseConnector):
     ) -> SourceReference | None:
         """Resolve opaque Gmail URLs to the canonical API thread ID."""
         ref = self.resolve_url(url)
+        message_id = (meta or {}).get("gmail_message_id")
+        if ref is not None and message_id and _GMAIL_MESSAGE_ID_RE.fullmatch(message_id):
+            thread_id = await _resolve_thread_id_by_message_id(
+                message_id,
+                account_id=(meta or {}).get("account_id"),
+            )
+            return SourceReference(
+                source=self.source,
+                resource_type="thread",
+                resource_id=thread_id,
+                fetch_meta={"gmail_thread_id": thread_id},
+            )
+
         thread_id = (meta or {}).get("gmail_thread_id")
         if ref is not None and thread_id and _GMAIL_THREAD_ID_RE.fullmatch(thread_id):
             return SourceReference(
@@ -622,6 +635,15 @@ async def _fetch_thread_by_message_id(
     account_id: str | None = None,
 ) -> EntityBatch:
     """Fetch the thread containing a specific message, identified by its hex API message ID."""
+    thread_id = await _resolve_thread_id_by_message_id(message_id, account_id=account_id)
+    return await _fetch_thread_by_thread_id(thread_id, account_id=account_id)
+
+
+async def _resolve_thread_id_by_message_id(
+    message_id: str,
+    account_id: str | None = None,
+) -> str:
+    """Resolve a Gmail message ID to its canonical API thread ID."""
     import asyncio
 
     loop = asyncio.get_event_loop()
@@ -634,8 +656,7 @@ async def _fetch_thread_by_message_id(
             service.users().messages().get(userId="me", id=message_id, format="minimal").execute()
         ),
     )
-    thread_id: str = msg["threadId"]
-    return await _fetch_thread_by_thread_id(thread_id, account_id=account_id)
+    return str(msg["threadId"])
 
 
 def _thread_to_items(

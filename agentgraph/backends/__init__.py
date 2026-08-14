@@ -15,6 +15,7 @@ from agentgraph.core.storage import StorageBackend
 logger = logging.getLogger(__name__)
 
 _registry: dict[str, type[StorageBackend]] = {}
+_builtin_import_errors: dict[str, ImportError] = {}
 
 
 def _ensure_loaded() -> None:
@@ -29,8 +30,9 @@ def _load_builtins() -> None:
         from agentgraph.backends.sqlite.backend import SQLiteBackend
 
         _registry["sqlite"] = SQLiteBackend
-    except ImportError:
-        logger.debug("SQLite backend unavailable (aiosqlite not installed)")
+    except ImportError as exc:
+        _builtin_import_errors["sqlite"] = exc
+        logger.debug("SQLite backend unavailable (aiosqlite not installed)", exc_info=True)
 
 
 def _load_plugins() -> None:
@@ -44,6 +46,11 @@ def _load_plugins() -> None:
 def get_backend_class(name: str) -> type[StorageBackend]:
     _ensure_loaded()
     if name not in _registry:
+        if name in _builtin_import_errors:
+            raise ValueError(
+                "SQLite backend is unavailable. Run this project with `uv run` or install "
+                "the project dependencies."
+            ) from _builtin_import_errors[name]
         raise ValueError(
             f"Unknown backend {name!r}. Available: {sorted(_registry)}"
         )

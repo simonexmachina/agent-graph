@@ -1558,9 +1558,9 @@ class SQLiteBackend(StorageBackend):
             [_new_id(), source_id, target_id],
         )
 
-    # --- GC ---
+    # --- Expiration ---
 
-    async def gc_entities(self, retention_days: int) -> int:
+    async def expire_entities(self, retention_days: float, dry_run: bool = False) -> int:
         # SQLite doesn't have interval arithmetic; compute cutoff in Python
         from datetime import timedelta
 
@@ -1578,7 +1578,7 @@ class SQLiteBackend(StorageBackend):
                 expired_sql = """
                     retention_policy = 'observed'
                     AND bookmarked = 0
-                    AND COALESCE(observed_at, created_at) < ?
+                    AND COALESCE(observed_at, created_at) <= ?
                 """
 
                 # A bookmarked owned child survives parent collection as a detached entity.
@@ -1619,7 +1619,10 @@ class SQLiteBackend(StorageBackend):
                 after_cursor = await conn.execute("SELECT count(*) FROM entities")
                 after_row = await after_cursor.fetchone()
                 after_count = int(after_row[0]) if after_row else 0
-                await conn.execute("COMMIT")
+                if dry_run:
+                    await conn.execute("ROLLBACK")
+                else:
+                    await conn.execute("COMMIT")
             except Exception:
                 await conn.execute("ROLLBACK")
                 raise
@@ -1675,6 +1678,49 @@ class SQLiteBackend(StorageBackend):
             """,
             [dwell_ms, now, dwell_ms, now, platform, platform_entity_id],
         )
+
+    async def record_observation_once(
+        self,
+        platform: str,
+        platform_entity_id: str,
+        observation_id: str,
+        url: str,
+        dwell_ms: int,
+    ) -> bool:
+        assert self._write_lock is not None
+        async with self._write_lock:
+            conn = self._conn_or_raise()
+            now = _now()
+            await conn.execute("BEGIN")
+            try:
+                cursor = await conn.execute(
+                    """
+                    INSERT INTO observations (
+                        id, event_type, url, timestamp, evaluated
+                    ) VALUES (?, 'dwell_threshold', ?, ?, 1)
+                    ON CONFLICT(id) DO NOTHING
+                    RETURNING id
+                    """,
+                    [observation_id, url, now],
+                )
+                inserted = await cursor.fetchone()
+                if inserted is not None:
+                    await conn.execute(
+                        """
+                        UPDATE entities
+                        SET cumulative_dwell_ms = cumulative_dwell_ms + ?,
+                            observed_at = ?,
+                            updated_at = CASE WHEN ? > 0 THEN ? ELSE updated_at END
+                        WHERE platform = ? AND platform_entity_id = ?
+                          AND retention_policy = 'observed'
+                        """,
+                        [dwell_ms, now, dwell_ms, now, platform, platform_entity_id],
+                    )
+                await conn.execute("COMMIT")
+                return inserted is not None
+            except Exception:
+                await conn.execute("ROLLBACK")
+                raise
 
     async def get_last_synced_at(self, platform: str, platform_entity_id: str) -> datetime | None:
         val = await self._fetchval(

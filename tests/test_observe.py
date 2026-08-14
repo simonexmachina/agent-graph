@@ -48,7 +48,15 @@ def test_viewer_url_brackets_ipv6_hosts() -> None:
 
 
 def test_report_dwell_unrecognised(client: TestClient) -> None:
-    resp = client.post("/report-dwell", json={"url": "https://example.com/unknown", "dwell_ms": 15000})
+    resp = client.post(
+        "/report-dwell",
+        json={
+            "url": "https://example.com/unknown",
+            "dwell_ms": 15000,
+            "observation_id": "34b2ad4d-55e3-4599-bf35-1e258a704bcd",
+            "observed": True,
+        },
+    )
     assert resp.status_code == 202
     assert resp.json()["status"] == "ignored"
 
@@ -129,7 +137,7 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
 
     backend = MagicMock()
     backend.upsert_stub_entity = AsyncMock()
-    backend.record_observation = AsyncMock()
+    backend.record_observation_once = AsyncMock(return_value=False)
     set_backend(backend)
     ref = SourceReference(
         source="rss",
@@ -137,17 +145,30 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
         resource_id="entry/known",
         fetch_meta={"web_url": "https://example.com/articles/known"},
     )
-    settings = MagicMock(dwell_threshold_seconds=60)
-
     with (
         patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
-        patch("agentgraph.config.get_settings", return_value=settings),
     ):
-        result = await record_dwell_time("https://example.com/articles/known", 15_000)
+        result = await record_dwell_time(
+            "https://example.com/articles/known",
+            15_000,
+            "observation-1",
+            True,
+        )
 
-    assert result == {"status": "accepted", "source": "rss", "resource_type": "document"}
+    assert result == {
+        "status": "accepted",
+        "source": "rss",
+        "resource_type": "document",
+        "observation_created": False,
+    }
     backend.upsert_stub_entity.assert_awaited_once_with("Document", "rss", "entry/known")
-    backend.record_observation.assert_awaited_once_with("rss", "entry/known", 15_000)
+    backend.record_observation_once.assert_awaited_once_with(
+        "rss",
+        "entry/known",
+        "observation-1",
+        "https://example.com/articles/known",
+        15_000,
+    )
 
 
 @pytest.mark.asyncio
@@ -156,17 +177,21 @@ async def test_dwell_passes_metadata_to_observation_resolution() -> None:
 
     backend = MagicMock()
     backend.upsert_stub_entity = AsyncMock()
-    backend.record_observation = AsyncMock()
+    backend.increment_dwell_time = AsyncMock()
     set_backend(backend)
     ref = SourceReference(source="gmail", resource_type="thread", resource_id="api-thread")
-    settings = MagicMock(dwell_threshold_seconds=60)
     meta = {"gmail_thread_id": "api-thread"}
 
     with (
         patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)) as classify,
-        patch("agentgraph.config.get_settings", return_value=settings),
     ):
-        result = await record_dwell_time("https://mail.google.com/mail/u/0/#inbox/opaque", 15_000, meta)
+        result = await record_dwell_time(
+            "https://mail.google.com/mail/u/0/#inbox/opaque",
+            15_000,
+            "observation-2",
+            False,
+            meta,
+        )
 
     assert result["status"] == "accepted"
     classify.assert_awaited_once_with(
@@ -174,6 +199,34 @@ async def test_dwell_passes_metadata_to_observation_resolution() -> None:
         meta=meta,
     )
     backend.upsert_stub_entity.assert_awaited_once_with("Email", "gmail", "api-thread")
+    backend.increment_dwell_time.assert_awaited_once_with("gmail", "api-thread", 15_000)
+
+
+@pytest.mark.asyncio
+async def test_new_observation_dispatches_once() -> None:
+    from agentgraph.server.dwell import record_dwell_time
+
+    backend = MagicMock()
+    backend.upsert_stub_entity = AsyncMock()
+    backend.record_observation_once = AsyncMock(side_effect=[True, False])
+    set_backend(backend)
+    ref = SourceReference(source="gmail", resource_type="thread", resource_id="thread-1")
+
+    with (
+        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch("agentgraph.server.dwell._dispatch", new=AsyncMock()) as dispatch,
+    ):
+        first = await record_dwell_time(
+            "https://mail.google.com/thread-1", 3000, "observation-1", True
+        )
+        duplicate = await record_dwell_time(
+            "https://mail.google.com/thread-1", 3000, "observation-1", True
+        )
+        await asyncio.sleep(0)
+
+    assert first["observation_created"] is True
+    assert duplicate["observation_created"] is False
+    dispatch.assert_awaited_once_with("gmail", "thread", "thread-1", None)
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-"""Bookmark graph entities to protect them from garbage collection."""
+"""Bookmark graph entities to protect them from expiration."""
 
 from __future__ import annotations
 

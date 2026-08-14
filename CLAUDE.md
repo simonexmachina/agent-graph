@@ -2,6 +2,11 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
+## Server Lifecycle
+
+- `agentgraph serve` is normally managed by the macOS LaunchAgent `com.agentgraph.server`. Do not start or stop it directly; use `launchctl kickstart` when a restart is required.
+- Exception: when `.env` contains an uncommented `AGENTGRAPH_CONFIG_DIR`, the user is running an isolated test server manually in a terminal. Do not use launchd to start, stop, or restart the server in that mode; leave lifecycle control to the user.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 

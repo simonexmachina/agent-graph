@@ -16,7 +16,13 @@ globalThis.chrome = {
   },
 };
 
-const { getObservationStatus, refreshMeta, startDwell } = await import("../dist/lib/dwell.js");
+const {
+  cancelDwell,
+  getObservationStatus,
+  refreshMeta,
+  startDwell,
+  updateMeta,
+} = await import("../dist/lib/dwell.js");
 
 async function waitForTerminalStatus(tabId, url) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -27,12 +33,16 @@ async function waitForTerminalStatus(tabId, url) {
   throw new Error("Observation did not reach a terminal state");
 }
 
-async function configureDwell(reportResponse, urlPatterns = ["https://example.com/*"]) {
+async function configureDwell(
+  reportResponse,
+  urlPatterns = ["https://example.com/*"],
+  dwellThresholdMs = 0,
+) {
   globalThis.fetch = async (url) => {
     if (url.endsWith("/api/cli/meta")) {
       return Response.json({
         url_patterns: urlPatterns,
-        dwell_threshold_ms: 0,
+        dwell_threshold_ms: dwellThresholdMs,
       });
     }
     if (reportResponse instanceof Error) throw reportResponse;
@@ -95,4 +105,56 @@ test("can surface metadata refresh errors to explicit callers", async () => {
     () => refreshMeta({ throwOnError: true }),
     /Metadata refresh failed: HTTP 503/,
   );
+});
+
+test("Gmail metadata enriches an existing observation without requiring a restart", async () => {
+  const reports = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (url.endsWith("/api/cli/meta")) {
+      return Response.json({
+        url_patterns: ["https://mail.google.com/*"],
+        dwell_threshold_ms: 20,
+      });
+    }
+    reports.push(JSON.parse(options.body));
+    return new Response(null, { status: 204 });
+  };
+  await refreshMeta();
+
+  const url = "https://mail.google.com/mail/u/0/#inbox/opaque";
+  startDwell(6, url);
+  assert.equal(updateMeta(6, { gmail_message_id: "19ff5129584f3514" }), true);
+  await waitForTerminalStatus(6, url);
+
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].observed, true);
+  assert.match(reports[0].observation_id, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(reports[0].meta, { gmail_message_id: "19ff5129584f3514" });
+});
+
+test("reports one observation followed by a dwell-only update", async () => {
+  const reports = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (url.endsWith("/api/cli/meta")) {
+      return Response.json({
+        url_patterns: ["https://example.com/*"],
+        dwell_threshold_ms: 20,
+      });
+    }
+    reports.push(JSON.parse(options.body));
+    return new Response(null, { status: 204 });
+  };
+  await refreshMeta();
+
+  const url = "https://example.com/observed";
+  startDwell(7, url);
+  await waitForTerminalStatus(7, url);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  cancelDwell(7);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(reports.length, 2);
+  assert.equal(reports[0].observed, true);
+  assert.equal(reports[1].observed, false);
+  assert.equal(reports[1].observation_id, reports[0].observation_id);
 });

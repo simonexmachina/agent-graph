@@ -151,8 +151,13 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     gmailMetaByTab.set(tabId, mergedMeta);
     // Inject into any pending dwell for this tab (content script fires ~300ms
     // after navigation, well within the 3s threshold).
-    updateMeta(tabId, mergedMeta);
-    if (activeTabId === tabId && sender.tab.url === activeUrl && hasUsableGmailMeta(mergedMeta)) {
+    const updatedExistingObservation = updateMeta(tabId, mergedMeta);
+    if (
+      !updatedExistingObservation
+      && activeTabId === tabId
+      && sender.tab.url === activeUrl
+      && hasUsableGmailMeta(mergedMeta)
+    ) {
       clearGmailMetaRetry(tabId);
       activeUrl = "";
       void onFocus(tabId);
