@@ -1,10 +1,10 @@
 +++
 title = "Install"
-description = "Install AgentGraph, run the server, connect the extension, and expose MCP."
+description = "Install AgentGraph and configure connector dependency groups, background services, and MCP transports."
 nav_title = "Install"
 section = "Start"
 order = 20
-summary = "Set up AgentGraph locally, connect the extension, and hand off to Quickstart for authentication and first indexing."
+summary = "Install the local application and the connector packages you need, then hand off to Quickstart for the first observation and agent query."
 output = "install.html"
 source_path = "docs-src/install.md"
 +++
@@ -27,7 +27,10 @@ Clone the repository and install the first-party connectors you need.
 git clone https://github.com/simonexmachina/agent-graph
 cd agent-graph
 uv sync --extra all
+source .venv/bin/activate
 ```
+
+Activating `.venv` makes the `agentgraph` command available in the current shell. Alternatively, prefix commands with `uv run`.
 
 You can also sync only the connectors you want:
 
@@ -36,21 +39,12 @@ uv sync --extra google
 uv sync --extra slack
 uv sync --extra discord
 uv sync --extra rss
+uv sync --extra web
 ```
 
 <div class="callout">
   <p><strong>Credential storage:</strong> credentials live in <code>~/.agentgraph/</code> by default, or under <code>AGENTGRAPH_CONFIG_DIR</code> if you set a custom config directory.</p>
 </div>
-
-## Run the server
-
-`agentgraph serve` accepts browser observation events, runs connector pollers, serves the viewer, and exposes the local HTTP backend.
-
-```bash
-agentgraph serve
-```
-
-Logs are written to standard output.
 
 ## Install the browser extension
 
@@ -66,7 +60,7 @@ npm run build
 
 Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, and select `extension/dist/`.
 
-After the extension is installed, continue with [Quickstart](/quickstart.html) to authenticate connectors, start the server, and verify that your first entities land in the graph.
+After the extension is installed, continue with [Quickstart](/quickstart.html) to authenticate a connector, start the server, observe a resource, and ask the first source-backed agent question.
 
 ## Connect MCP clients
 

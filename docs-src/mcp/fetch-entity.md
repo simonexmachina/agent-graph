@@ -14,3 +14,14 @@ source_path = "docs-src/mcp/fetch-entity.md"
 ```text
 fetch_entity_tool(platform, resource_id) -> JSON string
 ```
+
+## Use it when
+
+- a search result or graph edge identifies a source resource that has not been hydrated;
+- a linked page is missing from the graph;
+- the agent has a platform-specific resource ID and needs current source content; or
+- a known resource is stale and should be re-ingested before reasoning over it.
+
+The owning connector fetches the resource and persists its complete returned batch of entities, people, and edges. Direct fetch does not set `observed_at`; it records retrieval by the agent, not human browser attention.
+
+For an existing internal graph UUID, use [`fetch_entity_by_id_tool`](/mcp/fetch-entity-by-id.html).

@@ -1,242 +1,133 @@
 # AgentGraph
 
-AgentGraph is a local knowledge graph for AI agents. It indexes content from Slack, Discord, Gmail, Google Docs, Google Sheets, Google Drive, and RSS/Atom feeds into a queryable graph of entities, people, and relationships that you can use from the CLI, web viewer, browser extension, or MCP.
+**Give the AI agent you already use a searchable world.**
 
-## Docs
+AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sources you choose into a searchable graph for the AI agent you already use. Connect Gmail, Google Drive, Slack, Discord, RSS, and web pages; AgentGraph translates them into local entities, people, relationships, and searchable content.
 
-- [Install](docs-src/install.md)
-- [Quickstart](docs-src/quickstart.md)
-- [Configuration](docs-src/configuration.md)
-- [Performance testing](docs-src/performance.md)
-- [Extending](docs-src/extending.md)
-- [Commands](docs-src/commands/index.md)
-- [MCP tools](docs-src/mcp/index.md)
-- [Privacy](docs-src/privacy.md)
+> **AgentGraph stores context; your agent reasons over it.** It is not an agent, chatbot, hosted graph service, or replacement for the tools you already use.
 
-## Installation
+[See the demo](docs-src/demo.md) · [Quickstart](docs-src/quickstart.md) · [Documentation](https://simonexmachina.github.io/agent-graph/) · [Chrome extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi)
 
-### Prerequisites
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs-src/assets/diagrams/architecture-overview-dark.svg">
+  <img src="docs-src/assets/diagrams/architecture-overview-light.svg" alt="Selected online services connect to AgentGraph on the user's machine. Browser observation, agent fetches, and background refresh flow through connector packages into a local graph, which is exposed to the user's existing coding agent through MCP.">
+</picture>
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/)
-- Chrome for the browser extension
+## Why AgentGraph
 
-Install `uv` if needed:
+Coding agents work well because their source of truth is already on disk. They can search files, follow references, inspect history, and build a model of the system without the user pasting every relevant detail.
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+The rest of a person's digital context is fragmented across messages, documents, feeds, and web pages. AgentGraph makes the parts you choose locally searchable and navigable through MCP, so a coding agent can investigate that context instead of starting every conversation blind.
 
-### Clone and sync
+## How context enters the graph
+
+AgentGraph builds context in three ways:
+
+1. **Observe:** the Chrome extension recognizes a supported URL, waits until you have kept it focused for the observation threshold, and reports the resource to your local AgentGraph server. The owning connector fetches it through the source API.
+2. **Fetch:** your agent or the CLI can request a specific resource. The connector adds or refreshes its entities, people, and edges before returning.
+3. **Refresh:** connector polling and ingest keep configured or already-known resources current in the background.
+
+Observation is also an attention signal. Browser observation updates `observed_at`; direct fetch, polling, ingest, and source changes do not. Observable entities expire after 90 days by default unless they are observed again or bookmarked. See [How AgentGraph works](docs-src/how-it-works.md) and [Entity retention](docs-src/retention.md).
+
+The extension sends recognized URLs, plus the Gmail thread identifier where required, to the local server. It does not upload arbitrary page content to an AgentGraph-operated service.
+
+## Trace a decision across sources
+
+The launch demo asks an existing coding agent:
+
+> Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does the Drive plan match, and which research supports the decision? Flag contradictions and link every source.
+
+The agent searches a Gmail thread, traverses a Slack discussion and its authors, checks a Drive plan, finds a web article captured by browser observation, and directly fetches a second linked page that is missing from the graph. The fixture is fictional and deterministic; the observation and MCP fetch paths are real. [Run the demo](docs-src/demo.md).
+
+## What each connector makes perceptible
+
+| Connector | What it contributes | Context paths |
+| --- | --- | --- |
+| Gmail | Email threads, participants, subjects, bodies, and attachment references | Observe, fetch, poll, ingest |
+| Google Drive, Docs, Sheets | Folders, files, content, ownership, authorship, and containment | Observe, fetch, poll |
+| Slack | Channels and DMs, messages, replies, authors, mentions, and attachments | Observe, fetch, poll |
+| Discord | Channels, DMs, threads, messages, authors, mentions, and attachments | Observe, fetch, poll |
+| RSS | Feeds, posts, dates, authors, and publication relationships | Observe, fetch, poll, ingest |
+| Web | Configured pages and bookmarks with titles, text, metadata, and URLs | Observe, fetch |
+
+These connectors are proof of the pattern, not the boundary of the product. A connector can translate an API, export, webhook, local database, browser surface, or structured file into AgentGraph's shared model.
+
+**Bring any service into your agent's world.** Teams can keep private connectors for internal systems, individuals can connect niche tools, and open-source contributors can publish integrations for the wider community. See [Connectors](docs-src/connectors.md) and [Extending AgentGraph](docs-src/extending.md).
+
+## Quickstart
+
+AgentGraph requires Python 3.12+, [`uv`](https://docs.astral.sh/uv/), and Chrome for browser observation.
 
 ```bash
 git clone https://github.com/simonexmachina/agent-graph
 cd agent-graph
 uv sync --extra all
-```
-
-Or install only the connectors you need:
-
-```bash
-uv sync --extra google
-uv sync --extra slack
-uv sync --extra discord
-uv sync --extra rss
-```
-
-Credentials and local state live in `~/.agentgraph/` by default, or under `AGENTGRAPH_CONFIG_DIR` if you set a custom config directory.
-
-## Quick Start
-
-### 1. Authenticate connectors
-
-Run the guided onboarding flow:
-
-```bash
+source .venv/bin/activate
 agentgraph onboard
-```
-
-Or authenticate a single source directly:
-
-```bash
-agentgraph auth <source>
-```
-
-### 2. Start AgentGraph
-
-```bash
 agentgraph serve
 ```
 
-The default server URL is `http://127.0.0.1:8765`.
-
-### 3. Install the browser extension
-
-Install the [AgentGraph Chrome Extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU) from the Chrome Web Store.
-
-To build it locally instead:
+Install the [AgentGraph Chrome extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi), browse a supported resource, then verify that context landed:
 
 ```bash
-cd extension
-npm install
-npm run build
+agentgraph connectors
+agentgraph search "project kickoff notes"
+agentgraph traverse <entity-id> --depth 2
 ```
 
-Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, and select `extension/dist/`.
-
-### 4. Browse something supported
-
-Open a Slack channel, Discord thread, Google Doc, Google Sheet, Gmail thread, or Drive folder and keep the tab focused long enough for the observation threshold to trigger a fetch.
-
-### 5. Verify entities landed
-
-```bash
-agentgraph connectors --json
-agentgraph search "slack" --limit 5
-agentgraph query --type Document --limit 5
-```
-
-### 6. Connect an assistant
+Connect the agent you already use:
 
 ```bash
 agentgraph mcp-config
 ```
 
-Use the printed stdio config with Claude Desktop or Claude Code. For ChatGPT developer mode, run AgentGraph with streamable HTTP and expose the local `/mcp` endpoint through HTTPS before creating the app/connector.
+Use the printed stdio configuration with Claude Desktop, Claude Code, Codex, or another compatible MCP client. ChatGPT developer mode uses the streamable HTTP `/mcp` endpoint through HTTPS. The [Quickstart](docs-src/quickstart.md) covers the complete path and expected result.
 
-## How It Works
+## What AgentGraph is and is not
 
-The browser extension watches supported URLs and sends observation events to your local AgentGraph server. When you stay on a page long enough, the matching connector fetches the resource and turns it into graph entities, people, and edges. After that first fetch, supported connectors keep known resources fresh with background polling.
+| AgentGraph is | AgentGraph is not |
+| --- | --- |
+| Local-first infrastructure | An AI agent or autonomous assistant |
+| A CLI and MCP server | A replacement for your agent |
+| A searchable graph of selected context | A chatbot or LLM |
+| An open connector architecture | A hosted integration SaaS |
+| Semantic search plus typed entities and edges | Only a vector database |
+| Self-hosted and open source | A project-operated store for your graph data |
 
-```text
-Browser extension -> local server -> connector -> local graph
-                                         |
-                                         +-> CLI / viewer / MCP
-```
+## Local data and privacy
 
-AgentGraph is local-first. Indexed content is stored in a local SQLite database. The project does not run a hosted service for your graph data.
+Indexed content is stored in SQLite on your machine. Provider credentials stay in the AgentGraph config directory, and source API calls run directly from your machine under your credentials. AgentGraph does not operate a hosted graph service or send indexed content to a project-controlled backend.
 
-## Surfaces
+An MCP client you connect can receive content from the local graph, subject to that client's data practices. Read the complete [Privacy Policy](docs-src/privacy.md), [Terms of Service](docs-src/terms.md), and [retention model](docs-src/retention.md).
+
+## Interfaces
 
 | Surface | Use it for | Entry point |
 | --- | --- | --- |
-| CLI | Search, fetch, ingest, debugging, and operations | `agentgraph search`, `agentgraph fetch`, `agentgraph serve` |
-| MCP | Claude Desktop, Claude Code, ChatGPT developer mode, and other MCP clients | `agentgraph mcp-config`, `agentgraph mcp-serve` |
-| Browser extension | Passive indexing from supported browser tabs | [Chrome Web Store](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU) |
-| Viewer | Visual graph inspection and manual exploration | `http://127.0.0.1:8765/viewer` |
+| MCP | Let an existing agent search, traverse, fetch, and manage context | `agentgraph mcp-config`, `agentgraph mcp-serve` |
+| CLI | Search, fetch, ingest, debug, and operate the graph | `agentgraph search`, `agentgraph fetch`, `agentgraph serve` |
+| Browser extension | Turn focused browsing on supported URLs into observations | [Chrome Web Store](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi) |
+| Viewer | Inspect entities, people, relationships, and observation state | `http://127.0.0.1:8765/viewer` |
 
-## Commands
+## Documentation
 
-### Query
-
-```bash
-agentgraph search "project kickoff notes"
-agentgraph query --type Message --filter platform=slack --since 12h
-agentgraph get <entity-id>
-agentgraph edges <entity-id>
-agentgraph traverse <entity-id> --depth 2
-```
-
-### Fetch and files
-
-```bash
-agentgraph fetch gdocs <document-id>
-agentgraph fetch-entity <entity-id>
-agentgraph download <entity-id>
-agentgraph bookmark <entity-id> --remove
-agentgraph delete <entity-id>
-```
-
-Gmail attachments are indexed as `Document` stub entities referenced by the
-owning `Email`. Re-fetch the email thread, traverse one hop to find the attachment
-document, then pass that document ID to `agentgraph download`.
-
-### Sync and connectors
-
-```bash
-agentgraph connectors
-agentgraph poll
-agentgraph connector rss add https://example.com/feed.xml
-```
-
-### MCP
-
-```bash
-agentgraph mcp-serve
-agentgraph mcp-serve --transport sse --port 8808
-agentgraph mcp-serve --transport streamable-http --host 0.0.0.0 --port 8808
-```
-
-ChatGPT uses the streamable HTTP endpoint, such as `https://your-tunnel.example/mcp`, not the stdio JSON config.
-
-See the full [command reference](docs-src/commands/index.md) and [MCP tool reference](docs-src/mcp/index.md).
-
-## Connectors
-
-Included connectors:
-
-| Source | Entities | Auth | Refresh model |
-| --- | --- | --- | --- |
-| Slack | Channel, Message | User OAuth PKCE; browser-session fallback | Browser observation plus 5 minute polling |
-| Discord | Channel, Message | Bot token | Browser observation plus 5 minute polling |
-| Google Docs | Document | Google OAuth | Browser observation plus Drive-backed refresh |
-| Google Sheets | Spreadsheet | Google OAuth | Browser observation plus Drive-backed refresh |
-| Google Drive | Folder, Document | Google OAuth | Browser observation for folders and files, plus Drive changes polling |
-| Gmail | Email, Document stubs for attachments | Google OAuth | Browser observation plus background poll and ingest |
-| RSS | Folder, Document | Feed URLs | Background poll and ingest; `add` validates feeds and queues a poll |
-
-AgentGraph is designed to be extended. Custom connectors live in separate packages, register through the connector entry point, and implement the shared `BaseConnector` interface. See [Extending](docs-src/extending.md).
-
-## Configuration
-
-Settings are read from environment variables and from a `.env` file in the config directory.
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `AGENTGRAPH_CONFIG_DIR` | `~/.agentgraph` | Directory for config, credentials, and the default SQLite database |
-| `AGENTGRAPH_BACKEND` | `sqlite` | Persistence backend. The built-in backend is `sqlite` |
-| `AGENTGRAPH_BACKEND_SQLITE_PATH` | `$AGENTGRAPH_CONFIG_DIR/agentgraph.db` | SQLite database path |
-| `AGENTGRAPH_SERVER_HOST` | `127.0.0.1` | Server bind address |
-| `AGENTGRAPH_SERVER_PORT` | `8765` | Server port |
-| `AGENTGRAPH_OBSERVATION_THRESHOLD_SECONDS` | `3` | Seconds of focus before a fetch is triggered |
-| `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unobserved or stale entity expires; see [Entity retention](docs-src/retention.md) |
-| `AGENTGRAPH_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | FastEmbed model used for embeddings |
-| `AGENTGRAPH_SLACK_CLIENT_ID` | prompt/stored account | Optional Client ID override for the admin-created internal Slack OAuth app |
-| `AGENTGRAPH_SLACK_REDIRECT_URI` | `http://localhost:8766/slack/oauth/callback` | Exact Slack OAuth callback registered on the app |
-
-See [Configuration](docs-src/configuration.md) for the full setup.
-
-## MCP Tools
-
-`agentgraph mcp-serve` exposes these tool families to MCP clients:
-
-- `list_connectors_tool`
-- `list_auth_providers_tool`
-- `authenticate_provider_tool`
-- `run_connector_command_tool`
-- `search_entities_tool`
-- `get_entity_tool`
-- `get_edges_tool`
-- `traverse_graph_tool`
-- `query_by_filter_tool`
-- `fetch_entity_tool`
-- `fetch_entity_by_id_tool`
-- `download_entity_tool`
-- `poll_connectors_tool`
-- `bookmark_entity_tool`
-- `delete_entity_tool`
-- `unify_persons_tool`
+- [Install](docs-src/install.md)
+- [Quickstart](docs-src/quickstart.md)
+- [How AgentGraph works](docs-src/how-it-works.md)
+- [Connectors](docs-src/connectors.md)
+- [Configuration](docs-src/configuration.md)
+- [Commands](docs-src/commands/index.md)
+- [MCP tools](docs-src/mcp/index.md)
+- [Extending](docs-src/extending.md)
 
 ## Contributing
 
-See [AGENTS.md](AGENTS.md) for repo-specific development rules.
-
-Before opening a change, run:
+See [AGENTS.md](AGENTS.md) for repository-specific development rules. Before opening a change, run:
 
 ```bash
 uv run pytest tests/ -m "not integration" -q
 uv run pyright
-uv run ruff check agentgraph/
+uv run ruff check agentgraph/ packages/ scripts/ tests/
 ```
 
 ## License

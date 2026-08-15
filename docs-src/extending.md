@@ -7,73 +7,19 @@ order = 30
 summary = "AgentGraph can be extended with custom connectors for your own tools and integrations. This page includes the `BaseConnector` interface, hook signatures, and an example implementation."
 output = "extending.html"
 source_path = "docs-src/extending.md"
-aliases = ["connectors.html"]
 +++
 
 ## Why extend AgentGraph
 
-AgentGraph is designed to be extended with new connectors.
+AgentGraph is designed to make custom connectors normal. The bundled services are proof of the connector pattern, not the boundary of the product.
 
 - Build connectors for internal tools, private APIs, or niche SaaS products that are specific to your team.
 - Keep your own integration logic outside the core package by shipping it as a separate connector package.
 - Reuse the same fetch, poll, auth, and graph-upsert model that the built-in Slack, Discord, Google Docs, Drive, Sheets, Gmail, and RSS connectors use.
 
-## Included connectors
+See [Connectors](/connectors.html) for accurate current coverage, authentication, and context paths across the bundled packages.
 
-<table>
-  <thead>
-    <tr>
-      <th>Source</th>
-      <th>Entities</th>
-      <th>Auth</th>
-      <th>Refresh model</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Slack</td>
-      <td>Channel, Message</td>
-      <td>Browser-derived cookie credentials</td>
-      <td>Browser observation plus 5 minute polling</td>
-    </tr>
-    <tr>
-      <td>Discord</td>
-      <td>Channel, Message</td>
-      <td>Bot token</td>
-      <td>Browser observation plus 5 minute polling</td>
-    </tr>
-    <tr>
-      <td>Google Docs</td>
-      <td>Document</td>
-      <td>Google OAuth</td>
-      <td>Browser observation plus Drive-backed refresh</td>
-    </tr>
-    <tr>
-      <td>Google Sheets</td>
-      <td>Spreadsheet</td>
-      <td>Google OAuth</td>
-      <td>Browser observation plus Drive-backed refresh</td>
-    </tr>
-    <tr>
-      <td>Google Drive</td>
-      <td>Folder, Document</td>
-      <td>Google OAuth</td>
-      <td>Browser observation for folders and files, plus Drive changes polling</td>
-    </tr>
-    <tr>
-      <td>Gmail</td>
-      <td>Email</td>
-      <td>Google OAuth</td>
-      <td>Browser observation plus background poll and ingest</td>
-    </tr>
-    <tr>
-      <td>RSS</td>
-      <td>Folder, Document</td>
-      <td>Feed URLs</td>
-      <td>Background poll and ingest; validated feed add and OPML import</td>
-    </tr>
-  </tbody>
-</table>
+<div class="connector-promise"><strong>Bring any service into your agent's world.</strong> A connector can wrap an API, export, webhook, local database, browser-accessible surface, or structured file format.</div>
 
 ## Connector behavior
 

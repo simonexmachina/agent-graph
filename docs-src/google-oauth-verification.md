@@ -24,9 +24,8 @@ Complete these items before asking Google to review the app:
   using a Google account that is an Owner or Editor of the Cloud project.
 - Make the homepage publicly accessible, describe AgentGraph's functionality,
   and link to the same privacy policy and Terms of Service supplied to Google.
-- Expand the privacy policy to state data retention and deletion behavior, how a
-  user revokes access, and how to contact the project. It must accurately explain
-  access, use, storage, and sharing of Google user data.
+- Confirm the published privacy policy still matches the released application's
+  retention, deletion, revocation, contact, and Google user-data behavior.
 - Confirm the support email, developer contact email, app name, and logo are
   current in Google Auth Platform.
 - Confirm `agentgraph auth google` completes browser consent, token exchange,

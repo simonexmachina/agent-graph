@@ -137,6 +137,7 @@ agentgraph download <attachment-document-entity-id> --output <file-or-dir>
 - Delete targets accept: full UUID, UUID prefix, platform ref, or HTTP(S) URL. Connected edges are removed with the entity.
 - Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs, exported Google Docs/Sheets, or Gmail attachment `Document` stubs
 - `agentgraph fetch` and `agentgraph fetch-entity` persist the connector's complete returned batch before reporting counts; content-rich resources such as RSS feeds may take several minutes
+- Direct fetch is not a browser observation and does not update `observed_at`; use it when a result references missing or stale context, not as evidence that the human viewed the resource
 - Use `agentgraph bookmark` for entities or HTTP(S) URLs that should survive retention-window expiration
 - Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep. Without `--json`, the command displays the updated canonical Person, including merged identity metadata and duplicate identities.
 - `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
@@ -155,3 +156,4 @@ When the user asks about graph data:
 4. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
 5. Run the appropriate `agentgraph` command with `--json` to get structured output
 6. Use `edges` or `traverse` to follow relationships when needed
+7. When a result links to an unfetched stub or a specific missing resource, use `fetch-entity` for its graph ID or `fetch <platform> <resource-id>`, then continue the investigation with the hydrated context

@@ -1,7 +1,7 @@
 [project]
 name = "agentgraph-server"
 version = "0.5.1"
-description = "AgentGraph builds a local, queryable graph of your digital world across tools like Slack, Discord, Gmail, Google Docs, Sheets, Drive, and RSS feeds, so your AI agents can search, fetch, and reason over the same connected context you work from."
+description = "A local-first CLI and MCP server that turns selected digital sources into a searchable graph for the AI agent you already use."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

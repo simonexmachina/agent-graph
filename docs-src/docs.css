@@ -142,6 +142,10 @@ main{min-width:0;padding:32px clamp(20px,4.5vw,56px) 80px;max-width:1180px;margi
 .doc-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:48px;margin-top:24px}
 @media(min-width:1180px){.doc-grid{grid-template-columns:minmax(0,72ch) 220px;justify-content:start}}
 .doc{min-width:0;max-width:72ch;overflow-wrap:break-word}
+.home main{max-width:1320px}
+.home .doc-grid{grid-template-columns:minmax(0,1fr)}
+.home .doc{max-width:980px}
+.home .toc{display:none}
 .doc h1{font-family:var(--serif);font-size:2.6rem;line-height:1.08;letter-spacing:0;margin:0 0 .4em;font-weight:600;color:var(--ink)}
 body:not(.home) .doc>h1:first-child{display:none}
 .doc h2{font-family:var(--serif);font-size:1.55rem;line-height:1.2;margin:2em 0 .5em;font-weight:600;letter-spacing:0;color:var(--ink);position:relative}
@@ -153,6 +157,17 @@ body:not(.home) .doc>h1:first-child{display:none}
 .doc :is(h2,h3,h4) .anchor:hover{opacity:1;color:var(--ecto);text-decoration:none}
 .doc p{margin:0 0 1.05em}
 .page-summary{margin:0 0 1.4em;color:var(--muted);font-size:1rem;max-width:62ch}
+.home-intro{font-size:1.12rem;max-width:68ch;margin-bottom:1.5rem}
+.home-intro .positioning{font-size:1.28rem;line-height:1.5;color:var(--ink);margin-bottom:.8rem}
+.home-intro .boundary{border-left:3px solid var(--ecto);padding-left:14px;color:var(--text);font-weight:550}
+.home-actions{display:flex;flex-wrap:wrap;gap:10px;margin:1.2rem 0 1.8rem}
+.home-actions a{display:inline-flex;align-items:center;min-height:42px;border-radius:8px;padding:9px 15px;border:1px solid var(--line);font-weight:600;text-decoration:none}
+.home-actions .primary{background:var(--ecto);border-color:var(--ecto);color:#04130c}
+.home-actions a:hover{text-decoration:none;opacity:.9}
+.architecture-figure{margin:1.5rem 0 2rem;overflow-x:auto}
+.architecture-figure img{display:block;width:100%;min-width:720px;height:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg0)}
+.architecture-figure figcaption{margin-top:.65rem;color:var(--muted);font-size:.84rem;line-height:1.5}
+.connector-promise{padding:16px 18px;border-left:3px solid var(--moon);background:var(--panel);margin:1.2rem 0}
 .doc ul,.doc ol{padding-left:1.3rem;margin:0 0 1.15em}
 .doc li{margin:.25em 0}
 .doc li>p{margin:0 0 .4em}
@@ -228,4 +243,5 @@ body:not(.home) .doc>h1:first-child{display:none}
 @media(max-width:520px){
   main{padding:60px 14px 48px}
   .doc pre{margin-left:-14px;margin-right:-14px;border-radius:0;border-left:0;border-right:0}
+  .architecture-figure{margin-left:-14px;margin-right:-14px;padding:0 14px}
 }

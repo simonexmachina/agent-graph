@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS_SRC = ROOT / "docs-src"
 DOCS_OUT = ROOT / "docs"
 GITHUB_ROOT = "https://github.com/simonexmachina/agent-graph/blob/main"
+SITE_ROOT = "https://simonexmachina.github.io/agent-graph"
+SOCIAL_IMAGE_URL = f"{SITE_ROOT}/assets/diagrams/architecture-overview-dark.png"
 SECTION_ORDER = {"Start": 10, "Configuration": 15, "Reference": 20, "MCP": 30}
 
 _FORMATTER = HtmlFormatter(nowrap=True, classprefix="tok-")
@@ -102,7 +104,9 @@ def render_inline(text: str) -> str:
     escaped = re.sub(r"`([^`]+)`", lambda m: f"<code>{html.escape(m.group(1))}</code>", escaped)
     escaped = re.sub(
         r"\[([^\]]+)\]\(([^)]+)\)",
-        lambda m: f'<a href="{html.escape(html.unescape(m.group(2)), quote=True)}">{m.group(1)}</a>',
+        lambda m: (
+            f'<a href="{html.escape(html.unescape(m.group(2)), quote=True)}">{m.group(1)}</a>'
+        ),
         escaped,
     )
     escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
@@ -115,12 +119,24 @@ def render_code_block(code: str, language: str) -> str:
     code_class = f' class="language-{html.escape(language, quote=True)}"' if language else ""
 
     try:
-        lexer = get_lexer_by_name(language, stripall=False) if language else TextLexer(stripall=False)
+        lexer = (
+            get_lexer_by_name(language, stripall=False) if language else TextLexer(stripall=False)
+        )
     except ClassNotFound:
         lexer = TextLexer(stripall=False)
 
     highlighted = highlight(code, lexer, _FORMATTER)
     return f'<div class="codehilite"><pre><code{code_class}>{highlighted}</code></pre></div>'
+
+
+def split_table_row(line: str) -> list[str]:
+    """Split one simple Markdown table row into cells."""
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def is_table_separator(line: str) -> bool:
+    cells = split_table_row(line)
+    return len(cells) > 0 and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
 
 
 def render_markdown(body: str) -> tuple[str, tuple[Heading, ...]]:
@@ -156,8 +172,28 @@ def render_markdown(body: str) -> tuple[str, tuple[Heading, ...]]:
             slug = slugify(text)
             headings.append(Heading(level=level, text=text, slug=slug))
             anchor = f'<a class="anchor" href="#{slug}" aria-label="Anchor link">#</a>'
-            parts.append(f"<h{level} id=\"{slug}\">{anchor}{render_inline(text)}</h{level}>")
+            parts.append(f'<h{level} id="{slug}">{anchor}{render_inline(text)}</h{level}>')
             i += 1
+            continue
+
+        if "|" in stripped and i + 1 < len(lines) and is_table_separator(lines[i + 1].strip()):
+            headers = split_table_row(stripped)
+            i += 2
+            rows: list[list[str]] = []
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                cells = split_table_row(lines[i])
+                if len(cells) != len(headers):
+                    break
+                rows.append(cells)
+                i += 1
+            head_html = "".join(f"<th>{render_inline(cell)}</th>" for cell in headers)
+            body_html = "".join(
+                "<tr>" + "".join(f"<td>{render_inline(cell)}</td>" for cell in row) + "</tr>"
+                for row in rows
+            )
+            parts.append(
+                f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
+            )
             continue
 
         if stripped.startswith("<"):
@@ -265,10 +301,12 @@ def build_global_nav(pages: list[Page], current_page: Page) -> str:
         for page in grouped[section]:
             if page.meta.nav_hidden:
                 continue
-            current_class = "nav-link active" if page.meta.output_path == current_page.meta.output_path else "nav-link"
-            links += (
-                f'<a class="{current_class}" href="{page_permalink(page.meta)}">{page.meta.nav_title}</a>'
+            current_class = (
+                "nav-link active"
+                if page.meta.output_path == current_page.meta.output_path
+                else "nav-link"
             )
+            links += f'<a class="{current_class}" href="{page_permalink(page.meta)}">{page.meta.nav_title}</a>'
         if links:
             section_blocks.append(f"<section><h2>{html.escape(section)}</h2>{links}</section>")
     return "\n".join(section_blocks)
@@ -312,10 +350,13 @@ def relative_url(current_output: Path, target: str) -> str:
     return posixpath.relpath(target_path, start=current_dir)
 
 
-def normalize_internal_links(fragment: str, current_output: Path) -> str:
+def normalize_internal_urls(fragment: str, current_output: Path) -> str:
     return re.sub(
-        r'href="(/[^"]*)"',
-        lambda m: f'href="{html.escape(relative_url(current_output, m.group(1)), quote=True)}"',
+        r'(?P<attribute>href|src)="(?P<url>/[^"]*)"',
+        lambda m: (
+            f'{m.group("attribute")}="'
+            f'{html.escape(relative_url(current_output, m.group("url")), quote=True)}"'
+        ),
         fragment,
     )
 
@@ -332,7 +373,7 @@ def build_prev_next(pages: list[Page], index: int) -> str:
         links.append(
             f'<a class="page-nav-next" href="{page_permalink(next_page.meta)}"><small>Next</small><span>{html.escape(next_page.meta.nav_title)}</span></a>'
         )
-    return "<nav class=\"page-nav\" aria-label=\"Pager\">" + "".join(links) + "</nav>"
+    return '<nav class="page-nav" aria-label="Pager">' + "".join(links) + "</nav>"
 
 
 def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
@@ -340,14 +381,21 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
     title = html.escape(page.meta.title)
     description = html.escape(page.meta.description, quote=True)
     body_class = "home" if page.meta.output_path == Path("index.html") else ""
+    document_title = (
+        "AgentGraph - Local-first context for AI agents"
+        if body_class == "home"
+        else f"{title} - AgentGraph"
+    )
+    canonical_path = page_permalink(page.meta)
+    canonical_url = f"{SITE_ROOT}{canonical_path}"
     toc_html = build_on_page_nav(page)
     article_title = "" if body_class == "home" else f"          <h1>{title}</h1>\n"
     stylesheet_href = relative_url(page.meta.output_path, "/docs.css")
     home_href = relative_url(page.meta.output_path, "/")
-    body_html = normalize_internal_links(page.body, page.meta.output_path)
-    nav_html = normalize_internal_links(nav_html, page.meta.output_path)
-    toc_html = normalize_internal_links(toc_html, page.meta.output_path)
-    pager_html = normalize_internal_links(build_prev_next(pages, index), page.meta.output_path)
+    body_html = normalize_internal_urls(page.body, page.meta.output_path)
+    nav_html = normalize_internal_urls(nav_html, page.meta.output_path)
+    toc_html = normalize_internal_urls(toc_html, page.meta.output_path)
+    pager_html = normalize_internal_urls(build_prev_next(pages, index), page.meta.output_path)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -355,8 +403,19 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#07080a" />
   <meta name="color-scheme" content="light dark" />
-  <title>{title} - AgentGraph</title>
+  <title>{document_title}</title>
   <meta name="description" content="{description}" />
+  <link rel="canonical" href="{canonical_url}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="AgentGraph" />
+  <meta property="og:title" content="{document_title}" />
+  <meta property="og:description" content="{description}" />
+  <meta property="og:url" content="{canonical_url}" />
+  <meta property="og:image" content="{SOCIAL_IMAGE_URL}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{document_title}" />
+  <meta name="twitter:description" content="{description}" />
+  <meta name="twitter:image" content="{SOCIAL_IMAGE_URL}" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Recursive:wght@300..800&family=JetBrains+Mono:wght@400..700&display=swap" rel="stylesheet">
@@ -379,7 +438,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
     <aside class="sidebar">
       <div class="sidebar-head">
         <a class="brand" href="{home_href}" aria-label="AgentGraph home">
-          <span><strong>AgentGraph</strong><small>local knowledge graph</small></span>
+          <span><strong>AgentGraph</strong><small>local context for AI agents</small></span>
         </a>
       </div>
       <label class="search"><span>Search</span><input id="doc-search" type="search" placeholder="slack, mcp, drive, poll"></label>
@@ -402,7 +461,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
       <div class="doc-grid">
         <article class="doc">
 {article_title}\
-{f'          <p class="page-summary">{render_inline(page.meta.summary)}</p>\n' if page.meta.summary.strip() else ''}\
+{f'          <p class="page-summary">{render_inline(page.meta.summary)}</p>\n' if page.meta.summary.strip() else ""}\
 {body_html}
 {pager_html}
         </article>

@@ -67,7 +67,7 @@ Bookmarks protect an entity from automatic collection. A bookmarked Message or G
 
 ## RSS observations
 
-A configured feed URL identifies the RSS feed `Folder`. The extension reports observely after the exact configured URL matches an observation pattern. The RSS connector maps that URL to the stored `feed/{feed_hash}` Folder, and AgentGraph sets that Folder's `observed_at`.
+A configured feed URL identifies the RSS feed `Folder`. The extension reports an observation after the exact configured URL matches an observation pattern. The RSS connector maps that URL to the stored `feed/{feed_hash}` Folder, and AgentGraph sets that Folder's `observed_at`.
 
 Article observation is stricter than the extension's URL-prefix filter:
 
