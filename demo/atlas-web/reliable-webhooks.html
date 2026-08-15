@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reliable Webhooks: Idempotency and Replay</title>
+  <meta name="author" content="Nadia Okafor">
+  <meta name="description" content="A practical guide to idempotent webhook consumers, replay, ordering, and operational visibility.">
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; color: #17211d; background: #f6f8f7; line-height: 1.65; }
+    article { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; }
+    .kicker { color: #087a5d; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; font-size: 13px; }
+    h1 { max-width: 680px; margin: 12px 0; font-size: clamp(38px, 7vw, 70px); line-height: 1.02; letter-spacing: 0; }
+    .byline { color: #5a6862; border-bottom: 1px solid #cfd8d3; padding-bottom: 24px; }
+    h2 { margin-top: 42px; font-size: 28px; letter-spacing: 0; }
+    .principle { border-left: 4px solid #00a579; background: #e4f7f0; padding: 18px 22px; font-size: 20px; }
+    code { background: #e6ebe8; padding: 2px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <article>
+    <p class="kicker">Distributed systems field note</p>
+    <h1>Reliable Webhooks: Idempotency and Replay</h1>
+    <p class="byline">Nadia Okafor · August 4, 2026 · 7 minute read</p>
+    <p class="principle">Treat every webhook as an at-least-once delivery. Correctness starts with a stable event ID and an idempotent consumer.</p>
+    <h2>Deduplicate at the boundary</h2>
+    <p>Persist the provider's event ID before applying a state change. If the same event arrives again, return success without repeating the work. Keep the deduplication record longer than the provider's maximum retry window.</p>
+    <h2>Make replay ordinary</h2>
+    <p>Store the original payload and processing outcome so operators can replay an event after a bug fix. A replay should use the same validation and idempotency path as live delivery rather than a privileged bypass.</p>
+    <h2>Ordering is a domain rule</h2>
+    <p>Do not assume network arrival order. Carry a source sequence or version where possible, reject stale transitions explicitly, and surface gaps for investigation.</p>
+    <h2>Operate the failure path</h2>
+    <p>Measure delivery lag, duplicate rate, retry count, and terminal failures. Pair automatic retry with a dead-letter workflow and enough context for a human to decide whether replay is safe.</p>
+  </article>
+</body>
+</html>
