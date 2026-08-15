@@ -610,6 +610,22 @@ def test_auth_provider_dispatches_to_connector() -> None:
     assert _FakeConnector.auth_called
 
 
+def test_onboard_directs_users_to_install_chrome_extension() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+    ):
+        result = runner.invoke(app, ["onboard"], input="n\n")
+
+    assert result.exit_code == 0
+    assert "Install the AgentGraph Chrome Extension" in result.output
+    assert (
+        "https://chromewebstore.google.com/detail/agentgraph-extension/"
+        "iilkfclglabllelhjacijldknapbhidi"
+    ) in result.output
+    assert "Run `agentgraph serve` to start the server." in result.output
+
+
 def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:
     from agentgraph_connector_slack import SlackConnector
 

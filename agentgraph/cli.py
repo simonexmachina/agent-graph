@@ -563,7 +563,11 @@ def onboard() -> None:
         if i < total:
             typer.echo()
 
-    typer.echo("\nSetup complete. Run `agentgraph serve` to start the server.")
+    typer.echo(
+        "\nInstall the AgentGraph Chrome Extension: "
+        "https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi"
+    )
+    typer.echo("Run `agentgraph serve` to start the server.")
 
 
 @app.command()
