@@ -153,7 +153,9 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     broken_links: list[str] = []
     for html_path in output_dir.rglob("*.html"):
         page = html_path.read_text(encoding="utf-8")
-        for attribute, url in re.findall(r'(href|src)="([^"]+)"', page):
+        for match in re.finditer(r'(href|src)="([^"]+)"', page):
+            attribute = match.group(1)
+            url = match.group(2)
             parsed = urlsplit(url)
             if parsed.scheme or parsed.netloc or not parsed.path:
                 continue
