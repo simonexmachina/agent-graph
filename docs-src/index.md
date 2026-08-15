@@ -26,7 +26,7 @@ You can also teach AgentGraph about new tools quickly: connectors live in their 
   </section>
   <section class="doc-card">
     <h3><a href="/configuration.html">Configuration</a></h3>
-    <p>Choose the config directory, database path, retention window, dwell threshold, and transport settings.</p>
+    <p>Choose the config directory, database path, retention window, observation threshold, and transport settings.</p>
   </section>
   <section class="doc-card">
     <h3><a href="/rss.html">RSS</a></h3>

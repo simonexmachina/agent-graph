@@ -34,37 +34,37 @@ AgentGraph is designed to be extended with new connectors.
       <td>Slack</td>
       <td>Channel, Message</td>
       <td>Browser-derived cookie credentials</td>
-      <td>Browser dwell plus 5 minute polling</td>
+      <td>Browser observation plus 5 minute polling</td>
     </tr>
     <tr>
       <td>Discord</td>
       <td>Channel, Message</td>
       <td>Bot token</td>
-      <td>Browser dwell plus 5 minute polling</td>
+      <td>Browser observation plus 5 minute polling</td>
     </tr>
     <tr>
       <td>Google Docs</td>
       <td>Document</td>
       <td>Google OAuth</td>
-      <td>Browser dwell plus Drive-backed refresh</td>
+      <td>Browser observation plus Drive-backed refresh</td>
     </tr>
     <tr>
       <td>Google Sheets</td>
       <td>Spreadsheet</td>
       <td>Google OAuth</td>
-      <td>Browser dwell plus Drive-backed refresh</td>
+      <td>Browser observation plus Drive-backed refresh</td>
     </tr>
     <tr>
       <td>Google Drive</td>
       <td>Folder, Document</td>
       <td>Google OAuth</td>
-      <td>Browser dwell for folders and files, plus Drive changes polling</td>
+      <td>Browser observation for folders and files, plus Drive changes polling</td>
     </tr>
     <tr>
       <td>Gmail</td>
       <td>Email</td>
       <td>Google OAuth</td>
-      <td>Browser dwell plus background poll and ingest</td>
+      <td>Browser observation plus background poll and ingest</td>
     </tr>
     <tr>
       <td>RSS</td>
@@ -77,7 +77,7 @@ AgentGraph is designed to be extended with new connectors.
 
 ## Connector behavior
 
-- **Browser dwell:** supported URLs trigger targeted fetches after the configured dwell threshold.
+- **Browser observation:** supported URLs trigger targeted fetches after the configured observation threshold.
 - **Polling:** connectors that support it store cursor state and fetch changes on a schedule.
 - **Ingest:** some connectors expose a broader one-shot historical ingest beyond poll behavior.
 - **Download metadata:** file-backed entities can expose `metadata.download_url` and `metadata.mime_type` when an agent needs source bytes.
@@ -95,7 +95,7 @@ A connector is a Python package that subclasses `BaseConnector`, implements the 
 The required shape is small: identify which URLs the connector owns, implement `fetch()`, and optionally implement polling, ingest, auth, and user identity hooks. The signatures below match `agentgraph.connectors.base.BaseConnector`.
 
 - `source` is the stable connector identifier used by the CLI, MCP server, and registry.
-- `url_patterns` declares static browser URL patterns for dwell-based fetches. Connectors can override `observation_url_patterns()` to provide derived patterns.
+- `url_patterns` declares static browser URL patterns for observation-based fetches. Connectors can override `observation_url_patterns()` to provide derived patterns.
 - `fetch_policy` controls when a targeted fetch should be skipped because a resource is still fresh.
 - `can_handle(self, url) -> bool` is required and should confirm whether a specific URL belongs to the connector.
 - `resolve_observation_url(self, url)` can asynchronously resolve a browser observation and attach generic fetch metadata to the result.
@@ -115,7 +115,7 @@ The contract is intentionally generic: core AgentGraph code calls these hooks wi
 | `url_patterns: ClassVar[list[str]]` | No | URL match patterns that declare which browser URLs this connector can observe. |
 | `observation_url_patterns() -> list[str]` | No | Async hook for dynamic browser observation patterns; defaults to `url_patterns`. |
 | `can_handle(self, url: str) -> bool` | Yes | Fine-grained URL matcher used after `url_patterns` to decide whether the connector owns a specific URL. |
-| `resolve_observation_url(self, url) -> SourceReference \| None` | No | Async browser-dwell resolver; may attach fetch metadata while preserving connector-owned URL ownership. |
+| `resolve_observation_url(self, url) -> SourceReference \| None` | No | Async browser-observation resolver; may attach fetch metadata while preserving connector-owned URL ownership. |
 | `fetch(...) -> EntityBatch` | Yes | Fetch one resource and return the entities, people, and edges needed to represent it in the graph. |
 | `normalise_fetch_id(...) -> tuple[str, ResourceType]` | No | Override when stored entity IDs differ from the IDs required by the upstream fetch path. |
 | `poll_interval: ClassVar[timedelta \| None]` | No | Enables scheduled background polling when set to a duration. |

@@ -226,7 +226,7 @@ async def cli_meta(include_dynamic_url_patterns: bool = True) -> dict[str, Any]:
         "entity_types": list(ENTITY_TYPES),
         "platforms": sorted({c.source for c in connectors}),
         "url_patterns": seen_patterns,
-        "dwell_threshold_ms": get_settings().dwell_threshold_seconds * 1000,
+        "observation_threshold_ms": get_settings().observation_threshold_seconds * 1000,
     }
 
 

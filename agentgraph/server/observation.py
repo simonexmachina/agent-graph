@@ -1,4 +1,4 @@
-"""Dwell handling: fetch a classified URL before recording its observation."""
+"""Browser observation handling and observation-duration accounting."""
 
 from __future__ import annotations
 
@@ -29,17 +29,17 @@ def _forget_inflight_observation(
         task.exception()
 
 
-async def record_dwell_time(
+async def record_observation(
     url: str,
-    dwell_ms: int,
+    observation_duration_ms: int,
     observation_id: str,
     observed: bool,
     meta: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Record either a new observation or a dwell-only update."""
+    """Record either a new observation or a duration-only update."""
     ref = await classify_observation_url(url, meta=meta)
     if ref is None:
-        logger.debug("report-dwell: unrecognised URL %s", url)
+        logger.debug("report-observation: unrecognised URL %s", url)
         return {"status": "ignored", "reason": "unrecognised URL"}
 
     from agentgraph.core.context import get_backend
@@ -47,10 +47,10 @@ async def record_dwell_time(
     try:
         backend = get_backend()
         if not observed:
-            await backend.increment_dwell_time(ref.source, ref.resource_id, dwell_ms)
+            await backend.increment_observation_duration(ref.source, ref.resource_id, observation_duration_ms)
             logger.debug(
-                "Recorded dwell update: +%dms for %s %s/%s (observation_id=%s)",
-                dwell_ms,
+                "Recorded observation-duration update: +%dms for %s %s/%s (observation_id=%s)",
+                observation_duration_ms,
                 ref.source,
                 ref.resource_type,
                 ref.resource_id,
@@ -90,7 +90,7 @@ async def record_dwell_time(
                     resource_id=ref.resource_id,
                     observation_id=observation_id,
                     url=url,
-                    dwell_ms=dwell_ms,
+                    observation_duration_ms=observation_duration_ms,
                     meta=fetch_meta or None,
                 )
             )
@@ -108,7 +108,7 @@ async def record_dwell_time(
     except ObservationFetchError:
         raise
     except Exception:
-        logger.exception("Failed to record dwell time for %s", url)
+        logger.exception("Failed to record observation duration for %s", url)
         return {"status": "error", "reason": "internal backend error"}
 
 
@@ -119,7 +119,7 @@ async def _fetch_and_record_observation(
     resource_id: str,
     observation_id: str,
     url: str,
-    dwell_ms: int,
+    observation_duration_ms: int,
     meta: dict[str, str] | None,
 ) -> dict[str, Any]:
     counts = await _dispatch(source, resource_type, resource_id, meta)
@@ -138,7 +138,7 @@ async def _fetch_and_record_observation(
         resource_id,
         observation_id,
         url,
-        dwell_ms,
+        observation_duration_ms,
     )
     return {
         "status": "accepted",

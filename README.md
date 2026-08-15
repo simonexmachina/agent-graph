@@ -86,7 +86,7 @@ Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**,
 
 ### 4. Browse something supported
 
-Open a Slack channel, Discord thread, Google Doc, Google Sheet, Gmail thread, or Drive folder and keep the tab focused long enough for the dwell threshold to trigger a fetch.
+Open a Slack channel, Discord thread, Google Doc, Google Sheet, Gmail thread, or Drive folder and keep the tab focused long enough for the observation threshold to trigger a fetch.
 
 ### 5. Verify entities landed
 
@@ -106,7 +106,7 @@ Use the printed stdio config with Claude Desktop or Claude Code. For ChatGPT dev
 
 ## How It Works
 
-The browser extension watches supported URLs and sends dwell events to your local AgentGraph server. When you stay on a page long enough, the matching connector fetches the resource and turns it into graph entities, people, and edges. After that first fetch, supported connectors keep known resources fresh with background polling.
+The browser extension watches supported URLs and sends observation events to your local AgentGraph server. When you stay on a page long enough, the matching connector fetches the resource and turns it into graph entities, people, and edges. After that first fetch, supported connectors keep known resources fresh with background polling.
 
 ```text
 Browser extension -> local server -> connector -> local graph
@@ -177,12 +177,12 @@ Included connectors:
 
 | Source | Entities | Auth | Refresh model |
 | --- | --- | --- | --- |
-| Slack | Channel, Message | User OAuth PKCE; browser-session fallback | Browser dwell plus 5 minute polling |
-| Discord | Channel, Message | Bot token | Browser dwell plus 5 minute polling |
-| Google Docs | Document | Google OAuth | Browser dwell plus Drive-backed refresh |
-| Google Sheets | Spreadsheet | Google OAuth | Browser dwell plus Drive-backed refresh |
-| Google Drive | Folder, Document | Google OAuth | Browser dwell for folders and files, plus Drive changes polling |
-| Gmail | Email, Document stubs for attachments | Google OAuth | Browser dwell plus background poll and ingest |
+| Slack | Channel, Message | User OAuth PKCE; browser-session fallback | Browser observation plus 5 minute polling |
+| Discord | Channel, Message | Bot token | Browser observation plus 5 minute polling |
+| Google Docs | Document | Google OAuth | Browser observation plus Drive-backed refresh |
+| Google Sheets | Spreadsheet | Google OAuth | Browser observation plus Drive-backed refresh |
+| Google Drive | Folder, Document | Google OAuth | Browser observation for folders and files, plus Drive changes polling |
+| Gmail | Email, Document stubs for attachments | Google OAuth | Browser observation plus background poll and ingest |
 | RSS | Folder, Document | Feed URLs | Background poll and ingest; `add` validates feeds and queues a poll |
 
 AgentGraph is designed to be extended. Custom connectors live in separate packages, register through the connector entry point, and implement the shared `BaseConnector` interface. See [Extending](docs-src/extending.md).
@@ -198,7 +198,7 @@ Settings are read from environment variables and from a `.env` file in the confi
 | `AGENTGRAPH_BACKEND_SQLITE_PATH` | `$AGENTGRAPH_CONFIG_DIR/agentgraph.db` | SQLite database path |
 | `AGENTGRAPH_SERVER_HOST` | `127.0.0.1` | Server bind address |
 | `AGENTGRAPH_SERVER_PORT` | `8765` | Server port |
-| `AGENTGRAPH_DWELL_THRESHOLD_SECONDS` | `3` | Seconds of focus before a fetch is triggered |
+| `AGENTGRAPH_OBSERVATION_THRESHOLD_SECONDS` | `3` | Seconds of focus before a fetch is triggered |
 | `AGENTGRAPH_RETENTION_DAYS` | `90` | Days before an unobserved or stale entity expires; see [Entity retention](docs-src/retention.md) |
 | `AGENTGRAPH_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | FastEmbed model used for embeddings |
 | `AGENTGRAPH_SLACK_CLIENT_ID` | prompt/stored account | Optional Client ID override for the admin-created internal Slack OAuth app |

@@ -5,7 +5,7 @@ import {
   DEFAULT_SERVER_BASE_URL,
   getHealthUrl,
   getMetaUrl,
-  getReportDwellUrl,
+  getReportObservationUrl,
   getExtensionPageUrl,
   getExtensionFetchUrl,
   getExtensionBookmarkUrl,
@@ -29,7 +29,7 @@ test("derived endpoints are built from the configured base URL", () => {
   assert.equal(DEFAULT_SERVER_BASE_URL, "http://localhost:8765");
   assert.equal(getHealthUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/health");
   assert.equal(getMetaUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/cli/meta");
-  assert.equal(getReportDwellUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/report-dwell");
+  assert.equal(getReportObservationUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/report-observation");
   assert.equal(getExtensionPageUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/extension/page");
   assert.equal(getExtensionFetchUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/extension/fetch");
   assert.equal(getExtensionBookmarkUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/extension/bookmark");

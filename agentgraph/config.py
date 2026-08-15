@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import dotenv_values
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,6 +57,7 @@ class Settings(BaseSettings):
         env_file=[str(CONFIG_DIR / ".env"), ".env"],
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     # Backend selection
@@ -77,14 +78,22 @@ class Settings(BaseSettings):
     server_host: str = Field(default="127.0.0.1")
     server_port: int = Field(default=8765)
 
-    # Dwell detection
-    dwell_threshold_seconds: int = Field(
+    # Browser observation detection
+    observation_threshold_seconds: int = Field(
         default=3,
         description="Seconds a focus event must persist without a blur before triggering a fetch",
+        validation_alias=AliasChoices(
+            "AGENTGRAPH_OBSERVATION_THRESHOLD_SECONDS",
+            "AGENTGRAPH_DWELL_THRESHOLD_SECONDS",
+        ),
     )
-    dwell_poll_interval_seconds: float = Field(
+    observation_poll_interval_seconds: float = Field(
         default=1.0,
-        description="How often the dwell evaluator scans for mature focus events",
+        description="How often the observation evaluator scans for mature focus events",
+        validation_alias=AliasChoices(
+            "AGENTGRAPH_OBSERVATION_POLL_INTERVAL_SECONDS",
+            "AGENTGRAPH_DWELL_POLL_INTERVAL_SECONDS",
+        ),
     )
     poll_interval_seconds: int | None = Field(
         default=None,

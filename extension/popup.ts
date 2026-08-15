@@ -7,9 +7,9 @@ const CACHE_KEY = "agentgraph_meta_cache";
 import { getHealthUrl, getServerBaseUrl } from "./lib/config.js";
 import { type ObservationStatus, refreshPendingObservation } from "./lib/observation-status.js";
 
-interface DwellMeta {
+interface ObservationMeta {
   url_patterns: string[];
-  dwell_threshold_ms: number;
+  observation_threshold_ms: number;
 }
 
 interface ObservationStatusResponse {
@@ -47,9 +47,9 @@ async function getActiveUrl(): Promise<string | null> {
   return tab?.url ?? null;
 }
 
-async function getCachedMeta(): Promise<DwellMeta | null> {
+async function getCachedMeta(): Promise<ObservationMeta | null> {
   const result = await chrome.storage.local.get(CACHE_KEY);
-  return result[CACHE_KEY] as DwellMeta | null;
+  return result[CACHE_KEY] as ObservationMeta | null;
 }
 
 async function getObservationStatus(): Promise<ObservationStatus | null> {
@@ -111,7 +111,7 @@ function formatObservationStatus(status: ObservationStatus | null): { text: stri
 
   if (status.state === "waiting" && status.fires_at != null) {
     const seconds = Math.max(0, Math.ceil((status.fires_at - Date.now()) / 1000));
-    return { text: `Will send after dwell threshold (${seconds}s)`, className: "status status--ok" };
+    return { text: `Will send after observation threshold (${seconds}s)`, className: "status status--ok" };
   }
 
   if (status.state === "sending") {

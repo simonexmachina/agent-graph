@@ -978,7 +978,7 @@
               <th scope="col"><button class="list-sort" type="button" data-sort="observed_at">Observed</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="created_at">Created</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="updated_at">Updated</button></th>
-              <th scope="col">Dwell</th>
+              <th scope="col">Observation time</th>
               <th scope="col">ID</th>
             </tr>
           </thead>
@@ -1767,7 +1767,7 @@
     return value ? new Date(value).toLocaleString() : '—';
   }
 
-  function formatDwell(value) {
+  function formatObservationDuration(value) {
     const ms = Number(value || 0);
     if (ms < 1000) return '—';
     if (ms < 60000) return `${Math.round(ms / 1000)}s`;
@@ -1827,7 +1827,7 @@
       addListCell(row, formatDate(entity.observed_at));
       addListCell(row, formatDate(entity.created_at));
       addListCell(row, formatDate(entity.updated_at));
-      addListCell(row, formatDwell(entity.cumulative_dwell_ms));
+      addListCell(row, formatObservationDuration(entity.cumulative_observation_duration_ms));
       addListCell(row, entity.id);
       row.addEventListener('click', () => showEntityDetail(entity.id));
       row.addEventListener('dblclick', () => focusNode(entity.id));
@@ -2353,8 +2353,8 @@
     if (entity.source_updated_at) {
       detailBody.appendChild(row('Source updated', formatDate(entity.source_updated_at)));
     }
-    if (Number(entity.cumulative_dwell_ms || 0) > 0) {
-      detailBody.appendChild(row('Dwell', formatDwell(entity.cumulative_dwell_ms)));
+    if (Number(entity.cumulative_observation_duration_ms || 0) > 0) {
+      detailBody.appendChild(row('Observation time', formatObservationDuration(entity.cumulative_observation_duration_ms)));
     }
 
     if (entity.entity_type === 'Person') {

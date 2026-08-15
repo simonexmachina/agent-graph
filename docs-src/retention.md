@@ -22,7 +22,7 @@ AgentGraph treats browser observation, connector synchronization, and source-sys
 | `synced_at` | Last successful connector synchronization. Null for unresolved stubs. |
 | `observed_at` | Last accepted browser observation of this exact entity. Null until observed. |
 
-Ingests, background polls, explicit `fetch` and `fetch-entity` commands, stub creation, source changes, and new graph edges do not set `observed_at`. An accepted browser dwell report sets it immediately; the dwell threshold controls whether AgentGraph also fetches the resource.
+Ingests, background polls, explicit `fetch` and `fetch-entity` commands, stub creation, source changes, and new graph edges do not set `observed_at`. An accepted browser observation report sets it immediately; the observation threshold controls whether AgentGraph also fetches the resource.
 
 ## Retention policies
 
@@ -67,12 +67,12 @@ Bookmarks protect an entity from automatic collection. A bookmarked Message or G
 
 ## RSS observations
 
-A configured feed URL identifies the RSS feed `Folder`. The extension reports dwell only after the exact configured URL matches an observation pattern. The RSS connector maps that URL to the stored `feed/{feed_hash}` Folder, and AgentGraph sets that Folder's `observed_at`.
+A configured feed URL identifies the RSS feed `Folder`. The extension reports observely after the exact configured URL matches an observation pattern. The RSS connector maps that URL to the stored `feed/{feed_hash}` Folder, and AgentGraph sets that Folder's `observed_at`.
 
 Article observation is stricter than the extension's URL-prefix filter:
 
 1. AgentGraph derives a small set of eligible URL prefixes from indexed RSS entry links.
-2. The extension may report dwell for a page matching one of those prefixes.
+2. The extension may report observation for a page matching one of those prefixes.
 3. The server normalizes the URL and requires an exact match with the `web_url` of an existing RSS `Document`.
 4. Only the matched Document receives `observed_at`; unknown pages under the same prefix are ignored.
 

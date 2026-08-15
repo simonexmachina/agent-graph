@@ -48,8 +48,8 @@ export function getMetaUrl(serverBaseUrl: string): string {
   return `${serverBaseUrl}/api/cli/meta`;
 }
 
-export function getReportDwellUrl(serverBaseUrl: string): string {
-  return `${serverBaseUrl}/report-dwell`;
+export function getReportObservationUrl(serverBaseUrl: string): string {
+  return `${serverBaseUrl}/report-observation`;
 }
 
 export function getExtensionPageUrl(serverBaseUrl: string): string {

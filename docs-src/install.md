@@ -44,7 +44,7 @@ uv sync --extra rss
 
 ## Run the server
 
-`agentgraph serve` accepts browser dwell events, runs connector pollers, serves the viewer, and exposes the local HTTP backend.
+`agentgraph serve` accepts browser observation events, runs connector pollers, serves the viewer, and exposes the local HTTP backend.
 
 ```bash
 agentgraph serve

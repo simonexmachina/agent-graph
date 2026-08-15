@@ -1,25 +1,25 @@
 /**
- * Dwell tracker: reports dwell time after the user spends
- * dwell_threshold_ms on a URL that matches a connector pattern.
+ * Browser observation tracker: reports observation duration after the user spends
+ * observation_threshold_ms on a URL that matches a connector pattern.
  *
  * Patterns and threshold are fetched from the server on startup and cached
  * in chrome.storage.local so they survive service-worker restarts.
  */
 
-import { getMetaUrl, getServerBaseUrl, getReportDwellUrl } from "./config.js";
+import { getMetaUrl, getServerBaseUrl, getReportObservationUrl } from "./config.js";
 
 const CACHE_KEY = "agentgraph_meta_cache";
 const DEFAULT_THRESHOLD_MS = 3000;
 
 interface MetaCache {
   url_patterns: string[];
-  dwell_threshold_ms: number;
+  observation_threshold_ms: number;
   fetched_at: number; // ms since epoch
 }
 
-export interface DwellMeta {
+export interface ObservationMeta {
   url_patterns: string[];
-  dwell_threshold_ms: number;
+  observation_threshold_ms: number;
 }
 
 export interface ObservationStatus {
@@ -36,7 +36,7 @@ export interface ObservationStatus {
   meta?: Record<string, string>;
   threshold_reported_at?: number;
   threshold_accepted?: boolean;
-  pending_dwell_ms?: number;
+  pending_observation_duration_ms?: number;
 }
 
 // In-memory state — rebuilt from cache on service worker restart.
@@ -44,7 +44,7 @@ let patterns: string[] = [];
 let thresholdMs: number = DEFAULT_THRESHOLD_MS;
 
 // Per-tab: { timer, url, meta }
-interface DwellEntry {
+interface ObservationEntry {
   observation_id: string;
   timer: ReturnType<typeof setTimeout>;
   url: string;
@@ -59,7 +59,7 @@ interface ReportResult {
   error?: string;
 }
 
-const pending = new Map<number, DwellEntry>();
+const pending = new Map<number, ObservationEntry>();
 const observations = new Map<number, ObservationStatus>();
 
 // ---------------------------------------------------------------------------
@@ -85,23 +85,23 @@ async function loadCachedMeta(): Promise<void> {
   const cache = result[CACHE_KEY] as MetaCache | undefined;
   if (cache) {
     patterns = cache.url_patterns;
-    thresholdMs = cache.dwell_threshold_ms;
+    thresholdMs = cache.observation_threshold_ms;
   }
 }
 
-export async function refreshMeta(options: { throwOnError?: boolean } = {}): Promise<DwellMeta> {
+export async function refreshMeta(options: { throwOnError?: boolean } = {}): Promise<ObservationMeta> {
   try {
     const serverBaseUrl = await getServerBaseUrl();
     const resp = await fetch(getMetaUrl(serverBaseUrl), { signal: AbortSignal.timeout(5000) });
     if (!resp.ok) {
       throw new Error(`Metadata refresh failed: HTTP ${resp.status}`);
     }
-    const data = await resp.json() as { url_patterns?: string[]; dwell_threshold_ms?: number };
+    const data = await resp.json() as { url_patterns?: string[]; observation_threshold_ms?: number };
     patterns = data.url_patterns ?? [];
-    thresholdMs = data.dwell_threshold_ms ?? DEFAULT_THRESHOLD_MS;
+    thresholdMs = data.observation_threshold_ms ?? DEFAULT_THRESHOLD_MS;
     const cache: MetaCache = {
       url_patterns: patterns,
-      dwell_threshold_ms: thresholdMs,
+      observation_threshold_ms: thresholdMs,
       fetched_at: Date.now(),
     };
     await chrome.storage.local.set({ [CACHE_KEY]: cache });
@@ -110,19 +110,19 @@ export async function refreshMeta(options: { throwOnError?: boolean } = {}): Pro
     // Server not running — keep cached values
   }
 
-  return { url_patterns: patterns, dwell_threshold_ms: thresholdMs };
+  return { url_patterns: patterns, observation_threshold_ms: thresholdMs };
 }
 
 // ---------------------------------------------------------------------------
-// Dwell timer management
+// Observation timer management
 // ---------------------------------------------------------------------------
 
-export function startDwell(
+export function startObservation(
   tabId: number,
   url: string,
   meta: Record<string, string> = {},
 ): void {
-  cancelDwell(tabId);
+  cancelObservation(tabId);
   if (!matchesAny(url, patterns)) {
     observations.set(tabId, {
       url,
@@ -153,7 +153,7 @@ export function startDwell(
     if (obs && obs.matches) {
       obs.state = "sending";
       obs.threshold_reported_at = Date.now();
-      void sendReportDwell(
+      void sendReportObservation(
         obs.url,
         thresholdMs,
         observationId,
@@ -164,21 +164,21 @@ export function startDwell(
         if (result.ok) {
           obs.threshold_accepted = true;
           obs.sent_at = Date.now();
-          if (obs.pending_dwell_ms && obs.pending_dwell_ms > 0) {
-            void sendReportDwell(
+          if (obs.pending_observation_duration_ms && obs.pending_observation_duration_ms > 0) {
+            void sendReportObservation(
               obs.url,
-              obs.pending_dwell_ms,
+              obs.pending_observation_duration_ms,
               observationId,
               false,
               obs.meta || {},
             );
-            obs.pending_dwell_ms = undefined;
+            obs.pending_observation_duration_ms = undefined;
           }
           if (observations.get(tabId) === obs && obs.state === "sending") {
             obs.state = "sent";
           }
         } else {
-          obs.pending_dwell_ms = undefined;
+          obs.pending_observation_duration_ms = undefined;
           obs.error = result.error;
           if (observations.get(tabId) === obs && obs.state === "sending") {
             obs.state = "failed";
@@ -198,7 +198,7 @@ export function startDwell(
   });
 }
 
-export function cancelDwell(tabId: number): void {
+export function cancelObservation(tabId: number): void {
   const entry = pending.get(tabId);
   if (entry) {
     clearTimeout(entry.timer);
@@ -212,12 +212,12 @@ export function cancelDwell(tabId: number): void {
     if (elapsed > 0) {
       const meta = entry?.meta || obs.meta || {};
 
-      // A visit becomes an observation only after it reaches the dwell threshold.
+      // A visit becomes an observation only after it reaches the observation threshold.
       if (obs.threshold_reported_at && obs.observation_id) {
         const remaining = elapsed - thresholdMs;
         if (remaining > 0) {
           if (obs.threshold_accepted) {
-            void sendReportDwell(
+            void sendReportObservation(
               obs.url,
               remaining,
               obs.observation_id,
@@ -225,12 +225,12 @@ export function cancelDwell(tabId: number): void {
               meta,
             );
           } else {
-            obs.pending_dwell_ms = remaining;
+            obs.pending_observation_duration_ms = remaining;
           }
         }
       }
     }
-    // Prevent double-reporting if cancelDwell is called multiple times
+    // Prevent double-reporting if cancelObservation is called multiple times
     obs.started_at = undefined;
     obs.threshold_reported_at = undefined;
   }
@@ -255,21 +255,21 @@ export function updateMeta(tabId: number, extra: Record<string, string>): boolea
 // Server request
 // ---------------------------------------------------------------------------
 
-export async function sendReportDwell(
+export async function sendReportObservation(
   url: string,
-  dwellMs: number,
+  durationMs: number,
   observationId: string,
   observed: boolean,
   meta: Record<string, string>,
 ): Promise<ReportResult> {
   try {
     const serverBaseUrl = await getServerBaseUrl();
-    const response = await fetch(getReportDwellUrl(serverBaseUrl), {
+    const response = await fetch(getReportObservationUrl(serverBaseUrl), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url,
-        dwell_ms: dwellMs,
+        observation_duration_ms: durationMs,
         observation_id: observationId,
         observed,
         meta: Object.keys(meta).length ? meta : undefined,
@@ -284,13 +284,13 @@ export async function sendReportDwell(
         // Error responses are not required to contain JSON.
       }
       const error = detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
-      console.error(`POST /report-dwell failed with ${error}`);
+      console.error(`POST /report-observation failed with ${error}`);
       return { ok: false, http_status: response.status, error };
     }
     return { ok: true, http_status: response.status };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error(`POST /report-dwell failed: ${message}`);
+    console.error(`POST /report-observation failed: ${message}`);
     return { ok: false, error: message };
   }
 }

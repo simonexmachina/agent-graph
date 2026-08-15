@@ -13,7 +13,7 @@ import agentgraph.config as config
 def test_defaults() -> None:
     s = config.Settings(_env_file=None)
     assert s.server_port == 8765
-    assert s.dwell_threshold_seconds == 3
+    assert s.observation_threshold_seconds == 3
     assert s.retention_days == 90
     assert s.embedding_model == "BAAI/bge-small-en-v1.5"
     assert s.embedding_dimensions == 384
@@ -22,12 +22,38 @@ def test_defaults() -> None:
 
 def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENTGRAPH_SERVER_PORT", "9000")
-    monkeypatch.setenv("AGENTGRAPH_DWELL_THRESHOLD_SECONDS", "10")
+    monkeypatch.setenv("AGENTGRAPH_OBSERVATION_THRESHOLD_SECONDS", "10")
     monkeypatch.setenv("AGENTGRAPH_POLL_INTERVAL_SECONDS", "120")
     s = config.Settings()
     assert s.server_port == 9000
-    assert s.dwell_threshold_seconds == 10
+    assert s.observation_threshold_seconds == 10
     assert s.poll_interval_seconds == 120
+
+
+def test_legacy_duration_threshold_env_is_supported(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTGRAPH_DWELL_THRESHOLD_SECONDS", "10")
+
+    assert config.Settings(_env_file=None).observation_threshold_seconds == 10
+
+
+def test_settings_accepts_canonical_observation_field_names() -> None:
+    settings = config.Settings(
+        observation_threshold_seconds=10,
+        observation_poll_interval_seconds=2.5,
+        _env_file=None,
+    )
+
+    assert settings.observation_threshold_seconds == 10
+    assert settings.observation_poll_interval_seconds == 2.5
+
+
+def test_observation_threshold_env_takes_precedence_over_legacy_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENTGRAPH_DWELL_THRESHOLD_SECONDS", "10")
+    monkeypatch.setenv("AGENTGRAPH_OBSERVATION_THRESHOLD_SECONDS", "20")
+
+    assert config.Settings(_env_file=None).observation_threshold_seconds == 20
 
 
 def test_poll_interval_can_be_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

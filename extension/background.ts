@@ -1,19 +1,19 @@
 /**
- * Service worker: dwell-based fetch trigger.
+ * Service worker: observation-based fetch trigger.
  *
- * URL patterns and the dwell threshold are loaded from the AgentGraph server
+ * URL patterns and the observation threshold are loaded from the AgentGraph server
  * on startup. When the user focuses a matching URL for longer than the
- * threshold, a POST /report-dwell request is sent to the server.
+ * threshold, a POST /report-observation request is sent to the server.
  */
 
 import {
   init,
-  startDwell,
-  cancelDwell,
+  startObservation,
+  cancelObservation,
   getObservationStatus,
   refreshMeta,
   updateMeta,
-} from "./lib/dwell.js";
+} from "./lib/observation.js";
 import { getExtensionBookmarkUrl, getExtensionFetchUrl, getExtensionPageUrl, getServerBaseUrl } from "./lib/config.js";
 
 // Gmail metadata extracted by the content script, keyed by tab ID.
@@ -65,7 +65,7 @@ async function onFocus(tabId: number): Promise<void> {
 
   if (tabId !== activeTabId || url !== activeUrl) {
     clearGmailMetaRetry(tabId);
-    if (activeTabId !== null) cancelDwell(activeTabId);
+    if (activeTabId !== null) cancelObservation(activeTabId);
     activeTabId = tabId;
     activeUrl = url;
 
@@ -89,13 +89,13 @@ async function onFocus(tabId: number): Promise<void> {
       }
     }
 
-    startDwell(tabId, url, meta);
+    startObservation(tabId, url, meta);
   }
 }
 
 function onBlur(): void {
   if (activeTabId !== null) {
-    cancelDwell(activeTabId);
+    cancelObservation(activeTabId);
     activeTabId = null;
     activeUrl = "";
   }
@@ -130,7 +130,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  cancelDwell(tabId);
+  cancelObservation(tabId);
   gmailMetaByTab.delete(tabId);
   clearGmailMetaRetry(tabId);
   if (activeTabId === tabId) {
@@ -149,7 +149,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     const meta = message.meta as Record<string, string>;
     const mergedMeta = { ...(gmailMetaByTab.get(tabId) ?? {}), ...meta };
     gmailMetaByTab.set(tabId, mergedMeta);
-    // Inject into any pending dwell for this tab (content script fires ~300ms
+    // Inject into any pending observation for this tab (content script fires ~300ms
     // after navigation, well within the 3s threshold).
     const updatedExistingObservation = updateMeta(tabId, mergedMeta);
     if (

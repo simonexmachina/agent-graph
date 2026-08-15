@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AgentGraph Extension",
   "version": "0.1.5",
-  "description": "Watches browser activity and triggers AgentGraph to fetch content when you dwell on a supported URL.",
+  "description": "Watches browser activity and triggers AgentGraph to fetch content when you observe a supported URL.",
   "icons": {
     "16": "assets/icon-16.png",
     "32": "assets/icon-32.png",

@@ -191,17 +191,17 @@ class StorageBackend(ABC):
     # --- Connector support ---
 
     @abstractmethod
-    async def increment_dwell_time(
-        self, platform: str, platform_entity_id: str, dwell_ms: int
+    async def increment_observation_duration(
+        self, platform: str, platform_entity_id: str, observation_duration_ms: int
     ) -> None:
-        """Increment cumulative dwell time for an entity."""
+        """Increment cumulative observation duration for an entity."""
         ...
 
     @abstractmethod
     async def record_observation(
-        self, platform: str, platform_entity_id: str, dwell_ms: int
+        self, platform: str, platform_entity_id: str, observation_duration_ms: int
     ) -> None:
-        """Record direct observation and dwell for an observable entity."""
+        """Record direct observation and its duration for an observable entity."""
         ...
 
     @abstractmethod
@@ -211,7 +211,7 @@ class StorageBackend(ABC):
         platform_entity_id: str,
         observation_id: str,
         url: str,
-        dwell_ms: int,
+        observation_duration_ms: int,
     ) -> bool:
         """Record an observation event once and return whether it was new."""
         ...

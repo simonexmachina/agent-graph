@@ -185,9 +185,18 @@ class SQLiteBackend(StorageBackend):
             str(row["name"]): bool(row["notnull"]) for row in await cursor.fetchall()
         }
         columns = set(entity_columns)
-        if "cumulative_dwell_ms" not in columns:
+        if "cumulative_dwell_ms" in columns:
             await conn.execute(
-                "ALTER TABLE entities ADD COLUMN cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0"
+                "ALTER TABLE entities RENAME COLUMN cumulative_dwell_ms "
+                "TO cumulative_observation_duration_ms"
+            )
+            entity_columns["cumulative_observation_duration_ms"] = entity_columns.pop(
+                "cumulative_dwell_ms"
+            )
+            columns = set(entity_columns)
+        if "cumulative_observation_duration_ms" not in columns:
+            await conn.execute(
+                "ALTER TABLE entities ADD COLUMN cumulative_observation_duration_ms INTEGER NOT NULL DEFAULT 0"
             )
         if "bookmarked" not in columns:
             await conn.execute(
@@ -208,6 +217,10 @@ class SQLiteBackend(StorageBackend):
         )
         if needs_retention_migration:
             await self._rebuild_entities_for_retention(columns)
+        await conn.execute(
+            "UPDATE observations SET event_type = 'observation_threshold' "
+            "WHERE event_type = 'dwell_threshold'"
+        )
         await conn.execute(
             "UPDATE entities SET entity_type = 'Email' WHERE entity_type = 'Thread'"
         )
@@ -294,12 +307,12 @@ class SQLiteBackend(StorageBackend):
             )
 
         observed = "NULL"
-        if "observed_at" in columns and "cumulative_dwell_ms" in columns:
+        if "observed_at" in columns and "cumulative_observation_duration_ms" in columns:
             observed = (
                 "CASE WHEN entity_type IN ('Channel', 'Document', 'Email', 'Folder', 'Spreadsheet') "
-                "AND cumulative_dwell_ms > 0 THEN observed_at ELSE NULL END"
+                "AND cumulative_observation_duration_ms > 0 THEN observed_at ELSE NULL END"
             )
-        dwell = "cumulative_dwell_ms" if "cumulative_dwell_ms" in columns else "0"
+        duration = "cumulative_observation_duration_ms" if "cumulative_observation_duration_ms" in columns else "0"
         bookmarked = "bookmarked" if "bookmarked" in columns else "0"
         await conn.execute("PRAGMA foreign_keys=OFF")
         try:
@@ -324,7 +337,7 @@ class SQLiteBackend(StorageBackend):
                     retention_policy TEXT NOT NULL DEFAULT 'observed'
                         CHECK (retention_policy IN ('observed', 'owned', 'connected')),
                     retention_parent_id TEXT REFERENCES entities_new(id) ON DELETE CASCADE,
-                    cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
+                    cumulative_observation_duration_ms INTEGER NOT NULL DEFAULT 0,
                     bookmarked INTEGER NOT NULL DEFAULT 0,
                     UNIQUE (platform, platform_entity_id)
                 )
@@ -336,11 +349,11 @@ class SQLiteBackend(StorageBackend):
                     (id, entity_type, platform, platform_entity_id, title, content,
                      content_embedding, metadata, created_at, updated_at,
                      source_created_at, source_updated_at, synced_at, observed_at,
-                     retention_policy, retention_parent_id, cumulative_dwell_ms, bookmarked)
+                     retention_policy, retention_parent_id, cumulative_observation_duration_ms, bookmarked)
                 SELECT id, entity_type, platform, platform_entity_id, title, content,
                        content_embedding, metadata, {local_created}, {local_updated},
                        {source_created}, {source_updated}, synced_at, {observed},
-                       {retention_policy}, {retention_parent}, {dwell}, {bookmarked}
+                       {retention_policy}, {retention_parent}, {duration}, {bookmarked}
                 FROM entities
                 """,
             )
@@ -986,7 +999,7 @@ class SQLiteBackend(StorageBackend):
                       title, content, metadata, created_at, updated_at,
                       source_created_at, source_updated_at, synced_at, observed_at,
                       retention_policy, retention_parent_id,
-                      cumulative_dwell_ms, bookmarked
+                      cumulative_observation_duration_ms, bookmarked
             """,
             [1 if bookmarked else 0, now, entity_id],
         )
@@ -1018,7 +1031,7 @@ class SQLiteBackend(StorageBackend):
                               title, content, metadata, created_at, updated_at,
                               source_created_at, source_updated_at, synced_at, observed_at,
                               retention_policy, retention_parent_id,
-                              cumulative_dwell_ms, bookmarked
+                              cumulative_observation_duration_ms, bookmarked
                     """,
                     [entity_id],
                 )
@@ -1142,7 +1155,7 @@ class SQLiteBackend(StorageBackend):
                            title, content, metadata, created_at, updated_at,
                            source_created_at, source_updated_at, synced_at, observed_at,
                            retention_policy, retention_parent_id,
-                           cumulative_dwell_ms, bookmarked
+                           cumulative_observation_duration_ms, bookmarked
                     FROM entities WHERE id IN ({placeholders})
                     """,
                     id_list,
@@ -1152,9 +1165,9 @@ class SQLiteBackend(StorageBackend):
                 for row in rows:
                     r = _row_to_entity(row)
                     base_score = score_map.get(r["id"], 0.0)
-                    dwell_ms = r.get("cumulative_dwell_ms", 0)
-                    dwell_boost = 0.1 * math.log10(1 + (dwell_ms / 1000.0))
-                    r["score"] = base_score + dwell_boost
+                    observation_duration_ms = r.get("cumulative_observation_duration_ms", 0)
+                    duration_boost = 0.1 * math.log10(1 + (observation_duration_ms / 1000.0))
+                    r["score"] = base_score + duration_boost
 
                     if (r["score"] or 0) >= min_score:
                         results.append(r)
@@ -1173,7 +1186,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
-                   cumulative_dwell_ms, bookmarked
+                   cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE id = ?
             """,
             [entity_id],
@@ -1190,7 +1203,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
-                   cumulative_dwell_ms, bookmarked
+                   cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE id IN ({placeholders})
             """,
             entity_ids,
@@ -1204,7 +1217,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
-                   cumulative_dwell_ms, bookmarked
+                   cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE id LIKE ?
             """,
             [f"{prefix}%"],
@@ -1220,7 +1233,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
-                   cumulative_dwell_ms, bookmarked
+                   cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE platform = ? AND platform_entity_id = ?
             """,
             [platform, platform_entity_id],
@@ -1254,7 +1267,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
-                   cumulative_dwell_ms, bookmarked
+                   cumulative_observation_duration_ms, bookmarked
             FROM entities
             {where}
             ORDER BY observed_at DESC
@@ -1305,7 +1318,7 @@ class SQLiteBackend(StorageBackend):
                    title, content, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
-                   cumulative_dwell_ms, bookmarked
+                   cumulative_observation_duration_ms, bookmarked
             FROM entities
             {where}
             {order_clause}
@@ -1375,7 +1388,7 @@ class SQLiteBackend(StorageBackend):
                        e.source_created_at, e.source_updated_at,
                        e.synced_at, e.observed_at,
                        e.retention_policy, e.retention_parent_id,
-                       e.cumulative_dwell_ms, e.bookmarked
+                       e.cumulative_observation_duration_ms, e.bookmarked
                 FROM entities e
                 {authored_join}
                 WHERE e.entity_type = ? {where_extra}
@@ -1465,7 +1478,7 @@ class SQLiteBackend(StorageBackend):
                        title, content, metadata, created_at, updated_at,
                        source_created_at, source_updated_at, synced_at, observed_at,
                        retention_policy, retention_parent_id,
-                       cumulative_dwell_ms, bookmarked
+                       cumulative_observation_duration_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 frontier,
@@ -1512,7 +1525,7 @@ class SQLiteBackend(StorageBackend):
                        title, content, metadata, created_at, updated_at,
                        source_created_at, source_updated_at, synced_at, observed_at,
                        retention_policy, retention_parent_id,
-                       cumulative_dwell_ms, bookmarked
+                       cumulative_observation_duration_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
                 unvisited,
@@ -1652,33 +1665,33 @@ class SQLiteBackend(StorageBackend):
 
     # --- Connector support ---
 
-    async def increment_dwell_time(
-        self, platform: str, platform_entity_id: str, dwell_ms: int
+    async def increment_observation_duration(
+        self, platform: str, platform_entity_id: str, observation_duration_ms: int
     ) -> None:
         now = _now()
         await self._execute(
             """
             UPDATE entities
-            SET cumulative_dwell_ms = cumulative_dwell_ms + ?, updated_at = ?
+            SET cumulative_observation_duration_ms = cumulative_observation_duration_ms + ?, updated_at = ?
             WHERE platform = ? AND platform_entity_id = ?
             """,
-            [dwell_ms, now, platform, platform_entity_id],
+            [observation_duration_ms, now, platform, platform_entity_id],
         )
 
     async def record_observation(
-        self, platform: str, platform_entity_id: str, dwell_ms: int
+        self, platform: str, platform_entity_id: str, observation_duration_ms: int
     ) -> None:
         now = _now()
         await self._execute(
             """
             UPDATE entities
-            SET cumulative_dwell_ms = cumulative_dwell_ms + ?,
+            SET cumulative_observation_duration_ms = cumulative_observation_duration_ms + ?,
                 observed_at = ?,
                 updated_at = CASE WHEN ? > 0 THEN ? ELSE updated_at END
             WHERE platform = ? AND platform_entity_id = ?
               AND retention_policy = 'observed'
             """,
-            [dwell_ms, now, dwell_ms, now, platform, platform_entity_id],
+            [observation_duration_ms, now, observation_duration_ms, now, platform, platform_entity_id],
         )
 
     async def record_observation_once(
@@ -1687,7 +1700,7 @@ class SQLiteBackend(StorageBackend):
         platform_entity_id: str,
         observation_id: str,
         url: str,
-        dwell_ms: int,
+        observation_duration_ms: int,
     ) -> bool:
         assert self._write_lock is not None
         async with self._write_lock:
@@ -1699,7 +1712,7 @@ class SQLiteBackend(StorageBackend):
                     """
                     INSERT INTO observations (
                         id, event_type, url, timestamp, evaluated
-                    ) VALUES (?, 'dwell_threshold', ?, ?, 1)
+                    ) VALUES (?, 'observation_threshold', ?, ?, 1)
                     ON CONFLICT(id) DO NOTHING
                     RETURNING id
                     """,
@@ -1710,13 +1723,13 @@ class SQLiteBackend(StorageBackend):
                     await conn.execute(
                         """
                         UPDATE entities
-                        SET cumulative_dwell_ms = cumulative_dwell_ms + ?,
+                        SET cumulative_observation_duration_ms = cumulative_observation_duration_ms + ?,
                             observed_at = ?,
                             updated_at = CASE WHEN ? > 0 THEN ? ELSE updated_at END
                         WHERE platform = ? AND platform_entity_id = ?
                           AND retention_policy = 'observed'
                         """,
-                        [dwell_ms, now, dwell_ms, now, platform, platform_entity_id],
+                        [observation_duration_ms, now, observation_duration_ms, now, platform, platform_entity_id],
                     )
                 await conn.execute("COMMIT")
                 return inserted is not None
@@ -1816,7 +1829,7 @@ def _row_to_entity(row: Any) -> EntityResult:
         "observed_at": row["observed_at"] if "observed_at" in keys else None,
         "retention_policy": row["retention_policy"] if "retention_policy" in keys else "observed",
         "retention_parent_id": row["retention_parent_id"] if "retention_parent_id" in keys else None,
-        "cumulative_dwell_ms": row["cumulative_dwell_ms"] if "cumulative_dwell_ms" in keys else 0,
+        "cumulative_observation_duration_ms": row["cumulative_observation_duration_ms"] if "cumulative_observation_duration_ms" in keys else 0,
         "bookmarked": bool(row["bookmarked"]) if "bookmarked" in keys else False,
         "score": row["score"] if "score" in keys else None,
     }

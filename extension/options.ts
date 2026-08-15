@@ -2,13 +2,13 @@ import { DEFAULT_SERVER_BASE_URL, getServerBaseUrl, setServerBaseUrl } from "./l
 
 interface RuntimeResponse {
   ok: boolean;
-  meta?: DwellMeta;
+  meta?: ObservationMeta;
   error?: string;
 }
 
-interface DwellMeta {
+interface ObservationMeta {
   url_patterns: string[];
-  dwell_threshold_ms: number;
+  observation_threshold_ms: number;
 }
 
 function setStatus(message: string, variant: "neutral" | "success" | "error" = "neutral"): void {
@@ -21,7 +21,7 @@ function setStatus(message: string, variant: "neutral" | "success" | "error" = "
   }
 }
 
-async function notifyBackground(): Promise<DwellMeta> {
+async function notifyBackground(): Promise<ObservationMeta> {
   const response = await chrome.runtime.sendMessage({ type: "server_url_updated" }) as RuntimeResponse;
   if (!response.ok) {
     throw new Error(response.error ?? "Failed to reload extension settings");
@@ -32,7 +32,7 @@ async function notifyBackground(): Promise<DwellMeta> {
   return response.meta;
 }
 
-async function refreshObservationMetadata(): Promise<DwellMeta> {
+async function refreshObservationMetadata(): Promise<ObservationMeta> {
   const response = await chrome.runtime.sendMessage({ type: "reload_url_patterns" }) as RuntimeResponse;
   if (!response.ok) {
     throw new Error(response.error ?? "Failed to refresh observation metadata");
@@ -43,7 +43,7 @@ async function refreshObservationMetadata(): Promise<DwellMeta> {
   return response.meta;
 }
 
-function renderObservationMetadata(meta: DwellMeta): void {
+function renderObservationMetadata(meta: ObservationMeta): void {
   const count = document.getElementById("observation-pattern-count");
   if (count) count.textContent = String(meta.url_patterns.length);
 

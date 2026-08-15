@@ -107,7 +107,15 @@ app.include_router(cli_router)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
-class ReportDwellRequest(BaseModel):
+class ReportObservationRequest(BaseModel):
+    url: str
+    observation_duration_ms: int
+    observation_id: UUID
+    observed: bool
+    meta: dict[str, str] | None = None
+
+
+class LegacyReportDwellRequest(BaseModel):
     url: str
     dwell_ms: int
     observation_id: UUID
@@ -125,27 +133,41 @@ class ExtensionBookmarkRequest(ExtensionPageRequest):
     bookmarked: bool
 
 
-@app.post("/report-dwell", status_code=202)
-async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
+@app.post("/report-observation", status_code=202)
+async def report_observation(req: ReportObservationRequest) -> dict[str, Any]:
     """
     Receive either the extension's one threshold-crossed observation event or a
-    later dwell-only update. New observation IDs await one coalesced fetch before
+    later duration-only update. New observation IDs await one coalesced fetch before
     the observation is persisted.
     """
     from fastapi import HTTPException
 
-    from agentgraph.server.dwell import ObservationFetchError, record_dwell_time
+    from agentgraph.server.observation import ObservationFetchError, record_observation
 
     try:
-        return await record_dwell_time(
+        return await record_observation(
             req.url,
-            req.dwell_ms,
+            req.observation_duration_ms,
             str(req.observation_id),
             req.observed,
             req.meta,
         )
     except ObservationFetchError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/report-dwell", status_code=202, deprecated=True)
+async def report_dwell(req: LegacyReportDwellRequest) -> dict[str, Any]:
+    """Accept the previous extension payload during the observation terminology migration."""
+    return await report_observation(
+        ReportObservationRequest(
+            url=req.url,
+            observation_duration_ms=req.dwell_ms,
+            observation_id=req.observation_id,
+            observed=req.observed,
+            meta=req.meta,
+        )
+    )
 
 
 @app.post("/api/extension/fetch")

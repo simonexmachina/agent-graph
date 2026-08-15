@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS entities (
     retention_policy   TEXT NOT NULL DEFAULT 'observed'
                        CHECK (retention_policy IN ('observed', 'owned', 'connected')),
     retention_parent_id TEXT REFERENCES entities(id) ON DELETE CASCADE,
-    cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
+    cumulative_observation_duration_ms INTEGER NOT NULL DEFAULT 0,
     bookmarked         INTEGER NOT NULL DEFAULT 0,
     UNIQUE (platform, platform_entity_id)
 );

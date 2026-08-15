@@ -323,9 +323,9 @@ async def test_record_observation_only_marks_observable_entities(
     channel = await sqlite_backend.get_entity_by_id("channel")
     message = await sqlite_backend.get_entity_by_id("message")
     assert channel is not None and channel["observed_at"] is not None
-    assert channel["cumulative_dwell_ms"] == 1000
+    assert channel["cumulative_observation_duration_ms"] == 1000
     assert message is not None and message["observed_at"] is None
-    assert message["cumulative_dwell_ms"] == 0
+    assert message["cumulative_observation_duration_ms"] == 0
 
 
 async def test_record_observation_once_is_idempotent(
@@ -354,7 +354,7 @@ async def test_record_observation_once_is_idempotent(
     assert missing is False
     assert duplicate is False
     assert email is not None
-    assert email["cumulative_dwell_ms"] == 3000
+    assert email["cumulative_observation_duration_ms"] == 3000
     observations = await sqlite_backend._fetchall(
         "SELECT id FROM observations WHERE id = ?", ["observation-1"]
     )

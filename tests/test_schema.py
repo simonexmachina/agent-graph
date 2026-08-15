@@ -260,6 +260,7 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
             updated_at         TEXT,
             synced_at          TEXT,
             last_accessed      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            cumulative_dwell_ms INTEGER NOT NULL DEFAULT 0,
             UNIQUE (platform, platform_entity_id)
         );
         CREATE VIRTUAL TABLE entities_fts USING fts5(
@@ -268,16 +269,34 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
             content,
             tokenize='porter ascii'
         );
+        CREATE TABLE observations (
+            id         TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            url        TEXT NOT NULL,
+            title      TEXT,
+            tab_id     INTEGER,
+            timestamp  TEXT NOT NULL,
+            evaluated  INTEGER NOT NULL DEFAULT 0,
+            meta       TEXT,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
         """
     )
     conn.execute(
         """
             INSERT INTO entities (
-                id, entity_type, platform, platform_entity_id, title, content, last_accessed
+                id, entity_type, platform, platform_entity_id, title, content, last_accessed,
+                cumulative_dwell_ms
             )
-            VALUES (?, 'Thread', 'gmail', 'test-thread-001', 'Test Email', 'Some content', ?)
+            VALUES (?, 'Thread', 'gmail', 'test-thread-001', 'Test Email', 'Some content', ?, 987)
             """,
         ["entity-1", "2020-01-02T03:04:05Z"],
+    )
+    conn.execute(
+        """
+        INSERT INTO observations (id, event_type, url, timestamp, evaluated)
+        VALUES ('legacy-observation', 'dwell_threshold', 'https://example.com', '2020-01-02T03:04:05Z', 1)
+        """
     )
     conn.commit()
     conn.close()
@@ -287,7 +306,8 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
     try:
         columns = await migrated._fetchall("PRAGMA table_info(entities)")
         column_names = {row["name"] for row in columns}
-        assert "cumulative_dwell_ms" in column_names
+        assert "cumulative_dwell_ms" not in column_names
+        assert "cumulative_observation_duration_ms" in column_names
         assert "observed_at" in column_names
         assert "source_created_at" in column_names
         assert "source_updated_at" in column_names
@@ -302,7 +322,7 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
         entity = await migrated.get_entity_by_platform("gmail", "test-thread-001")
         assert entity is not None
         assert entity["entity_type"] == "Email"
-        assert entity["cumulative_dwell_ms"] == 0
+        assert entity["cumulative_observation_duration_ms"] == 987
         assert entity["created_at"] == "2020-01-02T03:04:05Z"
         assert entity["updated_at"] == "2020-01-02T03:04:05Z"
         assert entity["observed_at"] is None
@@ -311,7 +331,11 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
         await migrated.record_observation("gmail", "test-thread-001", 1234)
         updated = await migrated.get_entity_by_platform("gmail", "test-thread-001")
         assert updated is not None
-        assert updated["cumulative_dwell_ms"] == 1234
+        assert updated["cumulative_observation_duration_ms"] == 2221
         assert updated["observed_at"] is not None
+        event_type = await migrated._fetchval(
+            "SELECT event_type FROM observations WHERE id = ?", ["legacy-observation"]
+        )
+        assert event_type == "observation_threshold"
     finally:
         await migrated.close()

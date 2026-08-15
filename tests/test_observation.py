@@ -1,4 +1,4 @@
-"""Tests for the /report-dwell endpoint."""
+"""Tests for the /report-observation endpoint."""
 
 from __future__ import annotations
 
@@ -47,16 +47,31 @@ def test_viewer_url_brackets_ipv6_hosts() -> None:
     assert viewer_url("::1", 8765) == "http://[::1]:8765/viewer"
 
 
-def test_report_dwell_unrecognised(client: TestClient) -> None:
+def test_report_observation_unrecognised(client: TestClient) -> None:
     resp = client.post(
-        "/report-dwell",
+        "/report-observation",
         json={
             "url": "https://example.com/unknown",
-            "dwell_ms": 15000,
+            "observation_duration_ms": 15000,
             "observation_id": "34b2ad4d-55e3-4599-bf35-1e258a704bcd",
             "observed": True,
         },
     )
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "ignored"
+
+
+def test_legacy_report_dwell_payload_is_accepted(client: TestClient) -> None:
+    resp = client.post(
+        "/report-dwell",
+        json={
+            "url": "https://example.com/unknown",
+            "dwell_ms": 15_000,
+            "observation_id": "34b2ad4d-55e3-4599-bf35-1e258a704bcd",
+            "observed": True,
+        },
+    )
+
     assert resp.status_code == 202
     assert resp.json()["status"] == "ignored"
 
@@ -70,7 +85,7 @@ async def test_cli_meta_includes_dynamic_connector_patterns() -> None:
     connector.observation_url_patterns = AsyncMock(
         return_value=["https://example.com/articles/*", "https://example.com/articles/*"]
     )
-    settings = MagicMock(dwell_threshold_seconds=3)
+    settings = MagicMock(observation_threshold_seconds=3)
 
     with (
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[connector]),
@@ -79,6 +94,7 @@ async def test_cli_meta_includes_dynamic_connector_patterns() -> None:
         result = await cli_meta()
 
     assert result["url_patterns"] == ["https://example.com/articles/*"]
+    assert result["observation_threshold_ms"] == 3_000
     connector.observation_url_patterns.assert_awaited_once()
 
 
@@ -90,7 +106,7 @@ async def test_cli_meta_can_skip_dynamic_connector_patterns() -> None:
     connector.source = "rss"
     connector.url_patterns = ["https://static.example.com/*"]
     connector.observation_url_patterns = AsyncMock()
-    settings = MagicMock(dwell_threshold_seconds=3)
+    settings = MagicMock(observation_threshold_seconds=3)
 
     with (
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[connector]),
@@ -119,7 +135,7 @@ async def test_cli_meta_skips_slow_dynamic_connector_and_returns_remaining_patte
     fast_connector = MagicMock()
     fast_connector.source = "web"
     fast_connector.observation_url_patterns = AsyncMock(return_value=["http://localhost:3000/*"])
-    settings = MagicMock(dwell_threshold_seconds=3)
+    settings = MagicMock(observation_threshold_seconds=3)
 
     with (
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[slow_connector, fast_connector]),
@@ -132,8 +148,8 @@ async def test_cli_meta_skips_slow_dynamic_connector_and_returns_remaining_patte
 
 
 @pytest.mark.asyncio
-async def test_rss_dwell_uses_exact_observation_reference() -> None:
-    from agentgraph.server.dwell import record_dwell_time
+async def test_rss_duration_uses_exact_observation_reference() -> None:
+    from agentgraph.server.observation import record_observation
 
     backend = MagicMock()
     backend.observation_exists = AsyncMock(return_value=True)
@@ -145,9 +161,9 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
         fetch_meta={"web_url": "https://example.com/articles/known"},
     )
     with (
-        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
     ):
-        result = await record_dwell_time(
+        result = await record_observation(
             "https://example.com/articles/known",
             15_000,
             "observation-1",
@@ -164,19 +180,19 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dwell_passes_metadata_to_observation_resolution() -> None:
-    from agentgraph.server.dwell import record_dwell_time
+async def test_duration_passes_metadata_to_observation_resolution() -> None:
+    from agentgraph.server.observation import record_observation
 
     backend = MagicMock()
-    backend.increment_dwell_time = AsyncMock()
+    backend.increment_observation_duration = AsyncMock()
     set_backend(backend)
     ref = SourceReference(source="gmail", resource_type="thread", resource_id="api-thread")
     meta = {"gmail_thread_id": "api-thread"}
 
     with (
-        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)) as classify,
+        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)) as classify,
     ):
-        result = await record_dwell_time(
+        result = await record_observation(
             "https://mail.google.com/mail/u/0/#inbox/opaque",
             15_000,
             "observation-2",
@@ -190,12 +206,12 @@ async def test_dwell_passes_metadata_to_observation_resolution() -> None:
         meta=meta,
     )
     backend.upsert_stub_entity.assert_not_called()
-    backend.increment_dwell_time.assert_awaited_once_with("gmail", "api-thread", 15_000)
+    backend.increment_observation_duration.assert_awaited_once_with("gmail", "api-thread", 15_000)
 
 
 @pytest.mark.asyncio
 async def test_new_observation_dispatches_once() -> None:
-    from agentgraph.server.dwell import record_dwell_time
+    from agentgraph.server.observation import record_observation
 
     backend = MagicMock()
     backend.observation_exists = AsyncMock(side_effect=[False, True])
@@ -205,16 +221,16 @@ async def test_new_observation_dispatches_once() -> None:
     ref = SourceReference(source="gmail", resource_type="thread", resource_id="thread-1")
 
     with (
-        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
         patch(
-            "agentgraph.server.dwell._dispatch",
+            "agentgraph.server.observation._dispatch",
             new=AsyncMock(return_value={"entities": 1, "persons": 0, "edges": 0}),
         ) as dispatch,
     ):
-        first = await record_dwell_time(
+        first = await record_observation(
             "https://mail.google.com/thread-1", 3000, "observation-1", True
         )
-        duplicate = await record_dwell_time(
+        duplicate = await record_observation(
             "https://mail.google.com/thread-1", 3000, "observation-1", True
         )
     assert first["observation_created"] is True
@@ -233,7 +249,7 @@ async def test_new_observation_dispatches_once() -> None:
 
 @pytest.mark.asyncio
 async def test_concurrent_duplicate_observation_awaits_one_fetch() -> None:
-    from agentgraph.server.dwell import record_dwell_time
+    from agentgraph.server.observation import record_observation
 
     backend = MagicMock()
     backend.observation_exists = AsyncMock(return_value=False)
@@ -250,15 +266,15 @@ async def test_concurrent_duplicate_observation_awaits_one_fetch() -> None:
         return {"entities": 1, "persons": 0, "edges": 0}
 
     with (
-        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
-        patch("agentgraph.server.dwell._dispatch", side_effect=dispatch) as mocked_dispatch,
+        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch("agentgraph.server.observation._dispatch", side_effect=dispatch) as mocked_dispatch,
     ):
         first_task = asyncio.create_task(
-            record_dwell_time("https://mail.google.com/thread-1", 3000, "observation-1", True)
+            record_observation("https://mail.google.com/thread-1", 3000, "observation-1", True)
         )
         await fetch_started.wait()
         duplicate_task = asyncio.create_task(
-            record_dwell_time("https://mail.google.com/thread-1", 3000, "observation-1", True)
+            record_observation("https://mail.google.com/thread-1", 3000, "observation-1", True)
         )
         await asyncio.sleep(0)
         release_fetch.set()
@@ -272,7 +288,7 @@ async def test_concurrent_duplicate_observation_awaits_one_fetch() -> None:
 
 @pytest.mark.asyncio
 async def test_failed_observation_does_not_create_or_mark_entity() -> None:
-    from agentgraph.server.dwell import ObservationFetchError, record_dwell_time
+    from agentgraph.server.observation import ObservationFetchError, record_observation
 
     backend = MagicMock()
     backend.observation_exists = AsyncMock(return_value=False)
@@ -281,14 +297,14 @@ async def test_failed_observation_does_not_create_or_mark_entity() -> None:
     ref = SourceReference(source="gdrive", resource_type="folder", resource_id="folder-1")
 
     with (
-        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
         patch(
-            "agentgraph.server.dwell._dispatch",
+            "agentgraph.server.observation._dispatch",
             new=AsyncMock(side_effect=ObservationFetchError("Drive unavailable")),
         ),
         pytest.raises(ObservationFetchError, match="Drive unavailable"),
     ):
-        await record_dwell_time(
+        await record_observation(
             "https://drive.google.com/drive/folders/folder-1",
             3000,
             "observation-1",
@@ -301,7 +317,7 @@ async def test_failed_observation_does_not_create_or_mark_entity() -> None:
 
 @pytest.mark.asyncio
 async def test_observation_rejects_fetch_without_persisted_target() -> None:
-    from agentgraph.server.dwell import ObservationFetchError, record_dwell_time
+    from agentgraph.server.observation import ObservationFetchError, record_observation
 
     backend = MagicMock()
     backend.observation_exists = AsyncMock(return_value=False)
@@ -311,14 +327,14 @@ async def test_observation_rejects_fetch_without_persisted_target() -> None:
     ref = SourceReference(source="gdrive", resource_type="folder", resource_id="folder-1")
 
     with (
-        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
         patch(
-            "agentgraph.server.dwell._dispatch",
+            "agentgraph.server.observation._dispatch",
             new=AsyncMock(return_value={"entities": 0, "persons": 0, "edges": 0}),
         ),
         pytest.raises(ObservationFetchError, match="without persisting"),
     ):
-        await record_dwell_time(
+        await record_observation(
             "https://drive.google.com/drive/folders/folder-1",
             3000,
             "observation-1",
@@ -329,8 +345,8 @@ async def test_observation_rejects_fetch_without_persisted_target() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dwell_dispatch_upserts_returned_batch() -> None:
-    from agentgraph.server.dwell import _dispatch  # pyright: ignore[reportPrivateUsage]
+async def test_observation_dispatch_upserts_returned_batch() -> None:
+    from agentgraph.server.observation import _dispatch  # pyright: ignore[reportPrivateUsage]
 
     batch = EntityBatch(
         entities=[
@@ -365,18 +381,18 @@ async def test_dwell_dispatch_upserts_returned_batch() -> None:
     assert result == {"entities": 1, "persons": 0, "edges": 0}
 
 
-def test_report_dwell_returns_bad_gateway_for_connector_failure(client: TestClient) -> None:
-    from agentgraph.server.dwell import ObservationFetchError
+def test_report_observation_returns_bad_gateway_for_connector_failure(client: TestClient) -> None:
+    from agentgraph.server.observation import ObservationFetchError
 
     with patch(
-        "agentgraph.server.dwell.record_dwell_time",
+        "agentgraph.server.observation.record_observation",
         new=AsyncMock(side_effect=ObservationFetchError("Connector fetch failed")),
     ):
         response = client.post(
-            "/report-dwell",
+            "/report-observation",
             json={
                 "url": "https://drive.google.com/drive/folders/folder-1",
-                "dwell_ms": 3000,
+                "observation_duration_ms": 3000,
                 "observation_id": "34b2ad4d-55e3-4599-bf35-1e258a704bcd",
                 "observed": True,
             },

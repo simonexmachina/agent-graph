@@ -1,6 +1,6 @@
 +++
 title = "Configuration"
-description = "Configuration directory, database settings, dwell threshold, retention, and server settings."
+description = "Configuration directory, database settings, observation threshold, retention, and server settings."
 nav_title = "Configuration"
 section = "Configuration"
 order = 10
@@ -73,11 +73,15 @@ Default: `8765`
 
 Server port.
 
-### `AGENTGRAPH_DWELL_THRESHOLD_SECONDS`
+### `AGENTGRAPH_OBSERVATION_THRESHOLD_SECONDS`
 
 Default: `3`
 
 Seconds of focus before a fetch is triggered.
+
+For this release, `AGENTGRAPH_DWELL_THRESHOLD_SECONDS` remains accepted as a
+deprecated alias. The deprecated `POST /report-dwell` endpoint likewise remains
+available for installed extensions; new integrations must use observation names.
 
 ### `AGENTGRAPH_POLL_INTERVAL_SECONDS`
 

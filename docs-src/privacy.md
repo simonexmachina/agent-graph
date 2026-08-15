@@ -26,8 +26,8 @@ AgentGraph is an open-source application that you install and run locally on you
 ## Browser extension data flow
 
 - The browser extension stores its configured local server URL and a cached copy of supported URL patterns in Chrome local storage, and refreshes that metadata periodically from the local server.
-- When you dwell on a supported page, the extension sends the page URL to your local AgentGraph server so the matching connector can fetch that resource.
-- RSS article patterns are derived from previously indexed feed entry links. A matching RSS prefix never by itself attributes a page: the local server accepts RSS dwell only for an exact known entry URL.
+- When you observe a supported page, the extension sends the page URL to your local AgentGraph server so the matching connector can fetch that resource.
+- RSS article patterns are derived from previously indexed feed entry links. A matching RSS prefix never by itself attributes a page: the local server accepts RSS observely for an exact known entry URL.
 - On Gmail, the extension also extracts the currently open Gmail thread identifier from the page so the local AgentGraph server can fetch the correct thread through the Gmail API.
 - The extension talks only to `localhost` or `127.0.0.1` for AgentGraph server requests; it does not call a project-operated remote extension backend.
 

@@ -31,7 +31,7 @@ The default server URL is `http://127.0.0.1:8765`.
 
 ## 3. Browse something supported
 
-Open a Slack channel, a Google Doc, a Google Sheet, a Gmail thread, or a Drive folder. Leave the tab focused long enough for the dwell threshold to trigger a fetch.
+Open a Slack channel, a Google Doc, a Google Sheet, a Gmail thread, or a Drive folder. Leave the tab focused long enough for the observation threshold to trigger a fetch.
 
 For RSS, add a feed URL. AgentGraph validates it and queues a background poll:
 
