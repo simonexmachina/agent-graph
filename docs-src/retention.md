@@ -42,11 +42,11 @@ Google Drive Folder contents are not owned children: a file can remain useful in
 
 The server runs expiration daily at 03:00 using `AGENTGRAPH_RETENTION_DAYS`, which defaults to 90 days.
 
-To preview collection without changing the database, run the standalone script with a
+To expire entities with a specific retention window, run the standalone script with a
 human-readable retention window:
 
 ```bash
-uv run python scripts/expiration_dry_run.py --retention 30d
+uv run python scripts/expiration.py --retention 30d
 ```
 
 The script also accepts minutes, hours, and weeks, such as `30m`, `12h`, and `2w`.
@@ -54,8 +54,8 @@ An ISO-8601 timestamp or a date copied from the viewer can be used to calculate 
 retention period from a specific date, for example
 `--retention 2026-08-01T00:00:00Z` or
 `--retention '14/08/2026, 09:51:54'`. Viewer-formatted dates are interpreted in the
-script's local timezone. It logs the number of entities that would be removed and
-rolls back the transaction.
+script's local timezone. Expiration is applied by default; add `--dry-run` to preview
+the number of entities without changing the database.
 
 1. Delete unbookmarked observed-policy entities whose effective retention timestamp is outside the window.
 2. Cascade deletion to their unbookmarked owned children.

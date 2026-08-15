@@ -33,6 +33,14 @@ async function waitForTerminalStatus(tabId, url) {
   throw new Error("Observation did not reach a terminal state");
 }
 
+async function waitFor(predicate, message) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(message);
+}
+
 async function configureDwell(
   reportResponse,
   urlPatterns = ["https://example.com/*"],
@@ -84,6 +92,22 @@ test("marks an observation as failed after an unsuccessful report", async () => 
   assert.equal(status.state, "failed");
   assert.equal(status.http_status, 503);
   assert.equal(status.error, "HTTP 503");
+});
+
+test("includes server detail in an unsuccessful observation", async () => {
+  await configureDwell(Response.json(
+    { detail: "Connector fetch failed for gdrive folder/folder-1" },
+    { status: 502 },
+  ));
+
+  const url = "https://example.com/detailed-failure";
+  startDwell(8, url);
+
+  const status = await waitForTerminalStatus(8, url);
+  assert.equal(
+    status.error,
+    "HTTP 502: Connector fetch failed for gdrive folder/folder-1",
+  );
 });
 
 test("marks an observation as failed when the report request rejects", async () => {
@@ -157,4 +181,65 @@ test("reports one observation followed by a dwell-only update", async () => {
   assert.equal(reports[0].observed, true);
   assert.equal(reports[1].observed, false);
   assert.equal(reports[1].observation_id, reports[0].observation_id);
+});
+
+test("defers trailing dwell until the initial observation succeeds", async () => {
+  const reports = [];
+  let completeInitialReport;
+  const initialResponse = new Promise((resolve) => {
+    completeInitialReport = resolve;
+  });
+  globalThis.fetch = async (url, options = {}) => {
+    if (url.endsWith("/api/cli/meta")) {
+      return Response.json({
+        url_patterns: ["https://example.com/*"],
+        dwell_threshold_ms: 5,
+      });
+    }
+    reports.push(JSON.parse(options.body));
+    if (reports.length === 1) return initialResponse;
+    return new Response(null, { status: 204 });
+  };
+  await refreshMeta();
+
+  const url = "https://example.com/slow-success";
+  startDwell(9, url);
+  await waitFor(() => reports.length === 1, "Initial observation was not sent");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  cancelDwell(9);
+  assert.equal(reports.length, 1);
+
+  completeInitialReport(new Response(null, { status: 204 }));
+  await waitFor(() => reports.length === 2, "Trailing dwell was not sent after success");
+  assert.equal(reports[1].observed, false);
+  assert.equal(reports[1].observation_id, reports[0].observation_id);
+});
+
+test("discards trailing dwell when the initial observation fails", async () => {
+  const reports = [];
+  let failInitialReport;
+  const initialResponse = new Promise((resolve) => {
+    failInitialReport = resolve;
+  });
+  globalThis.fetch = async (url, options = {}) => {
+    if (url.endsWith("/api/cli/meta")) {
+      return Response.json({
+        url_patterns: ["https://example.com/*"],
+        dwell_threshold_ms: 5,
+      });
+    }
+    reports.push(JSON.parse(options.body));
+    return initialResponse;
+  };
+  await refreshMeta();
+
+  const url = "https://example.com/slow-failure";
+  startDwell(10, url);
+  await waitFor(() => reports.length === 1, "Initial observation was not sent");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  cancelDwell(10);
+  failInitialReport(new Response(null, { status: 502 }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(reports.length, 1);
 });

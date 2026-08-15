@@ -1,4 +1,4 @@
-"""Preview expiration without changing the AgentGraph database."""
+"""Expire AgentGraph entities using a retention window."""
 
 from __future__ import annotations
 
@@ -18,27 +18,32 @@ from agentgraph.logging import configure_logging
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Preview AgentGraph expiration without changing the database."
+        description="Expire AgentGraph entities using a retention window."
     )
     parser.add_argument(
         "--retention",
         required=True,
         help="Duration (30m, 12h, 30d, 2w), ISO timestamp, or viewer date (DD/MM/YYYY, HH:MM:SS).",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would expire without changing the database.",
+    )
     return parser.parse_args()
 
 
-async def main(retention: str) -> int:
+async def main(retention: str, dry_run: bool = False) -> int:
     retention_days = parse_retention_window(retention)
     settings = get_settings()
     configure_logging(settings.log_level)
     async with backend_context():
-        return await run_expiration(retention_days=retention_days, dry_run=True)
+        return await run_expiration(retention_days=retention_days, dry_run=dry_run)
 
 
 if __name__ == "__main__":
     args = parse_args()
     try:
-        asyncio.run(main(args.retention))
+        asyncio.run(main(args.retention, dry_run=args.dry_run))
     except ValueError as exc:
         raise SystemExit(f"error: {exc}") from exc

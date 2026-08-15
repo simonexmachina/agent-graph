@@ -1,4 +1,4 @@
-"""Dwell dispatch: classifies a URL and fires a connector fetch."""
+"""Dwell handling: fetch a classified URL before recording its observation."""
 
 from __future__ import annotations
 
@@ -6,10 +6,27 @@ import asyncio
 import logging
 from typing import Any
 
-from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE, ResourceType
+from agentgraph.connectors.base import ResourceType
 from agentgraph.server.router import classify_observation_url
 
 logger = logging.getLogger(__name__)
+
+
+class ObservationFetchError(RuntimeError):
+    """A connector could not hydrate the resource for an observation."""
+
+
+_inflight_observations: dict[str, asyncio.Task[dict[str, Any]]] = {}
+
+
+def _forget_inflight_observation(
+    observation_id: str,
+    task: asyncio.Task[dict[str, Any]],
+) -> None:
+    if _inflight_observations.get(observation_id) is task:
+        _inflight_observations.pop(observation_id, None)
+    if not task.cancelled():
+        task.exception()
 
 
 async def record_dwell_time(
@@ -29,55 +46,107 @@ async def record_dwell_time(
 
     try:
         backend = get_backend()
-        await backend.upsert_stub_entity(
-            RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type],
-            ref.source,
-            ref.resource_id,
-        )
-        observation_created = False
-        if observed:
-            observation_created = await backend.record_observation_once(
+        if not observed:
+            await backend.increment_dwell_time(ref.source, ref.resource_id, dwell_ms)
+            logger.debug(
+                "Recorded dwell update: +%dms for %s %s/%s (observation_id=%s)",
+                dwell_ms,
                 ref.source,
+                ref.resource_type,
                 ref.resource_id,
                 observation_id,
-                url,
-                dwell_ms,
             )
-        else:
-            await backend.increment_dwell_time(ref.source, ref.resource_id, dwell_ms)
-        logger.debug(
-            "Recorded %s: +%dms for %s %s/%s (observation_id=%s)",
-            "observation" if observed else "dwell update",
-            dwell_ms,
-            ref.source,
-            ref.resource_type,
-            ref.resource_id,
-            observation_id,
-        )
+            return {
+                "status": "accepted",
+                "source": ref.source,
+                "resource_type": ref.resource_type,
+                "observation_created": False,
+            }
 
-        if observation_created:
+        if await backend.observation_exists(observation_id):
+            return {
+                "status": "accepted",
+                "source": ref.source,
+                "resource_type": ref.resource_type,
+                "observation_created": False,
+            }
+
+        task = _inflight_observations.get(observation_id)
+        owns_task = task is None
+        if task is None:
+            fetch_meta = dict(meta or {})
+            fetch_meta.update(ref.fetch_meta or {})
             logger.info(
-                "New observation %s: dispatching fetch for %s %s/%s",
+                "New observation %s: fetching %s %s/%s",
                 observation_id,
                 ref.source,
                 ref.resource_type,
                 ref.resource_id,
             )
-            fetch_meta = dict(meta or {})
-            fetch_meta.update(ref.fetch_meta or {})
-            asyncio.create_task(
-                _dispatch(ref.source, ref.resource_type, ref.resource_id, fetch_meta or None)
+            task = asyncio.create_task(
+                _fetch_and_record_observation(
+                    source=ref.source,
+                    resource_type=ref.resource_type,
+                    resource_id=ref.resource_id,
+                    observation_id=observation_id,
+                    url=url,
+                    dwell_ms=dwell_ms,
+                    meta=fetch_meta or None,
+                )
+            )
+            _inflight_observations[observation_id] = task
+            task.add_done_callback(
+                lambda completed, oid=observation_id: _forget_inflight_observation(oid, completed)
             )
 
+        result = await asyncio.shield(task)
+
         return {
-            "status": "accepted",
-            "source": ref.source,
-            "resource_type": ref.resource_type,
-            "observation_created": observation_created,
+            **result,
+            "observation_created": bool(result["observation_created"] and owns_task),
         }
+    except ObservationFetchError:
+        raise
     except Exception:
         logger.exception("Failed to record dwell time for %s", url)
         return {"status": "error", "reason": "internal backend error"}
+
+
+async def _fetch_and_record_observation(
+    *,
+    source: str,
+    resource_type: ResourceType,
+    resource_id: str,
+    observation_id: str,
+    url: str,
+    dwell_ms: int,
+    meta: dict[str, str] | None,
+) -> dict[str, Any]:
+    counts = await _dispatch(source, resource_type, resource_id, meta)
+
+    from agentgraph.core.context import get_backend
+
+    backend = get_backend()
+    entity = await backend.get_entity_by_platform(source, resource_id)
+    if entity is None:
+        raise ObservationFetchError(
+            f"Connector fetch completed without persisting {source} {resource_type}/{resource_id}"
+        )
+
+    observation_created = await backend.record_observation_once(
+        source,
+        resource_id,
+        observation_id,
+        url,
+        dwell_ms,
+    )
+    return {
+        "status": "accepted",
+        "source": source,
+        "resource_type": resource_type,
+        "observation_created": observation_created,
+        "fetch": counts,
+    }
 
 
 async def _dispatch(
@@ -85,13 +154,12 @@ async def _dispatch(
     resource_type: ResourceType,
     resource_id: str,
     meta: dict[str, str] | None = None,
-) -> None:
+) -> dict[str, int]:
     from agentgraph.connectors.registry import get_connector
 
     connector = get_connector(source)
     if connector is None:
-        logger.debug("No connector registered for source '%s'", source)
-        return
+        raise ObservationFetchError(f"No connector registered for source '{source}'")
     try:
         logger.info("Fetching %s/%s/%s", source, resource_type, resource_id)
         batch = await connector.fetch(
@@ -106,5 +174,15 @@ async def _dispatch(
             source, resource_type, resource_id,
             len(batch.entities), len(batch.persons), len(batch.edges),
         )
-    except Exception:
+        return {
+            "entities": len(batch.entities),
+            "persons": len(batch.persons),
+            "edges": len(batch.edges),
+        }
+    except ObservationFetchError:
+        raise
+    except Exception as exc:
         logger.exception("Connector fetch failed: %s/%s/%s", source, resource_type, resource_id)
+        raise ObservationFetchError(
+            f"Connector fetch failed for {source} {resource_type}/{resource_id}"
+        ) from exc

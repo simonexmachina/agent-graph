@@ -2220,7 +2220,16 @@
 
     detailFocus.dataset.entityId = entity.id;
     syncDetailFocusState(readUrlState().node_id);
-    detailFocus.onclick = () => focusNode(entity.id);
+    detailFocus.onclick = () => {
+      if (readUrlState().node_id !== entity.id) {
+        focusNode(entity.id);
+        return;
+      }
+      lookupInput.value = '';
+      depthInput.value = 1;
+      lookupError.style.display = 'none';
+      syncDepthEnabled();
+    };
 
     const isBookmarked = Boolean(entity.bookmarked);
     detailBookmark.setAttribute('aria-pressed', isBookmarked ? 'true' : 'false');

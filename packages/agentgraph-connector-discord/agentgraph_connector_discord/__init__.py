@@ -487,7 +487,7 @@ async def _fetch_channel(
             channel_info = await _api_get(client, f"/channels/{channel_id}", account_id=account_id)
         except Exception as exc:
             logger.error("Could not fetch Discord channel %s: %s", channel_id, exc)
-            return EntityBatch()
+            raise
 
         guild_id = channel_info.get("guild_id", "")
         channel_type: int = channel_info.get("type", 0)
@@ -548,7 +548,7 @@ async def _fetch_channel(
             messages = await _api_get(client, f"/channels/{channel_id}/messages", account_id=account_id, **params)
         except Exception as exc:
             logger.error("Could not fetch messages for Discord channel %s: %s", channel_id, exc)
-            return EntityBatch(entities=entities)
+            raise
 
         for msg in messages:
             msg_id: str = msg.get("id", "")

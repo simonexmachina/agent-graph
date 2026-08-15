@@ -233,7 +233,7 @@ async def test_sqlite_expiration_cascades_owned_messages_and_removes_orphan_peop
     assert await sqlite_backend._fetchval("SELECT count(*) FROM entities") == 0
 
 
-async def test_sqlite_expiration_detaches_bookmarked_owned_child(
+async def test_sqlite_expiration_preserves_bookmarked_owned_child(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     conn = sqlite_backend._conn_or_raise()
@@ -255,11 +255,20 @@ async def test_sqlite_expiration_detaches_bookmarked_owned_child(
         ) VALUES ('message', 'Message', 'discord', 'channel:message', 'owned', 'channel', 1)
         """
     )
+    await conn.execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, retention_policy,
+            retention_parent_id
+        ) VALUES ('unbookmarked-message', 'Message', 'discord', 'channel:other-message', 'owned', 'channel')
+        """
+    )
 
-    assert await sqlite_backend.expire_entities(90) == 1
+    assert await sqlite_backend.expire_entities(90) == 2
     message = await sqlite_backend.get_entity_by_id("message")
     assert message is not None
     assert message["retention_parent_id"] is None
+    assert await sqlite_backend.get_entity_by_id("unbookmarked-message") is None
 
     await sqlite_backend.set_entity_bookmarked("message", False)
     assert await sqlite_backend.expire_entities(90) == 1
@@ -333,12 +342,16 @@ async def test_record_observation_once_is_idempotent(
     first = await sqlite_backend.record_observation_once(
         "gmail", "thread-1", "observation-1", "https://mail.google.com/thread-1", 3000
     )
+    exists = await sqlite_backend.observation_exists("observation-1")
+    missing = await sqlite_backend.observation_exists("observation-missing")
     duplicate = await sqlite_backend.record_observation_once(
         "gmail", "thread-1", "observation-1", "https://mail.google.com/thread-1", 3000
     )
 
     email = await sqlite_backend.get_entity_by_id("email")
     assert first is True
+    assert exists is True
+    assert missing is False
     assert duplicate is False
     assert email is not None
     assert email["cumulative_dwell_ms"] == 3000

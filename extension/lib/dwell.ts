@@ -35,6 +35,8 @@ export interface ObservationStatus {
   error?: string;
   meta?: Record<string, string>;
   threshold_reported_at?: number;
+  threshold_accepted?: boolean;
+  pending_dwell_ms?: number;
 }
 
 // In-memory state — rebuilt from cache on service worker restart.
@@ -158,15 +160,29 @@ export function startDwell(
         true,
         obs.meta || {},
       ).then((result) => {
-        if (observations.get(tabId) !== obs || obs.state !== "sending") return;
-
         obs.http_status = result.http_status;
         if (result.ok) {
-          obs.state = "sent";
+          obs.threshold_accepted = true;
           obs.sent_at = Date.now();
+          if (obs.pending_dwell_ms && obs.pending_dwell_ms > 0) {
+            void sendReportDwell(
+              obs.url,
+              obs.pending_dwell_ms,
+              observationId,
+              false,
+              obs.meta || {},
+            );
+            obs.pending_dwell_ms = undefined;
+          }
+          if (observations.get(tabId) === obs && obs.state === "sending") {
+            obs.state = "sent";
+          }
         } else {
-          obs.state = "failed";
+          obs.pending_dwell_ms = undefined;
           obs.error = result.error;
+          if (observations.get(tabId) === obs && obs.state === "sending") {
+            obs.state = "failed";
+          }
         }
       });
     }
@@ -200,13 +216,17 @@ export function cancelDwell(tabId: number): void {
       if (obs.threshold_reported_at && obs.observation_id) {
         const remaining = elapsed - thresholdMs;
         if (remaining > 0) {
-          void sendReportDwell(
-            obs.url,
-            remaining,
-            obs.observation_id,
-            false,
-            meta,
-          );
+          if (obs.threshold_accepted) {
+            void sendReportDwell(
+              obs.url,
+              remaining,
+              obs.observation_id,
+              false,
+              meta,
+            );
+          } else {
+            obs.pending_dwell_ms = remaining;
+          }
         }
       }
     }
@@ -256,7 +276,14 @@ export async function sendReportDwell(
       }),
     });
     if (!response.ok) {
-      const error = `HTTP ${response.status}`;
+      let detail: string | undefined;
+      try {
+        const body = await response.json() as { detail?: unknown };
+        if (typeof body.detail === "string" && body.detail) detail = body.detail;
+      } catch {
+        // Error responses are not required to contain JSON.
+      }
+      const error = detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
       console.error(`POST /report-dwell failed with ${error}`);
       return { ok: false, http_status: response.status, error };
     }

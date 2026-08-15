@@ -129,18 +129,23 @@ class ExtensionBookmarkRequest(ExtensionPageRequest):
 async def report_dwell(req: ReportDwellRequest) -> dict[str, Any]:
     """
     Receive either the extension's one threshold-crossed observation event or a
-    later dwell-only update. New observation IDs dispatch a fetch exactly once.
+    later dwell-only update. New observation IDs await one coalesced fetch before
+    the observation is persisted.
     """
-    from agentgraph.server.dwell import record_dwell_time
+    from fastapi import HTTPException
 
-    result = await record_dwell_time(
-        req.url,
-        req.dwell_ms,
-        str(req.observation_id),
-        req.observed,
-        req.meta,
-    )
-    return result
+    from agentgraph.server.dwell import ObservationFetchError, record_dwell_time
+
+    try:
+        return await record_dwell_time(
+            req.url,
+            req.dwell_ms,
+            str(req.observation_id),
+            req.observed,
+            req.meta,
+        )
+    except ObservationFetchError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/api/extension/fetch")

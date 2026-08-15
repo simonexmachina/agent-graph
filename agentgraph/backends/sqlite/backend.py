@@ -1577,7 +1577,6 @@ class SQLiteBackend(StorageBackend):
                 before_count = int(before_row[0]) if before_row else 0
                 expired_sql = """
                     retention_policy = 'observed'
-                    AND bookmarked = 0
                     AND COALESCE(observed_at, created_at) <= ?
                 """
 
@@ -1588,12 +1587,15 @@ class SQLiteBackend(StorageBackend):
                     SET retention_parent_id = NULL, updated_at = ?
                     WHERE bookmarked = 1
                       AND retention_parent_id IN (
-                          SELECT id FROM entities WHERE {expired_sql}
+                          SELECT id FROM entities
+                          WHERE bookmarked = 0 AND {expired_sql}
                       )
                     """,
                     [_now(), cutoff],
                 )
-                await conn.execute(f"DELETE FROM entities WHERE {expired_sql}", [cutoff])
+                await conn.execute(
+                    f"DELETE FROM entities WHERE bookmarked = 0 AND {expired_sql}", [cutoff]
+                )
                 await conn.execute(
                     """
                     DELETE FROM entities
@@ -1721,6 +1723,13 @@ class SQLiteBackend(StorageBackend):
             except Exception:
                 await conn.execute("ROLLBACK")
                 raise
+
+    async def observation_exists(self, observation_id: str) -> bool:
+        row = await self._fetchval(
+            "SELECT 1 FROM observations WHERE id = ? LIMIT 1",
+            [observation_id],
+        )
+        return row is not None
 
     async def get_last_synced_at(self, platform: str, platform_entity_id: str) -> datetime | None:
         val = await self._fetchval(

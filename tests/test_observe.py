@@ -136,8 +136,7 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
     from agentgraph.server.dwell import record_dwell_time
 
     backend = MagicMock()
-    backend.upsert_stub_entity = AsyncMock()
-    backend.record_observation_once = AsyncMock(return_value=False)
+    backend.observation_exists = AsyncMock(return_value=True)
     set_backend(backend)
     ref = SourceReference(
         source="rss",
@@ -161,14 +160,7 @@ async def test_rss_dwell_uses_exact_observation_reference() -> None:
         "resource_type": "document",
         "observation_created": False,
     }
-    backend.upsert_stub_entity.assert_awaited_once_with("Document", "rss", "entry/known")
-    backend.record_observation_once.assert_awaited_once_with(
-        "rss",
-        "entry/known",
-        "observation-1",
-        "https://example.com/articles/known",
-        15_000,
-    )
+    backend.upsert_stub_entity.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -176,7 +168,6 @@ async def test_dwell_passes_metadata_to_observation_resolution() -> None:
     from agentgraph.server.dwell import record_dwell_time
 
     backend = MagicMock()
-    backend.upsert_stub_entity = AsyncMock()
     backend.increment_dwell_time = AsyncMock()
     set_backend(backend)
     ref = SourceReference(source="gmail", resource_type="thread", resource_id="api-thread")
@@ -198,7 +189,7 @@ async def test_dwell_passes_metadata_to_observation_resolution() -> None:
         "https://mail.google.com/mail/u/0/#inbox/opaque",
         meta=meta,
     )
-    backend.upsert_stub_entity.assert_awaited_once_with("Email", "gmail", "api-thread")
+    backend.upsert_stub_entity.assert_not_called()
     backend.increment_dwell_time.assert_awaited_once_with("gmail", "api-thread", 15_000)
 
 
@@ -207,14 +198,18 @@ async def test_new_observation_dispatches_once() -> None:
     from agentgraph.server.dwell import record_dwell_time
 
     backend = MagicMock()
-    backend.upsert_stub_entity = AsyncMock()
-    backend.record_observation_once = AsyncMock(side_effect=[True, False])
+    backend.observation_exists = AsyncMock(side_effect=[False, True])
+    backend.get_entity_by_platform = AsyncMock(return_value={"id": "thread-entity"})
+    backend.record_observation_once = AsyncMock(return_value=True)
     set_backend(backend)
     ref = SourceReference(source="gmail", resource_type="thread", resource_id="thread-1")
 
     with (
         patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
-        patch("agentgraph.server.dwell._dispatch", new=AsyncMock()) as dispatch,
+        patch(
+            "agentgraph.server.dwell._dispatch",
+            new=AsyncMock(return_value={"entities": 1, "persons": 0, "edges": 0}),
+        ) as dispatch,
     ):
         first = await record_dwell_time(
             "https://mail.google.com/thread-1", 3000, "observation-1", True
@@ -222,11 +217,115 @@ async def test_new_observation_dispatches_once() -> None:
         duplicate = await record_dwell_time(
             "https://mail.google.com/thread-1", 3000, "observation-1", True
         )
+    assert first["observation_created"] is True
+    assert first["fetch"] == {"entities": 1, "persons": 0, "edges": 0}
+    assert duplicate["observation_created"] is False
+    dispatch.assert_awaited_once_with("gmail", "thread", "thread-1", None)
+    backend.record_observation_once.assert_awaited_once_with(
+        "gmail",
+        "thread-1",
+        "observation-1",
+        "https://mail.google.com/thread-1",
+        3000,
+    )
+    backend.upsert_stub_entity.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_observation_awaits_one_fetch() -> None:
+    from agentgraph.server.dwell import record_dwell_time
+
+    backend = MagicMock()
+    backend.observation_exists = AsyncMock(return_value=False)
+    backend.get_entity_by_platform = AsyncMock(return_value={"id": "thread-entity"})
+    backend.record_observation_once = AsyncMock(return_value=True)
+    set_backend(backend)
+    ref = SourceReference(source="gmail", resource_type="thread", resource_id="thread-1")
+    fetch_started = asyncio.Event()
+    release_fetch = asyncio.Event()
+
+    async def dispatch(*_: object, **__: object) -> dict[str, int]:
+        fetch_started.set()
+        await release_fetch.wait()
+        return {"entities": 1, "persons": 0, "edges": 0}
+
+    with (
+        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch("agentgraph.server.dwell._dispatch", side_effect=dispatch) as mocked_dispatch,
+    ):
+        first_task = asyncio.create_task(
+            record_dwell_time("https://mail.google.com/thread-1", 3000, "observation-1", True)
+        )
+        await fetch_started.wait()
+        duplicate_task = asyncio.create_task(
+            record_dwell_time("https://mail.google.com/thread-1", 3000, "observation-1", True)
+        )
         await asyncio.sleep(0)
+        release_fetch.set()
+        first, duplicate = await asyncio.gather(first_task, duplicate_task)
 
     assert first["observation_created"] is True
     assert duplicate["observation_created"] is False
-    dispatch.assert_awaited_once_with("gmail", "thread", "thread-1", None)
+    assert mocked_dispatch.await_count == 1
+    backend.record_observation_once.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_observation_does_not_create_or_mark_entity() -> None:
+    from agentgraph.server.dwell import ObservationFetchError, record_dwell_time
+
+    backend = MagicMock()
+    backend.observation_exists = AsyncMock(return_value=False)
+    backend.record_observation_once = AsyncMock()
+    set_backend(backend)
+    ref = SourceReference(source="gdrive", resource_type="folder", resource_id="folder-1")
+
+    with (
+        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.dwell._dispatch",
+            new=AsyncMock(side_effect=ObservationFetchError("Drive unavailable")),
+        ),
+        pytest.raises(ObservationFetchError, match="Drive unavailable"),
+    ):
+        await record_dwell_time(
+            "https://drive.google.com/drive/folders/folder-1",
+            3000,
+            "observation-1",
+            True,
+        )
+
+    backend.upsert_stub_entity.assert_not_called()
+    backend.record_observation_once.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_observation_rejects_fetch_without_persisted_target() -> None:
+    from agentgraph.server.dwell import ObservationFetchError, record_dwell_time
+
+    backend = MagicMock()
+    backend.observation_exists = AsyncMock(return_value=False)
+    backend.get_entity_by_platform = AsyncMock(return_value=None)
+    backend.record_observation_once = AsyncMock()
+    set_backend(backend)
+    ref = SourceReference(source="gdrive", resource_type="folder", resource_id="folder-1")
+
+    with (
+        patch("agentgraph.server.dwell.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.dwell._dispatch",
+            new=AsyncMock(return_value={"entities": 0, "persons": 0, "edges": 0}),
+        ),
+        pytest.raises(ObservationFetchError, match="without persisting"),
+    ):
+        await record_dwell_time(
+            "https://drive.google.com/drive/folders/folder-1",
+            3000,
+            "observation-1",
+            True,
+        )
+
+    backend.record_observation_once.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -250,7 +349,7 @@ async def test_dwell_dispatch_upserts_returned_batch() -> None:
         patch("agentgraph.connectors.registry.get_connector", return_value=connector),
         patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert_batch,
     ):
-        await _dispatch(
+        result = await _dispatch(
             "rss",
             "document",
             "entry/known",
@@ -263,3 +362,25 @@ async def test_dwell_dispatch_upserts_returned_batch() -> None:
         meta={"web_url": "https://example.com/articles/known"},
     )
     upsert_batch.assert_awaited_once_with(batch)
+    assert result == {"entities": 1, "persons": 0, "edges": 0}
+
+
+def test_report_dwell_returns_bad_gateway_for_connector_failure(client: TestClient) -> None:
+    from agentgraph.server.dwell import ObservationFetchError
+
+    with patch(
+        "agentgraph.server.dwell.record_dwell_time",
+        new=AsyncMock(side_effect=ObservationFetchError("Connector fetch failed")),
+    ):
+        response = client.post(
+            "/report-dwell",
+            json={
+                "url": "https://drive.google.com/drive/folders/folder-1",
+                "dwell_ms": 3000,
+                "observation_id": "34b2ad4d-55e3-4599-bf35-1e258a704bcd",
+                "observed": True,
+            },
+        )
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Connector fetch failed"}

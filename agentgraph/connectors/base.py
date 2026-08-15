@@ -403,7 +403,13 @@ class BaseConnector(ABC):
         resource_id: str,
         meta: dict[str, str] | None = None,
         account_id: str | None = None,
-    ) -> EntityBatch: ...
+    ) -> EntityBatch:
+        """Fetch a resource, raising when its primary upstream retrieval fails.
+
+        An empty batch is reserved for a known fresh resource or an intentional
+        no-op; callers use exceptions to distinguish retrieval failures.
+        """
+        ...
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         """Run a one-shot bulk ingest of all available historical data for this connector.

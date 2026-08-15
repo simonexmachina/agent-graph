@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from agentgraph_connector_discord import _fetch_channel as _fetch_discord_channel
 from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
 from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
@@ -24,14 +25,6 @@ from agentgraph.connectors.base import (
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
-
-
-class _FakeSlackAsyncClientContext:
-    async def __aenter__(self) -> MagicMock:
-        return MagicMock()
-
-    async def __aexit__(self, *_: object) -> None:
-        return None
 
 
 def _recent_dt() -> datetime:
@@ -52,6 +45,22 @@ class _FakeDriveRequest:
 
     def execute(self) -> object:
         return self._payload
+
+
+class _FakeAsyncClientContext:
+    async def __aenter__(self) -> MagicMock:
+        return MagicMock()
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+
+class _FakeSlackAsyncClientContext:
+    async def __aenter__(self) -> MagicMock:
+        return MagicMock()
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
 
 
 class _FakeDriveFiles:
@@ -684,6 +693,32 @@ async def test_gmail_download_attachment_document_stub(
 def test_slack_can_handle(slack_connector: SlackConnector) -> None:
     assert slack_connector.can_handle("https://app.slack.com/client/T123/C456")
     assert not slack_connector.can_handle("https://docs.google.com")
+
+
+@pytest.mark.asyncio
+async def test_discord_fetch_raises_when_channel_request_fails() -> None:
+    with (
+        patch("agentgraph_connector_discord.httpx.AsyncClient", return_value=_FakeAsyncClientContext()),
+        patch(
+            "agentgraph_connector_discord._api_get",
+            new=AsyncMock(side_effect=RuntimeError("HTTP 403")),
+        ),
+        pytest.raises(RuntimeError, match="HTTP 403"),
+    ):
+        await _fetch_discord_channel("channel-1")
+
+
+@pytest.mark.asyncio
+async def test_discord_fetch_raises_when_message_request_fails() -> None:
+    with (
+        patch("agentgraph_connector_discord.httpx.AsyncClient", return_value=_FakeAsyncClientContext()),
+        patch(
+            "agentgraph_connector_discord._api_get",
+            new=AsyncMock(side_effect=[{"id": "channel-1", "name": "general"}, RuntimeError("HTTP 503")]),
+        ),
+        pytest.raises(RuntimeError, match="HTTP 503"),
+    ):
+        await _fetch_discord_channel("channel-1")
 
 
 @pytest.mark.asyncio

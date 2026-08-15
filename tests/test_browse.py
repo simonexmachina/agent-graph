@@ -80,7 +80,11 @@ def test_viewer_uses_bookmark_symbol_without_status_row() -> None:
     assert "applyZoomStyles();" in viewer_html
     assert "cy.style().update();" in viewer_html
     assert "/api/cli/delete" in viewer_html
-    assert "detailFocus.onclick = () => focusNode(entity.id);" in viewer_html
+    assert "detailFocus.onclick = () => {" in viewer_html
+    assert "if (readUrlState().node_id !== entity.id) {" in viewer_html
+    assert "lookupInput.value = '';" in viewer_html
+    assert "depthInput.value = 1;" in viewer_html
+    assert "syncDepthEnabled();" in viewer_html
 
 
 def test_viewer_supports_zero_depth_for_a_node_only_view() -> None:

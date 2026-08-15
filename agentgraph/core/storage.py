@@ -217,6 +217,11 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
+    async def observation_exists(self, observation_id: str) -> bool:
+        """Return whether an observation event has already completed."""
+        ...
+
+    @abstractmethod
     async def get_last_synced_at(
         self, platform: str, platform_entity_id: str
     ) -> datetime | None: ...
