@@ -49,7 +49,7 @@ def snapshot_mtimes(paths: tuple[Path, ...]) -> dict[Path, float]:
     for path in paths:
         if path.is_dir():
             for child in path.rglob("*"):
-                if child.is_file():
+                if child.is_file() and "node_modules" not in child.parts:
                     mtimes[child] = child.stat().st_mtime
         elif path.is_file():
             mtimes[path] = path.stat().st_mtime

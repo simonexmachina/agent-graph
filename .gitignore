@@ -33,6 +33,7 @@ release/
 
 # Node (extension)
 extension/node_modules/
+docs-src/node_modules/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

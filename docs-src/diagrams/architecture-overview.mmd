@@ -1,0 +1,35 @@
+flowchart LR
+    services["Selected services<br/>Gmail · Drive · Slack · Discord · RSS · Web"]
+    subgraph local["Your machine"]
+        direction LR
+        human["You browse"]
+        extension["Browser extension<br/>Observe"]
+        mcp["MCP server<br/>Search · Traverse · Fetch"]
+        refresh["Scheduler<br/>Refresh · Ingest"]
+        connectors["Connector packages<br/>Translate each service"]
+        database[("Local graph<br/>SQLite · FTS · vectors")]
+        tools["CLI · Viewer"]
+        agent["Your existing<br/>coding agent"]
+
+        human --> extension
+        extension -->|"resource that mattered"| connectors
+        mcp -->|"direct fetch"| connectors
+        refresh -->|"known resources"| connectors
+        connectors -->|"entities · people · edges"| database
+        database --> mcp
+        database --> tools
+        agent <--> mcp
+    end
+
+    services <--> connectors
+
+    classDef source fill:#edf4ff,stroke:#2563eb,color:#10213a,stroke-width:2px;
+    classDef observe fill:#e9fff6,stroke:#008566,color:#082b22,stroke-width:2px;
+    classDef core fill:#fff7d6,stroke:#b87900,color:#342500,stroke-width:2px;
+    classDef storage fill:#ffe9f1,stroke:#c83264,color:#35101f,stroke-width:2px;
+    classDef actor fill:#f5f5f5,stroke:#52525b,color:#18181b,stroke-width:2px;
+    class services source;
+    class extension,refresh observe;
+    class connectors,mcp core;
+    class database storage;
+    class human,agent,tools actor;

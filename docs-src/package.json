@@ -1,0 +1,10 @@
+{
+  "name": "agentgraph-docs",
+  "private": true,
+  "scripts": {
+    "diagrams:build": "node diagrams/render.mjs"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "11.12.0"
+  }
+}

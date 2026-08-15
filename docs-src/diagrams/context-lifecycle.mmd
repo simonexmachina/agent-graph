@@ -1,0 +1,39 @@
+sequenceDiagram
+    autonumber
+    actor Human as You
+    participant Extension as Browser extension
+    participant Server as Local AgentGraph server
+    participant Connector as Owning connector
+    participant Service as Source service
+    participant Graph as Local graph
+    actor Agent as Your agent
+
+    rect rgb(232, 255, 246)
+        Note over Human,Graph: Observe: attention triggers a targeted fetch
+        Human->>Extension: Keep a supported page focused
+        Extension->>Extension: Wait for observation threshold
+        Extension->>Server: Report URL and observation ID
+        Server->>Connector: Resolve and fetch resource
+        Connector->>Service: Read through the source API
+        Service-->>Connector: Resource content and metadata
+        Connector->>Graph: Upsert entities, people, and edges
+        Server->>Graph: Set observed_at and duration
+    end
+
+    rect rgb(255, 247, 214)
+        Note over Agent,Graph: Fetch: the agent asks for missing or stale context
+        Agent->>Server: fetch_entity_tool(platform, resource_id)
+        Server->>Connector: Fetch the requested resource
+        Connector->>Service: Read through the source API
+        Service-->>Connector: Resource content and metadata
+        Connector->>Graph: Upsert entities, people, and edges
+        Note over Server,Graph: Direct fetch does not set observed_at
+    end
+
+    rect rgb(237, 244, 255)
+        Note over Server,Graph: Refresh: configured connectors keep known context current
+        Server->>Connector: Scheduled poll or ingest
+        Connector->>Service: Read changes
+        Connector->>Graph: Upsert changed context
+        Note over Server,Graph: Polling and ingest do not set observed_at
+    end

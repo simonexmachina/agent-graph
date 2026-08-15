@@ -50,6 +50,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     build_docs.build()
 
     docs_css = (output_dir / "docs.css").read_text(encoding="utf-8")
+    architecture_svg = output_dir / "assets" / "diagrams" / "architecture-overview-dark.svg"
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
     install_html = (output_dir / "install.html").read_text(encoding="utf-8")
     extending_html = (output_dir / "extending.html").read_text(encoding="utf-8")
@@ -65,6 +66,8 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     redirect_html = (output_dir / "commands.html").read_text(encoding="utf-8")
 
     assert 'class="shell"' in index_html
+    assert architecture_svg.exists()
+    assert architecture_svg.stat().st_size > 1_000
     assert "https://www.googletagmanager.com/gtag/js?id=G-36ETGXF6K5" in index_html
     assert "gtag('config', 'G-36ETGXF6K5');" in index_html
     assert 'id="doc-search"' in index_html
@@ -135,3 +138,31 @@ def test_watch_snapshot_tracks_docs_sources(tmp_path: Path, monkeypatch: pytest.
     assert Path("docs-src/index.md") in snapshot
     assert Path("scripts/build_docs.py") in snapshot
     assert Path("scripts/serve_docs.py") in snapshot
+
+
+def test_load_pages_ignores_node_modules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    docs_src = tmp_path / "docs-src"
+    dependency = docs_src / "node_modules" / "example"
+    dependency.mkdir(parents=True)
+    (dependency / "README.md").write_text("not a docs page", encoding="utf-8")
+    (docs_src / "index.md").write_text(
+        """+++
+title = "Home"
+description = "Home"
+nav_title = "Home"
+section = "Start"
+order = 1
+summary = ""
+output = "index.html"
+source_path = "docs-src/index.md"
++++
+
+Hello.
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_docs, "DOCS_SRC", docs_src)
+
+    pages = build_docs.load_pages()
+
+    assert [page.meta.title for page in pages] == ["Home"]

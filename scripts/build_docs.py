@@ -234,6 +234,8 @@ def render_markdown(body: str) -> tuple[str, tuple[Heading, ...]]:
 def load_pages() -> list[Page]:
     pages: list[Page] = []
     for source_path in sorted(DOCS_SRC.rglob("*.md")):
+        if "node_modules" in source_path.parts:
+            continue
         text = source_path.read_text(encoding="utf-8")
         meta, body = parse_frontmatter(text)
         rendered_body, headings = render_markdown(body)
@@ -456,6 +458,9 @@ def copy_static_assets() -> None:
         shutil.rmtree(DOCS_OUT)
     DOCS_OUT.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "docs-src" / "docs.css", DOCS_OUT / "docs.css")
+    assets_src = ROOT / "docs-src" / "assets"
+    if assets_src.exists():
+        shutil.copytree(assets_src, DOCS_OUT / "assets")
 
 
 def build() -> None:
