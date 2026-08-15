@@ -1556,6 +1556,11 @@
     cy.add(elements);
     applyZoomStyles();
 
+    const focusedNodeId = readUrlState().node_id;
+    if (focusedNodeId) {
+      cy.getElementById(focusedNodeId).select();
+    }
+
     if (cy.nodes().length === 0) {
       hideHoverCard();
       emptyState.style.display = 'flex';

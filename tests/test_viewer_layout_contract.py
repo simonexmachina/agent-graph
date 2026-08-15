@@ -483,6 +483,23 @@ def test_i_toggles_selected_node_detail_without_intercepting_text_input(page: Pa
         expect(page.locator("#detail")).to_have_class("open")
 
 
+def test_i_toggles_focused_url_node_detail(page: Page) -> None:
+    nodes = [_node(1, "Focused keyboard detail")]
+    with _serve_viewer(nodes, []) as url:
+        _wait_for_graph(page, f"{url}?node_id=node-1", len(nodes))
+
+        assert page.evaluate("() => window.__agentGraphViewer.cy.$('node:selected').id()") == "node-1"
+
+        page.keyboard.press("i")
+        expect(page.locator("#detail")).to_have_class("open")
+
+        page.keyboard.press("i")
+        expect(page.locator("#detail")).not_to_have_class("open")
+
+        page.keyboard.press("i")
+        expect(page.locator("#detail")).to_have_class("open")
+
+
 def test_i_hides_and_shows_url_selected_detail_in_list_mode(page: Page) -> None:
     nodes = [_node(1, "List keyboard detail")]
     with _serve_viewer(nodes, []) as url:
