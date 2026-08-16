@@ -279,3 +279,17 @@ async def test_command_and_mcp_reference_pages_match_runtime_interfaces() -> Non
 
     assert documented_commands == runtime_commands
     assert documented_tools == runtime_tools
+
+    pages_by_output = {page.meta.output_path: page for page in pages}
+
+    def source_for(output_path: str) -> str:
+        return pages_by_output[Path(output_path)].meta.source_path.read_text(encoding="utf-8")
+
+    assert "agentgraph auth [status] [--verify] [--json]" in source_for("commands/auth.html")
+    assert "agentgraph connectors [--verify] [--json]" in source_for("commands/connectors.html")
+    assert "get_entity_tool(entity_id, resolve=false) -> JSON string" in source_for(
+        "mcp/get-entity.html"
+    )
+    assert "list_connectors_tool(verify=false) -> JSON string" in source_for(
+        "mcp/list-connectors.html"
+    )

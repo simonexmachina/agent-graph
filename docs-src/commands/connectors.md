@@ -12,7 +12,7 @@ source_path = "docs-src/commands/connectors.md"
 ## Synopsis
 
 ```bash
-agentgraph connectors [--json]
+agentgraph connectors [--verify] [--json]
 agentgraph connector <source> <command> [args...] [--json]
 agentgraph connector <source> --help
 ```
@@ -22,6 +22,7 @@ agentgraph connector <source> --help
 ```bash
 agentgraph connectors
 agentgraph connectors --json
+agentgraph connectors --verify
 agentgraph connector rss add https://simonwillison.net/atom/everything/
 agentgraph connector rss remove https://simonwillison.net/atom/everything/
 agentgraph connector rss --help
@@ -50,3 +51,6 @@ running server periodically.
 
 Connectors that do not use credentials, such as RSS and generic web, omit auth
 status in the human output and report `null` auth fields in JSON.
+
+Use `--verify` only when credential validity is uncertain; it performs live provider
+API checks before reporting connector status.

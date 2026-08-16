@@ -21,7 +21,7 @@ source_path = "docs-src/mcp/index.md"
 ## Query and traversal
 
 - [`search_entities_tool`](/mcp/search-entities.html) - hybrid search across the graph.
-- [`get_entity_tool`](/mcp/get-entity.html) - retrieve one entity by UUID.
+- [`get_entity_tool`](/mcp/get-entity.html) - retrieve one entity by ID, platform reference, or indexed URL.
 - [`get_edges_tool`](/mcp/get-edges.html) - inspect direct edges.
 - [`traverse_graph_tool`](/mcp/traverse-graph.html) - build a local subgraph from one entity.
 - [`query_by_filter_tool`](/mcp/query-by-filter.html) - structured filtering by type and metadata.

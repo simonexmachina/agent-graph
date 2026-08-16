@@ -23,6 +23,7 @@ for a live provider credential check.
 
 - connector `source`
 - `description`
-- `auth_status` and `auth_detail`, or null for connectors that do not use credentials
+- authentication provider, shared-auth, and account-count metadata
+- `auth_status`, `auth_detail`, and `auth_verified`, or null for connectors that do not use credentials
 - `url_patterns`
-- polling metadata and sync summary
+- polling metadata, delegation, and sync timestamps/summary
