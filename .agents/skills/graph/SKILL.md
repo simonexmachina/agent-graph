@@ -13,6 +13,20 @@ Prefer the `agentgraph` CLI when a shell is available. Use the equivalent MCP to
 when AgentGraph is connected directly to the agent. Do not query AgentGraph's SQLite
 database or connector internals directly.
 
+## Local server access
+
+AgentGraph normally connects to a server running on the user's machine. If an
+AgentGraph CLI command cannot reach the configured local server and command execution
+is local but sandboxed, retry the same command using the agent's normal mechanism for
+requesting user-approved network access or unsandboxed execution. Scope the request to
+the configured AgentGraph server and explain why access is required. Do not conclude
+that AgentGraph is unavailable until the approved retry also fails.
+
+If command execution is running in a cloud, remote, or containerized environment where
+localhost does not refer to the user's machine, do not repeatedly retry. Explain that
+the local AgentGraph server is unreachable from that environment and that the command
+must run through a local agent or an explicitly configured host connection.
+
 ## Investigation workflow
 
 1. Discover likely entities with `agentgraph search "<query>" --json` or

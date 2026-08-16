@@ -51,11 +51,13 @@ This is the local backend used by the CLI. The demo does not require provider cr
 
 ## 4. Ask a coding agent
 
-Then give your coding agent this prompt:
+Open a **local** coding-agent session in this project, then give it this prompt. A
+cloud, background, or containerized agent cannot reach the AgentGraph server through
+your machine's `127.0.0.1`, even if you approve additional network access.
 
 > Use the Graph skill and AgentGraph CLI to answer this question: Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does the Drive plan match, and which research supports the decision? Flag contradictions and link every source.
 
-The coding agent should use the installed Graph skill and commands such as `agentgraph search --json`, `agentgraph get --json`, and `agentgraph traverse --json`. It should not read the SQLite database directly or ask you to configure source credentials.
+The coding agent should use the installed Graph skill and commands such as `agentgraph search --json`, `agentgraph get --json`, and `agentgraph traverse --json`. If its local sandbox blocks the CLI from contacting AgentGraph, the skill tells it to request approval for that connection and retry. It should not read the SQLite database directly or ask you to configure source credentials.
 
 ## Expected evidence
 
