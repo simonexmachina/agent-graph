@@ -76,7 +76,6 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     install_html = (output_dir / "install.html").read_text(encoding="utf-8")
     extending_html = (output_dir / "extending.html").read_text(encoding="utf-8")
     rss_html = (output_dir / "rss.html").read_text(encoding="utf-8")
-    slack_html = (output_dir / "slack.html").read_text(encoding="utf-8")
     commands_html = (output_dir / "commands" / "index.html").read_text(encoding="utf-8")
     search_html = (output_dir / "commands" / "search.html").read_text(encoding="utf-8")
     mcp_html = (output_dir / "mcp" / "index.html").read_text(encoding="utf-8")
@@ -113,7 +112,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert ".doc pre .copy svg" in docs_css
     assert ">Commands</a>" in index_html
     assert (
-        '<section><h2>Configuration</h2><a class="nav-link" href="configuration.html">Configuration</a><a class="nav-link" href="rss.html">RSS</a><a class="nav-link" href="slack.html">Slack auth</a><a class="nav-link" href="extending.html">Extending</a></section>'
+        '<section><h2>Configuration</h2><a class="nav-link" href="configuration.html">Configuration</a><a class="nav-link" href="rss.html">RSS</a><a class="nav-link" href="extending.html">Extending</a></section>'
         in index_html
     )
     assert 'href="extending.html"' in index_html
@@ -131,8 +130,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "Add RSS and Atom feeds" in rss_html
     assert "feed.xml" in rss_html
     assert "platform=rss" in rss_html
-    assert "AGENTGRAPH_SLACK_CLIENT_ID" in slack_html
-    assert "Browser-session fallback" in slack_html
+    assert not (output_dir / "slack.html").exists()
     assert 'href="install.html"' in index_html
     assert 'href="quickstart.html"' not in index_html
     assert "What it lets the agent perceive" in connectors_html

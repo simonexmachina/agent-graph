@@ -32,11 +32,6 @@ OAuth client ID that issued each refresh token, but never the packaged OAuth cli
 secret. Desktop OAuth client credentials distributed with AgentGraph are public
 application identifiers, not a security boundary.
 
-Slack OAuth accepts `AGENTGRAPH_SLACK_CLIENT_ID` or prompts for the Client ID on
-first authorization, then stores it per account. The packaged app manifest contains
-the fixed callback `http://localhost:8766/slack/oauth/callback`. See [Slack
-authentication](/slack.html).
-
 ## Storage backend
 
 AgentGraph stores the graph in SQLite by default, and the install and quickstart docs assume this setup.
