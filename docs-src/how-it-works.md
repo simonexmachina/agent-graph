@@ -42,6 +42,8 @@ Connectors add the following items to the graph:
 - **People:** source identities, unified automatically when connectors provide the same canonical email and mergeable manually with confirmation otherwise.
 - **Edges:** relationships such as `authored`, `participated_in`, `posted_in`, `replied_to`, `mentions`, `contains`, and `references`.
 
+When a connector discovers a linked resource without fetching its full contents, AgentGraph creates a **stub**: a lightweight placeholder that preserves the entity and its relationships. A stub is hydrated with the complete resource only when it is explicitly fetched or resolved.
+
 Content is available through full-text and semantic search. Edges make it possible to move from a person to their conversations and documents, from a message to its thread or channel, and from a folder or source document to related context.
 
 ## Attention and retention
