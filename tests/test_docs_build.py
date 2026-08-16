@@ -136,6 +136,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'href="install.html"' in index_html
     assert 'href="quickstart.html"' not in index_html
     assert "What it lets the agent perceive" in connectors_html
+    assert "Context paths" not in connectors_html
     assert "Bring any service into your agent's world" in connectors_html
     assert "Three ways context enters" in how_it_works_html
     assert "agentgraph fetch" in how_it_works_html

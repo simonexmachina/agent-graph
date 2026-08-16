@@ -13,16 +13,16 @@ AgentGraph's bundled connectors are useful integrations today and examples of an
 
 ## Works today
 
-| Connector | What it lets the agent perceive | Context paths |
-| --- | --- | --- |
-| Gmail | Email threads, participants, subjects, bodies, and attachment references | Observe, fetch, poll, ingest |
-| Google Drive | Folders and files, content, ownership, and containment | Observe, fetch, poll |
-| Google Docs | Document content, ownership, authorship, and source dates | Observe, fetch, Drive refresh |
-| Google Sheets | Sheet values, ownership, authorship, and source dates | Observe, fetch, Drive refresh |
-| Slack | Channels and DMs, messages, replies, authors, mentions, and attachments | Observe, fetch, poll |
-| Discord | Channels, DMs, threads, messages, authors, mentions, and attachments | Observe, fetch, poll |
-| RSS | Feeds, posts, dates, authors, and publication relationships | Observe, fetch, poll |
-| Web | Configured pages and bookmarks with titles, text, metadata, and URLs | Observe, fetch |
+| Connector | What it lets the agent perceive |
+| --- | --- |
+| Gmail | Email threads, participants, subjects, bodies, and attachment references |
+| Google Drive | Folders and files, content, ownership, and containment |
+| Google Docs | Document content, ownership, authorship, and source dates |
+| Google Sheets | Sheet values, ownership, authorship, and source dates |
+| Slack | Channels and DMs, messages, replies, authors, mentions, and attachments |
+| Discord | Channels, DMs, threads, messages, authors, mentions, and attachments |
+| RSS | Feeds, posts, dates, authors, and publication relationships |
+| Web | Configured pages and bookmarks with titles, text, metadata, and URLs |
 
 Connector coverage is intentionally precise. For example, Drive currently records owners rather than every collaborator, and Discord bots cannot access user email addresses. Slack-to-Google person unification works automatically only when both connectors provide the same email; other identities require user-confirmed merging.
 
