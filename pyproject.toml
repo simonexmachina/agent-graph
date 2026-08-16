@@ -1,6 +1,6 @@
 [project]
 name = "agentgraph-server"
-version = "0.5.1"
+version = "0.5.2"
 description = "A local-first CLI and MCP server that turns selected digital sources into a searchable graph for the AI agent you already use."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -72,6 +72,7 @@ agentgraph-connector-web     = { workspace = true }
 include = ["agentgraph*"]
 
 [tool.setuptools.package-data]
+"agentgraph" = ["demo_fixtures/*.md"]
 "agentgraph.backends.sqlite" = ["schema.sql"]
 "agentgraph.server" = ["static/*.html"]
 

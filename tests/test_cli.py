@@ -55,7 +55,19 @@ def test_help() -> None:
     assert "bookmark" in result.output
     assert "delete" in result.output
     assert "unify-persons" in result.output
+    assert "demo" in result.output
     assert "ingest" not in result.output
+
+
+def test_demo_seed_creates_fixture_and_outputs_json(tmp_path: Path) -> None:
+    config_dir = tmp_path / "atlas-demo"
+
+    result = runner.invoke(app, ["demo", "seed", "--config-dir", str(config_dir), "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["entities"] == 12
+    assert (config_dir / "agentgraph.db").exists()
 
 
 def test_bookmark_command_dispatches_to_cli_query() -> None:

@@ -73,6 +73,9 @@ agentgraph serve [--reload]
 agentgraph mcp-serve
 agentgraph mcp-config   # stdio config for Claude Desktop/Claude Code; ChatGPT uses a tunneled HTTPS /mcp endpoint
 
+# Create the self-contained fictional graph used by the public demo
+agentgraph demo seed --config-dir <directory> [--reset] [--json]
+
 # Install the bundled AgentGraph skill into ~/.agents/skills or ./.agents/skills
 agentgraph install-skill [graph] [--target user|project] [--force] [--json]
 ```
@@ -142,6 +145,7 @@ agentgraph download <attachment-document-entity-id> --output <file-or-dir>
 - Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep. Without `--json`, the command displays the updated canonical Person, including merged identity metadata and duplicate identities.
 - `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
 - Server logs go to stdout unless the process manager redirects them elsewhere
+- `agentgraph demo seed` is an offline CLI fixture; it does not configure or require an MCP client
 
 ## Stub Entities
 

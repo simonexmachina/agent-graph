@@ -28,8 +28,8 @@ uv venv "${venv_dir}" --python 3.12
 uv pip install --python "${venv_dir}/bin/python" "${wheel}"
 
 cd "${work_dir}"
+"${venv_dir}/bin/agentgraph" demo seed --config-dir "${config_dir}" --json | grep --fixed-strings '"entities": 12'
 AGENTGRAPH_CONFIG_DIR="${config_dir}" \
-AGENTGRAPH_BACKEND_SQLITE_VECTOR_MODE=bm25-only \
 AGENTGRAPH_SERVER_PORT="${server_port}" \
   "${venv_dir}/bin/agentgraph" serve >"${server_log}" 2>&1 &
 server_pid=$!

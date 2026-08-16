@@ -1,6 +1,6 @@
 [project]
 name = "agentgraph-connector-discord"
-version = "0.5.1"
+version = "0.5.2"
 description = "Discord connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [

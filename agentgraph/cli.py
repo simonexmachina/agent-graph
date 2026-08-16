@@ -6,6 +6,7 @@ import asyncio
 import json as _json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import typer
@@ -18,6 +19,11 @@ app = typer.Typer(
     help="Local knowledge graph for AI agents.",
     no_args_is_help=True,
 )
+demo_app = typer.Typer(
+    help="Create reproducible local demo graphs.",
+    no_args_is_help=True,
+)
+app.add_typer(demo_app, name="demo")
 auth_app = typer.Typer(
     help="Show auth provider state or manage connector authentication.",
     invoke_without_command=True,
@@ -42,6 +48,34 @@ def _readable_credentials() -> Iterator[None]:
 def _status_label(status: str) -> str:
     return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(
         status, status
+    )
+
+
+@demo_app.command("seed")
+def seed_demo_command(
+    config_dir: Path = typer.Option(
+        ...,
+        "--config-dir",
+        help="Explicit non-default config directory for the isolated demo graph",
+    ),
+    reset: bool = typer.Option(False, "--reset", help="Replace an existing demo database"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Seed the fictional Atlas graph used by the launch demo."""
+    from agentgraph.demo import seed_demo
+
+    try:
+        result = asyncio.run(seed_demo(config_dir, reset=reset))
+    except (FileExistsError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    if json:
+        typer.echo(_json.dumps(result, indent=2))
+        return
+    typer.echo(f"Seeded Atlas demo graph at {result['database']}")
+    typer.echo(
+        f"{result['entities']} entities, {result['persons']} people, {result['edges']} edges"
     )
 
 

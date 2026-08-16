@@ -136,11 +136,16 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "Three ways context enters" in how_it_works_html
     assert "fetch_entity_tool" in how_it_works_html
     assert "Before I reply to Maya" in demo_html
-    assert "Restart the coding agent" in demo_html
+    assert "agentgraph-server" in demo_html
+    assert "demo<span" in demo_html
+    assert "Open a new coding-agent session" in demo_html
     assert "AgentGraph CLI" in demo_html
     assert "mcp-config" not in demo_article
     assert "http.server" not in demo_article
     assert "Observe the first article" not in demo_article
+    assert "git clone" not in demo_article
+    assert "uv sync" not in demo_article
+    assert "AGENTGRAPH_BACKEND_SQLITE_VECTOR_MODE" not in demo_article
     assert "Retention and deletion" in privacy_html
     assert "Open-source software" in terms_html
     assert "<h1>Commands</h1>" in commands_html
