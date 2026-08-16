@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from agentgraph.connectors.base import ConnectorCommandEffects
+from agentgraph.connectors.base import ConnectorCommandEffects, EntityReference
 from agentgraph.core.context import set_backend
 
 # ---------------------------------------------------------------------------
@@ -1240,6 +1240,43 @@ async def test_mcp_connector_command_queues_requested_poll() -> None:
 
     assert json.loads(result)["poll"] == poll_result
     schedule_poll.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mcp_connector_command_executes_requested_entity_deletion() -> None:
+    from agentgraph.mcp.server import run_connector_command_tool
+
+    class Connector:
+        source = "rss"
+
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "ok", "args": args}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(
+                delete_entities=(EntityReference("rss", "feed/example"),),
+            )
+
+    deleted = [{"id": "feed", "platform": "rss", "platform_entity_id": "feed/example"}]
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch(
+            "agentgraph.connectors.command_effects.execute_deletions",
+            new=AsyncMock(return_value=deleted),
+        ) as execute_deletions,
+    ):
+        result = await run_connector_command_tool("rss", ["remove", "https://example.com/feed.xml"])
+
+    assert json.loads(result)["deleted_entities"] == deleted
+    execute_deletions.assert_awaited_once()
 
 
 @pytest.mark.asyncio

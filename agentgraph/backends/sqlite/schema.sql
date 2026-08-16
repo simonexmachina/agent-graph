@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS entities (
     synced_at          TEXT,  -- ISO8601 UTC
     observed_at        TEXT,
     retention_policy   TEXT NOT NULL DEFAULT 'observed'
-                       CHECK (retention_policy IN ('observed', 'owned', 'connected')),
+                       CHECK (retention_policy IN ('observed', 'owned', 'connected', 'persistent')),
     retention_parent_id TEXT REFERENCES entities(id) ON DELETE CASCADE,
     cumulative_observation_duration_ms INTEGER NOT NULL DEFAULT 0,
     bookmarked         INTEGER NOT NULL DEFAULT 0,

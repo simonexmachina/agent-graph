@@ -49,6 +49,8 @@ Remove one or more exact configured feed URLs:
 agentgraph connector rss remove https://example.com/feed.xml
 ```
 
+Removing a feed also deletes its feed `Folder` and relationships. Indexed articles remain in the graph and expire under the normal retention policy.
+
 ## Import OPML
 
 Import an OPML export from a feed reader:
@@ -77,16 +79,12 @@ The RSS connector also polls configured feeds in the background when `agentgraph
 
 ## Browser observations
 
-Configured feed URLs and, after indexing, a small set of article URL-prefix patterns derived
-from known entry links are exposed to the browser extension. The extension refreshes those
-patterns periodically and can then report observation for matching feed and article pages.
+After indexing, a small set of article URL-prefix patterns derived from known entry links are exposed to the browser extension. The extension refreshes those patterns periodically and can then report observation for matching article pages.
 
 The prefixes are only an extension-side eligibility filter. The server attributes observations to RSS
-only when the observed, normalized URL exactly matches a configured feed or previously indexed
-RSS entry. Unknown pages under a matching article prefix are ignored.
+only when the observed, normalized URL exactly matches a previously indexed RSS entry. Unknown pages under a matching article prefix are ignored.
 
-Observing the exact configured feed URL updates the feed `Folder`, whose stored ID is derived as
-`feed/{feed_hash}`. Observing an article URL updates only the existing RSS `Document` whose
+RSS feed Folders are durable configured sources and are not browser-observable. Observing an article URL updates only the existing RSS `Document` whose
 `metadata.web_url` exactly matches the normalized URL. Polling and hydration do not count as
 observations or extend observation-based retention. See [Entity retention](retention.html).
 

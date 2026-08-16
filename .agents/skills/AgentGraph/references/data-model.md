@@ -46,4 +46,6 @@ document.
 
 Observable entities expire from `observed_at`, or local `created_at` if never
 observed. Messages and Gmail attachment documents follow their parent. Persons remain
-while connected. Bookmarks protect an entity from automatic expiration.
+while connected. Configured RSS feed Folders are persistent source entities and are
+removed by the RSS connector's `remove` command or explicit deletion. Bookmarks protect
+an entity from automatic expiration.

@@ -17,6 +17,7 @@ from agentgraph_connector_rss import (
     _MAX_OBSERVATION_ENTRIES_PER_FEED,
     FeedAuthor,
     RssConnector,
+    _feed_id,
     _fetch_feed,
     _parse_authors,
     derive_observation_url_patterns,
@@ -122,7 +123,7 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
     ):
         patterns = await RssConnector().observation_url_patterns()
 
-    assert patterns == [feed_url, "https://example.com/*"]
+    assert patterns == ["https://example.com/*"]
     backend.query_by_filter.assert_awaited_once_with(
         "Document",
         {"platform": "rss", "feed_url": feed_url},
@@ -174,6 +175,30 @@ async def test_rss_observation_resolution_ignores_unknown_matching_prefix_url() 
     ref = await RssConnector().resolve_observation_url("https://example.com/articles/not-indexed")
 
     assert ref is None
+
+
+@pytest.mark.asyncio
+async def test_rss_observation_resolution_ignores_configured_feed_url() -> None:
+    feed_url = "https://example.com/feed.xml"
+    backend = MagicMock()
+    backend.query_by_filter = AsyncMock(return_value=[])
+    set_backend(backend)
+
+    with patch(
+        "agentgraph_connector_rss.load_rss_settings",
+        return_value=RssConfig(feed_urls=[feed_url]),
+    ):
+        ref = await RssConnector().resolve_observation_url(feed_url)
+
+    assert ref is None
+    backend.query_by_filter.assert_awaited_once_with(
+        "Document",
+        {"platform": "rss", "web_url": feed_url},
+        1,
+        "updated_at",
+        None,
+        None,
+    )
 
 
 def test_rss_config_roundtrip_uses_config_toml(
@@ -440,6 +465,19 @@ def test_rss_connector_remove_reports_removed_feed(
     assert result["removed"] == ["https://example.com/two.xml"]
     assert result["feed_urls"] == ["https://example.com/one.xml"]
     assert saved["data"] == {"feed_urls": ["https://example.com/one.xml"]}
+
+
+def test_rss_connector_remove_requests_feed_folder_deletion() -> None:
+    feed_url = "https://example.com/two.xml"
+
+    effects = RssConnector.command_effects(
+        ["remove", feed_url],
+        {"status": "ok", "removed": [feed_url]},
+    )
+
+    assert [(item.platform, item.platform_entity_id) for item in effects.delete_entities] == [
+        ("rss", f"feed/{_feed_id(feed_url)}")
+    ]
 
 
 def test_parse_opml_feeds_deduplicates_feed_urls(tmp_path: Path) -> None:

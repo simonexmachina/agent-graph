@@ -30,7 +30,7 @@ from agentgraph.auth.credentials import (
     upsert_platform_account,
 )
 from agentgraph.cli import app
-from agentgraph.connectors.base import ConnectorAccount, ConnectorCommandEffects
+from agentgraph.connectors.base import ConnectorAccount, ConnectorCommandEffects, EntityReference
 from agentgraph.core.storage import EntityResult
 
 runner = CliRunner()
@@ -1014,6 +1014,36 @@ def test_connector_command_queues_requested_poll() -> None:
     assert result.exit_code == 0
     assert json.loads(result.output)["poll"] == poll_result
     queue_poll.assert_called_once_with("rss")
+
+
+def test_connector_command_executes_requested_entity_deletion() -> None:
+    class _DeletingRssConnector(_FakeRssConnector):
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "ok", "args": args}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(
+                delete_entities=(EntityReference("rss", "feed/example"),),
+            )
+
+    deleted = [{"id": "feed", "platform": "rss", "platform_entity_id": "feed/example"}]
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=_DeletingRssConnector()),
+        patch("agentgraph.cli_query.run_graph_operation", return_value=deleted) as run_operation,
+    ):
+        result = runner.invoke(app, ["connector", "rss", "remove", "https://example.com/feed.xml", "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["deleted_entities"] == deleted
+    run_operation.assert_called_once()
 
 
 def test_connector_command_queues_requested_ingest_for_account() -> None:

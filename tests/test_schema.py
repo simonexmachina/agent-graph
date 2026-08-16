@@ -40,6 +40,67 @@ async def test_tables_exist(sqlite_backend: SQLiteBackend) -> None:
     assert "observed_at" in {row["name"] for row in columns}
 
 
+async def test_schema_migration_makes_rss_folders_persistent(tmp_path: Path) -> None:
+    db_path = tmp_path / "v1.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE entities (
+            id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            platform_entity_id TEXT NOT NULL,
+            title TEXT,
+            content TEXT,
+            content_embedding BLOB,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_created_at TEXT,
+            source_updated_at TEXT,
+            synced_at TEXT,
+            observed_at TEXT,
+            retention_policy TEXT NOT NULL DEFAULT 'observed'
+                CHECK (retention_policy IN ('observed', 'owned', 'connected')),
+            retention_parent_id TEXT,
+            cumulative_observation_duration_ms INTEGER NOT NULL DEFAULT 0,
+            bookmarked INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (platform, platform_entity_id)
+        );
+        PRAGMA user_version=1;
+        """
+    )
+    conn.executemany(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, created_at, updated_at,
+            observed_at, retention_policy, cumulative_observation_duration_ms
+        ) VALUES (?, ?, ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', ?, 'observed', 1)
+        """,
+        [
+            ("feed", "Folder", "rss", "feed/example", "2026-01-02T00:00:00Z"),
+            ("document", "Document", "web", "https://example.com", "2026-01-03T00:00:00Z"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    backend = SQLiteBackend(str(db_path), vector_mode="bm25-only")
+    await backend.initialize()
+    try:
+        feed = await backend.get_entity_by_id("feed")
+        document = await backend.get_entity_by_id("document")
+    finally:
+        await backend.close()
+
+    assert feed is not None
+    assert feed["retention_policy"] == "persistent"
+    assert feed["observed_at"] is None
+    assert document is not None
+    assert document["retention_policy"] == "observed"
+    assert document["observed_at"] == "2026-01-03T00:00:00Z"
+
+
 async def test_insert_person_and_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
     conn = sqlite_backend._conn_or_raise()
     person_id = "person-1"

@@ -197,7 +197,7 @@ async def test_sqlite_backends_do_not_reapply_schema_after_initialization(tmp_pa
 
     with sqlite3.connect(database_path) as conn:
         schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
-    assert schema_version == 1
+    assert schema_version == 2
 
 
 @pytest.mark.asyncio

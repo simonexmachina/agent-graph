@@ -47,7 +47,7 @@ If you connect an MCP client, that client can receive content from your local Ag
 
 ## Retention and deletion
 
-Observable entities use a configurable retention window, `AGENTGRAPH_RETENTION_DAYS`, which defaults to 90 days. Browser observation updates an entity's `observed_at` timestamp. Direct fetch, polling, ingest, and source changes do not. Messages and attachments can follow a parent entity's lifecycle, while Person entities remain only while connected to other graph entities. Bookmarks protect selected entities from automatic expiration.
+Observable entities use a configurable retention window, `AGENTGRAPH_RETENTION_DAYS`, which defaults to 90 days. Browser observation updates an entity's `observed_at` timestamp. Direct fetch, polling, ingest, and source changes do not. Messages and attachments can follow a parent entity's lifecycle, Person entities remain only while connected to other graph entities, and configured RSS feed Folders remain until explicitly removed. Bookmarks protect selected entities from automatic expiration.
 
 You can delete an entity with `agentgraph delete`, remove bookmark protection with `agentgraph bookmark --remove`, or remove the local database and config directory to delete the entire local graph. Deleting local AgentGraph data does not delete the source material from Gmail, Drive, Slack, Discord, or another connected service.
 
@@ -57,7 +57,7 @@ See [Entity retention](/retention.html) for the complete policy and expiration b
 
 - Run `agentgraph auth remove <provider>` or use the corresponding MCP authentication-removal tool to remove locally stored provider credentials.
 - Revoke AgentGraph in the connected provider's account or application settings to invalidate access at the source.
-- Remove configured RSS feeds or Web observation URLs with their connector `remove` commands.
+- Remove configured RSS feeds or Web observation URLs with their connector `remove` commands. Removing an RSS feed also removes its feed Folder and edges; indexed articles follow normal retention.
 - Stop `agentgraph serve` and remove the Chrome extension to stop browser observation.
 - Remove AgentGraph from the MCP client to stop that client reading the local graph.
 

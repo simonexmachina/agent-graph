@@ -64,7 +64,7 @@ _LIST_PAGE_ORDER_BY = {
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 _FTS_DELETE_CHUNK_SIZE = 500
 _BUSY_TIMEOUT_MS = 5_000
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 def _now() -> str:
@@ -241,6 +241,7 @@ class SQLiteBackend(StorageBackend):
             or "source_updated_at" not in columns
             or "retention_policy" not in columns
             or "retention_parent_id" not in columns
+            or await self._retention_policy_needs_migration()
         )
         if needs_retention_migration:
             await self._rebuild_entities_for_retention(columns)
@@ -291,6 +292,14 @@ class SQLiteBackend(StorageBackend):
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC)"
         )
 
+    async def _retention_policy_needs_migration(self) -> bool:
+        """Return whether the entity policy constraint lacks persistent support."""
+        cursor = await self._conn_or_raise().execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entities'"
+        )
+        row = await cursor.fetchone()
+        return row is None or "'persistent'" not in str(row["sql"])
+
     async def _rebuild_entities_for_retention(self, columns: set[str]) -> None:
         """Best-effort migration from source-based timestamps to lifecycle timestamps."""
         conn = self._conn_or_raise()
@@ -316,7 +325,10 @@ class SQLiteBackend(StorageBackend):
             source_updated = "updated_at" if "updated_at" in columns else "NULL"
 
         if "retention_policy" in columns:
-            retention_policy = "retention_policy"
+            retention_policy = (
+                "CASE WHEN platform = 'rss' AND entity_type = 'Folder' THEN 'persistent' "
+                "ELSE retention_policy END"
+            )
         else:
             retention_policy = (
                 "CASE entity_type WHEN 'Person' THEN 'connected' "
@@ -339,6 +351,10 @@ class SQLiteBackend(StorageBackend):
                 "CASE WHEN entity_type IN ('Channel', 'Document', 'Email', 'Folder', 'Spreadsheet') "
                 "AND cumulative_observation_duration_ms > 0 THEN observed_at ELSE NULL END"
             )
+        observed = (
+            "CASE WHEN platform = 'rss' AND entity_type = 'Folder' THEN NULL "
+            f"ELSE {observed} END"
+        )
         duration = "cumulative_observation_duration_ms" if "cumulative_observation_duration_ms" in columns else "0"
         bookmarked = "bookmarked" if "bookmarked" in columns else "0"
         await conn.execute("PRAGMA foreign_keys=OFF")
@@ -362,7 +378,7 @@ class SQLiteBackend(StorageBackend):
                     synced_at TEXT,
                     observed_at TEXT,
                     retention_policy TEXT NOT NULL DEFAULT 'observed'
-                        CHECK (retention_policy IN ('observed', 'owned', 'connected')),
+                        CHECK (retention_policy IN ('observed', 'owned', 'connected', 'persistent')),
                     retention_parent_id TEXT REFERENCES entities_new(id) ON DELETE CASCADE,
                     cumulative_observation_duration_ms INTEGER NOT NULL DEFAULT 0,
                     bookmarked INTEGER NOT NULL DEFAULT 0,

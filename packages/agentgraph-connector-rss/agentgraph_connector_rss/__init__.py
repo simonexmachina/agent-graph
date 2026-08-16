@@ -25,6 +25,7 @@ from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
     EntityRecord,
+    EntityReference,
     FetchPolicy,
     PersonRecord,
     ResourceType,
@@ -157,7 +158,19 @@ class RssConnector(BaseConnector):
     ) -> ConnectorCommandEffects:
         _ = result
         command = args[0] if args else None
-        return ConnectorCommandEffects(poll=command in {"add", "import-opml"})
+        removed = result.get("removed") if command == "remove" else None
+        deleted = (
+            tuple(
+                EntityReference(platform=cls.source, platform_entity_id=f"feed/{_feed_id(feed_url)}")
+                for feed_url in removed
+            )
+            if isinstance(removed, list)
+            else ()
+        )
+        return ConnectorCommandEffects(
+            poll=command in {"add", "import-opml"},
+            delete_entities=deleted,
+        )
 
     def can_handle(self, url: str) -> bool:
         return self.resolve_url(url) is not None
@@ -181,15 +194,6 @@ class RssConnector(BaseConnector):
         meta: dict[str, str] | None = None,
     ) -> SourceReference | None:
         _ = meta
-        configured_feed = self.resolve_url(url)
-        if configured_feed is not None:
-            return SourceReference(
-                source=self.source,
-                resource_type="folder",
-                resource_id=f"feed/{_feed_id(url)}",
-                fetch_meta={"feed_url": url},
-            )
-
         normalised_url = normalise_article_url(url)
         if normalised_url is None:
             return None
@@ -235,7 +239,7 @@ class RssConnector(BaseConnector):
         for feed_url, entries in results:
             links_by_feed[feed_url] = _entry_links(entries)
         derived_patterns = derive_observation_url_patterns(links_by_feed)
-        self._observation_patterns = list(dict.fromkeys([*settings.feed_urls, *derived_patterns]))
+        self._observation_patterns = list(dict.fromkeys(derived_patterns))
         return self._observation_patterns
 
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
@@ -314,6 +318,7 @@ async def _fetch_feed(
             title=feed_title,
             content=f"RSS feed: {feed_title}\n{feed_url}",
             metadata={"feed_url": feed_url, "web_url": feed_url},
+            retention_policy="persistent",
         )
     ]
     edges: list[EdgeRecord] = []
@@ -416,7 +421,7 @@ def _rss_help() -> str:
             "  add <feed-url> [feed-url...]",
             "      Validate and add one or more RSS/Atom feeds, then queue an RSS poll.",
             "  remove <feed-url> [feed-url...]",
-            "      Remove one or more exact RSS/Atom feed URLs from the configured feed list.",
+            "      Remove feed URLs and their local feed Folders; indexed articles remain.",
             "  import-opml <file.opml> [--all | --select <indexes>]",
             "      Import RSS/Atom feed URLs from an OPML file. Omit flags for checkbox selection.",
             "",

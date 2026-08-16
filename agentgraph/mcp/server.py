@@ -278,7 +278,8 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             ["add", "https://simonwillison.net/atom/everything/"].
             RSS add validates the supplied URLs as feeds before saving and
             queues an RSS poll after a successful change.
-            RSS remove is available as:
+            RSS remove deletes the configured feed's local Folder and feed edges, while
+            leaving indexed articles subject to their normal retention. It is available as:
             ["remove", "https://simonwillison.net/atom/everything/"].
             RSS OPML import is also available as:
             ["import-opml", "/path/to/feeds.opml", "--all"] or
@@ -302,6 +303,10 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
     try:
         result = type(connector).run_cli_command(args)
         effects = type(connector).command_effects(args, result)
+        if effects.delete_entities:
+            from agentgraph.connectors.command_effects import execute_deletions
+
+            result["deleted_entities"] = await execute_deletions(effects)
         if effects.poll:
             from agentgraph.server.sync import schedule_poll_connector
 

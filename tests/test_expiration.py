@@ -193,6 +193,24 @@ async def test_sqlite_expiration_uses_created_at_for_never_observed_entities(
     assert await sqlite_backend.get_entity_by_id("never-observed") is None
 
 
+async def test_sqlite_expiration_keeps_persistent_entities(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    stale_time = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    await sqlite_backend._execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, created_at, updated_at,
+            retention_policy
+        ) VALUES ('rss-feed', 'Folder', 'rss', 'feed/example', ?, ?, 'persistent')
+        """,
+        [stale_time, stale_time],
+    )
+
+    assert await sqlite_backend.expire_entities(90) == 0
+    assert await sqlite_backend.get_entity_by_id("rss-feed") is not None
+
+
 async def test_sqlite_expiration_cascades_owned_messages_and_removes_orphan_people(
     sqlite_backend: SQLiteBackend,
 ) -> None:

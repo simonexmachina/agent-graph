@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 # All resource_type values understood by the connector layer.
 # Each value maps to a distinct fetch strategy within a connector.
 ResourceType = Literal["channel", "dm", "document", "folder", "message", "spreadsheet", "thread"]
-RetentionPolicy = Literal["observed", "owned", "connected"]
+RetentionPolicy = Literal["observed", "owned", "connected", "persistent"]
 
 # All valid entity_type values stored in the DB.
 ENTITY_TYPES: tuple[str, ...] = (
@@ -53,12 +53,21 @@ class SourceReference:
 
 
 @dataclass(frozen=True)
+class EntityReference:
+    """A connector-owned external entity identifier."""
+
+    platform: str
+    platform_entity_id: str
+
+
+@dataclass(frozen=True)
 class ConnectorCommandEffects:
     """Side effects requested after a connector command succeeds."""
 
     poll: bool = False
     ingest: bool = False
     ingest_account_id: str | None = None
+    delete_entities: tuple[EntityReference, ...] = ()
 
 
 class PersonRecord(BaseModel):

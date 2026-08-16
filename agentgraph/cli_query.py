@@ -34,6 +34,11 @@ def _run[T](operation: Callable[[], Awaitable[T]]) -> T:
         raise SystemExit(1) from exc
 
 
+def run_graph_operation[T](operation: Callable[[], Awaitable[T]]) -> T:
+    """Run a graph operation from another CLI command."""
+    return _run(operation)
+
+
 def cmd_search(
     query: str,
     entity_types: list[str],

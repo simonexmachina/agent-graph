@@ -15,3 +15,12 @@ async def delete_entity(target: str) -> dict[str, Any]:
         raise ValueError(f"Entity {target!r} not found")
     deleted = await get_backend().delete_entity(entity["id"])
     return {"deleted": True, "entity": deleted}
+
+
+async def delete_platform_entity(platform: str, platform_entity_id: str) -> dict[str, Any] | None:
+    """Delete an external entity if it is present in the graph."""
+    entity = await get_backend().get_entity_by_platform(platform, platform_entity_id)
+    if entity is None:
+        return None
+    deleted = await get_backend().delete_entity(entity["id"])
+    return {"deleted": True, "entity": deleted}

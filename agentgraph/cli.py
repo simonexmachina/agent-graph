@@ -335,6 +335,11 @@ def connector_command(
     try:
         result = type(connector).run_cli_command(command_args)
         effects = type(connector).command_effects(command_args, result)
+        if effects.delete_entities:
+            from agentgraph.cli_query import run_graph_operation
+            from agentgraph.connectors.command_effects import execute_deletions
+
+            result["deleted_entities"] = run_graph_operation(lambda: execute_deletions(effects))
         if effects.poll:
             from agentgraph.cli_sync import queue_connector_poll
 
