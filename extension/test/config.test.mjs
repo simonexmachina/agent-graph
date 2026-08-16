@@ -28,7 +28,7 @@ test("normalizeServerBaseUrl rejects unsupported hosts and malformed URLs", () =
 test("derived endpoints are built from the configured base URL", () => {
   assert.equal(DEFAULT_SERVER_BASE_URL, "http://localhost:8765");
   assert.equal(getHealthUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/health");
-  assert.equal(getMetaUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/cli/meta");
+  assert.equal(getMetaUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/meta");
   assert.equal(getReportObservationUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/report-observation");
   assert.equal(getExtensionPageUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/extension/page");
   assert.equal(getExtensionFetchUrl(DEFAULT_SERVER_BASE_URL), "http://localhost:8765/api/extension/fetch");

@@ -77,8 +77,8 @@ def test_legacy_report_dwell_payload_is_accepted(client: TestClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cli_meta_includes_dynamic_connector_patterns() -> None:
-    from agentgraph.server.cli_api import cli_meta
+async def test_meta_includes_dynamic_connector_patterns() -> None:
+    from agentgraph.server.meta_api import get_meta
 
     connector = MagicMock()
     connector.source = "rss"
@@ -91,7 +91,7 @@ async def test_cli_meta_includes_dynamic_connector_patterns() -> None:
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[connector]),
         patch("agentgraph.config.get_settings", return_value=settings),
     ):
-        result = await cli_meta()
+        result = await get_meta()
 
     assert result["url_patterns"] == ["https://example.com/articles/*"]
     assert result["observation_threshold_ms"] == 3_000
@@ -99,8 +99,8 @@ async def test_cli_meta_includes_dynamic_connector_patterns() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cli_meta_can_skip_dynamic_connector_patterns() -> None:
-    from agentgraph.server.cli_api import cli_meta
+async def test_meta_can_skip_dynamic_connector_patterns() -> None:
+    from agentgraph.server.meta_api import get_meta
 
     connector = MagicMock()
     connector.source = "rss"
@@ -112,7 +112,7 @@ async def test_cli_meta_can_skip_dynamic_connector_patterns() -> None:
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[connector]),
         patch("agentgraph.config.get_settings", return_value=settings),
     ):
-        result = await cli_meta(include_dynamic_url_patterns=False)
+        result = await get_meta(include_dynamic_url_patterns=False)
 
     assert result["entity_types"]
     assert result["platforms"] == ["rss"]
@@ -121,8 +121,8 @@ async def test_cli_meta_can_skip_dynamic_connector_patterns() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cli_meta_skips_slow_dynamic_connector_and_returns_remaining_patterns() -> None:
-    from agentgraph.server.cli_api import cli_meta
+async def test_meta_skips_slow_dynamic_connector_and_returns_remaining_patterns() -> None:
+    from agentgraph.server.meta_api import get_meta
 
     slow_connector = MagicMock()
     slow_connector.source = "rss"
@@ -140,9 +140,9 @@ async def test_cli_meta_skips_slow_dynamic_connector_and_returns_remaining_patte
     with (
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[slow_connector, fast_connector]),
         patch("agentgraph.config.get_settings", return_value=settings),
-        patch("agentgraph.server.cli_api._DYNAMIC_PATTERN_TIMEOUT_SECONDS", 0.01),
+        patch("agentgraph.server.meta_api._DYNAMIC_PATTERN_TIMEOUT_SECONDS", 0.01),
     ):
-        result = await cli_meta()
+        result = await get_meta()
 
     assert result["url_patterns"] == ["http://localhost:3000/*"]
 

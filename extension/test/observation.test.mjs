@@ -47,7 +47,7 @@ async function configureObservation(
   durationThresholdMs = 0,
 ) {
   globalThis.fetch = async (url) => {
-    if (url.endsWith("/api/cli/meta")) {
+    if (url.endsWith("/api/meta")) {
       return Response.json({
         url_patterns: urlPatterns,
         observation_threshold_ms: durationThresholdMs,
@@ -134,7 +134,7 @@ test("can surface metadata refresh errors to explicit callers", async () => {
 test("Gmail metadata enriches an existing observation without requiring a restart", async () => {
   const reports = [];
   globalThis.fetch = async (url, options = {}) => {
-    if (url.endsWith("/api/cli/meta")) {
+    if (url.endsWith("/api/meta")) {
       return Response.json({
         url_patterns: ["https://mail.google.com/*"],
         observation_threshold_ms: 20,
@@ -160,7 +160,7 @@ test("Gmail metadata enriches an existing observation without requiring a restar
 test("reports one observation followed by a duration-only update", async () => {
   const reports = [];
   globalThis.fetch = async (url, options = {}) => {
-    if (url.endsWith("/api/cli/meta")) {
+    if (url.endsWith("/api/meta")) {
       return Response.json({
         url_patterns: ["https://example.com/*"],
         observation_threshold_ms: 20,
@@ -191,7 +191,7 @@ test("defers trailing duration until the initial observation succeeds", async ()
     completeInitialReport = resolve;
   });
   globalThis.fetch = async (url, options = {}) => {
-    if (url.endsWith("/api/cli/meta")) {
+    if (url.endsWith("/api/meta")) {
       return Response.json({
         url_patterns: ["https://example.com/*"],
         observation_threshold_ms: 5,
@@ -223,7 +223,7 @@ test("discards trailing duration when the initial observation fails", async () =
     failInitialReport = resolve;
   });
   globalThis.fetch = async (url, options = {}) => {
-    if (url.endsWith("/api/cli/meta")) {
+    if (url.endsWith("/api/meta")) {
       return Response.json({
         url_patterns: ["https://example.com/*"],
         observation_threshold_ms: 5,

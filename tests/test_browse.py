@@ -72,7 +72,7 @@ def test_server_exposes_only_viewer_extension_and_sync_routes() -> None:
 
     paths = {route.path for route in app.routes if isinstance(route, Route | Mount)}
     assert {
-        "/api/cli/meta",
+        "/api/meta",
         "/api/cli/entity/{entity_id:path}",
         "/api/cli/edges/{entity_id:path}",
         "/api/cli/browse/nodes",

@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import logging
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -16,8 +14,6 @@ from fastapi import APIRouter, HTTPException, Query
 router = APIRouter(prefix="/api/cli", tags=["cli"])
 
 _WHITESPACE_RE = re.compile(r"\s+")
-_DYNAMIC_PATTERN_TIMEOUT_SECONDS = 2.0
-logger = logging.getLogger(__name__)
 
 
 async def search_entities(
@@ -144,43 +140,6 @@ def _summarize_entities(
     from agentgraph.graph.operations import summarize_entities
 
     return summarize_entities(entities, content_limit=content_limit)
-
-
-@router.get("/meta")
-async def cli_meta(include_dynamic_url_patterns: bool = True) -> dict[str, Any]:
-    """Return registered connector sources, URL patterns, and known entity types."""
-    from agentgraph.config import get_settings
-    from agentgraph.connectors.base import ENTITY_TYPES
-    from agentgraph.connectors.registry import get_all_connectors
-
-    connectors = get_all_connectors()
-    seen_patterns: list[str] = []
-    seen_set: set[str] = set()
-    for c in connectors:
-        if include_dynamic_url_patterns:
-            try:
-                patterns = await asyncio.wait_for(
-                    c.observation_url_patterns(), timeout=_DYNAMIC_PATTERN_TIMEOUT_SECONDS
-                )
-            except TimeoutError:
-                logger.warning(
-                    "Timed out loading observation URL patterns for connector %s",
-                    c.source,
-                )
-                continue
-        else:
-            patterns = c.url_patterns
-        for p in patterns:
-            if p not in seen_set:
-                seen_patterns.append(p)
-                seen_set.add(p)
-
-    return {
-        "entity_types": list(ENTITY_TYPES),
-        "platforms": sorted({c.source for c in connectors}),
-        "url_patterns": seen_patterns,
-        "observation_threshold_ms": get_settings().observation_threshold_seconds * 1000,
-    }
 
 
 @router.get("/entity/{entity_id:path}")

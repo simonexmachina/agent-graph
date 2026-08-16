@@ -29,7 +29,7 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/viewer":
             self._send(200, "text/html; charset=utf-8", server.viewer_html)
-        elif path == "/api/cli/meta":
+        elif path == "/api/meta":
             time.sleep(server.meta_delay_seconds)
             self._send(200, "application/json", {"entity_types": ["Document"], "platforms": []})
         elif path.startswith("/api/cli/entity/"):

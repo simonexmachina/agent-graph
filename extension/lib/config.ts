@@ -45,7 +45,7 @@ export function getHealthUrl(serverBaseUrl: string): string {
 }
 
 export function getMetaUrl(serverBaseUrl: string): string {
-  return `${serverBaseUrl}/api/cli/meta`;
+  return `${serverBaseUrl}/api/meta`;
 }
 
 export function getReportObservationUrl(serverBaseUrl: string): string {

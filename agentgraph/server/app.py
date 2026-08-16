@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from agentgraph.core.runtime import backend_context
 from agentgraph.graph.expiration import run_expiration
 from agentgraph.server.cli_api import router as cli_router
+from agentgraph.server.meta_api import router as meta_router
 from agentgraph.server.sync import setup_sync, shutdown_poll_tasks
 from agentgraph.server.sync_api import router as sync_router
 
@@ -90,6 +91,7 @@ async def log_request_timing(request: Request, call_next: Any) -> Any:
     return response
 
 app.include_router(cli_router)
+app.include_router(meta_router)
 app.include_router(sync_router)
 
 
