@@ -15,6 +15,8 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from playwright.sync_api import Browser, Page, ViewportSize, expect, sync_playwright
 
+pytestmark = pytest.mark.browser
+
 
 class _ViewerFixtureServer(ThreadingHTTPServer):
     nodes: list[dict[str, Any]]

@@ -125,7 +125,7 @@ An MCP client you connect can receive content from the local graph, subject to t
 See [AGENTS.md](AGENTS.md) for repository-specific development rules. Before opening a change, run:
 
 ```bash
-uv run pytest tests/ -m "not integration" -q
+uv run pytest tests/ -m "not integration and not browser" -q
 uv run pyright
 uv run ruff check agentgraph/ packages/ scripts/ tests/
 ```

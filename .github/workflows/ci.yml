@@ -19,20 +19,35 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra all
 
-      - name: Install browser for viewer contracts
-        run: uv run playwright install --with-deps chromium
-
       - name: Build docs
         run: uv run python scripts/build_docs.py
 
       - name: Run tests
-        run: uv run pytest tests/ -m "not integration" -q
+        run: uv run pytest tests/ -m "not integration and not browser" -q
 
       - name: Type check
         run: uv run pyright
 
       - name: Lint
         run: uv run ruff check agentgraph/
+
+  viewer-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra all
+
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Run viewer layout contracts
+        run: uv run pytest tests/test_viewer_layout_contract.py -q
 
   wheel-install:
     runs-on: ubuntu-latest

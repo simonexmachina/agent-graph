@@ -52,6 +52,7 @@ agentgraph = "agentgraph.cli:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
+    "browser: marks tests that require a browser (run separately in CI)",
     "integration: marks tests that require a live database (deselect with '-m not integration')",
 ]
 
