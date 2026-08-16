@@ -166,6 +166,7 @@ body:not(.home) .doc>h1:first-child{display:none}
 .home-actions a:hover{text-decoration:none;opacity:.9}
 .architecture-figure{margin:1.5rem 0 2rem;overflow-x:auto}
 .architecture-figure img{display:block;width:100%;min-width:720px;height:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg0)}
+.architecture-figure-fit img{min-width:0}
 .architecture-figure figcaption{margin-top:.65rem;color:var(--muted);font-size:.84rem;line-height:1.5}
 .connector-promise{padding:16px 18px;border-left:3px solid var(--moon);background:var(--panel);margin:1.2rem 0}
 .doc ul,.doc ol{padding-left:1.3rem;margin:0 0 1.15em}

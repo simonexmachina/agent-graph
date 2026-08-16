@@ -21,11 +21,6 @@ source_path = "docs-src/index.md"
 
 Coding agents work well because their source of truth is already available on disk. They can search files, follow references, inspect history, and build a model of a system. AgentGraph applies that advantage to the selected digital context outside the current repository.
 
-<figure class="architecture-figure" tabindex="0">
-  <img src="/assets/diagrams/architecture-overview-dark.svg" alt="Observe, Fetch, and Refresh converge on connector packages that read selected services and write to a local graph. Agents access the graph through the CLI or MCP, while Expiry applies the retention model.">
-  <figcaption>Observe, Fetch, and Refresh converge on connector packages and the local graph. Expiry applies the retention model to stored content.</figcaption>
-</figure>
-
 ## Connectors
 
 Connectors define which selected services and URLs AgentGraph can access. Some use

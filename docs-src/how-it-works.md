@@ -11,7 +11,7 @@ source_path = "docs-src/how-it-works.md"
 
 AgentGraph is infrastructure for the agent you already use. It does not answer questions itself. It gives an MCP client or CLI a searchable, traversable representation of selected messages, documents, people, feeds, and web pages.
 
-<figure class="architecture-figure" tabindex="0">
+<figure class="architecture-figure architecture-figure-fit" tabindex="0">
   <img src="/assets/diagrams/architecture-overview-dark.svg" alt="Observe, Fetch, and Refresh converge on connector packages that read selected services and write to a local graph. Agents access the graph through the CLI or MCP, while Expiry applies the retention model.">
   <figcaption>Observe, Fetch, and Refresh converge on connector packages and the local graph. Expiry applies the retention model to stored content.</figcaption>
 </figure>

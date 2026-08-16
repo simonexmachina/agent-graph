@@ -92,8 +92,9 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'class="shell"' in index_html
     assert architecture_svg.exists()
     assert architecture_svg.stat().st_size > 1_000
-    assert 'src="assets/diagrams/architecture-overview-dark.svg"' in index_html
-    assert 'src="/assets/diagrams/architecture-overview-dark.svg"' not in index_html
+    assert "architecture-overview-dark.svg" not in index_html
+    assert 'src="assets/diagrams/architecture-overview-dark.svg"' in how_it_works_html
+    assert 'class="architecture-figure architecture-figure-fit"' in how_it_works_html
     assert "<title>AgentGraph - Local-first context for AI agents</title>" in index_html
     assert 'rel="canonical" href="https://simonexmachina.github.io/agent-graph/"' in index_html
     assert 'property="og:image"' in index_html
@@ -108,6 +109,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'agentgraph<span class="tok-w"> </span>mcp-config' not in index_html
     assert ".doc .codehilite .tok-n" in docs_css
     assert "var(--code-name)" in docs_css
+    assert ".architecture-figure-fit img{min-width:0}" in docs_css
     assert ".doc pre .copy svg" in docs_css
     assert ">Commands</a>" in index_html
     assert (
