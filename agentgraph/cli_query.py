@@ -1,71 +1,38 @@
-"""CLI query commands backed by the running AgentGraph server."""
+"""CLI graph commands executed directly against the configured backend."""
 
 from __future__ import annotations
 
+import asyncio
 import json
-from typing import Any, NoReturn, cast
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-import httpx
 from rich.console import Console
 from rich.table import Table
 
-from agentgraph.config import get_settings
+from agentgraph.core.runtime import backend_context
+from agentgraph.graph.operations import is_stub, summarize_entities
 
 console = Console()
-GET_TIMEOUT = httpx.Timeout(10, connect=0.5)
-POST_TIMEOUT = httpx.Timeout(30, connect=0.5)
-FETCH_TIMEOUT = httpx.Timeout(15 * 60, connect=0.5)
 
 
-def _server_base() -> str:
-    s = get_settings()
-    return f"http://{s.server_host}:{s.server_port}/api/cli"
+async def _with_backend[T](operation: Callable[[], Awaitable[T]]) -> T:
+    from agentgraph.connectors.registry import bootstrap
+
+    bootstrap()
+    async with backend_context():
+        return await operation()
 
 
-def _server_unavailable(exc: Exception) -> NoReturn:
-    console.print(
-        f"[red]AgentGraph server is not available at {_server_base()}.[/red]\n"
-        "Start it with: [bold]agentgraph serve[/bold]",
-    )
-    raise SystemExit(1) from exc
-
-
-def _get(path: str, params: dict[str, Any] | None = None) -> Any:
-    """GET from the server's CLI API and return parsed JSON."""
+def _run[T](operation: Callable[[], Awaitable[T]]) -> T:
+    """Run one graph operation with a configured backend and concise CLI errors."""
     try:
-        resp = httpx.get(
-            f"{_server_base()}{path}",
-            params=params,
-            timeout=GET_TIMEOUT,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except (httpx.ConnectError, httpx.TimeoutException) as exc:
-        _server_unavailable(exc)
+        return asyncio.run(_with_backend(operation))
+    except Exception as exc:
+        console.print("[red]AgentGraph command failed:[/red] ", end="")
+        console.print(str(exc), markup=False, highlight=False)
+        raise SystemExit(1) from exc
 
-
-def _post(
-    path: str,
-    params: dict[str, Any] | None = None,
-    *,
-    timeout: httpx.Timeout = POST_TIMEOUT,
-) -> Any:
-    """POST to the server's CLI API and return parsed JSON."""
-    try:
-        resp = httpx.post(
-            f"{_server_base()}{path}",
-            params=params,
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except (httpx.ConnectError, httpx.TimeoutException) as exc:
-        _server_unavailable(exc)
-
-
-# ---------------------------------------------------------------------------
-# search
-# ---------------------------------------------------------------------------
 
 def cmd_search(
     query: str,
@@ -75,18 +42,23 @@ def cmd_search(
     as_json: bool,
     platform: str | None = None,
 ) -> None:
-    params: dict[str, Any] = {"q": query, "limit": limit, "min_score": min_score}
-    if entity_types:
-        params["entity_type"] = entity_types
-    if platform:
-        params["platform"] = platform
+    async def operation() -> list[dict[str, Any]]:
+        from agentgraph.graph.query import search_entities
 
-    results = _get("/search", params)
+        results = await search_entities(
+            query,
+            entity_types=entity_types or None,
+            limit=limit,
+            min_score=min_score,
+            platform=platform,
+        )
+        return summarize_entities(results)
+
+    results = _run(operation)
 
     if as_json:
         console.print_json(json.dumps(results, default=str))
         return
-
     if not results:
         console.print("[dim]No results.[/dim]")
         return
@@ -97,22 +69,17 @@ def cmd_search(
     table.add_column("Platform")
     table.add_column("Title / Content", ratio=1)
     table.add_column("Score", justify="right")
-
-    for r in results:
-        snippet = (r.get("title") or r.get("content") or "")[:120]
-        score = f"{r['score']:.4f}" if r.get("score") else "—"
-        table.add_row(str(r["id"])[:8], r["entity_type"], r["platform"], snippet, score)
-
+    for result in results:
+        snippet = (result.get("title") or result.get("content") or "")[:120]
+        score = f"{result['score']:.4f}" if result.get("score") else "—"
+        table.add_row(
+            str(result["id"])[:8],
+            str(result["entity_type"]),
+            str(result["platform"]),
+            str(snippet),
+            score,
+        )
     console.print(table)
-
-
-# ---------------------------------------------------------------------------
-# get
-# ---------------------------------------------------------------------------
-
-def _is_stub(entity: dict[str, Any]) -> bool:
-    """Return True if the entity has no meaningful content (stub / unfetched)."""
-    return not entity.get("title") and not entity.get("content")
 
 
 def _print_field(label: str, value: object) -> None:
@@ -121,7 +88,7 @@ def _print_field(label: str, value: object) -> None:
 
 
 def _print_entity(entity: dict[str, Any]) -> None:
-    """Render an entity in the same detail format used by ``agentgraph get``."""
+    """Render an entity in the detail format used by ``agentgraph get``."""
     console.print(f"[bold]{entity['entity_type']}[/bold] — {entity['platform']}")
     console.print(f"[dim]{entity['id']}[/dim]")
     if entity.get("title"):
@@ -134,105 +101,88 @@ def _print_entity(entity: dict[str, Any]) -> None:
 
 
 def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
-    from agentgraph.graph.query import is_http_url
+    async def operation() -> dict[str, Any] | None:
+        from agentgraph.graph.operations import get_entity_details
 
-    target_is_url = is_http_url(entity_id)
-    try:
-        entity = (
-            _get("/entity-by-url", {"url": entity_id})
-            if target_is_url
-            else _get(f"/entity/{entity_id}")
-        )
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code != 404:
-            raise
-        entity = None
+        return await get_entity_details(entity_id, resolve=resolve)
+
+    entity = _run(operation)
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
-
-    if resolve and _is_stub(entity):
-        console.print("[dim]Stub entity — fetching from source…[/dim]")
-        _post("/fetch-entity", params={"entity_id": entity["id"]})
-        refreshed = _get(f"/entity/{entity['id']}")
-        if refreshed is not None:
-            entity = refreshed
-
     if as_json:
         console.print_json(json.dumps(entity, default=str))
         return
-
     _print_entity(entity)
 
 
-# ---------------------------------------------------------------------------
-# edges
-# ---------------------------------------------------------------------------
-
 def cmd_edges(
-    entity_id: str, edge_type: str | None, direction: str, as_json: bool
+    entity_id: str,
+    edge_type: str | None,
+    direction: str,
+    as_json: bool,
 ) -> None:
-    params: dict[str, Any] = {"direction": direction}
-    if edge_type:
-        params["edge_type"] = edge_type
+    async def operation() -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        from agentgraph.graph.operations import get_entity_edges
 
-    try:
-        edges = _get(f"/edges/{entity_id}", params)
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code != 404:
-            raise
+        return await get_entity_edges(
+            entity_id,
+            edge_type=edge_type,
+            direction=direction,
+        )
+
+    entity, edges = _run(operation)
+    if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
-
     if as_json:
         console.print_json(json.dumps(edges, default=str))
         return
-
     if not edges:
         console.print("[dim]No edges found.[/dim]")
         return
 
-    table = Table(title=f"Edges for {entity_id[:8]}…", show_lines=True)
+    canonical_id = str(entity["id"])
+    table = Table(title=f"Edges for {canonical_id[:8]}…", show_lines=True)
     table.add_column("Type")
     table.add_column("Direction")
     table.add_column("Other end")
     table.add_column("Platform")
-
-    for e in edges:
-        if e.get("source_entity_id") == entity_id:
+    for edge in edges:
+        if edge.get("source_entity_id") == canonical_id:
             direction_label = "→ out"
-            other = e.get("target_ref") or e.get("target_entity_id") or "?"
+            other = edge.get("target_ref") or edge.get("target_entity_id") or "?"
         else:
             direction_label = "← in"
-            other = e.get("source_ref") or e.get("source_entity_id") or "?"
-        table.add_row(e["edge_type"], direction_label, str(other), e.get("platform") or "")
-
+            other = edge.get("source_ref") or edge.get("source_entity_id") or "?"
+        table.add_row(
+            str(edge["edge_type"]),
+            direction_label,
+            str(other),
+            str(edge.get("platform") or ""),
+        )
     console.print(table)
 
 
-# ---------------------------------------------------------------------------
-# traverse
-# ---------------------------------------------------------------------------
+def cmd_traverse(
+    entity_id: str,
+    max_depth: int,
+    as_json: bool,
+    resolve: bool = False,
+) -> None:
+    async def operation() -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        from agentgraph.graph.operations import traverse_entity
 
-def cmd_traverse(entity_id: str, max_depth: int, as_json: bool, resolve: bool = False) -> None:
-    try:
-        result = _get(f"/traverse/{entity_id}", {"depth": max_depth})
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code != 404:
-            raise
+        return await traverse_entity(
+            entity_id,
+            max_depth=max_depth,
+            resolve=resolve,
+        )
+
+    entity, result = _run(operation)
+    if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
-
-    if resolve and result:
-        stubs = [n for n in result.get("nodes", []) if _is_stub(n)]
-        if stubs:
-            console.print(f"[dim]Resolving {len(stubs)} stub node(s)…[/dim]")
-            for stub in stubs:
-                _post("/fetch-entity", params={"entity_id": stub["id"]})
-            refreshed = _get(f"/traverse/{entity_id}", {"depth": max_depth})
-            if refreshed is not None:
-                result = refreshed
-
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -240,90 +190,65 @@ def cmd_traverse(entity_id: str, max_depth: int, as_json: bool, resolve: bool = 
     nodes = result.get("nodes", [])
     edges = result.get("edges", [])
     console.print(f"[bold]Traversal:[/bold] {len(nodes)} nodes, {len(edges)} edges")
-
     table = Table(title="Nodes", show_lines=True)
     table.add_column("ID", style="dim", max_width=8)
     table.add_column("Type")
     table.add_column("Platform")
     table.add_column("Title")
-
-    for n in nodes:
-        stub_marker = " [dim](stub)[/dim]" if _is_stub(n) else ""
-        table.add_row(str(n["id"])[:8], n["entity_type"], n["platform"], (n.get("title") or "") + stub_marker)
-
+    for node in nodes:
+        stub_marker = " [dim](stub)[/dim]" if is_stub(node) else ""
+        table.add_row(
+            str(node["id"])[:8],
+            str(node["entity_type"]),
+            str(node["platform"]),
+            str(node.get("title") or "") + stub_marker,
+        )
     console.print(table)
 
 
-# ---------------------------------------------------------------------------
-# query
-# ---------------------------------------------------------------------------
-
-def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
-    try:
-        result = _post(
-            "/fetch",
-            params={"platform": platform, "resource_id": resource_id},
-            timeout=FETCH_TIMEOUT,
-        )
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
-    if as_json:
-        console.print_json(json.dumps(result, default=str))
-        return
-
+def _print_fetch_result(result: dict[str, Any]) -> None:
     console.print(
         f"[green]Fetched:[/green] {result['entities']} entities, "
         f"{result['persons']} persons, {result['edges']} edges"
     )
+
+
+def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
+    async def operation() -> dict[str, Any]:
+        from agentgraph.graph.fetch import fetch_entity
+
+        return await fetch_entity(platform, resource_id)
+
+    result = _run(operation)
+    if as_json:
+        console.print_json(json.dumps(result, default=str))
+        return
+    _print_fetch_result(result)
 
 
 def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
-    try:
-        result = _post(
-            "/fetch-entity",
-            params={"entity_id": entity_id},
-            timeout=FETCH_TIMEOUT,
-        )
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
+    async def operation() -> dict[str, Any]:
+        from agentgraph.graph.fetch import fetch_entity_by_id
+
+        return await fetch_entity_by_id(entity_id)
+
+    result = _run(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
-
-    console.print(
-        f"[green]Fetched:[/green] {result['entities']} entities, "
-        f"{result['persons']} persons, {result['edges']} edges"
-    )
+    _print_fetch_result(result)
 
 
 def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None:
-    try:
-        params: dict[str, Any] = {"entity_id": entity_id}
-        if output_path is not None:
-            params["output_path"] = output_path
-        result = _post("/download", params=params)
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
+    async def operation() -> dict[str, Any]:
+        from agentgraph.graph.download import download_entity
 
+        return await download_entity(entity_id, output_path)
+
+    result = _run(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
-
     console.print(
         f"[green]Downloaded:[/green] {result['filename']} "
         f"({result['bytes']} bytes) → {result['path']}"
@@ -331,40 +256,32 @@ def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None
 
 
 def cmd_bookmark(target: str, bookmarked: bool, as_json: bool) -> None:
-    try:
-        result = _post("/bookmark", params={"target": target, "bookmarked": bookmarked})
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
+    async def operation() -> dict[str, Any]:
+        from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
 
+        if bookmarked:
+            return await bookmark_target(target)
+        return await set_entity_bookmark(target, False)
+
+    result = _run(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
-
     label = result.get("title") or result.get("platform_entity_id") or result["id"]
     action = "Bookmarked" if bookmarked else "Bookmark removed"
     console.print(f"[green]{action}:[/green] {label} [{result['id'][:8]}]")
 
 
 def cmd_delete(target: str, as_json: bool) -> None:
-    try:
-        result = _post("/delete", params={"target": target})
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
+    async def operation() -> dict[str, Any]:
+        from agentgraph.graph.delete import delete_entity
 
+        return await delete_entity(target)
+
+    result = _run(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
-
     entity = result["entity"]
     label = entity.get("title") or entity.get("platform_entity_id") or entity["id"]
     console.print(f"[green]Deleted:[/green] {label} [{entity['id'][:8]}]")
@@ -375,22 +292,15 @@ def cmd_unify_persons(
     duplicate_entity_ids: list[str],
     as_json: bool,
 ) -> None:
-    try:
-        result = _post(
-            "/unify-persons",
-            params={"primary": primary_entity_id, "duplicate": duplicate_entity_ids},
-        )
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
+    async def operation() -> dict[str, Any]:
+        from agentgraph.graph.person import unify_persons
+
+        return await unify_persons(primary_entity_id, duplicate_entity_ids)
+
+    result = _run(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
-
     console.print(
         f"[green]Unified:[/green] {result['merged_count']} duplicate person(s). "
         "Canonical person:"
@@ -408,25 +318,24 @@ def cmd_query(
     as_json: bool,
     has_attachments: bool = False,
 ) -> None:
-    params: dict[str, Any] = {
-        "entity_type": entity_type,
-        "limit": limit,
-        "order_by": order_by,
-        "mine": authored_by_me,
-    }
-    if since:
-        params["since"] = since
-    if filters:
-        params["filter"] = [f"{k}={v}" for k, v in filters.items()]
-    if has_attachments:
-        params["has_attachments"] = True
+    async def operation() -> list[dict[str, Any]]:
+        from agentgraph.graph.query import query_by_filter
 
-    results = _get("/query", params)
+        results = await query_by_filter(
+            entity_type,
+            filters=filters,
+            limit=limit,
+            order_by=order_by,
+            since=since,
+            authored_by_me=authored_by_me,
+            has_attachments=has_attachments,
+        )
+        return summarize_entities(results)
 
+    results = _run(operation)
     if as_json:
         console.print_json(json.dumps(results, default=str))
         return
-
     if not results:
         console.print("[dim]No results.[/dim]")
         return
@@ -435,80 +344,7 @@ def cmd_query(
     table.add_column("ID", style="dim", max_width=8)
     table.add_column("Platform")
     table.add_column("Title / Content", ratio=1)
-
-    for r in results:
-        snippet = (r.get("title") or r.get("content") or "")[:120]
-        table.add_row(str(r["id"])[:8], r["platform"], snippet)
-
+    for result in results:
+        snippet = (result.get("title") or result.get("content") or "")[:120]
+        table.add_row(str(result["id"])[:8], str(result["platform"]), str(snippet))
     console.print(table)
-
-
-def cmd_poll(source: str | None, as_json: bool) -> None:
-    params: dict[str, Any] = {}
-    if source:
-        params["source"] = source
-    try:
-        result = _post("/poll", params=params)
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        console.print(f"[red]{detail}[/red]")
-        return
-    if as_json:
-        console.print_json(json.dumps(result, default=str))
-        return
-
-    polled: list[str] = result.get("polled", [])
-    already_running: list[str] = result.get("already_running", [])
-    skipped: list[dict[str, str | None]] = result.get("skipped", [])
-    if polled:
-        console.print(f"[green]Queued poll:[/green] {', '.join(polled)}")
-    if already_running:
-        console.print(f"[yellow]Already running:[/yellow] {', '.join(already_running)}")
-    for item in skipped:
-        source_name = item.get("source") or "unknown"
-        reason = item.get("reason") or "not available"
-        console.print(f"[yellow]Skipped:[/yellow] {source_name} — {reason}")
-    if not polled and not already_running and not skipped:
-        console.print("[dim]No connectors polled (none matched or none have poll_interval set).[/dim]")
-
-
-def queue_connector_poll(source: str) -> dict[str, str | None]:
-    """Queue one connector through the server and normalize its schedule result."""
-    try:
-        result = cast(dict[str, Any], _post("/poll", params={"source": source}))
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = str(exc.response.json().get("detail", str(exc)))
-        except Exception:
-            detail = str(exc)
-        raise ValueError(detail) from exc
-
-    if source in cast(list[str], result.get("polled", [])):
-        return {"source": source, "status": "queued", "reason": None}
-    if source in cast(list[str], result.get("already_running", [])):
-        return {"source": source, "status": "already_running", "reason": None}
-
-    skipped = cast(list[dict[str, str | None]], result.get("skipped", []))
-    reason = next(
-        (item.get("reason") for item in skipped if item.get("source") == source),
-        "poll was not queued",
-    )
-    return {"source": source, "status": "skipped", "reason": reason}
-
-
-def queue_connector_ingest(source: str, account_id: str | None = None) -> dict[str, Any]:
-    """Queue a connector-owned historical ingest through the server."""
-    try:
-        params: dict[str, Any] = {"source": source}
-        if account_id is not None:
-            params["account_id"] = account_id
-        return cast(dict[str, Any], _post("/ingest", params=params))
-    except httpx.HTTPStatusError as exc:
-        try:
-            detail = exc.response.json().get("detail", str(exc))
-        except Exception:
-            detail = str(exc)
-        raise ValueError(str(detail)) from exc

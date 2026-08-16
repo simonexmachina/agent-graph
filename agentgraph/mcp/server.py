@@ -20,12 +20,14 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from agentgraph.core.context import get_backend
+from agentgraph.graph.operations import (
+    get_entity_details,
+    get_entity_edges,
+    traverse_entity,
+)
 from agentgraph.graph.query import (
-    get_edges,
-    get_entity,
     query_by_filter,
     search_entities,
-    traverse_graph,
 )
 from agentgraph.perf import timed
 
@@ -462,26 +464,6 @@ async def search_entities_tool(
 # ---------------------------------------------------------------------------
 
 
-async def _get_existing_entity(target: str) -> dict[str, Any] | None:
-    """Resolve an existing entity from any target accepted by the read tools."""
-    from agentgraph.graph.query import get_entity_by_url, is_http_url
-
-    return await get_entity_by_url(target) if is_http_url(target) else await get_entity(target)
-
-
-def _is_stub(entity: dict[str, Any]) -> bool:
-    return not entity.get("title") and not entity.get("content")
-
-
-async def _resolve_stub(entity: dict[str, Any]) -> dict[str, Any]:
-    """Fetch one stub through its owning connector and return the refreshed entity."""
-    from agentgraph.graph.fetch import fetch_entity_by_id
-
-    entity_id = str(entity["id"])
-    await fetch_entity_by_id(entity_id)
-    return await get_entity(entity_id) or entity
-
-
 @mcp.tool(
     annotations=_tool_annotations(
         "Get a full AgentGraph entity",
@@ -505,11 +487,9 @@ async def get_entity_tool(entity_id: str, resolve: bool = False) -> str:
         JSON object with all entity fields, or an error message if not found.
     """
     try:
-        entity = await _get_existing_entity(entity_id)
+        entity = await get_entity_details(entity_id, resolve=resolve)
         if entity is None:
             return json.dumps({"error": f"Entity {entity_id!r} not found"})
-        if resolve and _is_stub(entity):
-            entity = await _resolve_stub(entity)
         return json.dumps(entity, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -547,10 +527,13 @@ async def get_edges_tool(
         JSON array of edge objects including source/target references.
     """
     try:
-        entity = await _get_existing_entity(entity_id)
+        entity, edges = await get_entity_edges(
+            entity_id,
+            edge_type=edge_type,
+            direction=direction,
+        )
         if entity is None:
             return json.dumps({"error": f"Entity {entity_id!r} not found"})
-        edges = await get_edges(str(entity["id"]), edge_type=edge_type, direction=direction)
         return json.dumps(edges, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -592,19 +575,14 @@ async def traverse_graph_tool(
         JSON object with "nodes" (entities) and "edges" lists.
     """
     try:
-        entity = await _get_existing_entity(entity_id)
+        depth = min(max(max_depth, 0), 4)
+        entity, result = await traverse_entity(
+            entity_id,
+            max_depth=depth,
+            resolve=resolve,
+        )
         if entity is None:
             return json.dumps({"error": f"Entity {entity_id!r} not found"})
-
-        depth = min(max(max_depth, 0), 4)
-        canonical_id = str(entity["id"])
-        result = await traverse_graph(canonical_id, max_depth=depth)
-        if resolve:
-            stubs = [node for node in result.get("nodes", []) if _is_stub(node)]
-            for stub in stubs:
-                await _resolve_stub(stub)
-            if stubs:
-                result = await traverse_graph(canonical_id, max_depth=depth)
 
         # Trim content on nodes to keep response size manageable.
         for node in result.get("nodes", []):

@@ -336,11 +336,11 @@ def connector_command(
         result = type(connector).run_cli_command(command_args)
         effects = type(connector).command_effects(command_args, result)
         if effects.poll:
-            from agentgraph.cli_query import queue_connector_poll
+            from agentgraph.cli_sync import queue_connector_poll
 
             result["poll"] = queue_connector_poll(connector.source)
         if effects.ingest:
-            from agentgraph.cli_query import queue_connector_ingest
+            from agentgraph.cli_sync import queue_connector_ingest
 
             result["ingest"] = queue_connector_ingest(
                 connector.source,
@@ -721,7 +721,7 @@ def poll(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Trigger a background poll for one or all connectors."""
-    from agentgraph.cli_query import cmd_poll
+    from agentgraph.cli_sync import cmd_poll
 
     cmd_poll(source=source, as_json=json)
 

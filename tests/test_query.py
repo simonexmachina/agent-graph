@@ -770,7 +770,7 @@ async def test_mcp_get_entity_tool_not_found() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
     eid = str(uuid4())
-    with patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=None)):
+    with patch("agentgraph.mcp.server.get_entity_details", new=AsyncMock(return_value=None)):
         result = await get_entity_tool(eid)
 
     parsed = json.loads(result)
@@ -784,7 +784,10 @@ async def test_mcp_get_entity_tool_found() -> None:
     eid = str(uuid4())
     fake_entity = _entity(title="My Doc")
     fake_entity["id"] = eid
-    with patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=fake_entity)):
+    with patch(
+        "agentgraph.mcp.server.get_entity_details",
+        new=AsyncMock(return_value=fake_entity),
+    ):
         result = await get_entity_tool(eid)
 
     parsed = json.loads(result)
@@ -796,25 +799,18 @@ async def test_mcp_get_entity_tool_resolves_stub_when_requested() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
     eid = str(uuid4())
-    stub = _entity(title="", content="")
-    stub["id"] = eid
-    resolved = {**stub, "title": "Resolved", "content": "Full source content"}
+    resolved = _entity(title="Resolved", content="Full source content")
+    resolved["id"] = eid
 
-    with (
-        patch(
-            "agentgraph.mcp.server.get_entity",
-            new=AsyncMock(side_effect=[stub, resolved]),
-        ),
-        patch(
-            "agentgraph.graph.fetch.fetch_entity_by_id",
-            new=AsyncMock(return_value={"entities": 1}),
-        ) as fetch,
-    ):
+    with patch(
+        "agentgraph.mcp.server.get_entity_details",
+        new=AsyncMock(return_value=resolved),
+    ) as get_entity_details:
         result = await get_entity_tool(eid, resolve=True)
 
     parsed = json.loads(result)
     assert parsed["content"] == "Full source content"
-    fetch.assert_awaited_once_with(eid)
+    get_entity_details.assert_awaited_once_with(eid, resolve=True)
 
 
 @pytest.mark.asyncio
@@ -822,14 +818,14 @@ async def test_mcp_get_entity_tool_does_not_resolve_stub_by_default() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
     stub = _entity(title="", content="")
-    with (
-        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=stub)),
-        patch("agentgraph.graph.fetch.fetch_entity_by_id", new=AsyncMock()) as fetch,
-    ):
+    with patch(
+        "agentgraph.mcp.server.get_entity_details",
+        new=AsyncMock(return_value=stub),
+    ) as get_entity_details:
         result = await get_entity_tool(str(stub["id"]))
 
     assert json.loads(result)["content"] == ""
-    fetch.assert_not_awaited()
+    get_entity_details.assert_awaited_once_with(str(stub["id"]), resolve=False)
 
 
 @pytest.mark.asyncio
@@ -837,7 +833,10 @@ async def test_mcp_get_entity_tool_url_found() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
     fake_entity = _entity(platform="web", title="Web Page")
-    with patch("agentgraph.graph.query.get_entity_by_url", new=AsyncMock(return_value=fake_entity)):
+    with patch(
+        "agentgraph.mcp.server.get_entity_details",
+        new=AsyncMock(return_value=fake_entity),
+    ):
         result = await get_entity_tool("https://example.com/page")
 
     parsed = json.loads(result)
@@ -848,7 +847,7 @@ async def test_mcp_get_entity_tool_url_found() -> None:
 async def test_mcp_get_entity_tool_url_not_found() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
-    with patch("agentgraph.graph.query.get_entity_by_url", new=AsyncMock(return_value=None)):
+    with patch("agentgraph.mcp.server.get_entity_details", new=AsyncMock(return_value=None)):
         result = await get_entity_tool("https://example.com/missing")
 
     parsed = json.loads(result)
@@ -861,55 +860,50 @@ async def test_mcp_get_edges_resolves_platform_reference() -> None:
 
     entity = _entity(platform="slack")
     edge = _edge(source_entity_id=str(entity["id"]), target_entity_id=str(uuid4()))
-    with (
-        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=entity)) as get,
-        patch("agentgraph.mcp.server.get_edges", new=AsyncMock(return_value=[edge])) as edges,
-    ):
+    with patch(
+        "agentgraph.mcp.server.get_entity_edges",
+        new=AsyncMock(return_value=(entity, [edge])),
+    ) as get_entity_edges:
         result = await get_edges_tool("slack/T123/C123")
 
     assert json.loads(result) == [edge]
-    get.assert_awaited_once_with("slack/T123/C123")
-    edges.assert_awaited_once_with(str(entity["id"]), edge_type=None, direction="both")
+    get_entity_edges.assert_awaited_once_with(
+        "slack/T123/C123",
+        edge_type=None,
+        direction="both",
+    )
 
 
 @pytest.mark.asyncio
 async def test_mcp_traverse_caps_depth() -> None:
     from agentgraph.mcp.server import traverse_graph_tool
 
-    captured: dict[str, Any] = {}
-
-    async def fake_traverse(entity_id: str, max_depth: int) -> dict[str, Any]:
-        captured["depth"] = max_depth
-        return {"nodes": [], "edges": []}
-
     entity = _entity()
-    with (
-        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=entity)),
-        patch("agentgraph.mcp.server.traverse_graph", new=fake_traverse),
-    ):
+    with patch(
+        "agentgraph.mcp.server.traverse_entity",
+        new=AsyncMock(return_value=(entity, {"nodes": [], "edges": []})),
+    ) as traverse:
         await traverse_graph_tool(str(uuid4()), max_depth=99)
 
-    assert captured["depth"] == 4  # capped at 4
+    traverse.assert_awaited_once()
+    assert traverse.await_args is not None
+    assert traverse.await_args.kwargs["max_depth"] == 4
 
 
 @pytest.mark.asyncio
 async def test_mcp_traverse_allows_depth_zero() -> None:
     from agentgraph.mcp.server import traverse_graph_tool
 
-    captured: dict[str, Any] = {}
-
-    async def fake_traverse(entity_id: str, max_depth: int) -> dict[str, Any]:
-        captured["depth"] = max_depth
-        return {"nodes": [], "edges": []}
-
     entity = _entity()
-    with (
-        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=entity)),
-        patch("agentgraph.mcp.server.traverse_graph", new=fake_traverse),
-    ):
+    with patch(
+        "agentgraph.mcp.server.traverse_entity",
+        new=AsyncMock(return_value=(entity, {"nodes": [], "edges": []})),
+    ) as traverse:
         await traverse_graph_tool(str(uuid4()), max_depth=0)
 
-    assert captured["depth"] == 0
+    traverse.assert_awaited_once()
+    assert traverse.await_args is not None
+    assert traverse.await_args.kwargs["max_depth"] == 0
 
 
 @pytest.mark.asyncio
@@ -917,31 +911,19 @@ async def test_mcp_traverse_resolves_stub_nodes_and_repeats_traversal() -> None:
     from agentgraph.mcp.server import traverse_graph_tool
 
     start = _entity(title="Start")
-    stub = _entity(title="", content="")
-    resolved = {**stub, "title": "Hydrated", "content": "source"}
-    traversals = [
-        {"nodes": [start, stub], "edges": []},
-        {"nodes": [start, resolved], "edges": []},
-    ]
+    resolved = _entity(title="Hydrated", content="source")
+    traversal = {"nodes": [start, resolved], "edges": []}
 
-    with (
-        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=start)),
-        patch(
-            "agentgraph.mcp.server.traverse_graph",
-            new=AsyncMock(side_effect=traversals),
-        ) as traverse,
-        patch(
-            "agentgraph.graph.fetch.fetch_entity_by_id",
-            new=AsyncMock(return_value={"entities": 1}),
-        ) as fetch,
-    ):
+    with patch(
+        "agentgraph.mcp.server.traverse_entity",
+        new=AsyncMock(return_value=(start, traversal)),
+    ) as traverse:
         result = await traverse_graph_tool("gdocs/doc-id", resolve=True)
 
     parsed = json.loads(result)
     assert parsed["nodes"][1]["title"] == "Hydrated"
     assert parsed["nodes"][1]["content_truncated"] is False
-    fetch.assert_awaited_once_with(str(stub["id"]))
-    assert traverse.await_count == 2
+    traverse.assert_awaited_once_with("gdocs/doc-id", max_depth=2, resolve=True)
 
 
 @pytest.mark.asyncio

@@ -174,7 +174,7 @@ def run_oauth_flow(
     )
     if start_backfill:
         try:
-            from agentgraph.cli_query import queue_connector_ingest
+            from agentgraph.cli_sync import queue_connector_ingest
 
             queue_connector_ingest("gmail", account_id=resolved_account_id)
             typer.echo("Gmail backfill queued - progress in server logs (agentgraph serve)")

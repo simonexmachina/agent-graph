@@ -13,7 +13,6 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 from agentgraph_connector_google.provider import (
     GOOGLE_OAUTH_CLIENT_ID,
@@ -94,7 +93,7 @@ def test_delete_command_dispatches_to_cli_query() -> None:
     cmd_delete.assert_called_once_with(target="abc123", as_json=True)
 
 
-def test_get_url_uses_entity_by_url_endpoint() -> None:
+def test_get_url_uses_shared_operation_without_http() -> None:
     from agentgraph.cli_query import cmd_get
 
     entity: EntityResult = {
@@ -105,24 +104,35 @@ def test_get_url_uses_entity_by_url_endpoint() -> None:
         "metadata": {},
     }
 
-    with patch("agentgraph.cli_query._get", return_value=entity) as get:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.operations.get_entity_details",
+            new=AsyncMock(return_value=entity),
+        ) as get_entity_details,
+        patch("httpx.get", side_effect=AssertionError("unexpected HTTP GET")),
+        patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
+    ):
         cmd_get("https://example.com/page", as_json=True)
 
-    get.assert_called_once_with("/entity-by-url", {"url": "https://example.com/page"})
+    get_entity_details.assert_awaited_once_with("https://example.com/page", resolve=False)
 
 
-def test_get_url_reports_not_found_from_server() -> None:
+def test_get_url_reports_not_found_from_backend(capsys: pytest.CaptureFixture[str]) -> None:
     from agentgraph.cli_query import cmd_get
 
-    response = httpx.Response(
-        404,
-        json={"detail": "Entity not found"},
-        request=httpx.Request("GET", "http://127.0.0.1:8765/api/cli/entity-by-url"),
-    )
-    error = httpx.HTTPStatusError("not found", request=response.request, response=response)
-
-    with patch("agentgraph.cli_query._get", side_effect=error):
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.operations.get_entity_details",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
         cmd_get("https://example.com/page", as_json=True)
+
+    assert "not found" in capsys.readouterr().out
 
 
 def test_get_prints_raw_content_without_rich_markup_errors() -> None:
@@ -137,11 +147,18 @@ def test_get_prints_raw_content_without_rich_markup_errors() -> None:
         "metadata": {"pattern": "[/not-rich-markup]"},
     }
 
-    with patch("agentgraph.cli_query._get", return_value=entity):
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.operations.get_entity_details",
+            new=AsyncMock(return_value=entity),
+        ),
+    ):
         cmd_get("entity-12345678", as_json=False)
 
 
-def test_bookmark_uses_server_endpoint() -> None:
+def test_bookmark_uses_graph_operation_without_http() -> None:
     from agentgraph.cli_query import cmd_bookmark
 
     entity = {
@@ -151,16 +168,21 @@ def test_bookmark_uses_server_endpoint() -> None:
         "bookmarked": True,
     }
 
-    with patch("agentgraph.cli_query._post", return_value=entity) as post:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.bookmark.bookmark_target",
+            new=AsyncMock(return_value=entity),
+        ) as bookmark_target,
+        patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
+    ):
         cmd_bookmark("https://example.com/page", bookmarked=True, as_json=True)
 
-    post.assert_called_once_with(
-        "/bookmark",
-        params={"target": "https://example.com/page", "bookmarked": True},
-    )
+    bookmark_target.assert_awaited_once_with("https://example.com/page")
 
 
-def test_delete_uses_server_endpoint() -> None:
+def test_delete_uses_graph_operation_without_http() -> None:
     from agentgraph.cli_query import cmd_delete
 
     result = {
@@ -172,10 +194,18 @@ def test_delete_uses_server_endpoint() -> None:
         },
     }
 
-    with patch("agentgraph.cli_query._post", return_value=result) as post:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.delete.delete_entity",
+            new=AsyncMock(return_value=result),
+        ) as delete_entity,
+        patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
+    ):
         cmd_delete("abc123", as_json=True)
 
-    post.assert_called_once_with("/delete", params={"target": "abc123"})
+    delete_entity.assert_awaited_once_with("abc123")
 
 
 def test_unify_persons_shows_the_canonical_person(capsys: pytest.CaptureFixture[str]) -> None:
@@ -195,12 +225,19 @@ def test_unify_persons_shows_the_canonical_person(capsys: pytest.CaptureFixture[
         },
     }
 
-    with patch("agentgraph.cli_query._post", return_value=result) as post:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.person.unify_persons",
+            new=AsyncMock(return_value=result),
+        ) as unify_persons,
+    ):
         cmd_unify_persons("canonical", ["duplicate-1", "duplicate-2"], as_json=False)
 
-    post.assert_called_once_with(
-        "/unify-persons",
-        params={"primary": "canonical", "duplicate": ["duplicate-1", "duplicate-2"]},
+    unify_persons.assert_awaited_once_with(
+        "canonical",
+        ["duplicate-1", "duplicate-2"],
     )
     output = capsys.readouterr().out
     assert "Unified: 2 duplicate person(s). Canonical person:" in output
@@ -209,22 +246,7 @@ def test_unify_persons_shows_the_canonical_person(capsys: pytest.CaptureFixture[
     assert "slack_user_id" in output
 
 
-def test_query_exits_when_server_unavailable() -> None:
-    from agentgraph.cli_query import cmd_query
-
-    with patch("agentgraph.cli_query._get", side_effect=SystemExit(1)), pytest.raises(SystemExit):
-        cmd_query(
-            entity_type="Email",
-            filters={},
-            limit=5,
-            order_by="updated_at",
-            since=None,
-            authored_by_me=False,
-            as_json=True,
-        )
-
-
-def test_download_uses_server_endpoint() -> None:
+def test_download_uses_graph_operation_without_http() -> None:
     from agentgraph.cli_query import cmd_download
 
     result = {
@@ -233,50 +255,63 @@ def test_download_uses_server_endpoint() -> None:
         "path": "/tmp/sheet.xlsx",
     }
 
-    with patch("agentgraph.cli_query._post", return_value=result) as post:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.download.download_entity",
+            new=AsyncMock(return_value=result),
+        ) as download_entity,
+        patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
+    ):
         cmd_download("gsheets/sheet-id", output_path="/tmp", as_json=True)
 
-    post.assert_called_once_with(
-        "/download",
-        params={"entity_id": "gsheets/sheet-id", "output_path": "/tmp"},
-    )
+    download_entity.assert_awaited_once_with("gsheets/sheet-id", "/tmp")
 
 
-def test_fetch_uses_server_endpoint() -> None:
-    from agentgraph.cli_query import FETCH_TIMEOUT, cmd_fetch
+def test_fetch_uses_graph_operation_without_http() -> None:
+    from agentgraph.cli_query import cmd_fetch
 
     fetch_result = {"entities": 1, "persons": 0, "edges": 0}
 
-    with patch("agentgraph.cli_query._post", return_value=fetch_result) as post:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.fetch.fetch_entity",
+            new=AsyncMock(return_value=fetch_result),
+        ) as fetch_entity,
+        patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
+    ):
         cmd_fetch("gsheets", "sheet-id", as_json=True)
 
-    post.assert_called_once_with(
-        "/fetch",
-        params={"platform": "gsheets", "resource_id": "sheet-id"},
-        timeout=FETCH_TIMEOUT,
-    )
+    fetch_entity.assert_awaited_once_with("gsheets", "sheet-id")
 
 
-def test_fetch_entity_uses_extended_server_timeout() -> None:
-    from agentgraph.cli_query import FETCH_TIMEOUT, cmd_fetch_entity
+def test_fetch_entity_uses_graph_operation_without_http() -> None:
+    from agentgraph.cli_query import cmd_fetch_entity
 
     fetch_result = {"entities": 1, "persons": 1, "edges": 1}
 
-    with patch("agentgraph.cli_query._post", return_value=fetch_result) as post:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.fetch.fetch_entity_by_id",
+            new=AsyncMock(return_value=fetch_result),
+        ) as fetch_entity_by_id,
+        patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
+    ):
         cmd_fetch_entity("entity-id", as_json=True)
 
-    post.assert_called_once_with(
-        "/fetch-entity",
-        params={"entity_id": "entity-id"},
-        timeout=FETCH_TIMEOUT,
-    )
+    fetch_entity_by_id.assert_awaited_once_with("entity-id")
 
 
-def test_server_unavailable_exits_nonzero() -> None:
+def test_backend_error_exits_nonzero() -> None:
     from agentgraph.cli_query import cmd_query
 
     with (
-        patch("httpx.get", side_effect=httpx.ConnectError("offline")),
+        patch("agentgraph.cli_query.backend_context", side_effect=RuntimeError("database offline")),
         pytest.raises(SystemExit) as exc,
     ):
         cmd_query(
@@ -292,16 +327,19 @@ def test_server_unavailable_exits_nonzero() -> None:
     assert exc.value.code == 1
 
 
-def test_cli_server_requests_use_short_connect_timeout() -> None:
+def test_query_uses_graph_operation_without_http() -> None:
     from agentgraph.cli_query import cmd_query
 
-    response = httpx.Response(
-        200,
-        json=[],
-        request=httpx.Request("GET", "http://127.0.0.1:8765/api/cli/query"),
-    )
-
-    with patch("httpx.get", return_value=response) as get:
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.query.query_by_filter",
+            new=AsyncMock(return_value=[]),
+        ) as query_by_filter,
+        patch("httpx.get", side_effect=AssertionError("unexpected HTTP GET")),
+        patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
+    ):
         cmd_query(
             entity_type="Email",
             filters={},
@@ -312,10 +350,15 @@ def test_cli_server_requests_use_short_connect_timeout() -> None:
             as_json=True,
         )
 
-    timeout = get.call_args.kwargs["timeout"]
-    assert isinstance(timeout, httpx.Timeout)
-    assert timeout.connect == 0.5
-    assert timeout.read == 10
+    query_by_filter.assert_awaited_once_with(
+        "Email",
+        filters={},
+        limit=5,
+        order_by="updated_at",
+        since=None,
+        authored_by_me=False,
+        has_attachments=False,
+    )
 
 
 def test_auth_help() -> None:
@@ -936,7 +979,7 @@ def test_connector_command_queues_requested_poll() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_connector", return_value=_PollingRssConnector()),
-        patch("agentgraph.cli_query.queue_connector_poll", return_value=poll_result) as queue_poll,
+        patch("agentgraph.cli_sync.queue_connector_poll", return_value=poll_result) as queue_poll,
     ):
         result = runner.invoke(
             app, ["connector", "rss", "add", "https://example.com/feed.xml", "--json"]
@@ -968,7 +1011,7 @@ def test_connector_command_queues_requested_ingest_for_account() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_connector", return_value=_IngestingGmailConnector()),
-        patch("agentgraph.cli_query.queue_connector_ingest", return_value=ingest_result) as queue_ingest,
+        patch("agentgraph.cli_sync.queue_connector_ingest", return_value=ingest_result) as queue_ingest,
     ):
         result = runner.invoke(app, ["connector", "gmail", "ingest", "--account", "user@example.com", "--json"])
 
@@ -1007,7 +1050,7 @@ def test_connector_command_does_not_poll_after_validation_error() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_connector", return_value=_InvalidRssConnector()),
-        patch("agentgraph.cli_query.queue_connector_poll") as queue_poll,
+        patch("agentgraph.cli_sync.queue_connector_poll") as queue_poll,
     ):
         result = runner.invoke(app, ["connector", "rss", "add", "https://example.com/not-a-feed"])
 
@@ -1041,9 +1084,9 @@ def test_queue_connector_poll_normalizes_server_result(
     response: dict[str, object],
     expected: dict[str, object],
 ) -> None:
-    from agentgraph.cli_query import queue_connector_poll
+    from agentgraph.cli_sync import queue_connector_poll
 
-    with patch("agentgraph.cli_query._post", return_value=response):
+    with patch("agentgraph.cli_sync._post", return_value=response):
         result = queue_connector_poll("rss")
 
     assert result == expected
@@ -1365,7 +1408,7 @@ def test_auth_google_queues_gmail_backfill_for_new_account(
             return_value=[_FakeGoogleConnector()],
         ),
         patch("agentgraph_connector_google.auth.typer.confirm", return_value=True),
-        patch("agentgraph.cli_query.queue_connector_ingest", return_value=queued) as queue_ingest,
+        patch("agentgraph.cli_sync.queue_connector_ingest", return_value=queued) as queue_ingest,
     ):
         result = runner.invoke(app, ["auth", "google"], input="y\n")
 

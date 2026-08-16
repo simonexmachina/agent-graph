@@ -63,6 +63,7 @@ _LIST_PAGE_ORDER_BY = {
 }
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 _FTS_DELETE_CHUNK_SIZE = 500
+_BUSY_TIMEOUT_MS = 5_000
 
 
 def _now() -> str:
@@ -126,6 +127,7 @@ class SQLiteBackend(StorageBackend):
 
         self._conn = await aiosqlite.connect(self._db_path, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
+        await self._conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
         if self._db_path == ":memory:":
             self._read_conn = self._conn
 
@@ -147,6 +149,7 @@ class SQLiteBackend(StorageBackend):
         if self._db_path != ":memory:":
             self._read_conn = await aiosqlite.connect(self._db_path, isolation_level=None)
             self._read_conn.row_factory = sqlite3.Row
+            await self._read_conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
             await self._read_conn.execute("PRAGMA foreign_keys=ON")
 
         if self._vector_mode == "sqlite-vec":
@@ -316,7 +319,7 @@ class SQLiteBackend(StorageBackend):
         bookmarked = "bookmarked" if "bookmarked" in columns else "0"
         await conn.execute("PRAGMA foreign_keys=OFF")
         try:
-            await conn.execute("BEGIN")
+            await conn.execute("BEGIN IMMEDIATE")
             await conn.execute(
                 """
                 CREATE TABLE entities_new (
@@ -436,7 +439,7 @@ class SQLiteBackend(StorageBackend):
                 persons=len(batch.persons),
                 edges=len(batch.edges),
             ):
-                await conn.execute("BEGIN")
+                await conn.execute("BEGIN IMMEDIATE")
                 try:
                     person_id_map = await self._upsert_persons(
                         conn, batch.persons, person_embeddings
@@ -860,7 +863,7 @@ class SQLiteBackend(StorageBackend):
         assert self._write_lock is not None
         async with self._write_lock:
             conn = self._conn_or_raise()
-            await conn.execute("BEGIN")
+            await conn.execute("BEGIN IMMEDIATE")
             try:
                 all_ids = [primary_entity_id, *duplicate_ids]
                 placeholders = ",".join("?" * len(all_ids))
@@ -1013,7 +1016,7 @@ class SQLiteBackend(StorageBackend):
         assert self._write_lock is not None
         async with self._write_lock:
             conn = self._conn_or_raise()
-            await conn.execute("BEGIN")
+            await conn.execute("BEGIN IMMEDIATE")
             try:
                 await conn.execute(
                     """
@@ -1583,7 +1586,7 @@ class SQLiteBackend(StorageBackend):
         assert self._write_lock is not None
         async with self._write_lock:
             conn = self._conn_or_raise()
-            await conn.execute("BEGIN")
+            await conn.execute("BEGIN IMMEDIATE")
             try:
                 before_cursor = await conn.execute("SELECT count(*) FROM entities")
                 before_row = await before_cursor.fetchone()
@@ -1706,7 +1709,7 @@ class SQLiteBackend(StorageBackend):
         async with self._write_lock:
             conn = self._conn_or_raise()
             now = _now()
-            await conn.execute("BEGIN")
+            await conn.execute("BEGIN IMMEDIATE")
             try:
                 cursor = await conn.execute(
                     """
