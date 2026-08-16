@@ -15,7 +15,7 @@ source_path = "docs-src/index.md"
 
 <div class="home-actions">
   <a class="primary" href="/demo.html">See the demo</a>
-  <a href="/quickstart.html">Quickstart</a>
+  <a href="/install.html">Install</a>
   <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
 </div>
 
@@ -53,8 +53,8 @@ AgentGraph provides a number of connectors for common services, but new connecto
 
 <div class="doc-card-grid">
   <section class="doc-card">
-    <h3><a href="/quickstart.html">Quickstart</a></h3>
-    <p>Install AgentGraph, observe one source, connect MCP, and ask the first useful question.</p>
+    <h3><a href="/install.html">Install</a></h3>
+    <p>Install AgentGraph, connect sources, and configure an optional MCP client.</p>
   </section>
   <section class="doc-card">
     <h3><a href="/how-it-works.html">How it works</a></h3>

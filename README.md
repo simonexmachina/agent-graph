@@ -6,7 +6,7 @@ AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sourc
 
 > **AgentGraph stores context; your agent reasons over it.** It is not an agent, chatbot, hosted graph service, or replacement for the tools you already use.
 
-[See the demo](docs-src/demo.md) · [Quickstart](docs-src/quickstart.md) · [Documentation](https://simonexmachina.github.io/agent-graph/) · [Chrome extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi)
+[See the demo](docs-src/demo.md) · [Install](docs-src/install.md) · [Documentation](https://simonexmachina.github.io/agent-graph/) · [Chrome extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs-src/assets/diagrams/architecture-overview-dark.svg">
@@ -81,7 +81,7 @@ Connect the agent you already use:
 agentgraph mcp-config
 ```
 
-Use the printed stdio configuration with Claude Desktop, Claude Code, Codex, or another compatible MCP client. ChatGPT developer mode uses the streamable HTTP `/mcp` endpoint through HTTPS. The [Quickstart](docs-src/quickstart.md) covers the complete path and expected result.
+Use the printed stdio configuration with Claude Desktop, Claude Code, Codex, or another compatible MCP client. ChatGPT developer mode uses the streamable HTTP `/mcp` endpoint through HTTPS. See [Install](docs-src/install.md) for the complete setup path.
 
 ## What AgentGraph is and is not
 
@@ -112,7 +112,7 @@ An MCP client you connect can receive content from the local graph, subject to t
 ## Documentation
 
 - [Install](docs-src/install.md)
-- [Quickstart](docs-src/quickstart.md)
+- [Install](docs-src/install.md)
 - [How AgentGraph works](docs-src/how-it-works.md)
 - [Connectors](docs-src/connectors.md)
 - [Configuration](docs-src/configuration.md)

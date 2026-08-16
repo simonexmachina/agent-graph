@@ -4,7 +4,7 @@ description = "Install AgentGraph with uv, configure optional connectors, backgr
 nav_title = "Install"
 section = "Start"
 order = 20
-summary = "Install the local application and the connectors you need, then hand off to Quickstart for the first observation and agent query."
+summary = "Install the local application, connect the sources you need, and configure optional MCP clients."
 output = "install.html"
 source_path = "docs-src/install.md"
 +++
@@ -43,6 +43,16 @@ uv tool install 'agentgraph-server[web]'
   <p><strong>Credential storage:</strong> credentials live in <code>~/.agentgraph/</code> by default, or under <code>AGENTGRAPH_CONFIG_DIR</code> if you set a custom config directory.</p>
 </div>
 
+## Connect a source
+
+Run guided onboarding to authenticate each installed connector that requires credentials:
+
+```bash
+agentgraph onboard
+```
+
+RSS and generic Web connectors do not require provider credentials. See [Connectors](/connectors.html) for their setup and supported sources.
+
 ## Install the browser extension
 
 Install the [AgentGraph Chrome Extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU) from the Chrome Web Store.
@@ -58,7 +68,7 @@ npm run build
 
 Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**, and select `extension/dist/`.
 
-After the extension is installed, continue with [Quickstart](/quickstart.html) to authenticate a connector, start the server, observe a resource, and ask the first source-backed agent question.
+After the extension is installed, start `agentgraph serve`, then open a supported resource and keep it focused past the default three-second observation threshold.
 
 ## Optional: Connect ChatGPT or Claude
 

@@ -133,7 +133,8 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "platform=rss" in rss_html
     assert "AGENTGRAPH_SLACK_CLIENT_ID" in slack_html
     assert "Browser-session fallback" in slack_html
-    assert "Quickstart" in index_html
+    assert 'href="install.html"' in index_html
+    assert 'href="quickstart.html"' not in index_html
     assert "What it lets the agent perceive" in connectors_html
     assert "Bring any service into your agent's world" in connectors_html
     assert "Three ways context enters" in how_it_works_html
@@ -156,13 +157,15 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "Retention and deletion" in privacy_html
     assert "Open-source software" in terms_html
     assert "<h1>Commands</h1>" in commands_html
-    assert "After the extension is installed, continue with" in install_html
+    assert "After the extension is installed, start" in install_html
     assert "agentgraph-server" in install_html
     assert "agentgraph-connector-google" not in install_html
     assert "uv sync" not in install_html
     assert "source .venv" not in install_html
     assert "Optional: Connect ChatGPT or Claude" in install_html
     assert "instead of through your coding agent" in install_html
+    assert "Connect a source" in install_html
+    assert "onboard" in install_html
     assert "Authenticate connectors" not in install_html
     assert "agentgraph search" in search_html
     assert "<code>agentgraph search</code>" in search_html
