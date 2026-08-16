@@ -20,6 +20,10 @@ run_connector_command_tool(source, args) -> JSON string
 - `source`: connector source, such as `rss`
 - `args`: connector-owned command and arguments, such as `["add", "https://example.com/feed.xml"]`
 
+Historical ingest is connector-owned. Gmail exposes `["ingest"]` and
+`["ingest", "--account", "user@example.com"]`; there is no separate
+`ingest_connector_tool`. Discover other command sets with `args=["--help"]`.
+
 ## Returns
 
 - connector-defined result JSON

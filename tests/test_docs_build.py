@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import pytest
+from click import Group
 
 import scripts.build_docs as build_docs
 import scripts.serve_docs as serve_docs
@@ -238,3 +239,29 @@ Hello.
     pages = build_docs.load_pages()
 
     assert [page.meta.title for page in pages] == ["Home"]
+
+
+@pytest.mark.asyncio
+async def test_command_and_mcp_reference_pages_match_runtime_interfaces() -> None:
+    from typer.main import get_command
+
+    from agentgraph.cli import app
+    from agentgraph.mcp.server import mcp
+
+    pages = build_docs.load_pages()
+    documented_commands = {
+        page.meta.title for page in pages if page.meta.output_path.parent == Path("commands")
+    }
+    documented_commands.remove("Commands")
+    root_command = get_command(app)
+    assert isinstance(root_command, Group)
+    runtime_commands: set[str] = set(root_command.commands)
+
+    documented_tools = {
+        page.meta.title for page in pages if page.meta.output_path.parent == Path("mcp")
+    }
+    documented_tools.remove("MCP tools")
+    runtime_tools = {tool.name for tool in await mcp.list_tools()}
+
+    assert documented_commands == runtime_commands
+    assert documented_tools == runtime_tools

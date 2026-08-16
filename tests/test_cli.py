@@ -349,6 +349,12 @@ def test_install_skill_defaults_to_user_agents_skills(
     skill_path = home / ".agents" / "skills" / "graph" / "SKILL.md"
     assert skill_path.is_file()
     assert "AgentGraph CLI skill" in skill_path.read_text(encoding="utf-8")
+    references = skill_path.parent / "references"
+    assert {path.name for path in references.glob("*.md")} == {
+        "commands.md",
+        "data-model.md",
+        "operations.md",
+    }
     assert str(skill_path.parent) in result.output
 
 
@@ -425,7 +431,9 @@ def test_install_skill_project_target_uses_current_directory(
     result = runner.invoke(app, ["install-skill", "--target", "project"])
 
     assert result.exit_code == 0
-    assert (tmp_path / ".agents" / "skills" / "graph" / "SKILL.md").is_file()
+    skill_dir = tmp_path / ".agents" / "skills" / "graph"
+    assert (skill_dir / "SKILL.md").is_file()
+    assert (skill_dir / "references" / "commands.md").is_file()
 
 
 class _FakeConnector:

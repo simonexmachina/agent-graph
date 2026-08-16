@@ -58,10 +58,13 @@ def test_slack_auth_skill_documents_oauth_and_explicit_fallback() -> None:
 
 
 def test_graph_skill_has_cli_and_mcp_auth_parity() -> None:
-    skill = (ROOT / ".agents" / "skills" / "graph" / "SKILL.md").read_text()
-    assert "agentgraph auth slack [--method oauth|browser]" in skill
-    assert "authenticate_provider_tool(provider, args, account_id, add)" in skill
-    assert "auth_method" in skill
+    operations = (
+        ROOT / ".agents" / "skills" / "graph" / "references" / "operations.md"
+    ).read_text()
+    assert "agentgraph auth <provider>" in operations
+    assert "list_auth_providers_tool" in operations
+    assert "authenticate_provider_tool" in operations
+    assert "remove_auth_provider_tool" in operations
 
 
 def test_slack_docs_cover_admin_approval_configuration_and_revocation() -> None:

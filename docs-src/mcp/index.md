@@ -16,6 +16,7 @@ source_path = "docs-src/mcp/index.md"
 - [`authenticate_provider_tool`](/mcp/authenticate-provider.html) - run connector-owned provider authentication.
 - [`remove_auth_provider_tool`](/mcp/remove-auth-provider.html) - remove stored credentials for an auth provider.
 - [`run_connector_command_tool`](/mcp/run-connector-command.html) - run connector-owned commands.
+- [`install_skill_tool`](/mcp/install-skill.html) - install the bundled Graph skill for an agent client.
 
 ## Query and traversal
 
@@ -31,7 +32,6 @@ source_path = "docs-src/mcp/index.md"
 - [`fetch_entity_by_id_tool`](/mcp/fetch-entity-by-id.html) - fetch by internal entity UUID.
 - [`download_entity_tool`](/mcp/download-entity.html) - download the source file behind an entity.
 - [`poll_connectors_tool`](/mcp/poll-connectors.html) - trigger background polling for one connector or all polling connectors.
-- [`ingest_connector_tool`](/mcp/ingest-connector.html) - trigger a connector's one-shot background ingest.
 
 ## State
 

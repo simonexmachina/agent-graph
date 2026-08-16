@@ -792,6 +792,47 @@ async def test_mcp_get_entity_tool_found() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_get_entity_tool_resolves_stub_when_requested() -> None:
+    from agentgraph.mcp.server import get_entity_tool
+
+    eid = str(uuid4())
+    stub = _entity(title="", content="")
+    stub["id"] = eid
+    resolved = {**stub, "title": "Resolved", "content": "Full source content"}
+
+    with (
+        patch(
+            "agentgraph.mcp.server.get_entity",
+            new=AsyncMock(side_effect=[stub, resolved]),
+        ),
+        patch(
+            "agentgraph.graph.fetch.fetch_entity_by_id",
+            new=AsyncMock(return_value={"entities": 1}),
+        ) as fetch,
+    ):
+        result = await get_entity_tool(eid, resolve=True)
+
+    parsed = json.loads(result)
+    assert parsed["content"] == "Full source content"
+    fetch.assert_awaited_once_with(eid)
+
+
+@pytest.mark.asyncio
+async def test_mcp_get_entity_tool_does_not_resolve_stub_by_default() -> None:
+    from agentgraph.mcp.server import get_entity_tool
+
+    stub = _entity(title="", content="")
+    with (
+        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=stub)),
+        patch("agentgraph.graph.fetch.fetch_entity_by_id", new=AsyncMock()) as fetch,
+    ):
+        result = await get_entity_tool(str(stub["id"]))
+
+    assert json.loads(result)["content"] == ""
+    fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_mcp_get_entity_tool_url_found() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
@@ -815,6 +856,23 @@ async def test_mcp_get_entity_tool_url_not_found() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_get_edges_resolves_platform_reference() -> None:
+    from agentgraph.mcp.server import get_edges_tool
+
+    entity = _entity(platform="slack")
+    edge = _edge(source_entity_id=str(entity["id"]), target_entity_id=str(uuid4()))
+    with (
+        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=entity)) as get,
+        patch("agentgraph.mcp.server.get_edges", new=AsyncMock(return_value=[edge])) as edges,
+    ):
+        result = await get_edges_tool("slack/T123/C123")
+
+    assert json.loads(result) == [edge]
+    get.assert_awaited_once_with("slack/T123/C123")
+    edges.assert_awaited_once_with(str(entity["id"]), edge_type=None, direction="both")
+
+
+@pytest.mark.asyncio
 async def test_mcp_traverse_caps_depth() -> None:
     from agentgraph.mcp.server import traverse_graph_tool
 
@@ -824,7 +882,11 @@ async def test_mcp_traverse_caps_depth() -> None:
         captured["depth"] = max_depth
         return {"nodes": [], "edges": []}
 
-    with patch("agentgraph.mcp.server.traverse_graph", new=fake_traverse):
+    entity = _entity()
+    with (
+        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=entity)),
+        patch("agentgraph.mcp.server.traverse_graph", new=fake_traverse),
+    ):
         await traverse_graph_tool(str(uuid4()), max_depth=99)
 
     assert captured["depth"] == 4  # capped at 4
@@ -840,10 +902,74 @@ async def test_mcp_traverse_allows_depth_zero() -> None:
         captured["depth"] = max_depth
         return {"nodes": [], "edges": []}
 
-    with patch("agentgraph.mcp.server.traverse_graph", new=fake_traverse):
+    entity = _entity()
+    with (
+        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=entity)),
+        patch("agentgraph.mcp.server.traverse_graph", new=fake_traverse),
+    ):
         await traverse_graph_tool(str(uuid4()), max_depth=0)
 
     assert captured["depth"] == 0
+
+
+@pytest.mark.asyncio
+async def test_mcp_traverse_resolves_stub_nodes_and_repeats_traversal() -> None:
+    from agentgraph.mcp.server import traverse_graph_tool
+
+    start = _entity(title="Start")
+    stub = _entity(title="", content="")
+    resolved = {**stub, "title": "Hydrated", "content": "source"}
+    traversals = [
+        {"nodes": [start, stub], "edges": []},
+        {"nodes": [start, resolved], "edges": []},
+    ]
+
+    with (
+        patch("agentgraph.mcp.server.get_entity", new=AsyncMock(return_value=start)),
+        patch(
+            "agentgraph.mcp.server.traverse_graph",
+            new=AsyncMock(side_effect=traversals),
+        ) as traverse,
+        patch(
+            "agentgraph.graph.fetch.fetch_entity_by_id",
+            new=AsyncMock(return_value={"entities": 1}),
+        ) as fetch,
+    ):
+        result = await traverse_graph_tool("gdocs/doc-id", resolve=True)
+
+    parsed = json.loads(result)
+    assert parsed["nodes"][1]["title"] == "Hydrated"
+    assert parsed["nodes"][1]["content_truncated"] is False
+    fetch.assert_awaited_once_with(str(stub["id"]))
+    assert traverse.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_metadata_guides_agent_workflow() -> None:
+    from agentgraph.mcp.server import mcp
+
+    tools = {tool.name: tool for tool in await mcp.list_tools()}
+
+    instructions = mcp.instructions
+    assert instructions is not None
+    assert "search broadly" in instructions
+    assert tools["search_entities_tool"].inputSchema["properties"]["min_score"][
+        "default"
+    ] == 0.03
+    assert tools["get_entity_tool"].inputSchema["properties"]["resolve"]["default"] is False
+    assert tools["traverse_graph_tool"].inputSchema["properties"]["resolve"][
+        "default"
+    ] is False
+    assert tools["search_entities_tool"].annotations is not None
+    assert tools["search_entities_tool"].annotations.readOnlyHint is True
+    assert tools["delete_entity_tool"].annotations is not None
+    assert tools["delete_entity_tool"].annotations.destructiveHint is True
+    search_description = tools["search_entities_tool"].description
+    query_description = tools["query_by_filter_tool"].description
+    assert search_description is not None
+    assert query_description is not None
+    assert "default 0.03" in search_description
+    assert "filters={\"platform\": \"gmail\"}" in query_description
 
 
 @pytest.mark.asyncio
@@ -1106,7 +1232,9 @@ async def test_mcp_install_skill_tool_installs_to_user_agents_skills(
     assert parsed["skill"] == "graph"
     assert parsed["target"] == "user"
     assert parsed["overwritten"] is False
-    assert (home / ".agents" / "skills" / "graph" / "SKILL.md").is_file()
+    skill_dir = home / ".agents" / "skills" / "graph"
+    assert (skill_dir / "SKILL.md").is_file()
+    assert (skill_dir / "references" / "data-model.md").is_file()
 
 
 @pytest.mark.asyncio

@@ -26,17 +26,23 @@ Coding agents work well because their source of truth is already available on di
   <figcaption>Selected services become one local graph. The coding agent you already use searches, traverses, and fetches that context through MCP.</figcaption>
 </figure>
 
-## Context follows attention
+## Connect selected sources
 
-AgentGraph builds context in three ways:
+Connectors define which selected services and URLs AgentGraph can access. Some use
+provider authentication, while others use connector-owned configuration or require no
+credentials. Connecting a source is setup; context then enters the graph in three ways:
 
 - **Observe:** when you keep a supported page focused, the Chrome extension tells the local server which resource mattered and its connector fetches it.
-- **Fetch:** an agent or the CLI can request a specific missing or stale resource directly.
-- **Refresh:** polling and ingest keep configured or already-known resources current.
+- **Fetch:** an agent or the CLI requests a specific missing or stale resource directly.
+- **Refresh:** polling and connector-owned ingest commands update configured or already-known resources.
 
-Only browser observation updates `observed_at`. Direct fetch and background refresh add useful context without pretending the human looked at it. This distinction powers the local retention model. [See how it works](/how-it-works.html).
+Only observation records human attention in `observed_at`. Fetch and refresh can update
+graph content without implying that the human viewed it. All unbookmarked context remains
+subject to the [retention model](/retention.html).
 
-## What the agent can perceive today
+## What the agent can perceive
+
+AgentGraph provides a number of connectors for common services, but new connectors can also be added to allow integration with other services. Teams, individuals, and open-source contributors can extend AgentGraph to include internal systems, niche tools, exports, local databases, and APIs.
 
 | Connector | What it contributes |
 | --- | --- |
@@ -47,19 +53,9 @@ Only browser observation updates `observed_at`. Direct fetch and background refr
 | RSS | Feeds, posts, dates, authors, and publication relationships |
 | Web | Configured pages and bookmarks with titles, text, metadata, and URLs |
 
-These are not the whole product. They prove a connector pattern that teams, individuals, and open-source contributors can extend to internal systems, niche tools, exports, local databases, and APIs.
-
-<div class="connector-promise"><strong>Bring any service into your agent's world.</strong> Use the bundled connectors today, then build the long tail of context your own agent needs.</div>
+<div class="connector-promise"><strong>Bring any service into your agent's world.</strong> Use the bundled connectors today, then add other connectors to build the context your own agent needs.</div>
 
 [Explore connectors](/connectors.html) or [build your own](/extending.html).
-
-## Trace a decision
-
-The reproducible launch demo installs the Graph skill, seeds a self-contained fixture, and asks a coding agent to reconcile a customer requirement in Gmail, an engineering decision in Slack, a stale Drive plan, and two research documents using the AgentGraph CLI.
-
-> Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does the Drive plan match, and which research supports the decision? Flag contradictions and link every source.
-
-[Run the fictional Atlas demo](/demo.html).
 
 ## Start here
 
@@ -82,7 +78,7 @@ The reproducible launch demo installs the Graph skill, seeds a self-contained fi
   </section>
   <section class="doc-card">
     <h3><a href="/commands/">CLI reference</a></h3>
-    <p>Search, query, fetch, observe, poll, ingest, and operate the local graph.</p>
+    <p>Search, query, fetch, observe, poll, run connector commands, and operate the local graph.</p>
   </section>
   <section class="doc-card">
     <h3><a href="/mcp/">MCP tools</a></h3>

@@ -22,4 +22,10 @@ poll_connectors_tool(source = null) -> JSON string
 ## Returns
 
 - `polled`: connector sources whose background poll was started
+- `already_running`: connector sources whose poll was already active
+- `skipped`: connector sources not queued, with a reason such as missing auth
 - an error message if a requested connector source is not registered
+
+A connector with no direct poll can still be refreshed by another connector. Inspect
+`polled_by` and `sync` from `list_connectors_tool` before treating `polled: []` as
+evidence that its graph data is stale.

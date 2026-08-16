@@ -67,13 +67,7 @@ In an interactive terminal, omit `--all` and `--select` to choose feeds with a c
 
 ## Sync feeds
 
-Run a one-shot ingest for every configured RSS feed:
-
-```bash
-agentgraph ingest rss
-```
-
-Run RSS polling immediately:
+Refresh every configured RSS feed immediately:
 
 ```bash
 agentgraph poll rss

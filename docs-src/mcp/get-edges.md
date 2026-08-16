@@ -12,5 +12,9 @@ source_path = "docs-src/mcp/get-edges.md"
 ## Signature
 
 ```text
-get_edges_tool(entity_id, edge_type=None, direction="both") -> JSON string
+get_edges_tool(entity_id, edge_type=null, direction="both") -> JSON string
 ```
+
+`entity_id` accepts a full UUID, unambiguous UUID prefix, or platform reference. The
+tool resolves that target to the canonical internal UUID before listing incoming,
+outgoing, or both edge directions.

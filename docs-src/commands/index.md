@@ -28,20 +28,26 @@ aliases = ["commands.html"]
 
 ## Sync and connectors
 
+- [`connector`](/commands/connector.html) - discover and run commands owned by an installed connector.
 - [`connectors`](/commands/connectors.html) - inspect installed connectors and auth state.
 - [`poll`](/commands/poll.html) - run background polling now.
-- [`ingest`](/commands/ingest.html) - run a one-shot historical ingest where supported.
 
 ## Auth and setup
 
 - [`onboard`](/commands/onboard.html) - walk connector auth interactively.
 - [`auth`](/commands/auth.html) - authenticate a specific platform connector.
+- [`install-skill`](/commands/install-skill.html) - install the bundled Graph skill for an agent.
 
 ## Server and transport
 
 - [`serve`](/commands/serve.html) - run the local AgentGraph HTTP server and pollers.
 - [`mcp-config`](/commands/mcp-config.html) - print MCP client configuration.
 - [`mcp-serve`](/commands/mcp-serve.html) - run the MCP server over stdio, SSE, or streaming HTTP.
+
+## Maintenance and demos
+
+- [`unify-persons`](/commands/unify-persons.html) - merge confirmed duplicate Person entities.
+- [`demo`](/commands/demo.html) - seed the self-contained fictional demonstration graph.
 
 ## Related
 

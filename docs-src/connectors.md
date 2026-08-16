@@ -21,7 +21,7 @@ AgentGraph's bundled connectors are useful integrations today and examples of an
 | Google Sheets | Sheet values, ownership, authorship, and source dates | Observe, fetch, Drive refresh |
 | Slack | Channels and DMs, messages, replies, authors, mentions, and attachments | Observe, fetch, poll |
 | Discord | Channels, DMs, threads, messages, authors, mentions, and attachments | Observe, fetch, poll |
-| RSS | Feeds, posts, dates, authors, and publication relationships | Observe, fetch, poll, ingest |
+| RSS | Feeds, posts, dates, authors, and publication relationships | Observe, fetch, poll |
 | Web | Configured pages and bookmarks with titles, text, metadata, and URLs | Observe, fetch |
 
 Connector coverage is intentionally precise. For example, Drive currently records owners rather than every collaborator, and Discord bots cannot access user email addresses. Slack-to-Google person unification works automatically only when both connectors provide the same email; other identities require user-confirmed merging.

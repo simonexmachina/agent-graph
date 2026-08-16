@@ -4,7 +4,7 @@ description = "MCP reference for list_connectors_tool."
 nav_title = "list_connectors_tool"
 section = "MCP"
 order = 11
-summary = "Call this first when an agent needs to know which connectors exist, their credential state where applicable, and which platform values are valid elsewhere."
+summary = "Use `list_connectors_tool` when an agent needs connector availability, credential state, source freshness, or valid platform values."
 output = "mcp/list-connectors.html"
 source_path = "docs-src/mcp/list-connectors.md"
 +++
@@ -12,8 +12,12 @@ source_path = "docs-src/mcp/list-connectors.md"
 ## Signature
 
 ```text
-list_connectors_tool() -> JSON string
+list_connectors_tool(verify=false) -> JSON string
 ```
+
+Use this tool when source availability, freshness, authentication, or valid platform
+values matter. Normal graph reads do not need to call it first. Set `verify=true` only
+for a live provider credential check.
 
 ## Returns
 

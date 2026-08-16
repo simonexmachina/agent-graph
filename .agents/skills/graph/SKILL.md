@@ -1,164 +1,69 @@
 ---
 name: graph
-description: Use the AgentGraph CLI to search and traverse the local knowledge graph, inspect sources, and retrieve evidence for coding-agent tasks.
+description: Use AgentGraph through its CLI or MCP tools to search and traverse selected local context, retrieve full source-backed evidence, fetch missing or stale resources, and troubleshoot connector availability.
 ---
 
-# /graph — AgentGraph CLI skill
+# /graph - AgentGraph CLI skill
 
-Use the `agentgraph` CLI to query the local knowledge graph. Always prefer the CLI over direct Python/DB access.
+AgentGraph is a local knowledge graph for the agent the user already uses. It stores
+selected messages, documents, people, feeds, pages, and relationships; the agent is
+responsible for searching that graph, comparing evidence, and explaining its reasoning.
 
-## Commands
+Prefer the `agentgraph` CLI when a shell is available. Use the equivalent MCP tools
+when AgentGraph is connected directly to the agent. Do not query AgentGraph's SQLite
+database or connector internals directly.
 
-```bash
-# Semantic search across entities
-agentgraph search "<query>" [--type <type>] [--platform <platform>] [--limit N] [--json]
+## Investigation workflow
 
-# Fetch full existing entity details by ID, UUID prefix, platform ref, or URL
-agentgraph get <entity-id|platform/ref|url> --resolve [--json]
+1. Discover likely entities with `agentgraph search "<query>" --json` or
+   `search_entities_tool`.
+2. Open promising results with `agentgraph get <target> --json` or
+   `get_entity_tool` to read full content and source metadata. Search and query results
+   contain bounded snippets and set `content_truncated` when content was shortened.
+3. Follow relationships with `agentgraph edges`, `agentgraph traverse`,
+   `get_edges_tool`, or `traverse_graph_tool`.
+4. If an entity is a stub, or known context is stale, resolve or re-fetch it through
+   the owning connector and then repeat the read or traversal.
+5. Compare source dates and contents. Distinguish source facts from inference and cite
+   each source URL or entity identifier used.
 
-# List edges for an entity
-agentgraph edges <entity-id|platform/ref> [--type <edge-type>] [--direction in|out|both] [--json]
+Start with search unless the user already supplied a graph ID, platform reference, or
+known indexed URL. Use structured `query` only when the entity type or filters are
+already known.
 
-# Traverse the graph from a starting entity
-agentgraph traverse <entity-id|platform/ref> --resolve [--depth N] [--json]
+## Context lifecycle
 
-# Filter entities by type and metadata
-agentgraph query --type <entity-type> [--filter key=value] [--since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|source_created_at|source_updated_at|observed_at|synced_at] [--json]
+- **Connect** is setup: installed connectors and their authentication/configuration
+  determine which selected sources AgentGraph can access.
+- **Observe** records human attention to a supported browser URL and triggers a
+  targeted connector fetch.
+- **Fetch** retrieves missing or stale context at the agent's request.
+- **Refresh** uses polling or connector-owned ingest commands to update configured or
+  already-known context.
 
-# Trigger a connector fetch for a platform entity (by platform + platform-specific ID)
-agentgraph fetch <platform> <resource-id> [--json]
+Only browser observation updates `observed_at`. Direct fetch, polling, and ingest can
+change graph content without implying that the human viewed it.
 
-# Trigger a connector re-fetch for an entity by its internal UUID
-agentgraph fetch-entity <entity-id> [--json]
+## Evidence rules
 
-# Download an entity's source file using connector auth, including Gmail attachment Document stubs
-agentgraph download <entity-id|platform/ref> [--output <file-or-dir>] [--json]
+- Use full entity content before making a source-backed claim; do not treat a search
+  snippet as the complete source.
+- Treat an entity with no title and no content as an unresolved stub.
+- Use source timestamps for chronology. `created_at` and `updated_at` describe the
+  local graph record; `source_created_at` and `source_updated_at` describe the source.
+- Chat uploads live on `Message.metadata.attachments`. Gmail attachments are
+  `Document` stubs referenced by their owning `Email` and are downloaded separately.
+- Inspect connector and auth state only when freshness matters, a fetch is required,
+  or a graph operation reports a connector or credential problem.
+- Never merge Person entities without user confirmation. Treat delete, credential
+  removal, and unbookmarking as destructive actions.
 
-# Bookmark an entity or retrieve and bookmark an HTTP(S) URL; use --remove to clear bookmark protection
-agentgraph bookmark <entity-id|platform/ref|url> [--remove] [--json]
+## References
 
-# Delete an entity from the graph
-agentgraph delete <entity-id|platform/ref|url> [--json]
-
-# Merge duplicate Person entities that refer to the same human
-agentgraph unify-persons <primary-person-id> <duplicate-person-id>... [--json]
-
-# Queue a background poll for one or all connectors
-agentgraph poll [<source>] [--json]   # source: slack, gmail, discord, drive, rss — omit for all; reports already_running and skipped auth failures
-
-# List installed connectors and their sync status; credential fields are null for connectors like RSS/web
-agentgraph connectors [--verify] [--json] # auth_provider, auth_status/auth_detail when applicable, auth_verified, url_patterns, polls, poll_delegates, polled_by, sync, last_synced_at
-
-# Run a connector-owned command
-agentgraph connector <source> <command> [args...] [--json] # e.g. agentgraph connector rss add https://simonwillison.net/atom/everything/
-agentgraph connector <source> --help
-agentgraph connector rss add <feed-url> [feed-url...] [--json] # validates feeds, rejects non-feeds without saving, and queues an RSS poll
-agentgraph connector rss remove <feed-url> [feed-url...] [--json] # removes exact configured feed URLs
-agentgraph connector rss import-opml <file.opml> [--all | --select 1,3-5] [--json] # omit flags for checkbox selection
-agentgraph connector gmail ingest [--account <account-id>] [--json] # queue an optional 90-day Gmail historical backfill; omit --account for all authenticated Google accounts
-
-# Show credential-backed auth provider state (dedupes shared providers like Google); add --verify for live provider API checks
-agentgraph auth [--verify] [--json] status # provider, connectors[], auth_status/auth_detail, auth_verified, accounts[] including auth_method
-
-# Authenticate connectors/providers
-agentgraph auth google [--add] [--account <account-id>]   # uses AgentGraph's packaged OAuth client
-agentgraph auth slack [--method oauth|browser] [--client-id <client-id>] [--add] [--account <account-id>] # --client-id implies OAuth; without one, OAuth shows admin/app setup guidance
-agentgraph auth slack --method browser [--xoxc-token <token>] [--d-cookie <cookie>] # explicit browser-session fallback; credential flags imply browser
-agentgraph auth discord [--add] [--account <account-id>]  # Discord bot token
-agentgraph auth remove <provider> [--account <account-id>] [--json] # remove stored credentials; does not delete graph data
-agentgraph connector rss add <feed-url>                   # RSS/Atom feed URLs are connector configuration, not auth
-
-# Server
-agentgraph serve [--reload]
-agentgraph mcp-serve
-agentgraph mcp-config   # stdio config for Claude Desktop/Claude Code; ChatGPT uses a tunneled HTTPS /mcp endpoint
-
-# Create the self-contained fictional graph used by the public demo
-agentgraph demo seed --config-dir <directory> [--reset] [--json]
-
-# Install the bundled AgentGraph skill into ~/.agents/skills or ./.agents/skills.
-# --claude also links it into the matching ~/.claude/skills or ./.claude/skills directory.
-agentgraph install-skill [graph] [--target user|project] [--claude] [--force] [--json]
-```
-
-`--depth 0` returns only the requested entity; depths 1 through 4 include that many relationship hops.
-
-## MCP tool equivalents
-
-When using AgentGraph through MCP instead of the CLI, use these equivalent tools:
-
-```text
-agentgraph connectors              -> list_connectors_tool(verify)
-agentgraph auth [--json] status    -> list_auth_providers_tool(verify) # credential-backed providers only
-agentgraph auth <provider> ...     -> authenticate_provider_tool(provider, args, account_id, add)
-agentgraph auth remove ...         -> remove_auth_provider_tool(provider, account_id)
-agentgraph connector <source> ...  -> run_connector_command_tool(source, args)
-agentgraph search ...              -> search_entities_tool(...)
-agentgraph get ...                 -> get_entity_tool(entity_id)
-agentgraph edges ...               -> get_edges_tool(entity_id, edge_type, direction)
-agentgraph traverse ...            -> traverse_graph_tool(entity_id, max_depth)
-agentgraph query ...               -> query_by_filter_tool(...)
-agentgraph fetch ...               -> fetch_entity_tool(platform, resource_id)
-agentgraph fetch-entity ...        -> fetch_entity_by_id_tool(entity_id)
-agentgraph download ...            -> download_entity_tool(entity_id, output_path)
-agentgraph poll [source]           -> poll_connectors_tool(source) # returns polled, already_running, and skipped lists
-agentgraph bookmark ...            -> bookmark_entity_tool(entity_id, bookmarked)
-agentgraph delete ...              -> delete_entity_tool(entity_id)
-agentgraph unify-persons ...       -> unify_persons_tool(primary_entity_id, duplicate_entity_ids)
-agentgraph install-skill ...       -> install_skill_tool(skill, target, force, claude)
-```
-
-## Entity types
-
-| Type | Contains |
-|---|---|
-| `Message` | Chat messages (Discord, Slack). **Chat images and file uploads are attachments on Message entities** — stored in `metadata.attachments` (JSON array with `url`, `filename`, `content_type`, `width`, `height`). Use `--has-attachments` to filter to messages with files. |
-| `Document` | Text documents (Google Docs, etc.) and Gmail attachment stubs. Gmail attachment stubs are referenced by their owning `Email` and can be downloaded with `agentgraph download`. |
-| `Email` | Gmail email threads. |
-| `Channel` | Chat channels and DM threads. |
-| `Task` | Tasks or to-do items. |
-| `Project` | Project/repository containers. |
-
-To find chat images uploaded this week: `agentgraph query --type Message --has-attachments --since 7d --json`
-
-To download a Gmail attachment: re-fetch the Gmail thread, traverse one hop to
-find referenced Gmail `Document` stubs, then download the attachment document:
-
-```bash
-agentgraph fetch-entity <gmail-thread-entity-id>
-agentgraph traverse <gmail-thread-entity-id> --depth 1 --json
-agentgraph download <attachment-document-entity-id> --output <file-or-dir>
-```
-
-## Notes
-
-- Graph data commands require the AgentGraph server. If a command reports the server is unavailable, run `agentgraph serve`.
-- Use `--json` when you need to parse results programmatically
-- List-style commands (`search`, `query`, and graph viewer/browse results) return bounded content snippets with `content_truncated` when applicable. Use `agentgraph get <entity-id> --json` for full entity content.
-- MCP `search_entities_tool` and `query_by_filter_tool` default to `refresh=false` so connector-owned network enrichment does not slow normal reads. Set `refresh=true` only when fresh connector-owned presentation metadata is needed.
-- Bookmark targets accept: full UUID, UUID prefix, platform ref (`slack/T123/C123`, `gdocs/doc-id`, `discord/dm/456`), or HTTP(S) URL
-- `agentgraph bookmark --remove <entity-id|platform/ref|url>` clears bookmark protection for existing graph entities
-- Delete targets accept: full UUID, UUID prefix, platform ref, or HTTP(S) URL. Connected edges are removed with the entity.
-- Use `agentgraph download` for source files stored behind connector auth, such as Drive PDFs, exported Google Docs/Sheets, or Gmail attachment `Document` stubs
-- `agentgraph fetch` and `agentgraph fetch-entity` persist the connector's complete returned batch before reporting counts; content-rich resources such as RSS feeds may take several minutes
-- Direct fetch is not a browser observation and does not update `observed_at`; use it when a result references missing or stale context, not as evidence that the human viewed the resource
-- Use `agentgraph bookmark` for entities or HTTP(S) URLs that should survive retention-window expiration
-- Use `agentgraph unify-persons` only after confirming two or more `Person` entities are the same human; the first argument is the canonical person to keep. Without `--json`, the command displays the updated canonical Person, including merged identity metadata and duplicate identities.
-- `polls: false` does not always mean stale: check `polled_by` / `sync` for connectors refreshed by another connector, e.g. `gdocs` and `gsheets` are refreshed via the `gdrive` Drive Changes poll
-- Server logs go to stdout unless the process manager redirects them elsewhere
-- `agentgraph demo seed` is an offline CLI fixture; it does not configure or require an MCP client
-
-## Stub Entities
-
-An entity is a **stub** when it has no title and no content — it was referenced in an edge but never fetched from its source. Using `--resolve` (default for `get` and `traverse`) automatically fetches stubs from their source before returning. If you omitted `--resolve` and get empty results, re-run with it or use `agentgraph fetch-entity <entity-id>` then re-fetch.
-
-## Workflow
-
-When the user asks about graph data:
-1. Search for the relevant terms with `agentgraph search ... --json`; do not query the SQLite database directly
-2. Open promising results with `agentgraph get ... --json` to read their full content and source metadata
-3. Use `agentgraph edges` or `agentgraph traverse` to follow people, threads, containers, references, and other relationships
-4. Compare source dates and contents, distinguish source facts from inference, and cite the source URLs or entity identifiers used
-5. Inspect `agentgraph connectors --json` and `agentgraph auth --json status` only when the task requires source freshness, a missing resource must be fetched, or a graph command reports a connector or credential problem
-6. If credential validity is uncertain, use `agentgraph auth --verify --json status` or `agentgraph connectors --verify --json`; if Google is invalid or missing, tell the user to run `agentgraph auth google`
-7. When a result links to an unfetched stub or a specific missing resource, use `fetch-entity` for its graph ID or `fetch <platform> <resource-id>`, then continue the investigation with the hydrated context
+- Read [references/commands.md](references/commands.md) for CLI syntax, MCP mappings,
+  target formats, stub resolution, and result-size behavior.
+- Read [references/data-model.md](references/data-model.md) for entity types, edges,
+  attachment representation, timestamps, and retention semantics.
+- Read [references/operations.md](references/operations.md) for connectors, auth,
+  polling, connector-owned commands, downloads, bookmarks, deletion, person merging,
+  server setup, and skill installation.

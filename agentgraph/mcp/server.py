@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from agentgraph.core.context import get_backend
 from agentgraph.graph.query import (
@@ -29,7 +30,32 @@ from agentgraph.graph.query import (
 from agentgraph.perf import timed
 
 logger = logging.getLogger(__name__)
-mcp = FastMCP("AgentGraph")
+MCP_INSTRUCTIONS = """AgentGraph is a local graph of selected messages, documents,
+people, feeds, pages, and relationships. For source-backed questions, search broadly,
+open promising entities for full content, traverse relevant relationships, and cite
+source URLs or entity IDs. Search and query return bounded snippets; get returns the
+full stored entity. Resolve or fetch stubs and stale context only when needed. Direct
+fetch, polling, and ingest may contact configured source services and do not record
+human attention in observed_at. Inspect connector or auth state only when availability
+or freshness matters. Confirm destructive actions and Person merges with the user."""
+mcp = FastMCP("AgentGraph", instructions=MCP_INSTRUCTIONS)
+
+
+def _tool_annotations(
+    title: str,
+    *,
+    read_only: bool,
+    destructive: bool,
+    idempotent: bool,
+    open_world: bool,
+) -> ToolAnnotations:
+    return ToolAnnotations(
+        title=title,
+        readOnlyHint=read_only,
+        destructiveHint=destructive,
+        idempotentHint=idempotent,
+        openWorldHint=open_world,
+    )
 
 
 def _truncate_content(entity: dict[str, Any], limit: int = 500) -> None:
@@ -46,14 +72,23 @@ def _truncate_content(entity: dict[str, Any], limit: int = 500) -> None:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "List AgentGraph connectors",
+        read_only=True,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def list_connectors_tool(verify: bool = False) -> str:
     """
     List all installed connectors and their capabilities.
 
-    Call this first to understand which data sources are available and
-    which platform values are valid for the platform= parameter in other
-    tools (search_entities_tool, query_by_filter_tool, fetch_entity_tool).
+    Use this when source availability, freshness, authentication, or valid
+    platform values matter. Normal graph reads do not need to call it first.
+    For query_by_filter_tool, scope a source with filters={"platform": "..."}.
+    Set verify=true only when a live provider credential check is needed.
 
     Returns:
         JSON array of connector objects, each with:
@@ -84,7 +119,15 @@ async def list_connectors_tool(verify: bool = False) -> str:
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "List AgentGraph authentication providers",
+        read_only=True,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def list_auth_providers_tool(verify: bool = False) -> str:
     """
     List credential-backed authentication providers and their current account/auth state.
@@ -112,7 +155,15 @@ async def list_auth_providers_tool(verify: bool = False) -> str:
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Remove AgentGraph provider credentials",
+        read_only=False,
+        destructive=True,
+        idempotent=True,
+        open_world=False,
+    )
+)
 async def remove_auth_provider_tool(provider: str, account_id: str | None = None) -> str:
     """
     Remove stored credentials for an authentication provider.
@@ -147,7 +198,15 @@ async def remove_auth_provider_tool(provider: str, account_id: str | None = None
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Authenticate an AgentGraph provider",
+        read_only=False,
+        destructive=False,
+        idempotent=False,
+        open_world=True,
+    )
+)
 async def authenticate_provider_tool(
     provider: str,
     args: list[str] | None = None,
@@ -192,7 +251,15 @@ async def authenticate_provider_tool(
     return json.dumps(result)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Run an AgentGraph connector command",
+        read_only=False,
+        destructive=True,
+        idempotent=False,
+        open_world=True,
+    )
+)
 async def run_connector_command_tool(source: str, args: list[str]) -> str:
     """
     Run a connector-owned command.
@@ -214,6 +281,9 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             RSS OPML import is also available as:
             ["import-opml", "/path/to/feeds.opml", "--all"] or
             ["import-opml", "/path/to/feeds.opml", "--select", "1,3-5"].
+            Gmail historical backfill is available as ["ingest"] or
+            ["ingest", "--account", "<account-id>"]. There is no separate
+            ingest_connector_tool; ingest is connector-owned.
             Connector-owned help is available as ["--help"].
 
     Returns:
@@ -249,7 +319,15 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         return json.dumps({"error": str(exc)})
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Install the AgentGraph skill",
+        read_only=False,
+        destructive=True,
+        idempotent=True,
+        open_world=False,
+    )
+)
 async def install_skill_tool(
     skill: str = "graph", target: str = "user", force: bool = False, claude: bool = False
 ) -> str:
@@ -315,7 +393,15 @@ async def _enrich_results(results: list[dict[str, Any]]) -> None:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Search AgentGraph entities",
+        read_only=True,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def search_entities_tool(
     query: str,
     entity_types: list[str] | None = None,
@@ -349,16 +435,17 @@ async def search_entities_tool(
             omitted, all platforms are searched. Use this to avoid
             cross-platform noise when the user specifies a source.
         limit: Maximum number of results to return (default 10).
-        min_score: Minimum relevance score threshold (0–1, default 0.02).
+        min_score: Minimum relevance score threshold (0–1, default 0.03).
             Results below this score are suppressed as noise.
         refresh: If true, let connectors refresh or enrich connector-owned
             presentation metadata before returning. Defaults to false to keep
             search responsive.
 
     Returns:
-        JSON array of matching entities with id, title, content snippet,
-        platform, and relevance score. Connectors may refresh or enrich
-        connector-owned metadata before results are returned.
+        JSON array of matching entities with id, title, bounded content snippet,
+        content_truncated, platform, and relevance score. Use get_entity_tool for
+        full stored content. Connectors may refresh or enrich connector-owned
+        metadata before results are returned.
     """
     results = await search_entities(
         query, entity_types=entity_types, limit=limit, min_score=min_score, platform=platform
@@ -375,27 +462,57 @@ async def search_entities_tool(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
-async def get_entity_tool(entity_id: str) -> str:
+async def _get_existing_entity(target: str) -> dict[str, Any] | None:
+    """Resolve an existing entity from any target accepted by the read tools."""
+    from agentgraph.graph.query import get_entity_by_url, is_http_url
+
+    return await get_entity_by_url(target) if is_http_url(target) else await get_entity(target)
+
+
+def _is_stub(entity: dict[str, Any]) -> bool:
+    return not entity.get("title") and not entity.get("content")
+
+
+async def _resolve_stub(entity: dict[str, Any]) -> dict[str, Any]:
+    """Fetch one stub through its owning connector and return the refreshed entity."""
+    from agentgraph.graph.fetch import fetch_entity_by_id
+
+    entity_id = str(entity["id"])
+    await fetch_entity_by_id(entity_id)
+    return await get_entity(entity_id) or entity
+
+
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Get a full AgentGraph entity",
+        read_only=False,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
+async def get_entity_tool(entity_id: str, resolve: bool = False) -> str:
     """
     Retrieve full details for a single existing entity.
 
     Args:
-        entity_id: Entity UUID, UUID prefix, platform ref, or HTTP(S) URL.
+        entity_id: Entity UUID, unambiguous UUID prefix, platform ref, or indexed
+            HTTP(S) URL.
+        resolve: If true and the entity is a stub, fetch it through its owning
+            connector before returning. Defaults to false.
 
     Returns:
         JSON object with all entity fields, or an error message if not found.
     """
-    from agentgraph.graph.query import get_entity_by_url, is_http_url
-
-    entity = (
-        await get_entity_by_url(entity_id)
-        if is_http_url(entity_id)
-        else await get_entity(entity_id)
-    )
-    if entity is None:
-        return json.dumps({"error": f"Entity {entity_id!r} not found"})
-    return json.dumps(entity, default=str)
+    try:
+        entity = await _get_existing_entity(entity_id)
+        if entity is None:
+            return json.dumps({"error": f"Entity {entity_id!r} not found"})
+        if resolve and _is_stub(entity):
+            entity = await _resolve_stub(entity)
+        return json.dumps(entity, default=str)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +520,15 @@ async def get_entity_tool(entity_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "List AgentGraph entity edges",
+        read_only=True,
+        destructive=False,
+        idempotent=True,
+        open_world=False,
+    )
+)
 async def get_edges_tool(
     entity_id: str,
     edge_type: str | None = None,
@@ -413,7 +538,7 @@ async def get_edges_tool(
     List edges connected to an entity.
 
     Args:
-        entity_id: UUID of the entity.
+        entity_id: Entity UUID, unambiguous UUID prefix, or platform ref.
         edge_type: Optional edge type filter (e.g. "authored", "posted_in",
             "replied_to", "mentions", "collaborated").
         direction: "in" (incoming), "out" (outgoing), or "both" (default).
@@ -421,8 +546,14 @@ async def get_edges_tool(
     Returns:
         JSON array of edge objects including source/target references.
     """
-    edges = await get_edges(entity_id, edge_type=edge_type, direction=direction)
-    return json.dumps(edges, default=str)
+    try:
+        entity = await _get_existing_entity(entity_id)
+        if entity is None:
+            return json.dumps({"error": f"Entity {entity_id!r} not found"})
+        edges = await get_edges(str(entity["id"]), edge_type=edge_type, direction=direction)
+        return json.dumps(edges, default=str)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
 
 
 # ---------------------------------------------------------------------------
@@ -430,10 +561,19 @@ async def get_edges_tool(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Traverse the AgentGraph neighborhood",
+        read_only=False,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def traverse_graph_tool(
     entity_id: str,
     max_depth: int = 2,
+    resolve: bool = False,
 ) -> str:
     """
     Traverse the knowledge graph from a starting entity using BFS.
@@ -442,20 +582,40 @@ async def traverse_graph_tool(
     who authored it, which channel it appeared in, what it references, etc.
 
     Args:
-        entity_id: UUID of the starting entity.
+        entity_id: Entity UUID, unambiguous UUID prefix, or platform ref.
         max_depth: Maximum number of hops to traverse (default 2, max 4).
             A depth of 0 returns only the starting entity.
+        resolve: If true, fetch stub nodes through their owning connectors and
+            repeat the traversal before returning. Defaults to false.
 
     Returns:
         JSON object with "nodes" (entities) and "edges" lists.
     """
-    depth = min(max(max_depth, 0), 4)
-    result = await traverse_graph(entity_id, max_depth=depth)
-    # Trim content on nodes to keep response size manageable
-    for node in result.get("nodes", []):
-        if node.get("content") and len(str(node["content"])) > 300:
-            node["content"] = str(node["content"])[:300] + "…"
-    return json.dumps(result, default=str)
+    try:
+        entity = await _get_existing_entity(entity_id)
+        if entity is None:
+            return json.dumps({"error": f"Entity {entity_id!r} not found"})
+
+        depth = min(max(max_depth, 0), 4)
+        canonical_id = str(entity["id"])
+        result = await traverse_graph(canonical_id, max_depth=depth)
+        if resolve:
+            stubs = [node for node in result.get("nodes", []) if _is_stub(node)]
+            for stub in stubs:
+                await _resolve_stub(stub)
+            if stubs:
+                result = await traverse_graph(canonical_id, max_depth=depth)
+
+        # Trim content on nodes to keep response size manageable.
+        for node in result.get("nodes", []):
+            if node.get("content") and len(str(node["content"])) > 300:
+                node["content"] = str(node["content"])[:300] + "…"
+                node["content_truncated"] = True
+            else:
+                node["content_truncated"] = False
+        return json.dumps(result, default=str)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
 
 
 # ---------------------------------------------------------------------------
@@ -463,7 +623,15 @@ async def traverse_graph_tool(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Fetch an AgentGraph source resource",
+        read_only=False,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def fetch_entity_tool(platform: str, resource_id: str) -> str:
     """
     Trigger a connector fetch for a platform entity.
@@ -492,7 +660,15 @@ async def fetch_entity_tool(platform: str, resource_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Refresh an AgentGraph entity",
+        read_only=False,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def fetch_entity_by_id_tool(entity_id: str) -> str:
     """
     Trigger a connector fetch for an entity by its internal UUID.
@@ -522,7 +698,15 @@ async def fetch_entity_by_id_tool(entity_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Poll AgentGraph connectors",
+        read_only=False,
+        destructive=False,
+        idempotent=False,
+        open_world=True,
+    )
+)
 async def poll_connectors_tool(source: str | None = None) -> str:
     """
     Trigger a background poll for one connector or all polling connectors.
@@ -572,7 +756,15 @@ async def poll_connectors_tool(source: str | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Download an AgentGraph source file",
+        read_only=False,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def download_entity_tool(entity_id: str, output_path: str | None = None) -> str:
     """
     Download an entity's source file using the connector's stored auth.
@@ -605,7 +797,15 @@ async def download_entity_tool(entity_id: str, output_path: str | None = None) -
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Set AgentGraph bookmark protection",
+        read_only=False,
+        destructive=True,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def bookmark_entity_tool(entity_id: str, bookmarked: bool = True) -> str:
     """
     Set or remove bookmark protection for an entity or URL.
@@ -641,7 +841,15 @@ async def bookmark_entity_tool(entity_id: str, bookmarked: bool = True) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Delete an AgentGraph entity",
+        read_only=False,
+        destructive=True,
+        idempotent=False,
+        open_world=False,
+    )
+)
 async def delete_entity_tool(entity_id: str) -> str:
     """
     Delete an entity from the graph.
@@ -671,7 +879,15 @@ async def delete_entity_tool(entity_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Unify duplicate AgentGraph people",
+        read_only=False,
+        destructive=True,
+        idempotent=False,
+        open_world=False,
+    )
+)
 async def unify_persons_tool(
     primary_entity_id: str,
     duplicate_entity_ids: list[str],
@@ -707,7 +923,15 @@ async def unify_persons_tool(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Filter AgentGraph entities",
+        read_only=True,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    )
+)
 async def query_by_filter_tool(
     entity_type: str,
     filters: dict[str, Any] | None = None,
@@ -739,8 +963,7 @@ async def query_by_filter_tool(
       - Folder: a Google Drive folder containing other entities.
       - Channel: a chat channel or DM thread (Discord, Slack, etc.).
       - Email: an email thread (Gmail).
-      - Task: a task or to-do item (e.g. from a project tracker).
-      - Project: a project or repository container.
+      - Person: a source identity or confirmed cross-source identity merge.
 
     Example — find images uploaded in the last 7 days:
         entity_type="Message", has_attachments=True, since="7d"
@@ -748,7 +971,7 @@ async def query_by_filter_tool(
     Args:
         entity_type: Entity type to query. See above for what each type
             contains. Use "Message" to find chat uploads; use "Document" with
-            platform="gmail" to find Gmail attachment stubs.
+            filters={"platform": "gmail"} to find Gmail attachment stubs.
         filters: Optional dict of key=value filters. Known columns
             (platform, platform_entity_id) are applied as column filters;
             all other keys are matched against the metadata JSONB field.
@@ -770,7 +993,8 @@ async def query_by_filter_tool(
             queries responsive.
 
     Returns:
-        JSON array of matching entities. For Message entities with
+        JSON array of matching entities with bounded content and a
+        content_truncated flag. For Message entities with
         attachments, each result includes metadata.attachments — a JSON
         string that decodes to a list of {url, filename, content_type,
         width?, height?} objects. Connectors may refresh or enrich

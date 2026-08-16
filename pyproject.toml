@@ -78,6 +78,7 @@ include = ["agentgraph*"]
 
 [tool.setuptools.data-files]
 ".agents/skills/graph" = [".agents/skills/graph/SKILL.md"]
+".agents/skills/graph/references" = [".agents/skills/graph/references/*.md"]
 ".agents/skills/slack-auth" = [".agents/skills/slack-auth/SKILL.md"]
 
 [tool.ruff]

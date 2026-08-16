@@ -22,15 +22,15 @@ Without AgentGraph, a coding agent would need separate integrations and authenti
 Install the published package with `uv`:
 
 ```bash
-uv tool install --reinstall agentgraph-server==0.5.2
-agentgraph install-skill graph --target user
+uv tool install agentgraph-server
+agentgraph install-skill --target project --claude
 ```
 
-The skill is installed at `~/.agents/skills/graph/SKILL.md`. Open a new coding-agent session after installation so it discovers the skill. If that destination already contains an older AgentGraph Graph skill, re-run the second command with `--force` to deliberately replace it.
+The skill is installed at `.agents/skills/graph/SKILL.md`. Open a new coding-agent session after installation so it discovers the skill. If that destination already contains an older AgentGraph Graph skill, re-run the second command with `--force` to update it.
 
 ## 2. Create an isolated demo graph
 
-Choose a disposable config directory. The command refuses the default `~/.agentgraph` directory and refuses to overwrite an existing demo database unless `--reset` is supplied. It also refuses to replace a non-demo `.env` file.
+We'll use a disposable config directory to have an isolated graph for this demo.
 
 ```bash
 agentgraph demo seed --config-dir /tmp/agentgraph-atlas-demo --reset
