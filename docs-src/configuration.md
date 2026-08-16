@@ -4,7 +4,7 @@ description = "Configuration directory, database settings, observation threshold
 nav_title = "Configuration"
 section = "Configuration"
 order = 10
-summary = "AgentGraph reads settings from environment variables and from a `.env` file in the config directory. The default setup is local-first SQLite."
+summary = "AgentGraph reads settings from environment variables and from `.env` files in the config directory and the local directory."
 output = "configuration.html"
 source_path = "docs-src/configuration.md"
 +++
