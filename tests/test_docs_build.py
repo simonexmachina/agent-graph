@@ -138,7 +138,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "What it lets the agent perceive" in connectors_html
     assert "Bring any service into your agent's world" in connectors_html
     assert "Three ways context enters" in how_it_works_html
-    assert "fetch_entity_tool" in how_it_works_html
+    assert "agentgraph fetch" in how_it_works_html
     assert "Before I reply to Maya" in demo_html
     assert "agentgraph-server" in demo_html
     assert "demo<span" in demo_html

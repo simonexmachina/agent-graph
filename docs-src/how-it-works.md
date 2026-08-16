@@ -28,7 +28,7 @@ This is targeted capture, not a copy of arbitrary browsing. Unknown URLs are ign
 
 ### Fetch
 
-An agent can request a resource directly through `fetch_entity_tool(platform, resource_id)` or refresh an existing graph entity with `fetch_entity_by_id_tool(entity_id)`. The CLI exposes the equivalent `fetch` and `fetch-entity` commands.
+An agent can request a resource directly with `agentgraph fetch <platform> <resource-id>` or refresh an existing graph entity with `agentgraph fetch-entity <entity-id>`.
 
 Direct fetch uses the same owning connector and persists the same graph-shaped batch as observation. It does not set `observed_at`, because fetching a resource on demand is not evidence that the human looked at it.
 
