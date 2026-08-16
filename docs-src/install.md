@@ -60,15 +60,15 @@ Then open `chrome://extensions`, enable Developer Mode, click **Load unpacked**,
 
 After the extension is installed, continue with [Quickstart](/quickstart.html) to authenticate a connector, start the server, observe a resource, and ask the first source-backed agent question.
 
-## Connect MCP clients
+## Optional: Connect ChatGPT or Claude
 
-Print the client config:
+If you want to use AgentGraph from ChatGPT or Claude instead of through your coding agent, connect it as an MCP client. For Claude, print the stdio client configuration:
 
 ```bash
 agentgraph mcp-config
 ```
 
-See [`mcp-config`](/commands/mcp-config.html) for the command details and transport examples.
+Add the printed configuration to Claude Desktop or another compatible MCP client. See [`mcp-config`](/commands/mcp-config.html) for command details and transport examples.
 
 For ChatGPT, do not use the stdio JSON config. Run `agentgraph mcp-serve --transport streamable-http --port 8808`, expose `http://127.0.0.1:8808/mcp` through an HTTPS tunnel, then create an app/connector in ChatGPT developer mode with the public URL ending in `/mcp`.
 
