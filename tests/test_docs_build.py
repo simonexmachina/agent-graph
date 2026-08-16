@@ -83,6 +83,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     connectors_html = (output_dir / "connectors.html").read_text(encoding="utf-8")
     how_it_works_html = (output_dir / "how-it-works.html").read_text(encoding="utf-8")
     demo_html = (output_dir / "demo.html").read_text(encoding="utf-8")
+    demo_article = demo_html.split('<article class="doc">', 1)[1].split("</article>", 1)[0]
     privacy_html = (output_dir / "privacy.html").read_text(encoding="utf-8")
     terms_html = (output_dir / "terms.html").read_text(encoding="utf-8")
     redirect_html = (output_dir / "commands.html").read_text(encoding="utf-8")
@@ -135,6 +136,11 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "Three ways context enters" in how_it_works_html
     assert "fetch_entity_tool" in how_it_works_html
     assert "Before I reply to Maya" in demo_html
+    assert "Restart the coding agent" in demo_html
+    assert "AgentGraph CLI" in demo_html
+    assert "mcp-config" not in demo_article
+    assert "http.server" not in demo_article
+    assert "Observe the first article" not in demo_article
     assert "Retention and deletion" in privacy_html
     assert "Open-source software" in terms_html
     assert "<h1>Commands</h1>" in commands_html

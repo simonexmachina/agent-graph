@@ -37,7 +37,7 @@ The launch demo asks an existing coding agent:
 
 > Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does the Drive plan match, and which research supports the decision? Flag contradictions and link every source.
 
-The agent searches a Gmail thread, traverses a Slack discussion and its authors, checks a Drive plan, finds a web article captured by browser observation, and directly fetches a second linked page that is missing from the graph. The fixture is fictional and deterministic; the observation and MCP fetch paths are real. [Run the demo](docs-src/demo.md).
+The agent uses the Graph skill and AgentGraph CLI to search a fictional Gmail thread, traverse a Slack discussion and its authors, check a stale Drive plan, and compare two research documents. Everything is included in one deterministic fixture; no provider credentials, browser observation, or MCP setup are required. [Run the demo](docs-src/demo.md).
 
 ## What each connector makes perceptible
 

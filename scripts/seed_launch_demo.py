@@ -14,12 +14,22 @@ from agentgraph.connectors.base import EdgeRecord, EntityBatch, EntityRecord, Pe
 
 DEMO_DATABASE_NAME = "agentgraph.db"
 DEMO_CREATED_AT = "2026-08-14T08:00:00Z"
-WEBHOOK_ARTICLE_URL = "http://127.0.0.1:8899/reliable-webhooks.html"
-RETRY_GUIDE_URL = "http://127.0.0.1:8899/retry-guidance.html"
+RESEARCH_FIXTURE_DIR = Path(__file__).resolve().parents[1] / "demo" / "atlas-research"
+WEBHOOK_ARTICLE_URL = (
+    "https://github.com/simonexmachina/agent-graph/blob/main/"
+    "demo/atlas-research/reliable-webhooks.md"
+)
+RETRY_GUIDE_URL = (
+    "https://github.com/simonexmachina/agent-graph/blob/main/demo/atlas-research/retry-guidance.md"
+)
 
 
 def utc(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
     return datetime(year, month, day, hour, minute, tzinfo=UTC)
+
+
+def load_research_fixture(filename: str) -> str:
+    return (RESEARCH_FIXTURE_DIR / filename).read_text(encoding="utf-8").strip()
 
 
 def build_demo_batch() -> EntityBatch:
@@ -138,15 +148,21 @@ def build_demo_batch() -> EntityBatch:
             entity_type="Document",
             platform="web",
             platform_entity_id=WEBHOOK_ARTICLE_URL,
-            title="Reliable Webhooks",
-            is_stub=True,
+            title="Reliable Webhooks: Idempotency and Replay",
+            content=load_research_fixture("reliable-webhooks.md"),
+            source_created_at=utc(2026, 8, 4, 9),
+            source_updated_at=utc(2026, 8, 4, 9),
+            metadata={"web_url": WEBHOOK_ARTICLE_URL, "author": "Nadia Okafor"},
         ),
         EntityRecord(
             entity_type="Document",
             platform="web",
             platform_entity_id=RETRY_GUIDE_URL,
-            title="Vendor retry guidance",
-            is_stub=True,
+            title="Atlas Platform Operations: Delivery Retry Guidance",
+            content=load_research_fixture("retry-guidance.md"),
+            source_created_at=utc(2026, 8, 8, 9),
+            source_updated_at=utc(2026, 8, 8, 9),
+            metadata={"web_url": RETRY_GUIDE_URL, "revision": "3"},
         ),
     ]
 
@@ -292,7 +308,6 @@ def apply_demo_timestamps(database_path: Path) -> None:
             "UPDATE entities SET created_at = ?, updated_at = ?, synced_at = ?",
             [DEMO_CREATED_AT, DEMO_CREATED_AT, DEMO_CREATED_AT],
         )
-        conn.execute("UPDATE entities SET synced_at = NULL WHERE platform = 'web'")
         for (platform, platform_entity_id), observed_at in observations.items():
             conn.execute(
                 """

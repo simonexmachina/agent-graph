@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from scripts.seed_launch_demo import (
+    DEMO_CREATED_AT,
     RETRY_GUIDE_URL,
     WEBHOOK_ARTICLE_URL,
     build_demo_batch,
@@ -36,7 +37,8 @@ def test_demo_batch_uses_real_graph_shapes() -> None:
         WEBHOOK_ARTICLE_URL,
         RETRY_GUIDE_URL,
     }
-    assert all(entity.is_stub for entity in web_entities)
+    assert all(not entity.is_stub for entity in web_entities)
+    assert all(entity.content and len(entity.content) > 500 for entity in web_entities)
 
 
 def test_demo_refuses_default_config_directory() -> None:
@@ -66,13 +68,19 @@ async def test_seed_demo_creates_isolated_searchable_graph(tmp_path: Path) -> No
         assert alex_metadata["slack_user_id"] == "U_ALEX"
         assert alex_metadata["gdrive_user_id"] == "alex@agentgraph.demo"
         web_rows = conn.execute(
-            "SELECT platform_entity_id, synced_at, observed_at FROM entities WHERE platform = 'web'"
+            """
+            SELECT platform_entity_id, content, synced_at, observed_at
+            FROM entities
+            WHERE platform = 'web'
+            """
         ).fetchall()
         assert {row["platform_entity_id"] for row in web_rows} == {
             WEBHOOK_ARTICLE_URL,
             RETRY_GUIDE_URL,
         }
-        assert all(row["synced_at"] is None and row["observed_at"] is None for row in web_rows)
+        assert all(row["content"] and len(row["content"]) > 500 for row in web_rows)
+        assert all(row["synced_at"] == DEMO_CREATED_AT for row in web_rows)
+        assert all(row["observed_at"] is None for row in web_rows)
         search_hits = conn.execute(
             "SELECT title FROM entities_fts WHERE entities_fts MATCH 'webhook'"
         ).fetchall()

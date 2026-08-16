@@ -1,23 +1,34 @@
 +++
-title = "Trace a decision demo"
-description = "Run the reproducible AgentGraph launch demo across Gmail, Slack, Drive, browser observation, and an agent-initiated web fetch."
+title = "Demo – trace a decision"
+description = "Use the Graph skill and AgentGraph CLI to trace a decision across a fictional Gmail thread, Slack discussion, Drive plan, and research documents."
 nav_title = "Demo"
 section = "Start"
 order = 60
-summary = "Use a fictional Atlas project to demonstrate cross-source reasoning without exposing private data. The fixture is static; browser observation and MCP fetch are live."
+summary = "Seed one isolated fictional graph, install the Graph skill, and let a coding agent reconstruct a decision by searching and traversing with the AgentGraph CLI."
 output = "demo.html"
 source_path = "docs-src/demo.md"
 +++
 
-The launch demo reconstructs one technical decision from a fictional Gmail thread, Slack discussion, Drive plan, and two web research pages. It is designed to prove cross-source search and traversal, browser observation, agent-initiated fetch, and evidence-backed reasoning in one short story.
+The launch demo reconstructs one technical decision from a fictional Gmail thread, Slack discussion, Drive plan, and two research documents. Everything is included in a static fixture, so the demo focuses on cross-source search, graph traversal, and evidence-backed reasoning.
 
 ## The question
 
 > Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does the Drive plan match, and which research supports the decision? Flag contradictions and link every source.
 
-Without AgentGraph, a coding agent cannot inspect those sources. With AgentGraph connected over MCP, it can discover the relevant entities, traverse people and thread relationships, fetch missing context, compare source dates, and return an answer with links.
+Without AgentGraph, a coding agent would need separate integrations and authentication for each source. With the Graph skill installed, it can use one local CLI to discover the relevant entities, follow people and thread relationships, compare source dates, and return an answer with links.
 
-## 1. Create an isolated demo graph
+## 1. Install the Graph skill
+
+From the AgentGraph repository, install dependencies and the bundled skill:
+
+```bash
+uv sync --extra all
+uv run agentgraph install-skill graph --target user --force
+```
+
+The skill is installed at `~/.agents/skills/graph/SKILL.md`. The `--force` flag refreshes only that installed Graph skill. Restart the coding agent after installation so it discovers the current version.
+
+## 2. Create an isolated demo graph
 
 Choose a disposable config directory. The seed script refuses the default `~/.agentgraph` directory and refuses to overwrite an existing demo database unless `--reset` is supplied.
 
@@ -25,52 +36,33 @@ Choose a disposable config directory. The seed script refuses the default `~/.ag
 uv run python scripts/seed_launch_demo.py --config-dir /tmp/agentgraph-atlas-demo --reset
 ```
 
-Start AgentGraph against that directory:
+The fixture contains all Gmail, Slack, Drive, research, people, and relationship records. It is self-contained and does not call those services.
 
-```bash
-AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-atlas-demo uv run agentgraph serve
-```
+## 3. Start the local CLI server
 
-The fixture contains the Gmail, Slack, Drive, people, and relationship records. It does not contain the two web pages.
-
-## 2. Serve the research pages
-
-In another terminal:
-
-```bash
-uv run python -m http.server 8899 --directory demo/atlas-web
-```
-
-Configure the generic Web connector to recognize those pages:
+In a dedicated terminal, start AgentGraph against the fixture using full-text search only:
 
 ```bash
 AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-atlas-demo \
-  uv run agentgraph connector web add 'http://127.0.0.1:8899/*'
+AGENTGRAPH_BACKEND_SQLITE_VECTOR_MODE=bm25-only \
+  uv run agentgraph serve
 ```
 
-## 3. Observe the first article
+This server is the local backend used by the CLI. The demo does not require an MCP configuration, provider credentials, the browser extension, or a research-page web server.
 
-Install the Chrome extension and point it at `http://127.0.0.1:8765`. Open `http://127.0.0.1:8899/reliable-webhooks.html` and keep the tab focused past the observation threshold.
+## 4. Ask a coding agent
 
-The extension reports the recognized URL to the local server. The Web connector fetches the page, stores it as a `Document`, and records `observed_at`.
-
-## 4. Connect an agent
-
-Print the MCP configuration while working in the project environment:
+Start or restart your coding agent from the repository with the virtual environment on `PATH`:
 
 ```bash
-AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-atlas-demo uv run agentgraph mcp-config
+export PATH="$PWD/.venv/bin:$PATH"
 ```
 
-Add the printed configuration to the coding agent you already use, and add this `env` entry beside its `command` and `args` fields:
+Then give it this prompt:
 
-```json
-"env": {
-  "AGENTGRAPH_CONFIG_DIR": "/tmp/agentgraph-atlas-demo"
-}
-```
+> Use the Graph skill and AgentGraph CLI to answer this question: Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does the Drive plan match, and which research supports the decision? Flag contradictions and link every source.
 
-Then ask the demo question. The Slack discussion links to `retry-guidance.html`, which is not yet in the graph. The agent should call `fetch_entity_tool("web", "http://127.0.0.1:8899/retry-guidance.html")` before finishing its answer.
+The coding agent should use commands such as `agentgraph search --json`, `agentgraph get --json`, and `agentgraph traverse --json`. It should not read the SQLite database directly or ask you to configure source credentials.
 
 ## Expected evidence
 
@@ -79,17 +71,17 @@ The answer should identify:
 - Maya's five-minute synchronization requirement and September 30 deadline from Gmail;
 - engineering's decision to use webhook delivery with idempotent consumers from Slack;
 - the Drive plan's stale hourly-batch proposal and conflicting October 15 date;
-- the observed webhook article's advice on idempotency and replay; and
-- the directly fetched retry guide's exponential backoff and dead-letter guidance.
+- the Reliable Webhooks article's advice on idempotency and replay; and
+- the vendor retry guide's exponential backoff, jitter, and dead-letter guidance.
 
-Every claim should link to its source entity. The observed article should have `observed_at` set. The directly fetched retry guide should have `observed_at = null`, demonstrating that agent fetch is not recorded as human attention.
+Every claim should identify and link its source. The answer should distinguish facts stated in the sources from conclusions formed by comparing them.
 
 ## Recording sequence
 
-1. Ask the question before connecting AgentGraph and show the agent explaining that it cannot inspect the sources.
-2. Show the extension recognizing and observing the webhook article.
-3. Connect the isolated AgentGraph MCP server and ask the same question.
-4. Keep the MCP tool calls visible as the agent searches, traverses, and fetches the missing retry guide.
-5. End on the evidence-backed answer and the viewer's observation timestamps.
+1. Show the fixture seed completing with entity, person, and edge counts.
+2. Install the Graph skill and restart the coding agent.
+3. Ask the demo question with the local AgentGraph server running.
+4. Keep the CLI calls visible as the agent searches, opens entities, and traverses relationships.
+5. End on the concise evidence-backed answer with links to each source.
 
 Label the fixture as fictional in the recording and description. The goal is reproducibility, not the appearance of private production data.

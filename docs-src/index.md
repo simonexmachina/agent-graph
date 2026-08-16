@@ -10,8 +10,7 @@ source_path = "docs-src/index.md"
 +++
 
 <div class="home-intro">
-  <p class="positioning"><strong>Give the AI agent you already use a searchable world.</strong> AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sources you choose into a graph of messages, documents, people, feeds, pages, and relationships.</p>
-  <p class="boundary"><strong>AgentGraph stores context; your agent reasons over it.</strong> It is not an agent, chatbot, or hosted graph service.</p>
+  <p class="positioning">AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sources you choose into a graph of messages, documents, people, feeds, pages, and relationships for your agent to use for reasoning.</p>
 </div>
 
 <div class="home-actions">
@@ -56,7 +55,7 @@ These are not the whole product. They prove a connector pattern that teams, indi
 
 ## Trace a decision
 
-The reproducible launch demo asks an agent to reconcile a customer requirement in Gmail, an engineering decision in Slack, a stale Drive plan, one article captured by browser observation, and another page fetched directly by the agent.
+The reproducible launch demo installs the Graph skill, seeds a self-contained fixture, and asks a coding agent to reconcile a customer requirement in Gmail, an engineering decision in Slack, a stale Drive plan, and two research documents using the AgentGraph CLI.
 
 > Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does the Drive plan match, and which research supports the decision? Flag contradictions and link every source.
 

@@ -1,6 +1,6 @@
 ---
 name: graph
-description: Use the AgentGraph CLI to query the local knowledge graph, inspect connectors, fetch entities, traverse relationships, and configure MCP access.
+description: Use the AgentGraph CLI to search and traverse the local knowledge graph, inspect sources, and retrieve evidence for coding-agent tasks.
 ---
 
 # /graph — AgentGraph CLI skill
@@ -150,10 +150,10 @@ An entity is a **stub** when it has no title and no content — it was reference
 ## Workflow
 
 When the user asks about graph data:
-1. Run `agentgraph connectors --json` to verify the relevant connector is installed and to inspect its last sync state
-2. Run `agentgraph auth --json status` to inspect local provider-level authentication state, especially for shared auth like Google
-3. If credential validity is uncertain, run `agentgraph auth --verify --json status` or `agentgraph connectors --verify --json` to live-check provider APIs for credential-backed connectors
-4. If Google has `auth_status: "invalid"` or `"missing"`, tell the user to run `agentgraph auth google`
-5. Run the appropriate `agentgraph` command with `--json` to get structured output
-6. Use `edges` or `traverse` to follow relationships when needed
+1. Search for the relevant terms with `agentgraph search ... --json`; do not query the SQLite database directly
+2. Open promising results with `agentgraph get ... --json` to read their full content and source metadata
+3. Use `agentgraph edges` or `agentgraph traverse` to follow people, threads, containers, references, and other relationships
+4. Compare source dates and contents, distinguish source facts from inference, and cite the source URLs or entity identifiers used
+5. Inspect `agentgraph connectors --json` and `agentgraph auth --json status` only when the task requires source freshness, a missing resource must be fetched, or a graph command reports a connector or credential problem
+6. If credential validity is uncertain, use `agentgraph auth --verify --json status` or `agentgraph connectors --verify --json`; if Google is invalid or missing, tell the user to run `agentgraph auth google`
 7. When a result links to an unfetched stub or a specific missing resource, use `fetch-entity` for its graph ID or `fetch <platform> <resource-id>`, then continue the investigation with the hydrated context
