@@ -1,4 +1,4 @@
-"""CLI API router — raw entity/edge data endpoints for the agentgraph CLI."""
+"""HTTP data endpoints retained for the local graph viewer and extension."""
 
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false
@@ -36,22 +36,6 @@ async def get_entity(entity_id: str) -> dict[str, Any] | None:
     from agentgraph.graph.query import get_entity as impl
 
     return await impl(entity_id)
-
-
-async def get_entity_by_url(url: str) -> dict[str, Any] | None:
-    from agentgraph.graph.query import get_entity_by_url as impl
-
-    return await impl(url)
-
-
-async def get_edges(
-    entity_id: str,
-    edge_type: str | None = None,
-    direction: str = "both",
-) -> list[dict[str, Any]]:
-    from agentgraph.graph.query import get_edges as impl
-
-    return await impl(entity_id, edge_type=edge_type, direction=direction)
 
 
 async def traverse_graph(entity_id: str, max_depth: int = 2) -> dict[str, Any]:
@@ -95,28 +79,6 @@ async def list_entities_page(
     from agentgraph.graph.query import list_entities_page as impl
 
     return await impl(entity_types, platform, since, limit, offset, order_by, order_dir)
-
-
-async def query_by_filter(
-    entity_type: str,
-    filters: dict[str, str],
-    limit: int = 50,
-    order_by: str = "observed_at",
-    since: str | None = None,
-    authored_by_me: bool = False,
-    has_attachments: bool = False,
-) -> list[dict[str, Any]]:
-    from agentgraph.graph.query import query_by_filter as impl
-
-    return await impl(
-        entity_type,
-        filters=filters,
-        limit=limit,
-        order_by=order_by,
-        since=since,
-        authored_by_me=authored_by_me,
-        has_attachments=has_attachments,
-    )
 
 
 def parse_since(since: str) -> datetime:
@@ -174,23 +136,14 @@ def _with_display_names(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [_with_display_name(entity) for entity in entities]
 
 
-def _summarize_entity(entity: dict[str, Any], *, content_limit: int = 500) -> dict[str, Any]:
-    summarized = dict(entity)
-    content = summarized.get("content")
-    if isinstance(content, str) and len(content) > content_limit:
-        summarized["content"] = _truncate_text(content, content_limit)
-        summarized["content_truncated"] = True
-    else:
-        summarized["content_truncated"] = False
-    return summarized
-
-
 def _summarize_entities(
     entities: list[dict[str, Any]],
     *,
     content_limit: int = 500,
 ) -> list[dict[str, Any]]:
-    return [_summarize_entity(entity, content_limit=content_limit) for entity in entities]
+    from agentgraph.graph.operations import summarize_entities
+
+    return summarize_entities(entities, content_limit=content_limit)
 
 
 @router.get("/meta")
@@ -230,31 +183,11 @@ async def cli_meta(include_dynamic_url_patterns: bool = True) -> dict[str, Any]:
     }
 
 
-@router.get("/search")
-async def cli_search(
-    q: str,
-    entity_type: list[str] = Query(default=[]),
-    limit: int = Query(default=10, ge=1, le=200),
-    min_score: float = Query(default=0.03, ge=0.0, le=1.0),
-    platform: str | None = Query(default=None),
-) -> list[dict[str, Any]]:
-    results = await search_entities(
-        q, entity_types=entity_type or None, limit=limit, min_score=min_score, platform=platform
-    )
-    return _summarize_entities(results)
-
-
 @router.get("/entity/{entity_id:path}")
 async def cli_get_entity(entity_id: str) -> dict[str, Any]:
-    entity = await get_entity(entity_id)
-    if entity is None:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    return _with_display_name(entity)
+    from agentgraph.graph.operations import get_entity_details
 
-
-@router.get("/entity-by-url")
-async def cli_get_entity_by_url(url: str = Query(...)) -> dict[str, Any]:
-    entity = await get_entity_by_url(url)
+    entity = await get_entity_details(entity_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
     return _with_display_name(entity)
@@ -266,21 +199,16 @@ async def cli_get_edges(
     edge_type: str | None = Query(default=None),
     direction: str = Query(default="both"),
 ) -> list[dict[str, Any]]:
-    entity = await get_entity(entity_id)
+    from agentgraph.graph.operations import get_entity_edges
+
+    entity, edges = await get_entity_edges(
+        entity_id,
+        edge_type=edge_type,
+        direction=direction,
+    )
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
-    return await get_edges(entity["id"], edge_type=edge_type, direction=direction)
-
-
-@router.get("/traverse/{entity_id:path}")
-async def cli_traverse(
-    entity_id: str,
-    depth: int = Query(default=2, ge=0, le=4),
-) -> dict[str, Any]:
-    entity = await get_entity(entity_id)
-    if entity is None:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    return await traverse_graph(entity["id"], max_depth=depth)
+    return edges
 
 
 _VIEWER_ORDER_FIELDS = {
@@ -484,6 +412,31 @@ async def _viewer_edges(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+async def cli_browse(
+    search: str | None = None,
+    entity_type: list[str] | None = None,
+    platform: str | None = None,
+    since: str | None = None,
+    node_id: str | None = None,
+    depth: int = 2,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Compose the legacy graph response for viewer resolver tests, without an HTTP route."""
+    nodes, _, _ = await _resolve_viewer_node_set(
+        search,
+        entity_type or [],
+        platform,
+        since,
+        node_id,
+        depth,
+        limit,
+    )
+    return {
+        "nodes": _with_display_names(_summarize_entities(nodes, content_limit=300)),
+        "edges": await _viewer_edges(nodes),
+    }
+
+
 @router.get("/browse/nodes")
 async def cli_browse_nodes(
     search: str | None = Query(default=None),
@@ -532,84 +485,6 @@ async def cli_browse_edges(node_ids: str = Query(default="")) -> dict[str, Any]:
     }
 
 
-@router.get("/browse")
-async def cli_browse(
-    search: str | None = Query(default=None),
-    entity_type: list[str] = Query(default=[]),
-    platform: str | None = Query(default=None),
-    since: str | None = Query(default=None),
-    node_id: str | None = Query(default=None),
-    depth: int = Query(default=2, ge=0, le=4),
-    limit: int = Query(default=50, ge=1, le=1000),
-) -> dict[str, Any]:
-    """Compatibility graph response, composed from the shared node-set resolver."""
-    nodes, _, _ = await _resolve_viewer_node_set(
-        search, entity_type, platform, since, node_id, depth, limit
-    )
-    return {
-        "nodes": _with_display_names(_summarize_entities(nodes, content_limit=300)),
-        "edges": await _viewer_edges(nodes),
-    }
-
-
-@router.get("/query")
-async def cli_query(
-    entity_type: str,
-    limit: int = Query(default=50, ge=1, le=500),
-    order_by: str = Query(default="observed_at"),
-    since: str | None = Query(default=None),
-    mine: bool = Query(default=False),
-    has_attachments: bool = Query(default=False),
-    filter: list[str] = Query(default=[]),
-) -> list[dict[str, Any]]:
-    """Query entities by type with optional filters (key=value pairs)."""
-    filters: dict[str, str] = {}
-    for f in filter:
-        if "=" in f:
-            k, _, v = f.partition("=")
-            filters[k.strip()] = v.strip()
-    results = await query_by_filter(
-        entity_type,
-        filters=filters,
-        limit=limit,
-        order_by=order_by,
-        since=since,
-        authored_by_me=mine,
-        has_attachments=has_attachments,
-    )
-    return _summarize_entities(results)
-
-
-@router.post("/fetch")
-async def cli_fetch(
-    platform: str = Query(...),
-    resource_id: str = Query(...),
-) -> dict[str, Any]:
-    """Trigger a connector fetch for a platform entity."""
-    from agentgraph.graph.fetch import fetch_entity
-
-    try:
-        return await fetch_entity(platform, resource_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/download")
-async def cli_download(
-    entity_id: str = Query(...),
-    output_path: str | None = Query(default=None),
-) -> dict[str, Any]:
-    """Download an entity's source file using connector auth."""
-    from agentgraph.graph.download import download_entity
-
-    try:
-        return await download_entity(entity_id, output_path)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
 @router.post("/bookmark")
 async def cli_bookmark(
     target: str | None = Query(default=None),
@@ -655,57 +530,6 @@ async def cli_unify_persons(
         return await unify_persons(primary, duplicate)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/poll")
-async def cli_poll(
-    source: str | None = Query(default=None),
-) -> dict[str, Any]:
-    """Trigger a background poll for one connector (by source) or all connectors."""
-    from agentgraph.connectors.registry import get_all_connectors, get_connector
-    from agentgraph.server.sync import schedule_poll_connector
-
-    if source is not None:
-        connector = get_connector(source)
-        if connector is None:
-            raise HTTPException(status_code=404, detail=f"No connector registered for source '{source}'")
-        connectors = [connector]
-    else:
-        connectors = get_all_connectors()
-
-    polled: list[str] = []
-    already_running: list[str] = []
-    skipped: list[dict[str, str | None]] = []
-    for connector in connectors:
-        if connector.poll_interval is None:
-            continue
-        result = await schedule_poll_connector(connector)
-        if result["status"] == "queued":
-            polled.append(connector.source)
-        elif result["status"] == "already_running":
-            already_running.append(connector.source)
-        else:
-            skipped.append({"source": connector.source, "reason": result["reason"]})
-
-    return {"polled": polled, "already_running": already_running, "skipped": skipped}
-
-
-@router.post("/ingest")
-async def cli_ingest(
-    source: str = Query(...),
-    account_id: str | None = Query(default=None),
-) -> dict[str, Any]:
-    """Kick off a background bulk ingest for a connector and return immediately."""
-    from agentgraph.connectors.registry import get_connector
-    from agentgraph.server.sync import run_ingest
-
-    connector = get_connector(source)
-    if connector is None:
-        raise HTTPException(status_code=404, detail=f"No connector registered for source '{source}'")
-
-    account_ids = [account_id] if account_id is not None else None
-    asyncio.create_task(run_ingest(connector, account_ids=account_ids))
-    return {"source": source, "status": "started", "account_id": account_id}
 
 
 @router.post("/fetch-entity")

@@ -15,14 +15,13 @@ from uuid import UUID
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agentgraph.core.context import clear_backend, set_backend
+from agentgraph.core.runtime import backend_context
 from agentgraph.graph.expiration import run_expiration
 from agentgraph.server.cli_api import router as cli_router
-from agentgraph.server.graph_api import router as graph_router
 from agentgraph.server.sync import setup_sync, shutdown_poll_tasks
+from agentgraph.server.sync_api import router as sync_router
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -41,7 +40,6 @@ def viewer_url(host: str, port: int) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global _scheduler
-    from agentgraph.backends import get_backend_class
     from agentgraph.config import get_config_paths, get_settings
     from agentgraph.connectors.registry import bootstrap
     from agentgraph.logging import configure_logging
@@ -49,37 +47,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_file)
 
-    backend_class: Any = get_backend_class(settings.backend)
-    if settings.backend == "sqlite":
-        backend = backend_class(settings.backend_sqlite_path, settings.backend_sqlite_vector_mode)
-    else:
-        backend = backend_class(settings)
+    async with backend_context():
+        bootstrap()
 
-    await backend.initialize()
-    set_backend(backend)
+        _scheduler = AsyncIOScheduler()
+        _scheduler.add_job(run_expiration, "cron", hour=3, minute=0, id="expiration")
+        setup_sync(_scheduler, poll_interval_seconds=settings.poll_interval_seconds)
+        _scheduler.start()
 
-    bootstrap()
-
-    _scheduler = AsyncIOScheduler()
-    _scheduler.add_job(run_expiration, "cron", hour=3, minute=0, id="expiration")
-    setup_sync(_scheduler, poll_interval_seconds=settings.poll_interval_seconds)
-    _scheduler.start()
-
-    logger.info(
-        "AgentGraph server started (backend=%s, config_dir=%s)",
-        settings.backend,
-        get_config_paths()[0],
-    )
-    logger.info("Web viewer: %s", viewer_url(settings.server_host, settings.server_port))
-    yield
-
-    if _scheduler:
-        _scheduler.shutdown(wait=False)
-    try:
-        await shutdown_poll_tasks()
-    finally:
-        await backend.close()
-        clear_backend()
+        logger.info(
+            "AgentGraph server started (backend=%s, config_dir=%s)",
+            settings.backend,
+            get_config_paths()[0],
+        )
+        logger.info("Web viewer: %s", viewer_url(settings.server_host, settings.server_port))
+        try:
+            yield
+        finally:
+            if _scheduler:
+                _scheduler.shutdown(wait=False)
+            await shutdown_poll_tasks()
     logger.info("AgentGraph server stopped")
 
 
@@ -102,9 +89,8 @@ async def log_request_timing(request: Request, call_next: Any) -> Any:
     )
     return response
 
-app.include_router(graph_router)
 app.include_router(cli_router)
-app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+app.include_router(sync_router)
 
 
 class ReportObservationRequest(BaseModel):
@@ -186,7 +172,7 @@ async def extension_fetch(req: ExtensionPageRequest) -> dict[str, Any]:
 @app.post("/api/extension/page")
 async def extension_page(req: ExtensionPageRequest) -> dict[str, Any]:
     """Return the existing graph entity for the active browser URL."""
-    from agentgraph.server.cli_api import get_entity_by_url
+    from agentgraph.graph.query import get_entity_by_url
 
     entity = await get_entity_by_url(req.url)
     return {"entity": entity}

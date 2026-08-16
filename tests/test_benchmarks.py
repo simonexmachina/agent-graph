@@ -70,7 +70,7 @@ async def test_backend_suite_writes_quality_checked_report(tmp_path: Path) -> No
 
 
 @pytest.mark.integration
-async def test_api_suite_exercises_cli_routes(tmp_path: Path) -> None:
+async def test_api_suite_exercises_direct_operations_and_viewer_routes(tmp_path: Path) -> None:
     report = await run_api_suite(
         tmp_path / "benchmark-api.db",
         CorpusSpec(
@@ -81,11 +81,13 @@ async def test_api_suite_exercises_cli_routes(tmp_path: Path) -> None:
     )
 
     assert {workload.name for workload in report.workloads} == {
-        "api.search.exact",
+        "operations.search.exact",
         "api.viewer_nodes",
-        "api.graph_traversal",
+        "operations.graph_traversal",
     }
-    exact = next(workload for workload in report.workloads if workload.name == "api.search.exact")
+    exact = next(
+        workload for workload in report.workloads if workload.name == "operations.search.exact"
+    )
     assert exact.quality is not None
     assert exact.quality.must_return_ids_present
 

@@ -260,6 +260,25 @@ async def test_run_ingest_uses_all_accounts_without_explicit_scope() -> None:
     assert connector.accounts == ["first@example.com", "second@example.com"]
 
 
+@pytest.mark.asyncio
+async def test_sync_api_queues_manual_poll() -> None:
+    from agentgraph.server.sync_api import poll_connectors
+
+    connector = _ScheduledConnector()
+    schedule_result = {"source": "scheduled", "status": "queued", "reason": None}
+    with (
+        patch("agentgraph.connectors.registry.get_connector", return_value=connector),
+        patch(
+            "agentgraph.server.sync.schedule_poll_connector",
+            new=AsyncMock(return_value=schedule_result),
+        ) as schedule_poll,
+    ):
+        result = await poll_connectors("scheduled")
+
+    assert result == {"polled": ["scheduled"], "already_running": [], "skipped": []}
+    schedule_poll.assert_awaited_once_with(connector)
+
+
 def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:
     scheduler = MagicMock()
 

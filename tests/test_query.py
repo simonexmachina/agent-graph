@@ -521,22 +521,6 @@ async def test_cli_bookmark_can_clear_bookmark() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cli_download_downloads_entity() -> None:
-    from agentgraph.server.cli_api import cli_download
-
-    fake_result: dict[str, Any] = {"path": "/tmp/file.pdf", "bytes": 7, "filename": "file.pdf"}
-
-    with patch(
-        "agentgraph.graph.download.download_entity",
-        new=AsyncMock(return_value=fake_result),
-    ) as download_entity:
-        result = await cli_download(entity_id="abc123", output_path="/tmp")
-
-    assert result == fake_result
-    download_entity.assert_awaited_once_with("abc123", "/tmp")
-
-
-@pytest.mark.asyncio
 async def test_bookmark_entity_missing_raises_value_error() -> None:
     from agentgraph.graph.bookmark import bookmark_entity
 
@@ -679,32 +663,6 @@ async def test_cli_delete_deletes_entity() -> None:
 
     assert result["deleted"] is True
     delete_entity.assert_awaited_once_with("abc123")
-
-
-@pytest.mark.asyncio
-async def test_cli_search_summarizes_long_content() -> None:
-    from agentgraph.server.cli_api import cli_search
-
-    entity = _entity(content="x" * 700)
-
-    with patch("agentgraph.server.cli_api.search_entities", new=AsyncMock(return_value=[entity])):
-        result = await cli_search(q="x")
-
-    assert len(result[0]["content"]) == 500
-    assert result[0]["content_truncated"] is True
-
-
-@pytest.mark.asyncio
-async def test_cli_query_summarizes_long_content() -> None:
-    from agentgraph.server.cli_api import cli_query
-
-    entity = _entity(content="x" * 700)
-
-    with patch("agentgraph.server.cli_api.query_by_filter", new=AsyncMock(return_value=[entity])):
-        result = await cli_query(entity_type="Message", filter=[])
-
-    assert len(result[0]["content"]) == 500
-    assert result[0]["content_truncated"] is True
 
 
 # ---------------------------------------------------------------------------

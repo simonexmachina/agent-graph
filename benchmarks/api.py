@@ -1,4 +1,4 @@
-"""HTTP-level benchmark workloads for the public CLI API."""
+"""Direct graph-operation and retained viewer HTTP benchmark workloads."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from fastapi import FastAPI
 
 from agentgraph.backends.sqlite.backend import SQLiteBackend
 from agentgraph.core.context import clear_backend, set_backend
+from agentgraph.graph.operations import traverse_entity
+from agentgraph.graph.query import search_entities
 from agentgraph.server.cli_api import router as cli_router
 from benchmarks.corpus import query_vector, seed_sqlite_database
 from benchmarks.models import BenchmarkRun, CorpusSpec
@@ -25,7 +27,7 @@ async def run_api_suite(
     warmup_iterations: int = 3,
     vector_mode: str = "numpy",
 ) -> BenchmarkRun:
-    """Measure HTTP route composition against a deterministic, seeded database."""
+    """Measure direct operations and viewer HTTP against a deterministic database."""
     seeded = await seed_sqlite_database(database_path, spec, vector_mode)
     backend = SQLiteBackend(str(database_path), vector_mode=vector_mode)
     await backend.initialize()
@@ -48,13 +50,15 @@ async def run_api_suite(
             ):
                 workloads = [
                     await measure_workload(
-                        "api.search.exact",
-                        lambda: _get_json(
-                            client, "/api/cli/search", {"q": seeded.exact_query, "min_score": 0}
+                        "operations.search.exact",
+                        lambda: search_entities(
+                            seeded.exact_query,
+                            limit=10,
+                            min_score=0,
                         ),
                         iterations=iterations,
                         warmup_iterations=warmup_iterations,
-                        kind="api",
+                        kind="backend",
                         quality=evaluate_search_quality(
                             [seeded.exact_platform_id], must_return_ids=[seeded.exact_platform_id]
                         ),
@@ -71,11 +75,11 @@ async def run_api_suite(
                         kind="api",
                     ),
                     await measure_workload(
-                        "api.graph_traversal",
-                        lambda: _get_json(client, f"/api/cli/traverse/{hub['id']}", {"depth": 2}),
+                        "operations.graph_traversal",
+                        lambda: traverse_entity(str(hub["id"]), max_depth=2),
                         iterations=iterations,
                         warmup_iterations=warmup_iterations,
-                        kind="api",
+                        kind="backend",
                     ),
                 ]
     finally:

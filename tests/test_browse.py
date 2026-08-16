@@ -65,6 +65,45 @@ def _mock_backend(**overrides: Any) -> Any:
     return backend
 
 
+def test_server_exposes_only_viewer_extension_and_sync_routes() -> None:
+    from starlette.routing import Mount, Route
+
+    from agentgraph.server.app import app
+
+    paths = {route.path for route in app.routes if isinstance(route, Route | Mount)}
+    assert {
+        "/api/cli/meta",
+        "/api/cli/entity/{entity_id:path}",
+        "/api/cli/edges/{entity_id:path}",
+        "/api/cli/browse/nodes",
+        "/api/cli/browse/edges",
+        "/api/cli/bookmark",
+        "/api/cli/delete",
+        "/api/cli/unify-persons",
+        "/api/cli/fetch-entity",
+        "/api/cli/poll",
+        "/api/cli/ingest",
+        "/report-observation",
+        "/report-dwell",
+        "/api/extension/fetch",
+        "/api/extension/page",
+        "/api/extension/bookmark",
+        "/viewer",
+        "/health",
+    } <= paths
+    assert {
+        "/api/cli/search",
+        "/api/cli/entity-by-url",
+        "/api/cli/traverse/{entity_id:path}",
+        "/api/cli/query",
+        "/api/cli/fetch",
+        "/api/cli/download",
+        "/api/cli/browse",
+        "/api/admin/relink",
+        "/static",
+    }.isdisjoint(paths)
+
+
 def test_viewer_uses_bookmark_symbol_without_status_row() -> None:
     """The web viewer presents bookmark state only through the symbol control."""
     viewer_html = Path("agentgraph/server/static/viewer.html").read_text()
@@ -896,30 +935,6 @@ async def test_browse_404_when_node_id_not_found() -> None:
         )
 
     assert exc_info.value.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# Connector fetch failures
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_fetch_returns_bad_request_for_connector_runtime_error() -> None:
-    """Connector setup errors are surfaced to the viewer instead of as 500s."""
-    from fastapi import HTTPException
-
-    from agentgraph.server.cli_api import cli_fetch
-
-    with (
-        patch(
-            "agentgraph.graph.fetch.fetch_entity",
-            new=AsyncMock(side_effect=RuntimeError("Google credentials not configured. Run: agentgraph auth google")),
-        ),
-        pytest.raises(HTTPException) as exc_info,
-    ):
-        await cli_fetch(platform="gmail", resource_id="thread-id")
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "Google credentials not configured. Run: agentgraph auth google"
 
 
 @pytest.mark.asyncio
