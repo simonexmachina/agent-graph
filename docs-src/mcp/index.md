@@ -16,7 +16,7 @@ source_path = "docs-src/mcp/index.md"
 - [`authenticate_provider_tool`](/mcp/authenticate-provider.html) - run connector-owned provider authentication.
 - [`remove_auth_provider_tool`](/mcp/remove-auth-provider.html) - remove stored credentials for an auth provider.
 - [`run_connector_command_tool`](/mcp/run-connector-command.html) - run connector-owned commands.
-- [`install_skill_tool`](/mcp/install-skill.html) - install the bundled Graph skill for an agent client.
+- [`install_skill_tool`](/mcp/install-skill.html) - install the bundled AgentGraph skill for an agent client.
 
 ## Query and traversal
 

@@ -1169,10 +1169,10 @@ async def test_mcp_install_skill_tool_installs_to_user_agents_skills(
     result = await install_skill_tool()
 
     parsed = json.loads(result)
-    assert parsed["skill"] == "graph"
+    assert parsed["skill"] == "AgentGraph"
     assert parsed["target"] == "user"
     assert parsed["overwritten"] is False
-    skill_dir = home / ".agents" / "skills" / "graph"
+    skill_dir = home / ".agents" / "skills" / "AgentGraph"
     assert (skill_dir / "SKILL.md").is_file()
     assert (skill_dir / "references" / "data-model.md").is_file()
 
@@ -1190,10 +1190,19 @@ async def test_mcp_install_skill_tool_links_to_claude_skills(
     result = await install_skill_tool(claude=True)
 
     parsed = json.loads(result)
-    claude_path = home / ".claude" / "skills" / "graph"
+    claude_path = home / ".claude" / "skills" / "AgentGraph"
     assert claude_path.is_symlink()
-    assert claude_path.resolve() == home / ".agents" / "skills" / "graph"
+    assert claude_path.resolve() == home / ".agents" / "skills" / "AgentGraph"
     assert parsed["claude_destination"] == str(claude_path)
+
+
+@pytest.mark.asyncio
+async def test_mcp_install_skill_tool_rejects_legacy_graph_name() -> None:
+    from agentgraph.mcp.server import install_skill_tool
+
+    result = await install_skill_tool("graph")
+
+    assert "Skill 'graph' was not found" in json.loads(result)["error"]
 
 
 @pytest.mark.asyncio

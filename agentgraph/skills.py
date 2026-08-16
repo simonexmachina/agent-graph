@@ -82,7 +82,7 @@ def _remove_path(path: Path) -> None:
 
 
 def install_skill(
-    skill: str = "graph",
+    skill: str = "AgentGraph",
     *,
     target: SkillTarget = "user",
     force: bool = False,

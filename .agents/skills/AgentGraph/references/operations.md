@@ -71,7 +71,7 @@ commands, request permission to contact the configured localhost server and retr
 ```bash
 agentgraph mcp-config
 agentgraph mcp-serve
-agentgraph install-skill [graph] [--target user|project] [--claude] [--force] [--json]
+agentgraph install-skill [AgentGraph] [--target user|project] [--claude] [--force] [--json]
 ```
 
 The MCP skill installer is `install_skill_tool(skill, target, force, claude)`.

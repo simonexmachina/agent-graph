@@ -389,7 +389,7 @@ def test_install_skill_defaults_to_user_agents_skills(
     result = runner.invoke(app, ["install-skill"])
 
     assert result.exit_code == 0
-    skill_path = home / ".agents" / "skills" / "graph" / "SKILL.md"
+    skill_path = home / ".agents" / "skills" / "AgentGraph" / "SKILL.md"
     assert skill_path.is_file()
     skill_content = skill_path.read_text(encoding="utf-8")
     assert "AgentGraph CLI skill" in skill_content
@@ -427,9 +427,9 @@ def test_install_skill_claude_links_to_user_skill(
 
     assert result.exit_code == 0
     parsed = json.loads(result.output)
-    claude_path = home / ".claude" / "skills" / "graph"
+    claude_path = home / ".claude" / "skills" / "AgentGraph"
     assert claude_path.is_symlink()
-    assert claude_path.resolve() == home / ".agents" / "skills" / "graph"
+    assert claude_path.resolve() == home / ".agents" / "skills" / "AgentGraph"
     assert parsed["claude_destination"] == str(claude_path)
 
 
@@ -439,7 +439,7 @@ def test_install_skill_refuses_to_overwrite_without_force(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    skill_path = home / ".agents" / "skills" / "graph" / "SKILL.md"
+    skill_path = home / ".agents" / "skills" / "AgentGraph" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("custom", encoding="utf-8")
 
@@ -456,7 +456,7 @@ def test_install_skill_force_overwrites_existing_skill(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    skill_path = home / ".agents" / "skills" / "graph" / "SKILL.md"
+    skill_path = home / ".agents" / "skills" / "AgentGraph" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("custom", encoding="utf-8")
 
@@ -464,7 +464,7 @@ def test_install_skill_force_overwrites_existing_skill(
 
     assert result.exit_code == 0
     parsed = json.loads(result.output)
-    assert parsed["skill"] == "graph"
+    assert parsed["skill"] == "AgentGraph"
     assert parsed["target"] == "user"
     assert parsed["overwritten"] is True
     assert "AgentGraph CLI skill" in skill_path.read_text(encoding="utf-8")
@@ -479,9 +479,33 @@ def test_install_skill_project_target_uses_current_directory(
     result = runner.invoke(app, ["install-skill", "--target", "project"])
 
     assert result.exit_code == 0
-    skill_dir = tmp_path / ".agents" / "skills" / "graph"
+    skill_dir = tmp_path / ".agents" / "skills" / "AgentGraph"
     assert (skill_dir / "SKILL.md").is_file()
     assert (skill_dir / "references" / "commands.md").is_file()
+
+
+def test_install_skill_rejects_legacy_graph_name() -> None:
+    result = runner.invoke(app, ["install-skill", "graph"])
+
+    assert result.exit_code == 1
+    assert "Skill 'graph' was not found" in result.output
+
+
+def test_install_skill_leaves_legacy_graph_directory_untouched(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    legacy_skill = home / ".agents" / "skills" / "graph" / "SKILL.md"
+    legacy_skill.parent.mkdir(parents=True)
+    legacy_skill.write_text("custom legacy skill", encoding="utf-8")
+
+    result = runner.invoke(app, ["install-skill", "--force"])
+
+    assert result.exit_code == 0
+    assert legacy_skill.read_text(encoding="utf-8") == "custom legacy skill"
+    assert (home / ".agents" / "skills" / "AgentGraph" / "SKILL.md").is_file()
 
 
 class _FakeConnector:

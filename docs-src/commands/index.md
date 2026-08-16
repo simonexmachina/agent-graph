@@ -36,7 +36,7 @@ aliases = ["commands.html"]
 
 - [`onboard`](/commands/onboard.html) - walk connector auth interactively.
 - [`auth`](/commands/auth.html) - authenticate a specific platform connector.
-- [`install-skill`](/commands/install-skill.html) - install the bundled Graph skill for an agent.
+- [`install-skill`](/commands/install-skill.html) - install the bundled AgentGraph skill for an agent.
 
 ## Server and transport
 

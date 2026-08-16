@@ -644,7 +644,7 @@ def mcp_config() -> None:
 
 @app.command()
 def install_skill(
-    skill: str = typer.Argument("graph", help="Bundled skill to install"),
+    skill: str = typer.Argument("AgentGraph", help="Bundled skill to install"),
     target: str = typer.Option(
         "user",
         "--target",

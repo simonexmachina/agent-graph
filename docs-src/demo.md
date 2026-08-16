@@ -17,7 +17,7 @@ This demo investigates a technical decision from a fictional Gmail thread, Slack
 
 Without AgentGraph, a coding agent would need separate integrations and authentication for each source. With the Graph skill installed, it can use one local CLI to discover the relevant entities, follow people and thread relationships, compare source dates, and return an answer with links.
 
-## 1. Install AgentGraph and the Graph skill
+## 1. Install AgentGraph and the AgentGraph skill
 
 Install the published package with `uv`:
 
@@ -26,7 +26,7 @@ uv tool install agentgraph-server
 agentgraph install-skill --target project --claude
 ```
 
-The skill is installed at `.agents/skills/graph/SKILL.md`. Open a new coding-agent session after installation so it discovers the skill. If that destination already contains an older AgentGraph Graph skill, re-run the second command with `--force` to update it.
+The skill is installed at `.agents/skills/AgentGraph/SKILL.md`. Open a new coding-agent session after installation so it discovers the skill. Existing `.agents/skills/graph` directories are left untouched.
 
 ## 2. Create an isolated demo graph
 

@@ -1,9 +1,9 @@
 ---
-name: graph
+name: AgentGraph
 description: Use AgentGraph through its CLI or MCP tools to search and traverse selected local context, retrieve full source-backed evidence, fetch missing or stale resources, and troubleshoot connector availability.
 ---
 
-# /graph - AgentGraph CLI skill
+# AgentGraph CLI skill
 
 AgentGraph is a local knowledge graph for the agent the user already uses. It stores
 selected messages, documents, people, feeds, pages, and relationships; the agent is

@@ -12,7 +12,7 @@ When the user asks a question, answer it without changing code unless they expli
 
 ## CLI / MCP / Skill Parity
 
-Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli_query.py`), apply the equivalent change to the MCP server (`agentgraph/mcp/server.py`) and update the `/graph` skill (`.claude/skills/graph/SKILL.md`) in the same pass. All three must stay in sync.
+Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli_query.py`), apply the equivalent change to the MCP server (`agentgraph/mcp/server.py`) and update the AgentGraph skill (`.agents/skills/AgentGraph/SKILL.md`) in the same pass. All three must stay in sync.
 
 ## Shell / Scripting
 
