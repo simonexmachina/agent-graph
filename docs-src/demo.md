@@ -58,3 +58,5 @@ The answer should identify:
 - the vendor retry guide's exponential backoff, jitter, and dead-letter guidance.
 
 Every claim should identify and link its source. The answer should distinguish facts stated in the sources from conclusions formed by comparing them.
+
+To configure AgentGraph for your own sources, continue with [Install](/install.html).

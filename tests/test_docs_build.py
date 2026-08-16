@@ -153,6 +153,10 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "Open-source software" in terms_html
     assert "<h1>Commands</h1>" in commands_html
     assert "After the extension is installed, continue with" in install_html
+    assert "agentgraph-server" in install_html
+    assert "agentgraph-connector-google" not in install_html
+    assert "uv sync" not in install_html
+    assert "source .venv" not in install_html
     assert "Authenticate connectors" not in install_html
     assert "agentgraph search" in search_html
     assert "<code>agentgraph search</code>" in search_html

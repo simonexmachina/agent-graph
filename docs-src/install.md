@@ -1,10 +1,10 @@
 +++
 title = "Install"
-description = "Install AgentGraph and configure connector dependency groups, background services, and MCP transports."
+description = "Install AgentGraph with uv, configure optional connectors, background services, and MCP transports."
 nav_title = "Install"
 section = "Start"
 order = 20
-summary = "Install the local application and the connector packages you need, then hand off to Quickstart for the first observation and agent query."
+summary = "Install the local application and the connectors you need, then hand off to Quickstart for the first observation and agent query."
 output = "install.html"
 source_path = "docs-src/install.md"
 +++
@@ -19,27 +19,24 @@ AgentGraph expects Python 3.12 or later and [uv](https://docs.astral.sh/uv/).
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-## Sync dependencies
+## Install AgentGraph
 
-Clone the repository and install the first-party connectors you need.
+Install AgentGraph with every first-party connector:
 
 ```bash
-git clone https://github.com/simonexmachina/agent-graph
-cd agent-graph
-uv sync --extra all
-source .venv/bin/activate
+uv tool install 'agentgraph-server[all]'
 ```
 
-Activating `.venv` makes the `agentgraph` command available in the current shell. Alternatively, prefix commands with `uv run`.
+This makes the `agentgraph` command available in your shell.
 
-You can also sync only the connectors you want:
+Or install only the connector support you need:
 
 ```bash
-uv sync --extra google
-uv sync --extra slack
-uv sync --extra discord
-uv sync --extra rss
-uv sync --extra web
+uv tool install 'agentgraph-server[google]'
+uv tool install 'agentgraph-server[slack]'
+uv tool install 'agentgraph-server[discord]'
+uv tool install 'agentgraph-server[rss]'
+uv tool install 'agentgraph-server[web]'
 ```
 
 <div class="callout">
@@ -50,10 +47,11 @@ uv sync --extra web
 
 Install the [AgentGraph Chrome Extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi?authuser=0&hl=en-AU) from the Chrome Web Store.
 
-If you want to build the extension yourself instead, use:
+To build the extension yourself, first clone the repository, then run:
 
 ```bash
-cd extension
+git clone https://github.com/simonexmachina/agent-graph
+cd agent-graph/extension
 npm install
 npm run build
 ```
