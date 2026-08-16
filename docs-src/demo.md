@@ -26,7 +26,7 @@ uv tool install agentgraph-server
 agentgraph install-skill --target project --claude
 ```
 
-The skill is installed at `.agents/skills/graph/SKILL.md`. Open a new coding-agent session after installation so it discovers the skill.
+The skill is installed in the local directory (in `.agents/skills` and `.claude/skills`).
 
 ## 2. Create an isolated demo database
 
@@ -37,11 +37,11 @@ echo 'AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-atlas-demo' > .env
 agentgraph demo seed --config-dir /tmp/agentgraph-atlas-demo --reset
 ```
 
-The fixture contains all Gmail, Slack, Drive, research, people, and relationship records. It is self-contained and does not call those services.
+The fixture contains a set of Gmail, Slack, Drive, research, people, and relationship records. It is self-contained and does not call those services.
 
 ## 3. Ask your coding agent
 
-Open a coding-agent session in this project, then give it this prompt:
+Open a coding-agent session and give it this prompt:
 
 > Use the AgentGraph skill to answer this question: Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does this match the plan on Drive, and which research supports the decision? Flag contradictions and link every source.
 
