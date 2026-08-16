@@ -36,11 +36,6 @@ Direct fetch uses the same owning connector and persists the same graph-shaped b
 
 Connectors can poll source APIs for changes and can optionally expose a broader historical ingest. Polling keeps already-known resources current; ingest loads a configured corpus. Neither path changes `observed_at`.
 
-<figure class="architecture-figure" tabindex="0">
-  <img src="/assets/diagrams/context-lifecycle-dark.svg" alt="Sequence diagram contrasting browser observation, direct agent fetch, and background connector refresh. Only observation updates observed_at.">
-  <figcaption>Observation, direct fetch, and refresh share connector fetch logic but carry different attention and retention semantics.</figcaption>
-</figure>
-
 ## The graph model
 
 Connectors return a common `EntityBatch` containing:
