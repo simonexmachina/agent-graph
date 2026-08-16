@@ -11,9 +11,9 @@ source_path = "docs-src/how-it-works.md"
 
 AgentGraph is infrastructure for the agent you already use. It does not answer questions itself. It gives an MCP client or CLI a searchable, traversable representation of selected messages, documents, people, feeds, and web pages.
 
-<figure class="architecture-figure">
-  <img src="/assets/diagrams/architecture-overview-dark.svg" alt="Selected online services connect to AgentGraph on the user's machine. Browser observation, agent fetches, and background refresh converge on connector packages and a local graph exposed through MCP.">
-  <figcaption>Connectors translate source-specific resources into a shared local model. MCP lets an existing agent search, traverse, and fetch that context.</figcaption>
+<figure class="architecture-figure" tabindex="0">
+  <img src="/assets/diagrams/architecture-overview-dark.svg" alt="Observe, Fetch, and Refresh converge on connector packages that read selected services and write to a local graph. Agents access the graph through the CLI or MCP, while Expiry applies the retention model.">
+  <figcaption>Observe, Fetch, and Refresh converge on connector packages and the local graph. Expiry applies the retention model to stored content.</figcaption>
 </figure>
 
 ## Three ways context enters
@@ -36,7 +36,7 @@ Direct fetch uses the same owning connector and persists the same graph-shaped b
 
 Connectors can poll source APIs for changes and can optionally expose a broader historical ingest. Polling keeps already-known resources current; ingest loads a configured corpus. Neither path changes `observed_at`.
 
-<figure class="architecture-figure">
+<figure class="architecture-figure" tabindex="0">
   <img src="/assets/diagrams/context-lifecycle-dark.svg" alt="Sequence diagram contrasting browser observation, direct agent fetch, and background connector refresh. Only observation updates observed_at.">
   <figcaption>Observation, direct fetch, and refresh share connector fetch logic but carry different attention and retention semantics.</figcaption>
 </figure>

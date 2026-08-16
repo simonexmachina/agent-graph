@@ -72,13 +72,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     docs_css = (output_dir / "docs.css").read_text(encoding="utf-8")
     architecture_svg = output_dir / "assets" / "diagrams" / "architecture-overview-dark.svg"
-    architecture_options_svg = (
-        output_dir / "assets" / "diagrams" / "architecture-converging-flows-dark.svg"
-    )
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
-    architecture_diagrams_html = (output_dir / "architecture-diagrams.html").read_text(
-        encoding="utf-8"
-    )
     install_html = (output_dir / "install.html").read_text(encoding="utf-8")
     extending_html = (output_dir / "extending.html").read_text(encoding="utf-8")
     rss_html = (output_dir / "rss.html").read_text(encoding="utf-8")
@@ -98,8 +92,6 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'class="shell"' in index_html
     assert architecture_svg.exists()
     assert architecture_svg.stat().st_size > 1_000
-    assert architecture_options_svg.exists()
-    assert architecture_options_svg.stat().st_size > 1_000
     assert 'src="assets/diagrams/architecture-overview-dark.svg"' in index_html
     assert 'src="/assets/diagrams/architecture-overview-dark.svg"' not in index_html
     assert "<title>AgentGraph - Local-first context for AI agents</title>" in index_html
@@ -107,14 +99,6 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'property="og:image"' in index_html
     assert 'name="twitter:card" content="summary_large_image"' in index_html
     assert "local context for AI agents" in index_html
-    assert "Converging flows" in architecture_diagrams_html
-    assert "Comparable lanes" in architecture_diagrams_html
-    assert "Central hub" in architecture_diagrams_html
-    assert "Lifecycle loop" in architecture_diagrams_html
-    assert (
-        'src="assets/diagrams/architecture-converging-flows-dark.svg"'
-        in architecture_diagrams_html
-    )
     assert "https://www.googletagmanager.com/gtag/js?id=G-36ETGXF6K5" in index_html
     assert "gtag('config', 'G-36ETGXF6K5');" in index_html
     assert 'id="doc-search"' in index_html
@@ -133,7 +117,6 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'href="extending.html"' in index_html
     assert 'href="rss.html"' in index_html
     nav_html = index_html.split('<nav aria-label="Documentation">', 1)[1].split("</nav>", 1)[0]
-    assert 'href="architecture-diagrams.html"' not in nav_html
     assert 'href="tester-extension-install.html"' not in nav_html
     assert 'href="privacy.html"' not in nav_html
     assert 'href="extension-distribution.html"' not in nav_html

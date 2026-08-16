@@ -10,7 +10,7 @@ AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sourc
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs-src/assets/diagrams/architecture-overview-dark.svg">
-  <img src="docs-src/assets/diagrams/architecture-overview-light.svg" alt="Selected online services connect to AgentGraph on the user's machine. Browser observation, agent fetches, and background refresh flow through connector packages into a local graph, which is exposed to the user's existing coding agent through MCP.">
+  <img src="docs-src/assets/diagrams/architecture-overview-light.svg" alt="Observe, Fetch, and Refresh converge on connector packages that read selected services and write to a local graph. Agents access the graph through the CLI or MCP, while Expiry applies the retention model.">
 </picture>
 
 ## Why AgentGraph

@@ -27,14 +27,7 @@ mkdirSync(outputDir, { recursive: true });
 const puppeteerConfig = join(tmpdir(), "agentgraph-mermaid-puppeteer.json");
 writeFileSync(puppeteerConfig, JSON.stringify({ executablePath }), "utf8");
 
-const diagrams = [
-  "architecture-overview",
-  "architecture-converging-flows",
-  "architecture-four-lanes",
-  "architecture-central-hub",
-  "architecture-lifecycle-loop",
-  "context-lifecycle",
-];
+const diagrams = ["architecture-overview", "context-lifecycle"];
 const themes = ["light", "dark"];
 
 function render(name, theme, format, scale = "1") {

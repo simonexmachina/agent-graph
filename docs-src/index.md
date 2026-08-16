@@ -21,24 +21,21 @@ source_path = "docs-src/index.md"
 
 Coding agents work well because their source of truth is already available on disk. They can search files, follow references, inspect history, and build a model of a system. AgentGraph applies that advantage to the selected digital context outside the current repository.
 
-<figure class="architecture-figure">
-  <img src="/assets/diagrams/architecture-overview-dark.svg" alt="Selected online services connect to AgentGraph on the user's machine. Browser observation, direct agent fetch, and background refresh flow through connector packages into a local graph exposed through MCP.">
-  <figcaption>Selected services become one local graph. The coding agent you already use searches, traverses, and fetches that context through MCP.</figcaption>
+<figure class="architecture-figure" tabindex="0">
+  <img src="/assets/diagrams/architecture-overview-dark.svg" alt="Observe, Fetch, and Refresh converge on connector packages that read selected services and write to a local graph. Agents access the graph through the CLI or MCP, while Expiry applies the retention model.">
+  <figcaption>Observe, Fetch, and Refresh converge on connector packages and the local graph. Expiry applies the retention model to stored content.</figcaption>
 </figure>
 
-## Connect selected sources
+## Connectors
 
 Connectors define which selected services and URLs AgentGraph can access. Some use
 provider authentication, while others use connector-owned configuration or require no
-credentials. Connecting a source is setup; context then enters the graph in three ways:
+credentials. Connecting a source is setup; its context lifecycle then has four paths:
 
 - **Observe:** when you keep a supported page focused, the Chrome extension tells the local server which resource mattered and its connector fetches it.
 - **Fetch:** an agent or the CLI requests a specific missing or stale resource directly.
-- **Refresh:** polling and connector-owned ingest commands update configured or already-known resources.
-
-Only observation records human attention in `observed_at`. Fetch and refresh can update
-graph content without implying that the human viewed it. All unbookmarked context remains
-subject to the [retention model](/retention.html).
+- **Refresh:** polling keeps known resources updated as they change.
+- **Expiry:** content is expired using a [retention model](/retention.html).
 
 ## What the agent can perceive
 
