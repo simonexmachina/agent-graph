@@ -22,7 +22,7 @@ AgentGraph treats browser observation, connector synchronization, and source-sys
 | `synced_at` | Last successful connector synchronization. Null for unresolved stubs. |
 | `observed_at` | Last accepted browser observation of this exact entity. Null until observed. |
 
-Ingests, background polls, explicit `fetch` and `fetch-entity` commands, stub creation, source changes, and new graph edges do not set `observed_at`. An accepted browser observation report sets it immediately; the observation threshold controls whether AgentGraph also fetches the resource.
+Ingests, background polls, explicit `fetch` and `fetch-entity` commands, stub creation, source changes, and new graph edges do not set `observed_at`. The browser sends an observation report only after its observation threshold has elapsed. AgentGraph then fetches and persists the resource and records `observed_at`. Duration-only updates do not fetch the resource or change `observed_at`.
 
 ## Retention policies
 
