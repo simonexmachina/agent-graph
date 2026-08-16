@@ -141,8 +141,12 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "Before I reply to Maya" in demo_html
     assert "agentgraph-server" in demo_html
     assert "demo<span" in demo_html
-    assert "Open a new coding-agent session" in demo_html
+    assert (
+        "Open a new coding-agent session" in demo_html
+        or "Open a coding-agent session" in demo_html
+    )
     assert "AgentGraph CLI" in demo_html
+    assert 'href="install.html"' in demo_article
     assert "mcp-config" not in demo_article
     assert "http.server" not in demo_article
     assert "Observe the first article" not in demo_article
