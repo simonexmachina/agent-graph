@@ -27,7 +27,11 @@ async def backend_context() -> AsyncGenerator[StorageBackend, None]:
     from agentgraph.core.context import clear_backend, set_backend
 
     backend = create_backend()
-    await backend.initialize()
+    try:
+        await backend.initialize()
+    except Exception:
+        await backend.close()
+        raise
     set_backend(backend)
     try:
         yield backend

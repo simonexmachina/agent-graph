@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
 import asyncio
+import sqlite3
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -173,3 +175,41 @@ async def test_sqlite_backends_can_write_to_same_wal_database(tmp_path: Path) ->
     finally:
         await cli_backend.close()
         await server_backend.close()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_sqlite_backends_do_not_reapply_schema_after_initialization(tmp_path: Path) -> None:
+    from agentgraph.backends.sqlite.backend import SQLiteBackend
+
+    database_path = tmp_path / "shared.db"
+    first_backend = SQLiteBackend(str(database_path), vector_mode="bm25-only")
+    await first_backend.initialize()
+    await first_backend.close()
+
+    backends = [SQLiteBackend(str(database_path), vector_mode="bm25-only") for _ in range(3)]
+    try:
+        with patch.object(SQLiteBackend, "_initialize_schema", new=AsyncMock()) as initialize_schema:
+            await asyncio.gather(*(backend.initialize() for backend in backends))
+        initialize_schema.assert_not_awaited()
+    finally:
+        await asyncio.gather(*(backend.close() for backend in backends))
+
+    with sqlite3.connect(database_path) as conn:
+        schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
+    assert schema_version == 1
+
+
+@pytest.mark.asyncio
+async def test_sqlite_initialization_failure_closes_connection(tmp_path: Path) -> None:
+    from agentgraph.backends.sqlite.backend import SQLiteBackend
+
+    backend = SQLiteBackend(str(tmp_path / "graph.db"), vector_mode="bm25-only")
+    with (
+        patch.object(backend, "_ensure_wal_mode", new=AsyncMock(side_effect=RuntimeError("locked"))),
+        pytest.raises(RuntimeError, match="locked"),
+    ):
+        await backend.initialize()
+
+    assert backend._conn is None
+    assert backend._read_conn is None

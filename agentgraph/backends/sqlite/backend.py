@@ -64,6 +64,7 @@ _LIST_PAGE_ORDER_BY = {
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 _FTS_DELETE_CHUNK_SIZE = 500
 _BUSY_TIMEOUT_MS = 5_000
+_SCHEMA_VERSION = 1
 
 
 def _now() -> str:
@@ -127,38 +128,33 @@ class SQLiteBackend(StorageBackend):
 
         self._conn = await aiosqlite.connect(self._db_path, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
-        await self._conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
-        if self._db_path == ":memory:":
-            self._read_conn = self._conn
-
-        if self._db_path != ":memory:":
-            await self._conn.execute("PRAGMA journal_mode=WAL")
-        await self._conn.execute("PRAGMA foreign_keys=ON")
-        legacy_table = await self._conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'entities'"
-        )
-        if await legacy_table.fetchone():
-            cursor = await self._conn.execute("PRAGMA table_info(entities)")
-            existing_columns = {row["name"] for row in await cursor.fetchall()}
-            if "observed_at" not in existing_columns:
-                await self._conn.execute("ALTER TABLE entities ADD COLUMN observed_at TEXT")
-        await self._conn.executescript(_SCHEMA_SQL)
-
-        await self._run_migrations()
-
-        if self._db_path != ":memory:":
-            self._read_conn = await aiosqlite.connect(self._db_path, isolation_level=None)
-            self._read_conn.row_factory = sqlite3.Row
-            await self._read_conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
-            await self._read_conn.execute("PRAGMA foreign_keys=ON")
-
-        if self._vector_mode == "sqlite-vec":
-            assert self._read_conn is not None
-            self._vec_loaded = await load_sqlite_vec(self._read_conn)
-            if self._vec_loaded:
-                logger.info("sqlite-vec extension loaded")
+        try:
+            await self._conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
+            if self._db_path == ":memory:":
+                self._read_conn = self._conn
             else:
-                logger.info("sqlite-vec not available, falling back to numpy")
+                await self._ensure_wal_mode()
+            await self._conn.execute("PRAGMA foreign_keys=ON")
+
+            if await self._schema_version() < _SCHEMA_VERSION:
+                await self._initialize_schema()
+
+            if self._db_path != ":memory:":
+                self._read_conn = await aiosqlite.connect(self._db_path, isolation_level=None)
+                self._read_conn.row_factory = sqlite3.Row
+                await self._read_conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
+                await self._read_conn.execute("PRAGMA foreign_keys=ON")
+
+            if self._vector_mode == "sqlite-vec":
+                assert self._read_conn is not None
+                self._vec_loaded = await load_sqlite_vec(self._read_conn)
+                if self._vec_loaded:
+                    logger.info("sqlite-vec extension loaded")
+                else:
+                    logger.info("sqlite-vec not available, falling back to numpy")
+        except Exception:
+            await self.close()
+            raise
 
     async def close(self) -> None:
         if self._read_conn is not None and self._read_conn is not self._conn:
@@ -180,6 +176,34 @@ class SQLiteBackend(StorageBackend):
         return self._read_conn
 
     # --- Internal helpers ---
+
+    async def _ensure_wal_mode(self) -> None:
+        """Enable WAL once; reapplying it would take a write lock for every CLI read."""
+        conn = self._conn_or_raise()
+        cursor = await conn.execute("PRAGMA journal_mode")
+        row = await cursor.fetchone()
+        if row is None or str(row[0]).lower() != "wal":
+            await conn.execute("PRAGMA journal_mode=WAL")
+
+    async def _schema_version(self) -> int:
+        cursor = await self._conn_or_raise().execute("PRAGMA user_version")
+        row = await cursor.fetchone()
+        return int(row[0]) if row is not None else 0
+
+    async def _initialize_schema(self) -> None:
+        """Create or migrate a database once, before marking its schema version."""
+        conn = self._conn_or_raise()
+        legacy_table = await conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'entities'"
+        )
+        if await legacy_table.fetchone():
+            cursor = await conn.execute("PRAGMA table_info(entities)")
+            existing_columns = {row["name"] for row in await cursor.fetchall()}
+            if "observed_at" not in existing_columns:
+                await conn.execute("ALTER TABLE entities ADD COLUMN observed_at TEXT")
+        await conn.executescript(_SCHEMA_SQL)
+        await self._run_migrations()
+        await conn.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
 
     async def _run_migrations(self) -> None:
         conn = self._conn_or_raise()
