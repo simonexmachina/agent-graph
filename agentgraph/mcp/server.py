@@ -251,22 +251,24 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
 
 @mcp.tool()
 async def install_skill_tool(
-    skill: str = "graph", target: str = "user", force: bool = False
+    skill: str = "graph", target: str = "user", force: bool = False, claude: bool = False
 ) -> str:
     """
     Install a bundled AgentGraph skill.
 
     This is the MCP equivalent of:
-        agentgraph install-skill <skill> --target <user|project> [--force]
+        agentgraph install-skill <skill> --target <user|project> [--claude] [--force]
 
     Args:
         skill: Bundled skill name. Defaults to "graph".
         target: "user" installs to ~/.agents/skills. "project" installs to
             ./.agents/skills relative to the MCP server process.
+        claude: Also link the skill into the corresponding Claude skills directory.
         force: Overwrite an existing installed skill.
 
     Returns:
-        JSON object with skill, target, source, destination, and overwritten,
+        JSON object with skill, target, source, destination, claude_destination,
+        and overwritten,
         or an error.
     """
     from agentgraph.skills import SkillInstallError, install_skill
@@ -275,7 +277,7 @@ async def install_skill_tool(
         return json.dumps({"error": "Target must be 'user' or 'project'"})
 
     try:
-        result = install_skill(skill, target=target, force=force)
+        result = install_skill(skill, target=target, force=force, claude=claude)
         return json.dumps(result.to_dict())
     except SkillInstallError as exc:
         return json.dumps({"error": str(exc)})

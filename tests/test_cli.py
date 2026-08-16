@@ -352,6 +352,33 @@ def test_install_skill_defaults_to_user_agents_skills(
     assert str(skill_path.parent) in result.output
 
 
+def test_install_skill_help_describes_install_locations() -> None:
+    result = runner.invoke(app, ["install-skill", "--help"])
+
+    assert result.exit_code == 0
+    assert "~/.agents/skills" in result.output
+    assert "./.agents/skills" in result.output
+    assert "~/.claude/skills" in result.output
+    assert "./.claude/skills" in result.output
+
+
+def test_install_skill_claude_links_to_user_skill(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    result = runner.invoke(app, ["install-skill", "--claude", "--json"])
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    claude_path = home / ".claude" / "skills" / "graph"
+    assert claude_path.is_symlink()
+    assert claude_path.resolve() == home / ".agents" / "skills" / "graph"
+    assert parsed["claude_destination"] == str(claude_path)
+
+
 def test_install_skill_refuses_to_overwrite_without_force(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

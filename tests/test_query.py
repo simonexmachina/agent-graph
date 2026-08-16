@@ -1110,6 +1110,25 @@ async def test_mcp_install_skill_tool_installs_to_user_agents_skills(
 
 
 @pytest.mark.asyncio
+async def test_mcp_install_skill_tool_links_to_claude_skills(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agentgraph.mcp.server import install_skill_tool
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    result = await install_skill_tool(claude=True)
+
+    parsed = json.loads(result)
+    claude_path = home / ".claude" / "skills" / "graph"
+    assert claude_path.is_symlink()
+    assert claude_path.resolve() == home / ".agents" / "skills" / "graph"
+    assert parsed["claude_destination"] == str(claude_path)
+
+
+@pytest.mark.asyncio
 async def test_mcp_connector_command_queues_requested_poll() -> None:
     from agentgraph.mcp.server import run_connector_command_tool
 

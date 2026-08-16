@@ -76,8 +76,9 @@ agentgraph mcp-config   # stdio config for Claude Desktop/Claude Code; ChatGPT u
 # Create the self-contained fictional graph used by the public demo
 agentgraph demo seed --config-dir <directory> [--reset] [--json]
 
-# Install the bundled AgentGraph skill into ~/.agents/skills or ./.agents/skills
-agentgraph install-skill [graph] [--target user|project] [--force] [--json]
+# Install the bundled AgentGraph skill into ~/.agents/skills or ./.agents/skills.
+# --claude also links it into the matching ~/.claude/skills or ./.claude/skills directory.
+agentgraph install-skill [graph] [--target user|project] [--claude] [--force] [--json]
 ```
 
 `--depth 0` returns only the requested entity; depths 1 through 4 include that many relationship hops.
@@ -104,7 +105,7 @@ agentgraph poll [source]           -> poll_connectors_tool(source) # returns pol
 agentgraph bookmark ...            -> bookmark_entity_tool(entity_id, bookmarked)
 agentgraph delete ...              -> delete_entity_tool(entity_id)
 agentgraph unify-persons ...       -> unify_persons_tool(primary_entity_id, duplicate_entity_ids)
-agentgraph install-skill ...       -> install_skill_tool(skill, target, force)
+agentgraph install-skill ...       -> install_skill_tool(skill, target, force, claude)
 ```
 
 ## Entity types

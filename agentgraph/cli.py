@@ -645,7 +645,16 @@ def mcp_config() -> None:
 @app.command()
 def install_skill(
     skill: str = typer.Argument("graph", help="Bundled skill to install"),
-    target: str = typer.Option("user", "--target", help="Install target: user or project"),
+    target: str = typer.Option(
+        "user",
+        "--target",
+        help="Install target: user (~/.agents/skills) or project (./.agents/skills)",
+    ),
+    claude: bool = typer.Option(
+        False,
+        "--claude",
+        help="Also link into Claude: ~/.claude/skills (user) or ./.claude/skills (project)",
+    ),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing installed skill"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -658,7 +667,7 @@ def install_skill(
         raise typer.Exit(code=1)
 
     try:
-        result = install_agentgraph_skill(skill, target=target, force=force)
+        result = install_agentgraph_skill(skill, target=target, force=force, claude=claude)
     except SkillInstallError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
@@ -668,6 +677,8 @@ def install_skill(
         return
 
     typer.echo(f"Installed AgentGraph skill '{result.skill}' to {result.destination}")
+    if result.claude_destination is not None:
+        typer.echo(f"Linked Claude skill to {result.claude_destination}")
 
 
 @app.command()
