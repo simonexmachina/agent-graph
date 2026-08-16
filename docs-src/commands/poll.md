@@ -22,3 +22,5 @@ agentgraph poll
 agentgraph poll slack
 agentgraph poll rss
 ```
+
+The command queues polling through the running local AgentGraph server.

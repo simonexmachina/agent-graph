@@ -60,10 +60,13 @@ first Person is canonical and keeps its ID. Deletion removes connected edges.
 
 ## Server and skill setup
 
-Graph data commands require the local AgentGraph server. If it is unavailable, follow
-the environment's process-management instructions; otherwise `agentgraph serve`
-starts it. Do not start a duplicate foreground server when a service manager already
-owns the process.
+`agentgraph serve` runs the required local AgentGraph service. Follow the environment's
+process-management instructions rather than starting a duplicate foreground server
+when a service manager already owns it.
+
+`agentgraph poll` and connector or authentication commands that queue a poll or ingest
+contact that service over localhost. If sandboxed execution blocks one of those
+commands, request permission to contact the configured localhost server and retry it.
 
 ```bash
 agentgraph mcp-config

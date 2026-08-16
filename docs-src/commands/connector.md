@@ -29,4 +29,5 @@ agentgraph connector gmail ingest --account user@example.com --json
 
 Historical ingest is connector-owned. There is no top-level `agentgraph ingest`
 command. Gmail currently exposes an optional 90-day backfill through its connector
-command; omit `--account` to queue it for every authenticated Google account.
+command; omit `--account` to queue it for every authenticated Google account. Commands
+that queue a poll or ingest send that work to the running local AgentGraph server.

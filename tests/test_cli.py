@@ -393,8 +393,10 @@ def test_install_skill_defaults_to_user_agents_skills(
     assert skill_path.is_file()
     skill_content = skill_path.read_text(encoding="utf-8")
     assert "AgentGraph CLI skill" in skill_content
-    assert "requesting user-approved network access" in skill_content
-    assert "cloud, remote, or containerized environment" in skill_content
+    assert "`agentgraph poll`" in skill_content
+    assert "request permission to contact that localhost server" in skill_content
+    assert "AgentGraph normally connects to a server" not in skill_content
+    assert "cloud, remote, or containerized environment" not in skill_content
     references = skill_path.parent / "references"
     assert {path.name for path in references.glob("*.md")} == {
         "commands.md",

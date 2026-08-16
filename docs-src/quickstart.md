@@ -47,7 +47,7 @@ agentgraph connector web add 'https://example.com/research/*'
 agentgraph serve
 ```
 
-The server listens at `http://127.0.0.1:8765`. It accepts browser observations, runs connector pollers, serves the viewer, and exposes the local HTTP backend.
+The server listens at `http://127.0.0.1:8765`. It accepts browser observations, runs connector pollers, and serves the viewer.
 
 ## 4. Observe one resource
 
