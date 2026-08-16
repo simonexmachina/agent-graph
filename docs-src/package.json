@@ -5,6 +5,7 @@
     "diagrams:build": "node diagrams/render.mjs"
   },
   "devDependencies": {
-    "@mermaid-js/mermaid-cli": "11.12.0"
+    "@mermaid-js/mermaid-cli": "11.16.0",
+    "puppeteer": "24.43.1"
   }
 }
