@@ -38,6 +38,12 @@ def test_health(client: TestClient) -> None:
     assert resp.json() == {"status": "ok"}
 
 
+def test_root_redirects_to_viewer(client: TestClient) -> None:
+    resp = client.get("/", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/viewer"
+
+
 def test_viewer_url_uses_localhost_for_wildcard_hosts() -> None:
     assert viewer_url("0.0.0.0", 8765) == "http://127.0.0.1:8765/viewer"
     assert viewer_url("::", 8765) == "http://127.0.0.1:8765/viewer"

@@ -88,6 +88,7 @@ def test_server_exposes_only_viewer_extension_and_sync_routes() -> None:
         "/api/extension/fetch",
         "/api/extension/page",
         "/api/extension/bookmark",
+        "/",
         "/viewer",
         "/health",
     } <= paths

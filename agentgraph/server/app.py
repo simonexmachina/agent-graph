@@ -14,7 +14,7 @@ from uuid import UUID
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 from agentgraph.core.runtime import backend_context
@@ -93,6 +93,12 @@ async def log_request_timing(request: Request, call_next: Any) -> Any:
 app.include_router(cli_router)
 app.include_router(meta_router)
 app.include_router(sync_router)
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    """Redirect the server root to the graph viewer."""
+    return RedirectResponse(url="/viewer")
 
 
 class ReportObservationRequest(BaseModel):
