@@ -12,8 +12,6 @@ from agentgraph.connectors.base import EdgeRecord, EntityBatch, EntityRecord, Pe
 
 DEMO_DATABASE_NAME = "agentgraph.db"
 DEMO_CREATED_AT = "2026-08-14T08:00:00Z"
-DEMO_ENV_NAME = ".env"
-DEMO_ENV_MARKER = "# AgentGraph Atlas demo configuration"
 WEBHOOK_ARTICLE_URL = (
     "https://github.com/simonexmachina/agent-graph/blob/main/"
     "agentgraph/demo_fixtures/reliable-webhooks.md"
@@ -301,29 +299,6 @@ def remove_demo_database(database_path: Path) -> None:
             candidate.unlink()
 
 
-def write_demo_environment(config_dir: Path) -> None:
-    """Write the demo-only backend setting without replacing user configuration."""
-    environment_path = config_dir / DEMO_ENV_NAME
-    if environment_path.exists():
-        existing = environment_path.read_text(encoding="utf-8")
-        if not existing.startswith(DEMO_ENV_MARKER):
-            raise FileExistsError(
-                f"Refusing to replace non-demo configuration: {environment_path}"
-            )
-    environment_path.write_text(
-        "\n".join(
-            [
-                DEMO_ENV_MARKER,
-                "# Keep this fixture lightweight and deterministic.",
-                "AGENTGRAPH_BACKEND_SQLITE_VECTOR_MODE=bm25-only",
-                "AGENTGRAPH_POLL_INTERVAL_SECONDS=0",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-
 def apply_demo_timestamps(database_path: Path) -> None:
     observations = {
         ("slack", "TDEMO/CATLAS"): "2026-08-10T11:05:00Z",
@@ -353,7 +328,6 @@ async def seed_demo(config_dir: Path, *, force: bool = False) -> dict[str, objec
     if database_path.exists() and not force:
         raise FileExistsError(f"Demo database already exists: {database_path}. Use --force to replace it.")
     safe_dir.mkdir(parents=True, exist_ok=True)
-    write_demo_environment(safe_dir)
     if force:
         remove_demo_database(database_path)
 

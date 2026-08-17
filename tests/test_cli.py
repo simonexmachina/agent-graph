@@ -72,6 +72,25 @@ def test_demo_seed_creates_fixture_and_outputs_json(
     assert (config_dir / "agentgraph.db").exists()
 
 
+def test_demo_seed_preserves_project_dotenv_config_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    working_dir = tmp_path / "demo-run"
+    config_dir = tmp_path / "atlas-demo"
+    working_dir.mkdir()
+    environment_path = working_dir / ".env"
+    environment = f"AGENTGRAPH_CONFIG_DIR={config_dir}\n"
+    environment_path.write_text(environment, encoding="utf-8")
+    monkeypatch.chdir(working_dir)
+    monkeypatch.delenv("AGENTGRAPH_CONFIG_DIR", raising=False)
+
+    result = runner.invoke(app, ["demo", "seed", "--json"])
+
+    assert result.exit_code == 0
+    assert (config_dir / "agentgraph.db").exists()
+    assert environment_path.read_text(encoding="utf-8") == environment
+
+
 def test_demo_seed_rejects_config_dir_option() -> None:
     result = runner.invoke(app, ["demo", "seed", "--config-dir", "/tmp/atlas-demo"])
 

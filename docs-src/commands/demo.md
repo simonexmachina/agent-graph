@@ -17,6 +17,6 @@ AGENTGRAPH_CONFIG_DIR=DIRECTORY agentgraph demo seed [--force] [--json]
 
 The seed command is offline and uses `AGENTGRAPH_CONFIG_DIR`; it refuses the default
 `~/.agentgraph` directory. It also refuses to replace an existing demo database unless
-`--force` is supplied and will not overwrite a non-demo `.env` file.
+`--force` is supplied. It does not create or modify `.env` files.
 
 See [Trace a decision](/demo.html) for the complete workflow and expected evidence.

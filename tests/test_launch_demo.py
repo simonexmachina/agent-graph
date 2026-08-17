@@ -8,7 +8,6 @@ import pytest
 
 from agentgraph.demo import (
     DEMO_CREATED_AT,
-    DEMO_ENV_MARKER,
     RETRY_GUIDE_URL,
     WEBHOOK_ARTICLE_URL,
     build_demo_batch,
@@ -58,9 +57,7 @@ async def test_seed_demo_creates_isolated_searchable_graph(tmp_path: Path) -> No
     assert result["entities"] == 12
     assert result["persons"] == 3
     assert result["edges"] == 15
-    environment = (config_dir / ".env").read_text(encoding="utf-8")
-    assert environment.startswith(DEMO_ENV_MARKER)
-    assert "AGENTGRAPH_BACKEND_SQLITE_VECTOR_MODE=bm25-only" in environment
+    assert not (config_dir / ".env").exists()
     with sqlite3.connect(database_path) as conn:
         conn.row_factory = sqlite3.Row
         alex = conn.execute(
@@ -98,10 +95,14 @@ async def test_seed_demo_creates_isolated_searchable_graph(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_seed_demo_does_not_replace_non_demo_environment(tmp_path: Path) -> None:
+async def test_seed_demo_preserves_existing_environment(tmp_path: Path) -> None:
     config_dir = tmp_path / "existing-config"
     config_dir.mkdir()
-    (config_dir / ".env").write_text("AGENTGRAPH_SERVER_PORT=9999\n", encoding="utf-8")
+    environment_path = config_dir / ".env"
+    environment = "AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-atlas-demo\n"
+    environment_path.write_text(environment, encoding="utf-8")
 
-    with pytest.raises(FileExistsError, match="non-demo configuration"):
-        await seed_demo(config_dir)
+    result = await seed_demo(config_dir)
+
+    assert result["database"] == str(config_dir / "agentgraph.db")
+    assert environment_path.read_text(encoding="utf-8") == environment
