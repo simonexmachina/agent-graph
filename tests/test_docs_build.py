@@ -71,6 +71,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     build_docs.build()
 
     docs_css = (output_dir / "docs.css").read_text(encoding="utf-8")
+    social_image = output_dir / "assets" / "og-image.png"
     architecture_svg = output_dir / "assets" / "diagrams" / "architecture-overview-dark.svg"
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
     install_html = (output_dir / "install.html").read_text(encoding="utf-8")
@@ -91,13 +92,17 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'class="shell"' in index_html
     assert architecture_svg.exists()
     assert architecture_svg.stat().st_size > 1_000
+    assert social_image.exists()
+    assert social_image.stat().st_size > 1_000
     assert "architecture-overview-dark.svg" not in index_html
     assert 'src="assets/diagrams/architecture-overview-dark.svg"' in how_it_works_html
     assert 'class="architecture-figure architecture-figure-fit"' in how_it_works_html
     assert "<title>AgentGraph - Local-first context for AI agents</title>" in index_html
     assert 'rel="canonical" href="https://simonexmachina.github.io/agent-graph/"' in index_html
-    assert 'property="og:image"' in index_html
+    social_image_url = "https://simonexmachina.github.io/agent-graph/assets/og-image.png"
+    assert f'property="og:image" content="{social_image_url}"' in index_html
     assert 'name="twitter:card" content="summary_large_image"' in index_html
+    assert f'name="twitter:image" content="{social_image_url}"' in index_html
     assert "local context for AI agents" in index_html
     assert "https://www.googletagmanager.com/gtag/js?id=G-36ETGXF6K5" in index_html
     assert "gtag('config', 'G-36ETGXF6K5');" in index_html
