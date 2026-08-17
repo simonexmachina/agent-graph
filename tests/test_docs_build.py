@@ -153,6 +153,9 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         or "Open a coding-agent session" in demo_html
     )
     assert "AgentGraph CLI" in demo_html
+    assert "Open the viewer" in demo_html
+    assert 'agentgraph<span class="tok-w"> </span>serve' in demo_html
+    assert 'href="http://127.0.0.1:8765/viewer"' in demo_html
     assert 'href="install.html"' in demo_article
     assert "mcp-config" not in demo_article
     assert "http.server" not in demo_article

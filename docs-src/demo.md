@@ -47,7 +47,17 @@ Open a coding-agent session and give it this prompt:
 
 The coding agent should use the installed AgentGraph skill and commands such as `agentgraph search`, `agentgraph get`, and `agentgraph traverse` to gather context from the different sources.
 
-## Expected evidence
+## 4. Open the viewer
+
+In a second terminal, stay in the temporary demo directory and start the local server:
+
+```bash
+agentgraph serve
+```
+
+Then open [http://127.0.0.1:8765/viewer](http://127.0.0.1:8765/viewer). The viewer shows the same seeded Atlas entities and relationships that the coding agent investigated.
+
+## 5. Expected evidence
 
 The answer should identify:
 
