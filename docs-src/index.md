@@ -21,20 +21,14 @@ source_path = "docs-src/index.md"
 
 Coding agents work well because their source of truth is already available on disk. They can search files, follow references, inspect history, and build a model of a system. AgentGraph applies that advantage to the selected digital context outside the current repository.
 
-## Connectors
-
-Connectors define which selected services and URLs AgentGraph can access. Some use
-provider authentication, while others use connector-owned configuration or require no
-credentials. Connecting a source is setup; its context lifecycle then has four paths:
-
 - **Observe:** when you keep a supported page focused, the Chrome extension tells the local server which resource mattered and its connector fetches it.
 - **Fetch:** an agent or the CLI requests a specific missing or stale resource directly.
 - **Refresh:** polling keeps known resources updated as they change.
 - **Expiry:** content is expired using a [retention model](/retention.html).
 
-## What the agent can perceive
+## Connectors
 
-AgentGraph provides a number of connectors for common services, but new connectors can also be added to allow integration with other services. Teams, individuals, and open-source contributors can extend AgentGraph to include internal systems, niche tools, exports, local databases, and APIs.
+Connectors provide access to the services you use. AgentGraph provides a number of connectors for common services, but new connectors can also be added to allow integration with other services. You can extend AgentGraph by adding connectors for other online services, internal systems, niche tools, exports, local databases, and APIs.
 
 | Connector | What it contributes |
 | --- | --- |
@@ -48,6 +42,12 @@ AgentGraph provides a number of connectors for common services, but new connecto
 <div class="connector-promise"><strong>Bring any service into your agent's world.</strong> Use the bundled connectors today, then add other connectors to build the context your own agent needs.</div>
 
 [Explore connectors](/connectors.html) or [build your own](/extending.html).
+
+## Local by design
+
+Indexed content is stored in SQLite on your machine. Source API calls run from your machine under your credentials. The project does not operate a hosted graph service or receive indexed content through a project-controlled backend.
+
+An MCP client you connect can read content from the local graph and is governed by that client's data practices. Read the [Privacy Policy](/privacy.html), [Terms of Service](/terms.html), and [retention model](/retention.html).
 
 ## Start here
 
@@ -77,9 +77,3 @@ AgentGraph provides a number of connectors for common services, but new connecto
     <p>Connect an existing agent to search, traversal, fetch, and graph-management tools.</p>
   </section>
 </div>
-
-## Local by design
-
-Indexed content is stored in SQLite on your machine. Source API calls run from your machine under your credentials. The project does not operate a hosted graph service or receive indexed content through a project-controlled backend.
-
-An MCP client you connect can read content from the local graph and is governed by that client's data practices. Read the [Privacy Policy](/privacy.html), [Terms of Service](/terms.html), and [retention model](/retention.html).
