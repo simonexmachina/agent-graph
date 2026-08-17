@@ -29,7 +29,7 @@ uv pip install --python "${venv_dir}/bin/python" "${wheel}"
 
 cd "${work_dir}"
 AGENTGRAPH_CONFIG_DIR="${config_dir}" \
-  "${venv_dir}/bin/agentgraph" demo seed --json | grep --fixed-strings '"entities": 12'
+  "${venv_dir}/bin/agentgraph" demo seed --force --json | grep --fixed-strings '"entities": 12'
 AGENTGRAPH_CONFIG_DIR="${config_dir}" \
 AGENTGRAPH_SERVER_PORT="${server_port}" \
   "${venv_dir}/bin/agentgraph" serve >"${server_log}" 2>&1 &

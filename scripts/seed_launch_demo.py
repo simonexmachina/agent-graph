@@ -12,10 +12,10 @@ from agentgraph.demo import seed_demo
 
 def main() -> None:
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument("--reset", action="store_true")
+    parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     try:
-        result = asyncio.run(seed_demo(get_config_paths()[0], reset=args.reset))
+        result = asyncio.run(seed_demo(get_config_paths()[0], force=args.force))
     except (FileExistsError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
     print(json.dumps(result, indent=2))

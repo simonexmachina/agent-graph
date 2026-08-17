@@ -79,6 +79,29 @@ def test_demo_seed_rejects_config_dir_option() -> None:
     assert "No such option: --config-dir" in result.output
 
 
+def test_demo_seed_rejects_reset_option() -> None:
+    result = runner.invoke(app, ["demo", "seed", "--reset"])
+
+    assert result.exit_code != 0
+    assert "No such option: --reset" in result.output
+
+
+def test_demo_seed_requires_force_to_replace_existing_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = tmp_path / "atlas-demo"
+    monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
+
+    assert runner.invoke(app, ["demo", "seed"]).exit_code == 0
+
+    result = runner.invoke(app, ["demo", "seed"])
+
+    assert result.exit_code == 1
+    assert "Demo database already exists" in result.output
+    assert "--force" in result.output
+    assert runner.invoke(app, ["demo", "seed", "--force"]).exit_code == 0
+
+
 def test_bookmark_command_dispatches_to_cli_query() -> None:
     with patch("agentgraph.cli_query.cmd_bookmark") as cmd_bookmark:
         result = runner.invoke(app, ["bookmark", "abc123", "--json"])

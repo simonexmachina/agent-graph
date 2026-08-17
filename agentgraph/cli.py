@@ -52,7 +52,7 @@ def _status_label(status: str) -> str:
 
 @demo_app.command("seed")
 def seed_demo_command(
-    reset: bool = typer.Option(False, "--reset", help="Replace an existing demo database"),
+    force: bool = typer.Option(False, "--force", help="Replace an existing demo database"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Seed the fictional Atlas graph used by the launch demo."""
@@ -60,7 +60,7 @@ def seed_demo_command(
     from agentgraph.demo import seed_demo
 
     try:
-        result = asyncio.run(seed_demo(get_config_paths()[0], reset=reset))
+        result = asyncio.run(seed_demo(get_config_paths()[0], force=force))
     except (FileExistsError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc

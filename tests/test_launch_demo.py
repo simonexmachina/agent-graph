@@ -90,8 +90,11 @@ async def test_seed_demo_creates_isolated_searchable_graph(tmp_path: Path) -> No
         ).fetchall()
         assert search_hits
 
-    with pytest.raises(FileExistsError):
+    with pytest.raises(FileExistsError, match=r"Use --force to replace it"):
         await seed_demo(config_dir)
+
+    result = await seed_demo(config_dir, force=True)
+    assert result["database"] == str(database_path)
 
 
 @pytest.mark.asyncio

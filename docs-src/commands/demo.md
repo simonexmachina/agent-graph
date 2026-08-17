@@ -12,11 +12,11 @@ source_path = "docs-src/commands/demo.md"
 ## Synopsis
 
 ```bash
-AGENTGRAPH_CONFIG_DIR=DIRECTORY agentgraph demo seed [--reset] [--json]
+AGENTGRAPH_CONFIG_DIR=DIRECTORY agentgraph demo seed [--force] [--json]
 ```
 
 The seed command is offline and uses `AGENTGRAPH_CONFIG_DIR`; it refuses the default
 `~/.agentgraph` directory. It also refuses to replace an existing demo database unless
-`--reset` is supplied and will not overwrite a non-demo `.env` file.
+`--force` is supplied and will not overwrite a non-demo `.env` file.
 
 See [Trace a decision](/demo.html) for the complete workflow and expected evidence.

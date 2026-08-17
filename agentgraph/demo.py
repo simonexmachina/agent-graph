@@ -347,14 +347,14 @@ def apply_demo_timestamps(database_path: Path) -> None:
             )
 
 
-async def seed_demo(config_dir: Path, *, reset: bool = False) -> dict[str, object]:
+async def seed_demo(config_dir: Path, *, force: bool = False) -> dict[str, object]:
     safe_dir = validate_demo_config_dir(config_dir)
     database_path = safe_dir / DEMO_DATABASE_NAME
-    if database_path.exists() and not reset:
-        raise FileExistsError(f"Demo database already exists: {database_path}")
+    if database_path.exists() and not force:
+        raise FileExistsError(f"Demo database already exists: {database_path}. Use --force to replace it.")
     safe_dir.mkdir(parents=True, exist_ok=True)
     write_demo_environment(safe_dir)
-    if reset:
+    if force:
         remove_demo_database(database_path)
 
     batch = build_demo_batch()
