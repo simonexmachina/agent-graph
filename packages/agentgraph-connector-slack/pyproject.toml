@@ -1,6 +1,6 @@
 [project]
 name = "agentgraph-connector-slack"
-version = "0.5.2"
+version = "0.5.3"
 description = "Slack connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
