@@ -19,22 +19,31 @@ Without AgentGraph, a coding agent would need separate integrations and authenti
 
 ## 1. Install AgentGraph and the AgentGraph skill
 
-Install the published package with `uv`:
+AgentGraph expects Python 3.12 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv tool install agentgraph-server
-agentgraph install-skill --target project --claude
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-The skill is installed in the local directory (in `.agents/skills` and `.claude/skills`).
+Install the published package with `uv` and install the Graph skill:
+
+```bash
+uv tool install 'agentgraph-server[all]'
+agentgraph install-skill --target project
+```
+
+Or you can use `--target project` to install the skill in the local directory.
 
 ## 2. Create an isolated demo database
 
 We'll use a disposable config directory to create an isolated database for this demo.
 
 ```bash
-echo 'AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-atlas-demo' > .env
-agentgraph demo seed --config-dir /tmp/agentgraph-atlas-demo --reset
+# mkdir and cd to a temporary directory
+mkdir /tmp/agentgraph-demo && cd "$_"
+# tell agentgraph to use this directory instead of ~/.agentgraph
+echo "AGENTGRAPH_CONFIG_DIR=`pwd`" > .env
+agentgraph demo seed
 ```
 
 The fixture contains a set of Gmail, Slack, Drive, research, people, and relationship records. It is self-contained and does not call those services.
