@@ -58,15 +58,25 @@ def test_help() -> None:
     assert "ingest" not in result.output
 
 
-def test_demo_seed_creates_fixture_and_outputs_json(tmp_path: Path) -> None:
+def test_demo_seed_creates_fixture_and_outputs_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config_dir = tmp_path / "atlas-demo"
+    monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
 
-    result = runner.invoke(app, ["demo", "seed", "--config-dir", str(config_dir), "--json"])
+    result = runner.invoke(app, ["demo", "seed", "--json"])
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert payload["entities"] == 12
     assert (config_dir / "agentgraph.db").exists()
+
+
+def test_demo_seed_rejects_config_dir_option() -> None:
+    result = runner.invoke(app, ["demo", "seed", "--config-dir", "/tmp/atlas-demo"])
+
+    assert result.exit_code != 0
+    assert "No such option: --config-dir" in result.output
 
 
 def test_bookmark_command_dispatches_to_cli_query() -> None:

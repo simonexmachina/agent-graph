@@ -4,23 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-from argparse import ArgumentParser, Namespace
-from pathlib import Path
+from argparse import ArgumentParser
 
+from agentgraph.config import get_config_paths
 from agentgraph.demo import seed_demo
 
 
-def parse_args() -> Namespace:
-    parser = ArgumentParser(description=__doc__)
-    parser.add_argument("--config-dir", required=True, type=Path)
-    parser.add_argument("--reset", action="store_true")
-    return parser.parse_args()
-
-
 def main() -> None:
-    args = parse_args()
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument("--reset", action="store_true")
+    args = parser.parse_args()
     try:
-        result = asyncio.run(seed_demo(args.config_dir, reset=args.reset))
+        result = asyncio.run(seed_demo(get_config_paths()[0], reset=args.reset))
     except (FileExistsError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
     print(json.dumps(result, indent=2))
