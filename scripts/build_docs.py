@@ -19,7 +19,7 @@ DOCS_SRC = ROOT / "docs-src"
 DOCS_OUT = ROOT / "docs"
 GITHUB_ROOT = "https://github.com/simonexmachina/agent-graph/blob/main"
 SITE_ROOT = "https://simonexmachina.github.io/agent-graph"
-SOCIAL_IMAGE_URL = f"{SITE_ROOT}/assets/og-image.png"
+SOCIAL_IMAGE_URL = f"{SITE_ROOT}/assets/og-image.png?v=2"
 SECTION_ORDER = {"Start": 10, "Configuration": 15, "Reference": 20, "MCP": 30}
 
 _FORMATTER = HtmlFormatter(nowrap=True, classprefix="tok-")
