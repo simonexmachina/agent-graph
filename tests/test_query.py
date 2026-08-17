@@ -904,6 +904,7 @@ async def test_mcp_tool_metadata_guides_agent_workflow() -> None:
     assert tools["search_entities_tool"].annotations.readOnlyHint is True
     assert tools["delete_entity_tool"].annotations is not None
     assert tools["delete_entity_tool"].annotations.destructiveHint is True
+    assert "install_skill_tool" not in tools
     search_description = tools["search_entities_tool"].description
     query_description = tools["query_by_filter_tool"].description
     assert search_description is not None
@@ -1157,57 +1158,6 @@ async def test_mcp_list_connectors_tool_returns_json() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_install_skill_tool_defaults_to_user_agent_and_claude_skills(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from agentgraph.mcp.server import install_skill_tool
-
-    home = tmp_path / "home"
-    monkeypatch.setenv("HOME", str(home))
-
-    result = await install_skill_tool()
-
-    parsed = json.loads(result)
-    assert parsed["skill"] == "AgentGraph"
-    assert parsed["target"] == "user"
-    assert parsed["overwritten"] is False
-    skill_dir = home / ".agents" / "skills" / "AgentGraph"
-    assert (skill_dir / "SKILL.md").is_file()
-    assert (skill_dir / "references" / "data-model.md").is_file()
-    claude_path = home / ".claude" / "skills" / "AgentGraph"
-    assert claude_path.is_symlink()
-    assert claude_path.resolve() == skill_dir
-    assert parsed["claude_destination"] == str(claude_path)
-
-
-@pytest.mark.asyncio
-async def test_mcp_install_skill_tool_can_skip_claude_skills(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from agentgraph.mcp.server import install_skill_tool
-
-    home = tmp_path / "home"
-    monkeypatch.setenv("HOME", str(home))
-
-    result = await install_skill_tool(claude=False)
-
-    parsed = json.loads(result)
-    assert not (home / ".claude").exists()
-    assert parsed["claude_destination"] is None
-
-
-@pytest.mark.asyncio
-async def test_mcp_install_skill_tool_rejects_legacy_graph_name() -> None:
-    from agentgraph.mcp.server import install_skill_tool
-
-    result = await install_skill_tool("graph")
-
-    assert "Skill 'graph' was not found" in json.loads(result)["error"]
-
-
-@pytest.mark.asyncio
 async def test_mcp_connector_command_queues_requested_poll() -> None:
     from agentgraph.mcp.server import run_connector_command_tool
 
@@ -1355,16 +1305,6 @@ async def test_mcp_connector_command_does_not_poll_after_validation_error() -> N
 
     assert json.loads(result) == {"error": "Not a valid RSS/Atom feed"}
     schedule_poll.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_mcp_install_skill_tool_reports_invalid_target() -> None:
-    from agentgraph.mcp.server import install_skill_tool
-
-    result = await install_skill_tool(target="elsewhere")
-
-    parsed = json.loads(result)
-    assert "error" in parsed
 
 
 @pytest.mark.asyncio

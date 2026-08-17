@@ -74,6 +74,4 @@ agentgraph mcp-serve
 agentgraph install-skill [AgentGraph] [--target user|project] [--no-claude] [--force] [--json]
 ```
 
-The MCP skill installer is `install_skill_tool(skill, target, force, claude=true)`.
-It installs into both agent and Claude skill directories by default; set `claude=false`
-or pass `--no-claude` to skip the Claude link.
+The skill installer is available only through the `agentgraph install-skill` CLI command.
