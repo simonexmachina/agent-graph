@@ -3,13 +3,32 @@ name: PyPI Release
 on:
   push:
     tags:
-      - "v*"
+      - "agentgraph-server-v*"
+      - "agentgraph-connector-*-v*"
 
 permissions:
   contents: read
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.release.outputs.package }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Resolve release package
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: uv run python scripts/release_package.py "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: resolve
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,48 +37,22 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Verify release versions
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          uv run python - <<'PY'
-          import os
-          import tomllib
-          from pathlib import Path
+      - name: Build distribution
+        run: uv build --package "${{ needs.resolve.outputs.package }}" --out-dir "dist/${{ needs.resolve.outputs.package }}"
 
-          root = Path.cwd()
-          expected = os.environ["RELEASE_TAG"].removeprefix("v")
-          projects = [root / "pyproject.toml", *sorted((root / "packages").glob("*/pyproject.toml"))]
-          versions = {
-              path.relative_to(root).as_posix(): tomllib.loads(path.read_text())["project"]["version"]
-              for path in projects
-          }
-          mismatches = {path: version for path, version in versions.items() if version != expected}
-          if mismatches:
-              raise SystemExit(f"Package versions do not match {expected}: {mismatches}")
-          PY
+      - name: Validate distribution
+        run: uvx twine check "dist/${{ needs.resolve.outputs.package }}"/*
 
-      - name: Build distributions
-        run: |
-          uv build --package agentgraph-server --out-dir dist/agentgraph-server
-          uv build --package agentgraph-connector-discord --out-dir dist/agentgraph-connector-discord
-          uv build --package agentgraph-connector-google --out-dir dist/agentgraph-connector-google
-          uv build --package agentgraph-connector-rss --out-dir dist/agentgraph-connector-rss
-          uv build --package agentgraph-connector-slack --out-dir dist/agentgraph-connector-slack
-          uv build --package agentgraph-connector-web --out-dir dist/agentgraph-connector-web
-
-      - name: Validate distributions
-        run: uvx twine check dist/*/*
-
-      - name: Upload distributions
+      - name: Upload distribution
         uses: actions/upload-artifact@v4
         with:
-          name: python-distributions
-          path: dist/
+          name: python-distribution-${{ needs.resolve.outputs.package }}
+          path: dist/${{ needs.resolve.outputs.package }}/
           retention-days: 1
 
   publish-server:
-    needs: build
+    needs: [resolve, build]
+    if: needs.resolve.outputs.package == 'agentgraph-server'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,8 +61,8 @@ jobs:
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
-          name: python-distributions
-          path: dist/
+          name: python-distribution-agentgraph-server
+          path: dist/agentgraph-server/
 
       - name: Publish distributions
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -77,18 +70,10 @@ jobs:
           packages-dir: dist/agentgraph-server/
 
   publish-connectors:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        package:
-          - agentgraph-connector-discord
-          - agentgraph-connector-google
-          - agentgraph-connector-rss
-          - agentgraph-connector-slack
-          - agentgraph-connector-web
+    needs: [resolve, build]
+    if: needs.resolve.outputs.package != 'agentgraph-server'
     runs-on: ubuntu-latest
-    environment: ${{ matrix.package }}
+    environment: ${{ needs.resolve.outputs.package }}
     permissions:
       contents: read
       id-token: write
@@ -96,10 +81,10 @@ jobs:
       - name: Download distributions
         uses: actions/download-artifact@v4
         with:
-          name: python-distributions
-          path: dist/
+          name: python-distribution-${{ needs.resolve.outputs.package }}
+          path: dist/${{ needs.resolve.outputs.package }}/
 
       - name: Publish distribution
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist/${{ matrix.package }}/
+          packages-dir: dist/${{ needs.resolve.outputs.package }}/
