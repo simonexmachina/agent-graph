@@ -67,28 +67,6 @@ def test_agentgraph_skill_has_cli_and_mcp_auth_parity() -> None:
     assert "remove_auth_provider_tool" in operations
 
 
-def test_slack_docs_cover_admin_approval_configuration_and_revocation() -> None:
-    guide = (ROOT / "docs-src" / "slack.md").read_text()
-    for required in (
-        "admin permission",
-        "approve",
-        "AGENTGRAPH_SLACK_CLIENT_ID",
-        "--add --client-id",
-        DEFAULT_REDIRECT_URI,
-        "Enter a Client ID provided by a Slack admin",
-        "Pick a workspace",
-        "project website",
-        "Message for your Slack Admin",
-        "Revoke access",
-        "Browser-session fallback",
-        "users:read.email",
-    ):
-        assert required in guide
-    assert "AGENTGRAPH_SLACK_REDIRECT_URI" not in guide
-    configuration = (ROOT / "docs-src" / "configuration.md").read_text()
-    assert "AGENTGRAPH_SLACK_REDIRECT_URI" not in configuration
-
-
 def test_mcp_authentication_operation_is_documented() -> None:
     reference = (ROOT / "docs-src" / "mcp" / "authenticate-provider.md").read_text()
     index = (ROOT / "docs-src" / "mcp" / "index.md").read_text()

@@ -1,5 +1,7 @@
 """Tests for connector-neutral command effects."""
 
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
