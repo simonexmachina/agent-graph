@@ -12,7 +12,7 @@ source_path = "docs-src/mcp/install-skill.md"
 ## Signature
 
 ```text
-install_skill_tool(skill="AgentGraph", target="user", force=false, claude=false) -> JSON string
+install_skill_tool(skill="AgentGraph", target="user", force=false, claude=true) -> JSON string
 ```
 
 ## Arguments
@@ -20,7 +20,7 @@ install_skill_tool(skill="AgentGraph", target="user", force=false, claude=false)
 - `skill`: bundled skill name; currently `AgentGraph`
 - `target`: `user` for `~/.agents/skills` or `project` for `./.agents/skills`
 - `force`: replace an existing destination
-- `claude`: also link the installed skill into the corresponding Claude skills directory
+- `claude`: link the installed skill into the corresponding Claude skills directory; defaults to `true`
 
 The complete skill directory, including progressively loaded references, is copied.
 The result reports both destinations and whether an existing skill was replaced.

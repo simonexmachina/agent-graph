@@ -656,9 +656,9 @@ def install_skill(
         help="Install target: user (~/.agents/skills) or project (./.agents/skills)",
     ),
     claude: bool = typer.Option(
-        False,
-        "--claude",
-        help="Also link into Claude: ~/.claude/skills (user) or ./.claude/skills (project)",
+        True,
+        "--claude/--no-claude",
+        help="Link into Claude by default; --no-claude skips ~/.claude/skills or ./.claude/skills",
     ),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing installed skill"),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),

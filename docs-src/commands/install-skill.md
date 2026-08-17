@@ -12,12 +12,12 @@ source_path = "docs-src/commands/install-skill.md"
 ## Synopsis
 
 ```bash
-agentgraph install-skill [AgentGraph] [--target user|project] [--claude] [--force] [--json]
+agentgraph install-skill [AgentGraph] [--target user|project] [--no-claude] [--force] [--json]
 ```
 
-The default target is `~/.agents/skills/AgentGraph`. A project target installs into
-`./.agents/skills/AgentGraph`. `--claude` also creates the matching link under
-`~/.claude/skills` or `./.claude/skills`.
+The default target is `~/.agents/skills/AgentGraph`, with a matching Claude link at
+`~/.claude/skills/AgentGraph`. A project target installs into `./.agents/skills/AgentGraph`
+and links `./.claude/skills/AgentGraph`. Pass `--no-claude` to skip the Claude link.
 
 The command refuses to replace an existing skill or Claude link unless `--force` is
 supplied. The complete skill directory, including progressively loaded references, is

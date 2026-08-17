@@ -336,19 +336,19 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
     )
 )
 async def install_skill_tool(
-    skill: str = "AgentGraph", target: str = "user", force: bool = False, claude: bool = False
+    skill: str = "AgentGraph", target: str = "user", force: bool = False, claude: bool = True
 ) -> str:
     """
     Install a bundled AgentGraph skill.
 
     This is the MCP equivalent of:
-        agentgraph install-skill <skill> --target <user|project> [--claude] [--force]
+        agentgraph install-skill <skill> --target <user|project> [--no-claude] [--force]
 
     Args:
         skill: Bundled skill name. Defaults to "AgentGraph".
         target: "user" installs to ~/.agents/skills. "project" installs to
             ./.agents/skills relative to the MCP server process.
-        claude: Also link the skill into the corresponding Claude skills directory.
+        claude: Link the skill into the corresponding Claude skills directory. Defaults to true.
         force: Overwrite an existing installed skill.
 
     Returns:

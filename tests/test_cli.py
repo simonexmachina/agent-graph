@@ -379,7 +379,7 @@ def test_mcp_config_includes_chatgpt() -> None:
     assert "https://your-tunnel.example/mcp" in result.output
 
 
-def test_install_skill_defaults_to_user_agents_skills(
+def test_install_skill_defaults_to_user_agent_and_claude_skills(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -404,6 +404,9 @@ def test_install_skill_defaults_to_user_agents_skills(
         "operations.md",
     }
     assert str(skill_path.parent) in result.output
+    claude_path = home / ".claude" / "skills" / "AgentGraph"
+    assert claude_path.is_symlink()
+    assert claude_path.resolve() == skill_path.parent
 
 
 def test_install_skill_help_describes_install_locations() -> None:
@@ -416,21 +419,19 @@ def test_install_skill_help_describes_install_locations() -> None:
     assert "./.claude/skills" in result.output
 
 
-def test_install_skill_claude_links_to_user_skill(
+def test_install_skill_no_claude_skips_claude_link(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
 
-    result = runner.invoke(app, ["install-skill", "--claude", "--json"])
+    result = runner.invoke(app, ["install-skill", "--no-claude", "--json"])
 
     assert result.exit_code == 0
     parsed = json.loads(result.output)
-    claude_path = home / ".claude" / "skills" / "AgentGraph"
-    assert claude_path.is_symlink()
-    assert claude_path.resolve() == home / ".agents" / "skills" / "AgentGraph"
-    assert parsed["claude_destination"] == str(claude_path)
+    assert not (home / ".claude").exists()
+    assert parsed["claude_destination"] is None
 
 
 def test_install_skill_refuses_to_overwrite_without_force(

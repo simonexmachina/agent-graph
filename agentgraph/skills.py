@@ -86,11 +86,11 @@ def install_skill(
     *,
     target: SkillTarget = "user",
     force: bool = False,
-    claude: bool = False,
+    claude: bool = True,
     source_root: Path | None = None,
     project_dir: Path | None = None,
 ) -> SkillInstallResult:
-    """Copy a bundled skill and optionally link it into Claude's skill directory."""
+    """Copy a bundled skill and link it into Claude's skill directory by default."""
     source = _find_source_skill(skill, source_root)
     destination = _target_root(target, project_dir) / skill
     claude_destination = _claude_target_root(target, project_dir) / skill if claude else None

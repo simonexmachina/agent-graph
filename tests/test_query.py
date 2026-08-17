@@ -1157,7 +1157,7 @@ async def test_mcp_list_connectors_tool_returns_json() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_install_skill_tool_installs_to_user_agents_skills(
+async def test_mcp_install_skill_tool_defaults_to_user_agent_and_claude_skills(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1175,10 +1175,14 @@ async def test_mcp_install_skill_tool_installs_to_user_agents_skills(
     skill_dir = home / ".agents" / "skills" / "AgentGraph"
     assert (skill_dir / "SKILL.md").is_file()
     assert (skill_dir / "references" / "data-model.md").is_file()
+    claude_path = home / ".claude" / "skills" / "AgentGraph"
+    assert claude_path.is_symlink()
+    assert claude_path.resolve() == skill_dir
+    assert parsed["claude_destination"] == str(claude_path)
 
 
 @pytest.mark.asyncio
-async def test_mcp_install_skill_tool_links_to_claude_skills(
+async def test_mcp_install_skill_tool_can_skip_claude_skills(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1187,13 +1191,11 @@ async def test_mcp_install_skill_tool_links_to_claude_skills(
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
 
-    result = await install_skill_tool(claude=True)
+    result = await install_skill_tool(claude=False)
 
     parsed = json.loads(result)
-    claude_path = home / ".claude" / "skills" / "AgentGraph"
-    assert claude_path.is_symlink()
-    assert claude_path.resolve() == home / ".agents" / "skills" / "AgentGraph"
-    assert parsed["claude_destination"] == str(claude_path)
+    assert not (home / ".claude").exists()
+    assert parsed["claude_destination"] is None
 
 
 @pytest.mark.asyncio
