@@ -10,7 +10,7 @@ source_path = "docs-src/index.md"
 +++
 
 <div class="home-intro">
-  <p class="positioning">AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sources you choose into a graph of messages, documents, people, feeds, pages, and relationships for your agent to use for reasoning.</p>
+  <p class="positioning">AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sources you choose into a graph of messages, documents, people, feeds, pages, and relationships that your agent can use for reasoning.</p>
 </div>
 
 <div class="home-actions">
