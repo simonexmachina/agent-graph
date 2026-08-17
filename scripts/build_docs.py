@@ -412,6 +412,8 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
   <meta property="og:description" content="{description}" />
   <meta property="og:url" content="{canonical_url}" />
   <meta property="og:image" content="{SOCIAL_IMAGE_URL}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="{document_title}" />
   <meta name="twitter:description" content="{description}" />

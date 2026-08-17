@@ -101,6 +101,8 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'rel="canonical" href="https://simonexmachina.github.io/agent-graph/"' in index_html
     social_image_url = "https://simonexmachina.github.io/agent-graph/assets/og-image.png"
     assert f'property="og:image" content="{social_image_url}"' in index_html
+    assert 'property="og:image:width" content="1200"' in index_html
+    assert 'property="og:image:height" content="630"' in index_html
     assert 'name="twitter:card" content="summary_large_image"' in index_html
     assert f'name="twitter:image" content="{social_image_url}"' in index_html
     assert "local context for AI agents" in index_html
