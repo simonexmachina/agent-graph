@@ -62,7 +62,7 @@ def test_version() -> None:
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.output == "agentgraph 0.5.4\n"
+    assert result.output == "agentgraph 0.6.0\n"
 
 
 def test_serve_outputs_log_file_path() -> None:
