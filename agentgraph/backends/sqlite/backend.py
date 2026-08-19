@@ -664,8 +664,8 @@ class SQLiteBackend(StorageBackend):
                     """
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, metadata,
-                         retention_policy, retention_parent_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                         created_at, updated_at, retention_policy, retention_parent_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
                         entity_type = entities.entity_type
                     RETURNING id
@@ -677,6 +677,8 @@ class SQLiteBackend(StorageBackend):
                         e.platform_entity_id,
                         e.title,
                         json.dumps(dict(e.metadata)),
+                        now,
+                        now,
                         e.retention_policy,
                         parent_id,
                     ],
@@ -760,8 +762,8 @@ class SQLiteBackend(StorageBackend):
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, content,
                          content_embedding, metadata, source_created_at, source_updated_at,
-                         synced_at, retention_policy, retention_parent_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         synced_at, created_at, updated_at, retention_policy, retention_parent_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
                         entity_type       = CASE WHEN entities.entity_type = 'Document' THEN EXCLUDED.entity_type ELSE entities.entity_type END,
                         title             = COALESCE(EXCLUDED.title, entities.title),
@@ -788,6 +790,8 @@ class SQLiteBackend(StorageBackend):
                         source_created,
                         source_updated,
                         now,
+                        now,
+                        local_updated,
                         e.retention_policy,
                         parent_id,
                         local_updated,
