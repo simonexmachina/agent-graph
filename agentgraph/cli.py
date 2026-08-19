@@ -8,6 +8,8 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from typing import TYPE_CHECKING, cast
 
 import typer
@@ -20,6 +22,33 @@ app = typer.Typer(
     help="Local knowledge graph for AI agents.",
     no_args_is_help=True,
 )
+
+
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+
+    try:
+        current = package_version("agentgraph-server")
+    except PackageNotFoundError:
+        current = "unknown"
+    typer.echo(f"agentgraph {current}")
+    raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the installed version and exit.",
+    ),
+) -> None:
+    """Configure global CLI options."""
+
+
 demo_app = typer.Typer(
     help="Create reproducible local demo graphs.",
     no_args_is_help=True,
