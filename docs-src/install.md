@@ -32,11 +32,20 @@ This makes the `agentgraph` command available in your shell.
 Or install only the connector support you need:
 
 ```bash
+uv tool install 'agentgraph-server'
 uv tool install 'agentgraph-server[google]'
 uv tool install 'agentgraph-server[slack]'
 uv tool install 'agentgraph-server[discord]'
 uv tool install 'agentgraph-server[rss]'
 uv tool install 'agentgraph-server[web]'
+```
+
+## Start the server
+
+To start the server in a terminal session, or see below for instructions on how to keep the server running in the background.
+
+```bash
+agentgraph server
 ```
 
 ## Connect sources
@@ -46,8 +55,6 @@ Run guided onboarding to set up each installed connector that provides an intera
 ```bash
 agentgraph onboard
 ```
-
-Generic Web connectors do not require onboarding. RSS setup is offered last, after provider authentication. See [Connectors](/connectors.html) for connector setup and supported sources.
 
 ## Install the AgentGraph skill
 
