@@ -430,6 +430,7 @@ def serve(
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_file)
     typer.echo(f"AgentGraph config directory: {get_config_paths()[0]}")
+    typer.echo(f"AgentGraph log file: {settings.log_file.expanduser()}")
     uvicorn.run(
         "agentgraph.server.app:app",
         host=settings.server_host,

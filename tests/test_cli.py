@@ -58,6 +58,31 @@ def test_help() -> None:
     assert "ingest" not in result.output
 
 
+def test_serve_outputs_log_file_path() -> None:
+    log_file = Path("/tmp/agentgraph-test/agentgraph.log")
+    settings = SimpleNamespace(
+        log_level="INFO",
+        log_file=log_file,
+        server_host="127.0.0.1",
+        server_port=8765,
+    )
+    with (
+        patch("agentgraph.config.get_settings", return_value=settings),
+        patch("agentgraph.logging.configure_logging"),
+        patch("uvicorn.run") as run,
+    ):
+        result = runner.invoke(app, ["serve"])
+
+    assert result.exit_code == 0
+    assert f"AgentGraph log file: {log_file}" in result.output
+    run.assert_called_once_with(
+        "agentgraph.server.app:app",
+        host="127.0.0.1",
+        port=8765,
+        reload=False,
+    )
+
+
 def test_demo_add_creates_fixture_and_outputs_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
