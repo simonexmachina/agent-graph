@@ -50,28 +50,42 @@ def _status_label(status: str) -> str:
     )
 
 
-@demo_app.command("seed")
-def seed_demo_command(
-    force: bool = typer.Option(False, "--force", help="Replace an existing demo database"),
+@demo_app.command("add")
+def add_demo_command(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Seed the fictional Atlas graph used by the launch demo."""
+    """Add the fictional Atlas graph to the configured database."""
     from agentgraph.config import get_config_paths
-    from agentgraph.demo import seed_demo
+    from agentgraph.demo import add_demo
 
     try:
-        result = asyncio.run(seed_demo(get_config_paths()[0], force=force))
-    except (FileExistsError, ValueError) as exc:
+        result = asyncio.run(add_demo(get_config_paths()[0]))
+    except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
     if json:
         typer.echo(_json.dumps(result, indent=2))
         return
-    typer.echo(f"Seeded Atlas demo graph at {result['database']}")
+    typer.echo(f"Added Atlas demo fixtures to {result['database']}")
     typer.echo(
         f"{result['entities']} entities, {result['persons']} people, {result['edges']} edges"
     )
+
+
+@demo_app.command("remove")
+def remove_demo_command(
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Remove Atlas demo fixtures from the configured database."""
+    from agentgraph.config import get_config_paths
+    from agentgraph.demo import remove_demo
+
+    result = asyncio.run(remove_demo(get_config_paths()[0]))
+    if json:
+        typer.echo(_json.dumps(result, indent=2))
+        return
+    typer.echo(f"Removed {result['removed']} Atlas demo entities from {result['database']}")
 
 
 def _remove_auth_credentials(provider: str, account_id: str | None) -> dict[str, object]:

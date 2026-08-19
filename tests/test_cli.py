@@ -58,21 +58,21 @@ def test_help() -> None:
     assert "ingest" not in result.output
 
 
-def test_demo_seed_creates_fixture_and_outputs_json(
+def test_demo_add_creates_fixture_and_outputs_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config_dir = tmp_path / "atlas-demo"
     monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
 
-    result = runner.invoke(app, ["demo", "seed", "--json"])
+    result = runner.invoke(app, ["demo", "add", "--json"])
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
-    assert payload["entities"] == 12
+    assert payload["entities"] == 9
     assert (config_dir / "agentgraph.db").exists()
 
 
-def test_demo_seed_preserves_project_dotenv_config_directory(
+def test_demo_add_preserves_project_dotenv_config_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     working_dir = tmp_path / "demo-run"
@@ -84,41 +84,36 @@ def test_demo_seed_preserves_project_dotenv_config_directory(
     monkeypatch.chdir(working_dir)
     monkeypatch.delenv("AGENTGRAPH_CONFIG_DIR", raising=False)
 
-    result = runner.invoke(app, ["demo", "seed", "--json"])
+    result = runner.invoke(app, ["demo", "add", "--json"])
 
     assert result.exit_code == 0
     assert (config_dir / "agentgraph.db").exists()
     assert environment_path.read_text(encoding="utf-8") == environment
 
 
-def test_demo_seed_rejects_config_dir_option() -> None:
-    result = runner.invoke(app, ["demo", "seed", "--config-dir", "/tmp/atlas-demo"])
+def test_demo_add_rejects_config_dir_option() -> None:
+    result = runner.invoke(app, ["demo", "add", "--config-dir", "/tmp/atlas-demo"])
 
     assert result.exit_code != 0
     assert "No such option: --config-dir" in result.output
 
 
-def test_demo_seed_rejects_reset_option() -> None:
-    result = runner.invoke(app, ["demo", "seed", "--reset"])
-
-    assert result.exit_code != 0
-    assert "No such option: --reset" in result.output
-
-
-def test_demo_seed_requires_force_to_replace_existing_database(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_demo_remove_outputs_removed_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_dir = tmp_path / "atlas-demo"
     monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
 
-    assert runner.invoke(app, ["demo", "seed"]).exit_code == 0
+    assert runner.invoke(app, ["demo", "add"]).exit_code == 0
+    result = runner.invoke(app, ["demo", "remove", "--json"])
 
-    result = runner.invoke(app, ["demo", "seed"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)["removed"] == 12
 
-    assert result.exit_code == 1
-    assert "Demo database already exists" in result.output
-    assert "--force" in result.output
-    assert runner.invoke(app, ["demo", "seed", "--force"]).exit_code == 0
+
+def test_demo_add_rejects_reset_option() -> None:
+    result = runner.invoke(app, ["demo", "add", "--reset"])
+
+    assert result.exit_code != 0
+    assert "No such option: --reset" in result.output
 
 
 def test_bookmark_command_dispatches_to_cli_query() -> None:
@@ -1092,7 +1087,9 @@ def test_connector_command_executes_requested_entity_deletion() -> None:
         patch("agentgraph.connectors.registry.get_connector", return_value=_DeletingRssConnector()),
         patch("agentgraph.cli_query.run_graph_operation", return_value=deleted) as run_operation,
     ):
-        result = runner.invoke(app, ["connector", "rss", "remove", "https://example.com/feed.xml", "--json"])
+        result = runner.invoke(
+            app, ["connector", "rss", "remove", "https://example.com/feed.xml", "--json"]
+        )
 
     assert result.exit_code == 0
     assert json.loads(result.output)["deleted_entities"] == deleted
@@ -1119,10 +1116,16 @@ def test_connector_command_queues_requested_ingest_for_account() -> None:
     ingest_result = {"source": "gmail", "status": "started", "account_id": "user@example.com"}
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
-        patch("agentgraph.connectors.registry.get_connector", return_value=_IngestingGmailConnector()),
-        patch("agentgraph.cli_sync.queue_connector_ingest", return_value=ingest_result) as queue_ingest,
+        patch(
+            "agentgraph.connectors.registry.get_connector", return_value=_IngestingGmailConnector()
+        ),
+        patch(
+            "agentgraph.cli_sync.queue_connector_ingest", return_value=ingest_result
+        ) as queue_ingest,
     ):
-        result = runner.invoke(app, ["connector", "gmail", "ingest", "--account", "user@example.com", "--json"])
+        result = runner.invoke(
+            app, ["connector", "gmail", "ingest", "--account", "user@example.com", "--json"]
+        )
 
     assert result.exit_code == 0
     assert json.loads(result.output)["ingest"] == ingest_result
@@ -1137,9 +1140,10 @@ def test_gmail_connector_ingest_command_parses_account_scope() -> None:
         "source": "gmail",
         "account_id": None,
     }
-    assert GmailConnector.run_cli_command(["ingest", "--account=user@example.com"])[
-        "account_id"
-    ] == "user@example.com"
+    assert (
+        GmailConnector.run_cli_command(["ingest", "--account=user@example.com"])["account_id"]
+        == "user@example.com"
+    )
     assert GmailConnector.command_effects(
         ["ingest", "--account", "user@example.com"],
         GmailConnector.run_cli_command(["ingest", "--account", "user@example.com"]),
@@ -1353,12 +1357,15 @@ def test_auth_status_dedupes_shared_google_provider() -> None:
 
 
 def test_auth_status_exposes_slack_auth_method(tmp_creds: Path) -> None:
-    save_platform("slack", {
-        "xoxc_token": "xoxc-T1-old",
-        "d_cookie": "cookie",
-        "team_id": "T1",
-        "user_id": "U1",
-    })
+    save_platform(
+        "slack",
+        {
+            "xoxc_token": "xoxc-T1-old",
+            "d_cookie": "cookie",
+            "team_id": "T1",
+            "user_id": "U1",
+        },
+    )
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch(

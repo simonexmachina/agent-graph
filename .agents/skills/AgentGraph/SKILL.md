@@ -13,6 +13,10 @@ Prefer the `agentgraph` CLI when a shell is available. Use the equivalent MCP to
 when AgentGraph is connected directly to the agent. Do not query AgentGraph's SQLite
 database or connector internals directly.
 
+Use `agentgraph demo add` or `add_demo_tool` to add the fictional Atlas fixtures to
+the configured graph. Remove them afterward with `agentgraph demo remove` or
+`remove_demo_tool`.
+
 ## Commands that use localhost
 
 `agentgraph poll` and connector or authentication commands that queue a poll or

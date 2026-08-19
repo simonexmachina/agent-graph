@@ -36,4 +36,6 @@ source_path = "docs-src/mcp/index.md"
 
 - [`bookmark_entity_tool`](/mcp/bookmark-entity.html) - add or remove bookmark protection.
 - [`delete_entity_tool`](/mcp/delete-entity.html) - remove an entity and its connected edges.
+- [`add_demo_tool`](/mcp/add-demo.html) - add the fictional Atlas demo fixtures.
+- [`remove_demo_tool`](/mcp/remove-demo.html) - remove the marked Atlas demo fixtures.
 - [`unify_persons_tool`](/mcp/unify-persons.html) - merge duplicate Person entities after confirmation.

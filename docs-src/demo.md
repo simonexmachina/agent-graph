@@ -29,44 +29,31 @@ Install the published package with `uv` and install the Graph skill:
 
 ```bash
 uv tool install 'agentgraph-server[all]'
+mkdir -p ~/agentgraph && cd "$_"
 agentgraph install-skill --target project
 ```
 
-Or you can use `--target project` to install the skill in the local directory.
+## 2. Add the demo fixtures
 
-## 2. Create an isolated demo database
-
-We'll use a disposable config directory to create an isolated database for this demo.
+We'll use the temporary demo directory to create an isolated database for this demo:
 
 ```bash
-# mkdir and cd to a temporary directory
-mkdir /tmp/agentgraph-demo && cd "$_"
-# tell agentgraph to use this directory instead of ~/.agentgraph
-echo "AGENTGRAPH_CONFIG_DIR=`pwd`" > .env
-agentgraph demo seed
+agentgraph demo add
 ```
 
 The fixture contains a set of Gmail, Slack, Drive, research, people, and relationship records. It is self-contained and does not call those services.
 
 ## 3. Ask your coding agent
 
-Open a coding-agent session and give it this prompt:
+Open a coding-agent session in the `~/agentgraph` directory and give it this prompt:
 
 > Use the AgentGraph skill to answer this question: Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does this match the plan on Drive, and which research supports the decision? Flag contradictions and link every source.
 
 The coding agent should use the installed AgentGraph skill and commands such as `agentgraph search`, `agentgraph get`, and `agentgraph traverse` to gather context from the different sources.
 
-## 4. Open the viewer
+Note that the ChatGPT app doesn't set the current working directory correctly, so you'll need to ask the agent to use set `AGENTGRAPH_CONFIG_DIR` to the demo directory.
 
-In a second terminal, stay in the temporary demo directory and start the local server:
-
-```bash
-agentgraph serve
-```
-
-Then open [http://127.0.0.1:8765/viewer](http://127.0.0.1:8765/viewer). The viewer shows the same seeded Atlas entities and relationships that the coding agent investigated.
-
-## 5. Expected evidence
+### Expected evidence
 
 The answer should identify:
 
@@ -77,5 +64,23 @@ The answer should identify:
 - the vendor retry guide's exponential backoff, jitter, and dead-letter guidance.
 
 Every claim should identify and link its source. The answer should distinguish facts stated in the sources from conclusions formed by comparing them.
+
+## 4. Open the viewer
+
+In the configured AgentGraph directory and start the local server:
+
+```bash
+agentgraph serve
+```
+
+Then open [http://127.0.0.1:8765/viewer](http://127.0.0.1:8765/viewer). The viewer shows the same seeded Atlas entities and relationships that the coding agent investigated.
+
+## 5. Cleanup
+
+Stop the server with Control-C, and remove only the demo fixtures:
+
+```bash
+agentgraph demo remove
+```
 
 To configure AgentGraph for your own sources, continue with [Install](/install.html).

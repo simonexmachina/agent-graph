@@ -326,6 +326,40 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         return json.dumps({"error": str(exc)})
 
 
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Add AgentGraph demo fixtures",
+        read_only=False,
+        destructive=False,
+        idempotent=True,
+        open_world=False,
+    )
+)
+async def add_demo_tool() -> str:
+    """Add the fictional Atlas demo fixtures to the configured database."""
+    from agentgraph.config import get_config_paths
+    from agentgraph.demo import add_demo
+
+    return json.dumps(await add_demo(get_config_paths()[0]))
+
+
+@mcp.tool(
+    annotations=_tool_annotations(
+        "Remove AgentGraph demo fixtures",
+        read_only=False,
+        destructive=True,
+        idempotent=True,
+        open_world=False,
+    )
+)
+async def remove_demo_tool() -> str:
+    """Remove marked Atlas demo fixtures from the configured database."""
+    from agentgraph.config import get_config_paths
+    from agentgraph.demo import remove_demo
+
+    return json.dumps(await remove_demo(get_config_paths()[0]))
+
+
 async def _enrich_results(results: list[dict[str, Any]]) -> None:
     """Let each owning connector apply result presentation fixes in-place."""
     from agentgraph.connectors.registry import bootstrap, get_connector

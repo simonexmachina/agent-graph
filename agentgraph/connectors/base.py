@@ -34,13 +34,13 @@ _URL_RE = re.compile(r"https?://\S+")
 
 # Maps ResourceType values to entity_type strings stored in the DB
 RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
-    "channel":     "Channel",
-    "dm":          "Channel",
-    "document":    "Document",
-    "folder":      "Folder",
-    "message":     "Message",
+    "channel": "Channel",
+    "dm": "Channel",
+    "document": "Document",
+    "folder": "Folder",
+    "message": "Message",
     "spreadsheet": "Spreadsheet",
-    "thread":      "Email",
+    "thread": "Email",
 }
 
 
@@ -76,10 +76,11 @@ class PersonRecord(BaseModel):
     platform_username: str | None = None
     canonical_email: str | None = None
     display_name: str | None = None
+    metadata: dict[str, str | int | float | bool | None] = {}
 
 
 class EntityRecord(BaseModel):
-    entity_type: str          # 'Message' | 'Document' | 'Channel' | 'Task'
+    entity_type: str  # 'Message' | 'Document' | 'Channel' | 'Task'
     platform: str
     platform_entity_id: str
     title: str | None = None
@@ -87,13 +88,13 @@ class EntityRecord(BaseModel):
     source_created_at: datetime | None = None
     source_updated_at: datetime | None = None
     metadata: dict[str, str | int | float | bool | None] = {}
-    is_stub: bool = False     # True → placeholder pending a full fetch; preserves synced_at=NULL
+    is_stub: bool = False  # True → placeholder pending a full fetch; preserves synced_at=NULL
     retention_policy: RetentionPolicy = "observed"
     retention_parent_platform_entity_id: str | None = None
 
 
 class EdgeRecord(BaseModel):
-    edge_type: str            # 'authored' | 'posted_in' | 'replied_to' | 'mentions'
+    edge_type: str  # 'authored' | 'posted_in' | 'replied_to' | 'mentions'
     source_platform_entity_id: str | None = None
     source_platform_user_id: str | None = None
     target_platform_entity_id: str | None = None
@@ -132,18 +133,22 @@ class EntityBatch(BaseModel):
             if ref.source == entity.platform and ref.resource_id == entity.platform_entity_id:
                 continue
             seen.add(key)
-            self.entities.append(EntityRecord(
-                entity_type=RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type],
-                platform=ref.source,
-                platform_entity_id=ref.resource_id,
-                is_stub=True,
-            ))
-            self.edges.append(EdgeRecord(
-                edge_type="references",
-                source_platform_entity_id=entity.platform_entity_id,
-                target_platform_entity_id=ref.resource_id,
-                platform="cross",
-            ))
+            self.entities.append(
+                EntityRecord(
+                    entity_type=RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type],
+                    platform=ref.source,
+                    platform_entity_id=ref.resource_id,
+                    is_stub=True,
+                )
+            )
+            self.edges.append(
+                EdgeRecord(
+                    edge_type="references",
+                    source_platform_entity_id=entity.platform_entity_id,
+                    target_platform_entity_id=ref.resource_id,
+                    platform="cross",
+                )
+            )
 
 
 async def get_known_channel_syncs(
@@ -195,7 +200,6 @@ class ConnectorAccount(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
-
 class FetchPolicy:
     """Encapsulates refresh policy decisions for a resource."""
 
@@ -222,7 +226,7 @@ class FetchPolicy:
 
 
 class BaseConnector(ABC):
-    source: ClassVar[str]           # platform name, e.g. "slack" — must be set by subclass
+    source: ClassVar[str]  # platform name, e.g. "slack" — must be set by subclass
     fetch_policy: ClassVar[FetchPolicy]  # staleness policy — must be set by subclass
     is_generic_url_fallback: ClassVar[bool] = False
     """True for broad fallback connectors that should not claim URLs during discovery."""
@@ -280,14 +284,16 @@ class BaseConnector(ABC):
         user = cls.get_authenticated_user()
         if user is None:
             return []
-        return [ConnectorAccount(
-            account_id=cls.source,
-            label=user,
-            auth_group=cls.auth_label or cls.source,
-            source=cls.source,
-            user_id=user,
-            email=user if "@" in user else None,
-        )]
+        return [
+            ConnectorAccount(
+                account_id=cls.source,
+                label=user,
+                auth_group=cls.auth_label or cls.source,
+                source=cls.source,
+                user_id=user,
+                email=user if "@" in user else None,
+            )
+        ]
 
     @classmethod
     async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
@@ -339,9 +345,7 @@ class BaseConnector(ABC):
         _ = (args, result)
         return ConnectorCommandEffects()
 
-    def normalise_fetch_id(
-        self, resource_id: str, entity_type: str
-    ) -> tuple[str, ResourceType]:
+    def normalise_fetch_id(self, resource_id: str, entity_type: str) -> tuple[str, ResourceType]:
         """Map a stored resource_id + entity_type to the (id, resource_type) that fetch() expects.
 
         The default maps entity_type to ResourceType using the standard table and

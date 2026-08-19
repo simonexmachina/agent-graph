@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the packaged Atlas demo seeder."""
+"""Compatibility wrapper for the packaged Atlas demo adder."""
 
 from __future__ import annotations
 
@@ -7,17 +7,13 @@ import json
 from argparse import ArgumentParser
 
 from agentgraph.config import get_config_paths
-from agentgraph.demo import seed_demo
+from agentgraph.demo import add_demo
 
 
 def main() -> None:
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
-    try:
-        result = asyncio.run(seed_demo(get_config_paths()[0], force=args.force))
-    except (FileExistsError, ValueError) as exc:
-        raise SystemExit(str(exc)) from exc
+    result = asyncio.run(add_demo(get_config_paths()[0]))
     print(json.dumps(result, indent=2))
 
 

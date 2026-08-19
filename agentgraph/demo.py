@@ -11,6 +11,8 @@ from agentgraph.backends.sqlite.backend import SQLiteBackend
 from agentgraph.connectors.base import EdgeRecord, EntityBatch, EntityRecord, PersonRecord
 
 DEMO_DATABASE_NAME = "agentgraph.db"
+DEMO_FIXTURE_METADATA_KEY = "_agentgraph_fixture"
+DEMO_FIXTURE_METADATA_VALUE = "atlas-demo"
 DEMO_CREATED_AT = "2026-08-14T08:00:00Z"
 WEBHOOK_ARTICLE_URL = (
     "https://github.com/simonexmachina/agent-graph/blob/main/"
@@ -28,10 +30,7 @@ def utc(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime
 
 def load_research_fixture(filename: str) -> str:
     return (
-        files("agentgraph")
-        .joinpath("demo_fixtures", filename)
-        .read_text(encoding="utf-8")
-        .strip()
+        files("agentgraph").joinpath("demo_fixtures", filename).read_text(encoding="utf-8").strip()
     )
 
 
@@ -44,6 +43,7 @@ def build_demo_batch() -> EntityBatch:
     drive_folder_id = "atlas-program-folder"
     drive_plan_id = "atlas-integration-plan"
 
+    fixture_metadata = {DEMO_FIXTURE_METADATA_KEY: DEMO_FIXTURE_METADATA_VALUE}
     entities = [
         EntityRecord(
             entity_type="Channel",
@@ -53,6 +53,7 @@ def build_demo_batch() -> EntityBatch:
             source_created_at=utc(2026, 7, 1, 9),
             source_updated_at=utc(2026, 8, 10, 14),
             metadata={
+                **fixture_metadata,
                 "web_url": "https://app.slack.com/client/TDEMO/CATLAS",
                 "workspace_name": "AgentGraph Demo",
             },
@@ -69,7 +70,10 @@ def build_demo_batch() -> EntityBatch:
             ),
             source_created_at=utc(2026, 8, 10, 10),
             source_updated_at=utc(2026, 8, 10, 10),
-            metadata={"web_url": "https://app.slack.com/client/TDEMO/CATLAS/thread-1"},
+            metadata={
+                **fixture_metadata,
+                "web_url": "https://app.slack.com/client/TDEMO/CATLAS/thread-1",
+            },
             retention_policy="owned",
             retention_parent_platform_entity_id=channel_id,
         ),
@@ -83,7 +87,10 @@ def build_demo_batch() -> EntityBatch:
             ),
             source_created_at=utc(2026, 8, 10, 10, 30),
             source_updated_at=utc(2026, 8, 10, 10, 30),
-            metadata={"web_url": "https://app.slack.com/client/TDEMO/CATLAS/thread-1-reply-1"},
+            metadata={
+                **fixture_metadata,
+                "web_url": "https://app.slack.com/client/TDEMO/CATLAS/thread-1-reply-1",
+            },
             retention_policy="owned",
             retention_parent_platform_entity_id=channel_id,
         ),
@@ -97,7 +104,10 @@ def build_demo_batch() -> EntityBatch:
             ),
             source_created_at=utc(2026, 8, 10, 11),
             source_updated_at=utc(2026, 8, 10, 11),
-            metadata={"web_url": "https://app.slack.com/client/TDEMO/CATLAS/thread-1-reply-2"},
+            metadata={
+                **fixture_metadata,
+                "web_url": "https://app.slack.com/client/TDEMO/CATLAS/thread-1-reply-2",
+            },
             retention_policy="owned",
             retention_parent_platform_entity_id=channel_id,
         ),
@@ -116,6 +126,7 @@ def build_demo_batch() -> EntityBatch:
             source_created_at=utc(2026, 8, 9, 15),
             source_updated_at=utc(2026, 8, 9, 15),
             metadata={
+                **fixture_metadata,
                 "web_url": "https://mail.google.com/mail/u/0/#all/atlas-maya-thread",
                 "snippet": "For the September 30 Atlas launch...",
             },
@@ -127,7 +138,10 @@ def build_demo_batch() -> EntityBatch:
             title="Atlas program",
             source_created_at=utc(2026, 7, 1, 8),
             source_updated_at=utc(2026, 8, 6, 9),
-            metadata={"web_url": "https://drive.google.com/drive/folders/atlas-program-folder"},
+            metadata={
+                **fixture_metadata,
+                "web_url": "https://drive.google.com/drive/folders/atlas-program-folder",
+            },
         ),
         EntityRecord(
             entity_type="Document",
@@ -143,6 +157,7 @@ def build_demo_batch() -> EntityBatch:
             source_created_at=utc(2026, 8, 2, 9),
             source_updated_at=utc(2026, 8, 6, 16),
             metadata={
+                **fixture_metadata,
                 "web_url": "https://drive.google.com/file/d/atlas-integration-plan/view",
                 "mime_type": "text/markdown",
             },
@@ -155,7 +170,7 @@ def build_demo_batch() -> EntityBatch:
             content=load_research_fixture("reliable-webhooks.md"),
             source_created_at=utc(2026, 8, 4, 9),
             source_updated_at=utc(2026, 8, 4, 9),
-            metadata={"web_url": WEBHOOK_ARTICLE_URL, "author": "Nadia Okafor"},
+            metadata={**fixture_metadata, "web_url": WEBHOOK_ARTICLE_URL, "author": "Nadia Okafor"},
         ),
         EntityRecord(
             entity_type="Document",
@@ -165,7 +180,7 @@ def build_demo_batch() -> EntityBatch:
             content=load_research_fixture("retry-guidance.md"),
             source_created_at=utc(2026, 8, 8, 9),
             source_updated_at=utc(2026, 8, 8, 9),
-            metadata={"web_url": RETRY_GUIDE_URL, "revision": "3"},
+            metadata={**fixture_metadata, "web_url": RETRY_GUIDE_URL, "revision": "3"},
         ),
     ]
 
@@ -176,12 +191,14 @@ def build_demo_batch() -> EntityBatch:
             platform_username="alex",
             canonical_email="alex@agentgraph.demo",
             display_name="Alex Chen",
+            metadata=fixture_metadata,
         ),
         PersonRecord(
             platform="gdrive",
             platform_user_id="alex@agentgraph.demo",
             canonical_email="alex@agentgraph.demo",
             display_name="Alex Chen",
+            metadata=fixture_metadata,
         ),
         PersonRecord(
             platform="slack",
@@ -189,12 +206,14 @@ def build_demo_batch() -> EntityBatch:
             platform_username="priya",
             canonical_email="priya@agentgraph.demo",
             display_name="Priya Raman",
+            metadata=fixture_metadata,
         ),
         PersonRecord(
             platform="gmail",
             platform_user_id="maya@customer.example",
             canonical_email="maya@customer.example",
             display_name="Maya Patel",
+            metadata=fixture_metadata,
         ),
     ]
 
@@ -284,21 +303,6 @@ def build_demo_batch() -> EntityBatch:
     return EntityBatch(entities=entities, persons=persons, edges=edges)
 
 
-def validate_demo_config_dir(config_dir: Path) -> Path:
-    resolved = config_dir.expanduser().resolve()
-    default_dir = (Path.home() / ".agentgraph").resolve()
-    if resolved == default_dir:
-        raise ValueError("Refusing to seed the default ~/.agentgraph directory")
-    return resolved
-
-
-def remove_demo_database(database_path: Path) -> None:
-    for suffix in ("", "-wal", "-shm"):
-        candidate = Path(f"{database_path}{suffix}")
-        if candidate.exists():
-            candidate.unlink()
-
-
 def apply_demo_timestamps(database_path: Path) -> None:
     observations = {
         ("slack", "TDEMO/CATLAS"): "2026-08-10T11:05:00Z",
@@ -308,29 +312,41 @@ def apply_demo_timestamps(database_path: Path) -> None:
     }
     with sqlite3.connect(database_path) as conn:
         conn.execute(
-            "UPDATE entities SET created_at = ?, updated_at = ?, synced_at = ?",
-            [DEMO_CREATED_AT, DEMO_CREATED_AT, DEMO_CREATED_AT],
+            """
+            UPDATE entities
+            SET created_at = ?, updated_at = ?, synced_at = ?
+            WHERE json_extract(metadata, ?) = ?
+            """,
+            [
+                DEMO_CREATED_AT,
+                DEMO_CREATED_AT,
+                DEMO_CREATED_AT,
+                f"$.{DEMO_FIXTURE_METADATA_KEY}",
+                DEMO_FIXTURE_METADATA_VALUE,
+            ],
         )
         for (platform, platform_entity_id), observed_at in observations.items():
             conn.execute(
                 """
                 UPDATE entities
                 SET observed_at = ?, cumulative_observation_duration_ms = 3000
-                WHERE platform = ? AND platform_entity_id = ?
+                WHERE platform = ?
+                  AND platform_entity_id = ?
+                  AND json_extract(metadata, ?) = ?
                 """,
-                [observed_at, platform, platform_entity_id],
+                [
+                    observed_at,
+                    platform,
+                    platform_entity_id,
+                    f"$.{DEMO_FIXTURE_METADATA_KEY}",
+                    DEMO_FIXTURE_METADATA_VALUE,
+                ],
             )
 
 
-async def seed_demo(config_dir: Path, *, force: bool = False) -> dict[str, object]:
-    safe_dir = validate_demo_config_dir(config_dir)
-    database_path = safe_dir / DEMO_DATABASE_NAME
-    if database_path.exists() and not force:
-        raise FileExistsError(f"Demo database already exists: {database_path}. Use --force to replace it.")
-    safe_dir.mkdir(parents=True, exist_ok=True)
-    if force:
-        remove_demo_database(database_path)
-
+async def add_demo(config_dir: Path) -> dict[str, object]:
+    database_path = config_dir / DEMO_DATABASE_NAME
+    config_dir.mkdir(parents=True, exist_ok=True)
     batch = build_demo_batch()
     backend = SQLiteBackend(str(database_path), vector_mode="bm25-only")
     await backend.initialize()
@@ -339,13 +355,11 @@ async def seed_demo(config_dir: Path, *, force: bool = False) -> dict[str, objec
     finally:
         await backend.close()
     apply_demo_timestamps(database_path)
-
-    with sqlite3.connect(database_path) as conn:
-        entity_count = int(conn.execute("SELECT count(*) FROM entities").fetchone()[0])
-        person_count = int(
-            conn.execute("SELECT count(*) FROM entities WHERE entity_type = 'Person'").fetchone()[0]
-        )
-        edge_count = int(conn.execute("SELECT count(*) FROM edges").fetchone()[0])
+    entity_count = len(batch.entities)
+    person_count = len(
+        {p.canonical_email or f"{p.platform}:{p.platform_user_id}" for p in batch.persons}
+    )
+    edge_count = len(batch.edges)
     return {
         "database": str(database_path),
         "entities": entity_count,
@@ -354,3 +368,29 @@ async def seed_demo(config_dir: Path, *, force: bool = False) -> dict[str, objec
         "webhook_article": WEBHOOK_ARTICLE_URL,
         "retry_guide": RETRY_GUIDE_URL,
     }
+
+
+async def remove_demo(config_dir: Path) -> dict[str, object]:
+    database_path = config_dir / DEMO_DATABASE_NAME
+    if not database_path.exists():
+        return {"database": str(database_path), "removed": 0}
+
+    with sqlite3.connect(database_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT id FROM entities
+            WHERE json_extract(metadata, ?) = ?
+            """,
+            [f"$.{DEMO_FIXTURE_METADATA_KEY}", DEMO_FIXTURE_METADATA_VALUE],
+        ).fetchall()
+    entity_ids = [str(row[0]) for row in rows]
+
+    backend = SQLiteBackend(str(database_path), vector_mode="bm25-only")
+    await backend.initialize()
+    try:
+        for entity_id in entity_ids:
+            if await backend.get_entity_by_id(entity_id) is not None:
+                await backend.delete_entity(entity_id)
+    finally:
+        await backend.close()
+    return {"database": str(database_path), "removed": len(entity_ids)}

@@ -208,9 +208,7 @@ class SQLiteBackend(StorageBackend):
     async def _run_migrations(self) -> None:
         conn = self._conn_or_raise()
         cursor = await conn.execute("PRAGMA table_info(entities)")
-        entity_columns = {
-            str(row["name"]): bool(row["notnull"]) for row in await cursor.fetchall()
-        }
+        entity_columns = {str(row["name"]): bool(row["notnull"]) for row in await cursor.fetchall()}
         columns = set(entity_columns)
         if "cumulative_dwell_ms" in columns:
             await conn.execute(
@@ -249,9 +247,7 @@ class SQLiteBackend(StorageBackend):
             "UPDATE observations SET event_type = 'observation_threshold' "
             "WHERE event_type = 'dwell_threshold'"
         )
-        await conn.execute(
-            "UPDATE entities SET entity_type = 'Email' WHERE entity_type = 'Thread'"
-        )
+        await conn.execute("UPDATE entities SET entity_type = 'Email' WHERE entity_type = 'Thread'")
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_bookmarked ON entities(bookmarked)"
         )
@@ -352,10 +348,13 @@ class SQLiteBackend(StorageBackend):
                 "AND cumulative_observation_duration_ms > 0 THEN observed_at ELSE NULL END"
             )
         observed = (
-            "CASE WHEN platform = 'rss' AND entity_type = 'Folder' THEN NULL "
-            f"ELSE {observed} END"
+            f"CASE WHEN platform = 'rss' AND entity_type = 'Folder' THEN NULL ELSE {observed} END"
         )
-        duration = "cumulative_observation_duration_ms" if "cumulative_observation_duration_ms" in columns else "0"
+        duration = (
+            "cumulative_observation_duration_ms"
+            if "cumulative_observation_duration_ms" in columns
+            else "0"
+        )
         bookmarked = "bookmarked" if "bookmarked" in columns else "0"
         await conn.execute("PRAGMA foreign_keys=OFF")
         try:
@@ -503,6 +502,7 @@ class SQLiteBackend(StorageBackend):
         for p in persons:
             canonical_key = p.canonical_email or f"{p.platform}:{p.platform_user_id}"
             meta: dict[str, str] = {}
+            meta.update({key: str(value) for key, value in p.metadata.items() if value is not None})
             if p.canonical_email:
                 meta["canonical_email"] = p.canonical_email
             meta[f"{p.platform}_user_id"] = p.platform_user_id
@@ -534,7 +534,9 @@ class SQLiteBackend(StorageBackend):
                 existing_metadata = json.loads(existing_row[3] or "{}") if existing_row else {}
                 merged_metadata = {**existing_metadata, **meta}
                 new_title = p.display_name if p.display_name is not None else existing_row[0]
-                new_content = p.canonical_email if p.canonical_email is not None else existing_row[1]
+                new_content = (
+                    p.canonical_email if p.canonical_email is not None else existing_row[1]
+                )
                 new_embedding = emb_blob if emb_blob is not None else existing_row[2]
                 changed = (
                     new_title != existing_row[0]
@@ -647,9 +649,7 @@ class SQLiteBackend(StorageBackend):
                 if parent_id is None:
                     parent_id = await self._resolve_existing_entity_id(conn, e.platform, parent_ref)
                 if parent_id is None:
-                    raise ValueError(
-                        f"Retention parent {e.platform}:{parent_ref} is not available"
-                    )
+                    raise ValueError(f"Retention parent {e.platform}:{parent_ref} is not available")
             elif e.retention_parent_platform_entity_id is not None:
                 raise ValueError(
                     f"Entity {e.platform}:{e.platform_entity_id} has a parent but is not owned"
@@ -689,8 +689,12 @@ class SQLiteBackend(StorageBackend):
                     [e.platform, e.platform_entity_id],
                 )
                 existing_row = await existing_cursor.fetchone()
-                existing_title = str(existing_row["title"]) if existing_row and existing_row["title"] else ""
-                existing_content = str(existing_row["content"]) if existing_row and existing_row["content"] else ""
+                existing_title = (
+                    str(existing_row["title"]) if existing_row and existing_row["title"] else ""
+                )
+                existing_content = (
+                    str(existing_row["content"]) if existing_row and existing_row["content"] else ""
+                )
                 fts_title = e.title if e.title is not None else existing_title
                 fts_content = e.content if e.content is not None else existing_content
                 rewrite_fts = (
@@ -1734,7 +1738,14 @@ class SQLiteBackend(StorageBackend):
             WHERE platform = ? AND platform_entity_id = ?
               AND retention_policy = 'observed'
             """,
-            [observation_duration_ms, now, observation_duration_ms, now, platform, platform_entity_id],
+            [
+                observation_duration_ms,
+                now,
+                observation_duration_ms,
+                now,
+                platform,
+                platform_entity_id,
+            ],
         )
 
     async def record_observation_once(
@@ -1772,7 +1783,14 @@ class SQLiteBackend(StorageBackend):
                         WHERE platform = ? AND platform_entity_id = ?
                           AND retention_policy = 'observed'
                         """,
-                        [observation_duration_ms, now, observation_duration_ms, now, platform, platform_entity_id],
+                        [
+                            observation_duration_ms,
+                            now,
+                            observation_duration_ms,
+                            now,
+                            platform,
+                            platform_entity_id,
+                        ],
                     )
                 await conn.execute("COMMIT")
                 return inserted is not None
@@ -1871,8 +1889,12 @@ def _row_to_entity(row: Any) -> EntityResult:
         "synced_at": row["synced_at"] if "synced_at" in keys else None,
         "observed_at": row["observed_at"] if "observed_at" in keys else None,
         "retention_policy": row["retention_policy"] if "retention_policy" in keys else "observed",
-        "retention_parent_id": row["retention_parent_id"] if "retention_parent_id" in keys else None,
-        "cumulative_observation_duration_ms": row["cumulative_observation_duration_ms"] if "cumulative_observation_duration_ms" in keys else 0,
+        "retention_parent_id": row["retention_parent_id"]
+        if "retention_parent_id" in keys
+        else None,
+        "cumulative_observation_duration_ms": row["cumulative_observation_duration_ms"]
+        if "cumulative_observation_duration_ms" in keys
+        else 0,
         "bookmarked": bool(row["bookmarked"]) if "bookmarked" in keys else False,
         "score": row["score"] if "score" in keys else None,
     }
