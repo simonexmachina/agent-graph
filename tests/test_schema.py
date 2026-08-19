@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from agentgraph.backends.sqlite.backend import SQLiteBackend
+from agentgraph.connectors.base import EntityBatch, EntityRecord
 from agentgraph.core.context import set_backend
 
 
@@ -378,6 +379,8 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
         by_name = {row["name"]: row for row in columns}
         assert by_name["created_at"]["notnull"] == 1
         assert by_name["updated_at"]["notnull"] == 1
+        assert by_name["created_at"]["dflt_value"] is not None
+        assert by_name["updated_at"]["dflt_value"] is not None
         assert by_name["observed_at"]["notnull"] == 0
 
         entity = await migrated.get_entity_by_platform("gmail", "test-thread-001")
@@ -394,6 +397,24 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
         assert updated is not None
         assert updated["cumulative_observation_duration_ms"] == 2221
         assert updated["observed_at"] is not None
+        await migrated.upsert_batch(
+            EntityBatch(
+                entities=[
+                    EntityRecord(
+                        entity_type="Message",
+                        platform="slack",
+                        platform_entity_id="T/C/123.456",
+                        content="A migrated database must accept new entities",
+                    )
+                ]
+            ),
+            {},
+            {},
+        )
+        inserted = await migrated.get_entity_by_platform("slack", "T/C/123.456")
+        assert inserted is not None
+        assert inserted["created_at"] is not None
+        assert inserted["updated_at"] is not None
         event_type = await migrated._fetchval(
             "SELECT event_type FROM observations WHERE id = ?", ["legacy-observation"]
         )
