@@ -77,13 +77,13 @@ If you want to use AgentGraph from ChatGPT or Claude instead of through your cod
 For ChatGPT's Codex client, register the local stdio server from your terminal:
 
 ```bash
-codex mcp add agentgraph -- agentgraph mcp-serve
+codex mcp add agentgraph -- "$(which agentgraph)" mcp-serve
 ```
 
 For Claude Code, use the equivalent command:
 
 ```bash
-claude mcp add agentgraph -- agentgraph mcp-serve
+claude mcp add agentgraph -- "$(which agentgraph)" mcp-serve
 ```
 
 For Claude Desktop or another compatible MCP client, print the stdio client configuration:
