@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     )
     # Logging
     log_level: str = Field(default="INFO")
-    log_file: Path = Field(default=Path("/tmp/agentgraph.log"))
+    log_file: Path = Field(default_factory=lambda: get_config_paths()[0] / "agentgraph.log")
 
     def __init__(self, **values: Any) -> None:
         # Resolve the config-directory .env at instantiation time as well as

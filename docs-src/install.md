@@ -108,11 +108,6 @@ cat > ~/Library/LaunchAgents/com.agentgraph.serve.plist <<'EOF'
   <true/>
   <key>KeepAlive</key>
   <true/>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>AGENTGRAPH_LOG_FILE</key>
-    <string>/tmp/agentgraph.log</string>
-  </dict>
 </dict>
 </plist>
 EOF

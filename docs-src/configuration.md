@@ -68,6 +68,13 @@ Default: `8765`
 
 Server port.
 
+### `AGENTGRAPH_LOG_FILE`
+
+Default: `$AGENTGRAPH_CONFIG_DIR/agentgraph.log`
+
+Path for the rotating server log. The default is stored in the per-user config
+directory rather than `/tmp`, so separate user accounts do not share a log file.
+
 ### `AGENTGRAPH_OBSERVATION_THRESHOLD_SECONDS`
 
 Default: `3`
