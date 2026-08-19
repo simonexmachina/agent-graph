@@ -41,13 +41,13 @@ uv tool install 'agentgraph-server[web]'
 
 ## Connect sources
 
-Run guided onboarding to authenticate each installed connector that requires credentials:
+Run guided onboarding to set up each installed connector that provides an interactive flow:
 
 ```bash
 agentgraph onboard
 ```
 
-RSS and generic Web connectors do not require provider credentials. See [Connectors](/connectors.html) for their setup and supported sources.
+Generic Web connectors do not require onboarding. RSS setup is offered last, after provider authentication. See [Connectors](/connectors.html) for connector setup and supported sources.
 
 ## Install the AgentGraph skill
 

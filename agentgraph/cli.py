@@ -595,7 +595,14 @@ def onboard() -> None:
         if label not in seen:
             seen[label] = connector
 
-    steps = list(seen.items())
+    # Only connectors with an explicit onboarding prompt own an interactive setup flow.
+    # Generic connectors such as Web are configured through connector commands instead.
+    steps = [
+        (label, connector)
+        for label, connector in seen.items()
+        if getattr(connector, "onboard_prompt", None)
+    ]
+    steps.sort(key=lambda item: getattr(item[1], "onboard_last", False))
     total = len(steps)
 
     typer.echo("=== AgentGraph Setup ===\n")

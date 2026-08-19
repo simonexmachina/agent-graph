@@ -70,6 +70,7 @@ class RssConnector(BaseConnector):
     auth_label = "rss"
     auth_description = "RSS/Atom feeds: feed URLs are fetched directly and entries are indexed as Document entities."
     onboard_prompt = "Set up RSS feeds?"
+    onboard_last = True
     appears_in_auth_status = False
 
     def __init__(self) -> None:

@@ -793,6 +793,74 @@ def test_onboard_directs_users_to_install_chrome_extension() -> None:
     assert "Run `agentgraph serve` to start the server." in result.output
 
 
+def test_onboard_skips_connectors_without_an_onboarding_flow() -> None:
+    class _FakeWebConnector:
+        source = "web"
+        auth_label = None
+        auth_description = "Web"
+        onboard_prompt = None
+        onboard_last = False
+        poll_interval = None
+        poll_delegates: list[str] = []
+        url_patterns: list[str] = []
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeWebConnector()],
+        ),
+    ):
+        result = runner.invoke(app, ["onboard"])
+
+    assert result.exit_code == 0
+    assert "Step" not in result.output
+    assert "Set up web?" not in result.output
+
+
+def test_onboard_places_last_step_connectors_at_the_end() -> None:
+    class _FakeRssOnboardConnector:
+        source = "rss"
+        auth_label = "rss"
+        auth_description = "RSS"
+        onboard_prompt = "Set up RSS feeds?"
+        onboard_last = True
+        poll_interval = None
+        poll_delegates: list[str] = []
+        url_patterns: list[str] = []
+        auth_calls = 0
+
+        @classmethod
+        def run_auth_flow(cls) -> None:
+            cls.auth_calls += 1
+
+    class _FakeSlackOnboardConnector:
+        source = "slack"
+        auth_label = "slack"
+        auth_description = "Slack"
+        onboard_prompt = "Set up Slack?"
+        onboard_last = False
+        poll_interval = None
+        poll_delegates: list[str] = []
+        url_patterns: list[str] = []
+
+        @classmethod
+        def run_auth_flow(cls) -> None:
+            pass
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeRssOnboardConnector(), _FakeSlackOnboardConnector()],
+        ),
+    ):
+        result = runner.invoke(app, ["onboard"], input="n\nn\n")
+
+    assert result.exit_code == 0
+    assert result.output.index("Step 1/2: Slack") < result.output.index("Step 2/2: RSS")
+
+
 def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:
     from agentgraph_connector_slack import SlackConnector
 

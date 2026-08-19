@@ -246,6 +246,7 @@ class BaseConnector(ABC):
     auth_label: ClassVar[str | None] = None
     auth_description: ClassVar[str | None] = None
     onboard_prompt: ClassVar[str | None] = None
+    onboard_last: ClassVar[bool] = False
     appears_in_auth_status: ClassVar[bool] = True
     """True for connectors backed by user/provider credentials.
 
