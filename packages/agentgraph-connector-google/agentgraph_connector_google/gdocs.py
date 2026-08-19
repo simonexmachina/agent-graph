@@ -90,9 +90,7 @@ class GoogleDocsConnector(BaseConnector):
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     url_patterns = ["https://docs.google.com/document/*"]
     auth_label = "google"
-    auth_description = (
-        "Google Docs: Document entities with full HTML body content and owner authorship."
-    )
+    auth_description = "Google: Gmail, Google Drive, Google Docs, and Google Sheets."
     onboard_prompt = "Set up Google?"
 
     @classmethod

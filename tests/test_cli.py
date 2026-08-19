@@ -806,16 +806,31 @@ def test_onboard_directs_users_to_install_chrome_extension() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+        patch("agentgraph.cli._server_is_running", return_value=False),
     ):
         result = runner.invoke(app, ["onboard"], input="n\n")
 
     assert result.exit_code == 0
+    assert "Step 2/2: Install the AgentGraph Chrome Extension" in result.output
     assert "Install the AgentGraph Chrome Extension" in result.output
     assert (
         "https://chromewebstore.google.com/detail/agentgraph-extension/"
         "iilkfclglabllelhjacijldknapbhidi"
     ) in result.output
     assert "Run `agentgraph serve` to start the server." in result.output
+
+
+def test_onboard_omits_server_hint_when_server_is_running() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
+        patch("agentgraph.cli._server_is_running", return_value=True),
+    ):
+        result = runner.invoke(app, ["onboard"], input="n\n")
+
+    assert result.exit_code == 0
+    assert "Step 2/2: Install the AgentGraph Chrome Extension" in result.output
+    assert "Run `agentgraph serve` to start the server." not in result.output
 
 
 def test_onboard_skips_connectors_without_an_onboarding_flow() -> None:
@@ -839,7 +854,7 @@ def test_onboard_skips_connectors_without_an_onboarding_flow() -> None:
         result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
-    assert "Step" not in result.output
+    assert "Step 1/1: Install the AgentGraph Chrome Extension" in result.output
     assert "Set up web?" not in result.output
 
 
@@ -883,7 +898,7 @@ def test_onboard_places_last_step_connectors_at_the_end() -> None:
         result = runner.invoke(app, ["onboard"], input="n\nn\n")
 
     assert result.exit_code == 0
-    assert result.output.index("Step 1/2: Slack") < result.output.index("Step 2/2: RSS")
+    assert result.output.index("Step 1/3: Slack") < result.output.index("Step 2/3: RSS")
 
 
 def test_auth_slack_accepts_noninteractive_options_after_provider() -> None:

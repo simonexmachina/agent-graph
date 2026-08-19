@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, cast
@@ -48,6 +50,20 @@ def _status_label(status: str) -> str:
     return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(
         status, status
     )
+
+
+def _server_is_running() -> bool:
+    """Return whether the configured AgentGraph server responds to health checks."""
+    from agentgraph.config import get_settings
+
+    settings = get_settings()
+    host = "127.0.0.1" if settings.server_host in ("", "0.0.0.0", "::") else settings.server_host
+    url = f"http://{host}:{settings.server_port}/health"
+    try:
+        with urllib.request.urlopen(url, timeout=1) as response:
+            return response.status == 200
+    except (OSError, urllib.error.URLError):
+        return False
 
 
 @demo_app.command("add")
@@ -604,7 +620,7 @@ def onboard() -> None:
         if getattr(connector, "onboard_prompt", None)
     ]
     steps.sort(key=lambda item: getattr(item[1], "onboard_last", False))
-    total = len(steps)
+    total = len(steps) + 1
 
     typer.echo("=== AgentGraph Setup ===\n")
 
@@ -619,11 +635,12 @@ def onboard() -> None:
         if i < total:
             typer.echo()
 
+    typer.echo(f"\nStep {total}/{total}: Install the AgentGraph Chrome Extension")
     typer.echo(
-        "\nInstall the AgentGraph Chrome Extension: "
         "https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi"
     )
-    typer.echo("Run `agentgraph serve` to start the server.")
+    if not _server_is_running():
+        typer.echo("Run `agentgraph serve` to start the server.")
 
 
 @app.command()

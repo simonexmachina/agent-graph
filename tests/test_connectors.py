@@ -215,6 +215,12 @@ def gdocs_connector() -> GoogleDocsConnector:
     return GoogleDocsConnector()
 
 
+def test_gdocs_onboarding_description_covers_google_connectors() -> None:
+    assert GoogleDocsConnector.auth_description == (
+        "Google: Gmail, Google Drive, Google Docs, and Google Sheets."
+    )
+
+
 @pytest.mark.asyncio
 async def test_gdocs_fetch_fresh_returns_empty_batch(gdocs_connector: GoogleDocsConnector) -> None:
     """When data is fresh, connector returns an empty batch without mutation."""
