@@ -91,7 +91,7 @@ Only `agentgraph serve` needs to be long-running. MCP stdio mode is spawned on d
 ```bash
 which agentgraph
 
-cat > ~/Library/LaunchAgents/com.agentgraph.serve.plist <<'EOF'
+cat > ~/Library/LaunchAgents/com.agentgraph.serve.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -101,7 +101,7 @@ cat > ~/Library/LaunchAgents/com.agentgraph.serve.plist <<'EOF'
   <string>com.agentgraph.serve</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/you/.local/bin/agentgraph</string>
+    <string>$(which agentgraph)</string>
     <string>serve</string>
   </array>
   <key>RunAtLoad</key>
@@ -121,13 +121,13 @@ launchctl load ~/Library/LaunchAgents/com.agentgraph.serve.plist
 which agentgraph
 
 mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/agentgraph.service <<'EOF'
+cat > ~/.config/systemd/user/agentgraph.service <<EOF
 [Unit]
 Description=AgentGraph local knowledge graph server
 After=network.target
 
 [Service]
-ExecStart=/home/you/.local/bin/agentgraph serve
+ExecStart=$(which agentgraph) serve
 Restart=on-failure
 RestartSec=5
 StandardOutput=append:/tmp/agentgraph-serve.log
