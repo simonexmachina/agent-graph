@@ -13,6 +13,34 @@ Prefer the `agentgraph` CLI when a shell is available. Use the equivalent MCP to
 when AgentGraph is connected directly to the agent. Do not query AgentGraph's SQLite
 database or connector internals directly.
 
+## Working directory and configuration
+
+AgentGraph resolves a project-local `.env` relative to the current working
+directory of each CLI process. Terminal-launched coding agents usually inherit
+the directory from which they were started, while desktop or IDE-hosted agents
+may use a host-selected project directory or an isolated shell directory. Do not
+assume that the directory shown by the host application is the CLI process CWD.
+
+When a task depends on a project-local `.env` or an isolated demo database:
+
+1. Run `pwd` to establish the shell's actual directory.
+2. Prefer an absolute `AGENTGRAPH_CONFIG_DIR` prefix on every AgentGraph CLI
+   command, for example:
+
+   ```bash
+   AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-demo agentgraph search "Atlas synchronization"
+   ```
+
+3. Use the same prefix for `agentgraph serve`, `poll`, and other commands that
+   must share that configuration. A prior `cd` may not persist if the host starts
+   each shell command independently.
+
+If the task explicitly relies on `.env` discovery, run the command from the
+directory containing that file and verify the result before doing graph work.
+An explicit environment variable takes precedence over `.env` and is the
+portable choice across CLI, desktop, IDE, and sandboxed coding agents. MCP
+connections are configured by their host and do not inherit this CLI CWD rule.
+
 ## Commands that use localhost
 
 `agentgraph poll` and connector or authentication commands that queue a poll or
