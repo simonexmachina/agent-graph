@@ -48,38 +48,11 @@ agentgraph demo seed
 
 The fixture contains a set of Gmail, Slack, Drive, research, people, and relationship records. It is self-contained and does not call those services.
 
-### Coding-agent working directory
-
-The AgentGraph CLI loads a project-local `.env` relative to the process current
-working directory. Terminal-launched agents normally inherit the directory from
-which they were started, but desktop and IDE-hosted agents can associate a chat
-with a different project directory. Confirm the directory with `pwd` before
-starting the agent. For a reliable demo, include the config directory explicitly
-when the agent runs AgentGraph commands:
-
-```bash
-AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-demo agentgraph demo seed --force
-AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-demo agentgraph search "Atlas synchronization"
-```
-
-Use the same prefix when starting the viewer:
-
-```bash
-AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-demo agentgraph serve
-```
-
-This avoids accidentally reading or modifying `~/.agentgraph` or another
-project's `.env` when the coding agent does not preserve the terminal's CWD.
-
 ## 3. Ask your coding agent
 
 Open a coding-agent session and give it this prompt:
 
 > Use the AgentGraph skill to answer this question: Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does this match the plan on Drive, and which research supports the decision? Flag contradictions and link every source.
-
-If the agent is running in a desktop or IDE chat, append:
-
-> Run `pwd` first. For every AgentGraph CLI command, set `AGENTGRAPH_CONFIG_DIR=/tmp/agentgraph-demo` explicitly so you use the seeded demo graph.
 
 The coding agent should use the installed AgentGraph skill and commands such as `agentgraph search`, `agentgraph get`, and `agentgraph traverse` to gather context from the different sources.
 

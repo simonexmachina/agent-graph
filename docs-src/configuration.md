@@ -12,10 +12,6 @@ source_path = "docs-src/configuration.md"
 ## Config directory
 
 The config directory defaults to `~/.agentgraph`. Change it with `AGENTGRAPH_CONFIG_DIR`.
-AgentGraph also reads `AGENTGRAPH_CONFIG_DIR` from a local `.env` file, resolved
-relative to the process current working directory. A shell or host application
-may choose a different working directory than the folder visible in its UI, so
-use an explicit environment variable for automation and coding-agent sessions.
 
 ```bash
 AGENTGRAPH_CONFIG_DIR=/path/to/agentgraph agentgraph serve
