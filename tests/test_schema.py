@@ -421,3 +421,79 @@ async def test_existing_database_gets_columns_and_renames_threads_to_email(tmp_p
         assert event_type == "observation_threshold"
     finally:
         await migrated.close()
+
+
+async def test_version_two_database_gets_timestamp_default_repair(tmp_path: Path) -> None:
+    db_path = tmp_path / "missing-timestamp-defaults.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE entities (
+            id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            platform_entity_id TEXT NOT NULL,
+            title TEXT,
+            content TEXT,
+            content_embedding BLOB,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_created_at TEXT,
+            source_updated_at TEXT,
+            synced_at TEXT,
+            observed_at TEXT,
+            retention_policy TEXT NOT NULL DEFAULT 'observed'
+                CHECK (retention_policy IN ('observed', 'owned', 'connected', 'persistent')),
+            retention_parent_id TEXT REFERENCES entities(id) ON DELETE CASCADE,
+            cumulative_observation_duration_ms INTEGER NOT NULL DEFAULT 0,
+            bookmarked INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (platform, platform_entity_id)
+        );
+        CREATE VIRTUAL TABLE entities_fts USING fts5(id UNINDEXED, title, content);
+        CREATE TABLE observations (
+            id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            url TEXT NOT NULL,
+            title TEXT,
+            tab_id INTEGER,
+            timestamp TEXT NOT NULL,
+            evaluated INTEGER NOT NULL DEFAULT 0,
+            meta TEXT,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, created_at, updated_at
+        ) VALUES ('existing', 'Document', 'web', 'https://example.com', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        PRAGMA user_version=2;
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = SQLiteBackend(str(db_path))
+    await migrated.initialize()
+    try:
+        columns = {
+            row["name"]: row for row in await migrated._fetchall("PRAGMA table_info(entities)")
+        }
+        assert columns["created_at"]["dflt_value"] is not None
+        assert columns["updated_at"]["dflt_value"] is not None
+        await migrated.upsert_batch(
+            EntityBatch(
+                entities=[
+                    EntityRecord(
+                        entity_type="Message",
+                        platform="slack",
+                        platform_entity_id="T/C/123.456",
+                    )
+                ]
+            ),
+            {},
+            {},
+        )
+        inserted = await migrated.get_entity_by_platform("slack", "T/C/123.456")
+        assert inserted is not None
+        assert inserted["created_at"] is not None
+    finally:
+        await migrated.close()

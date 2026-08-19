@@ -64,7 +64,7 @@ _LIST_PAGE_ORDER_BY = {
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 _FTS_DELETE_CHUNK_SIZE = 500
 _BUSY_TIMEOUT_MS = 5_000
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
 
 def _now() -> str:
@@ -208,7 +208,9 @@ class SQLiteBackend(StorageBackend):
     async def _run_migrations(self) -> None:
         conn = self._conn_or_raise()
         cursor = await conn.execute("PRAGMA table_info(entities)")
-        entity_columns = {str(row["name"]): bool(row["notnull"]) for row in await cursor.fetchall()}
+        table_info = await cursor.fetchall()
+        entity_columns = {str(row["name"]): bool(row["notnull"]) for row in table_info}
+        entity_defaults = {str(row["name"]): row["dflt_value"] for row in table_info}
         columns = set(entity_columns)
         if "cumulative_dwell_ms" in columns:
             await conn.execute(
@@ -234,6 +236,8 @@ class SQLiteBackend(StorageBackend):
             "last_accessed" in columns
             or not entity_columns.get("created_at", False)
             or not entity_columns.get("updated_at", False)
+            or entity_defaults.get("created_at") is None
+            or entity_defaults.get("updated_at") is None
             or entity_columns.get("observed_at", False)
             or "source_created_at" not in columns
             or "source_updated_at" not in columns
