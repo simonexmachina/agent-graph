@@ -37,3 +37,4 @@ docs-src/node_modules/
 
 .env
 AGENTS.local.md
+.envrc
