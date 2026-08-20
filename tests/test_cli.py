@@ -20,6 +20,7 @@ from agentgraph_connector_google.provider import (
     GoogleCredentials,
 )
 from agentgraph_connector_slack import SlackConnector
+from click import unstyle
 from typer.testing import CliRunner
 
 from agentgraph.auth.credentials import (
@@ -127,7 +128,7 @@ def test_demo_add_rejects_config_dir_option() -> None:
     result = runner.invoke(app, ["demo", "add", "--config-dir", "/tmp/atlas-demo"])
 
     assert result.exit_code != 0
-    assert "No such option: --config-dir" in result.output
+    assert "No such option: --config-dir" in unstyle(result.output)
 
 
 def test_demo_remove_outputs_removed_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,7 +146,7 @@ def test_demo_add_rejects_reset_option() -> None:
     result = runner.invoke(app, ["demo", "add", "--reset"])
 
     assert result.exit_code != 0
-    assert "No such option: --reset" in result.output
+    assert "No such option: --reset" in unstyle(result.output)
 
 
 def test_bookmark_command_dispatches_to_cli_query() -> None:

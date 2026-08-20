@@ -43,7 +43,7 @@ def test_release_projects_use_public_names() -> None:
 def test_connectors_declare_server_compatibility() -> None:
     for path in sorted((ROOT / "packages").glob("*/pyproject.toml")):
         project = _project(path)
-        assert "agentgraph-server>=0.5.0,<0.6" in project["dependencies"]
+        assert "agentgraph-server>=0.5.0,<0.7" in project["dependencies"]
 
 
 def test_rss_connector_declares_web_connector_compatibility() -> None:

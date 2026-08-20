@@ -21,11 +21,14 @@ server_log="${work_dir}/server.log"
 server_port=18765
 
 uv build --package agentgraph-server --wheel --out-dir "${dist_dir}"
-wheel="$(find "${dist_dir}" -maxdepth 1 -name '*.whl' -print -quit)"
+uv build --package agentgraph-connector-web --wheel --out-dir "${dist_dir}"
+wheel="$(find "${dist_dir}" -maxdepth 1 -name 'agentgraph_server-*.whl' -print -quit)"
+web_connector_wheel="$(find "${dist_dir}" -maxdepth 1 -name 'agentgraph_connector_web-*.whl' -print -quit)"
 test -n "${wheel}"
+test -n "${web_connector_wheel}"
 
 uv venv "${venv_dir}" --python 3.12
-uv pip install --python "${venv_dir}/bin/python" "${wheel}"
+uv pip install --python "${venv_dir}/bin/python" "${wheel}" "${web_connector_wheel}"
 
 cd "${work_dir}"
 AGENTGRAPH_CONFIG_DIR="${config_dir}" \
