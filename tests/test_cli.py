@@ -814,8 +814,10 @@ def test_onboard_directs_users_to_install_chrome_extension() -> None:
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
         patch("agentgraph.cli._server_is_running", return_value=False),
+        patch("agentgraph.cli.questionary.confirm") as confirm,
     ):
-        result = runner.invoke(app, ["onboard"], input="n\n")
+        confirm.return_value.ask.return_value = False
+        result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
     assert "Step 2/2: Install the AgentGraph Chrome Extension" in result.output
@@ -825,6 +827,8 @@ def test_onboard_directs_users_to_install_chrome_extension() -> None:
         "iilkfclglabllelhjacijldknapbhidi"
     ) in result.output
     assert "Run `agentgraph serve` to start the server." in result.output
+    confirm.assert_called_once_with("  Set up Slack?", default=True)
+    confirm.return_value.ask.assert_called_once_with()
 
 
 def test_onboard_omits_server_hint_when_server_is_running() -> None:
@@ -832,8 +836,10 @@ def test_onboard_omits_server_hint_when_server_is_running() -> None:
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_FakeConnector()]),
         patch("agentgraph.cli._server_is_running", return_value=True),
+        patch("agentgraph.cli.questionary.confirm") as confirm,
     ):
-        result = runner.invoke(app, ["onboard"], input="n\n")
+        confirm.return_value.ask.return_value = False
+        result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
     assert "Step 2/2: Install the AgentGraph Chrome Extension" in result.output
@@ -901,8 +907,10 @@ def test_onboard_places_last_step_connectors_at_the_end() -> None:
             "agentgraph.connectors.registry.get_all_connectors",
             return_value=[_FakeRssOnboardConnector(), _FakeSlackOnboardConnector()],
         ),
+        patch("agentgraph.cli.questionary.confirm") as confirm,
     ):
-        result = runner.invoke(app, ["onboard"], input="n\nn\n")
+        confirm.return_value.ask.return_value = False
+        result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
     assert result.output.index("Step 1/3: Slack") < result.output.index("Step 2/3: RSS")
