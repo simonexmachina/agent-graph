@@ -12,7 +12,7 @@ from agentgraph.demo import add_demo
 
 def main() -> None:
     parser = ArgumentParser(description=__doc__)
-    args = parser.parse_args()
+    parser.parse_args()
     result = asyncio.run(add_demo(get_config_paths()[0]))
     print(json.dumps(result, indent=2))
 

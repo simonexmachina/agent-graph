@@ -12,6 +12,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from typing import TYPE_CHECKING, cast
 
+import questionary  # type: ignore[import-untyped]
 import typer
 
 if TYPE_CHECKING:
@@ -657,7 +658,7 @@ def onboard() -> None:
         prompt: str = getattr(connector, "onboard_prompt", None) or f"Set up {label}?"
         description: str = getattr(connector, "auth_description", None) or label.title()
         typer.echo(f"Step {i}/{total}: {description}")
-        if typer.confirm(f"  {prompt}", default=True):
+        if questionary.confirm(f"  {prompt}", default=True).ask():
             type(connector).run_auth_flow()
         else:
             typer.echo("  Skipped.")

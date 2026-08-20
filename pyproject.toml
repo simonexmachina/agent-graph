@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=2.4.6",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
+    "questionary>=2.1.1",
     "rich>=14.3.3",
     "sqlite-vec>=0.1.9",
     "typer>=0.24.1",

@@ -43,7 +43,9 @@ def build_demo_batch() -> EntityBatch:
     drive_folder_id = "atlas-program-folder"
     drive_plan_id = "atlas-integration-plan"
 
-    fixture_metadata = {DEMO_FIXTURE_METADATA_KEY: DEMO_FIXTURE_METADATA_VALUE}
+    fixture_metadata: dict[str, str | int | float | bool | None] = {
+        DEMO_FIXTURE_METADATA_KEY: DEMO_FIXTURE_METADATA_VALUE
+    }
     entities = [
         EntityRecord(
             entity_type="Channel",
