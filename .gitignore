@@ -36,3 +36,4 @@ extension/node_modules/
 docs-src/node_modules/
 
 .env
+AGENTS.local.md

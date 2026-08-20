@@ -18,15 +18,6 @@ Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli
 
 - **Use `jq` for JSON parsing** in shell scripts and one-liners — prefer it over Python for command-line JSON manipulation.
 
-## Logs
-
-- Treat `/tmp/agentgraph.log` as the default server log file location when inspecting runtime errors for this repo.
-
-## Server Lifecycle
-
-- `agentgraph serve` is managed by the macOS LaunchAgent `com.agentgraph.server`. Do not start or stop it directly; use `launchctl kickstart` when a restart is required.
-- Exception: when `.env` contains an uncommented `AGENTGRAPH_CONFIG_DIR`, the user is running an isolated test server manually in a terminal. Do not use launchd to start, stop, or restart the server in that mode; leave lifecycle control to the user.
-
 ## Documentation Website
 
 - In this repository, “website” means the public documentation site hosted on GitHub Pages, built from `docs-src/` and previewed with `uv run python scripts/serve_docs.py` at `http://127.0.0.1:8001/`.
