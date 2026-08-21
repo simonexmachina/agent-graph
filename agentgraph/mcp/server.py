@@ -287,6 +287,8 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             Gmail historical backfill is available as ["ingest"] or
             ["ingest", "--account", "<account-id>"]. There is no separate
             ingest_connector_tool; ingest is connector-owned.
+            Compact one-off web fetches are available as
+            ["fetch", "https://example.com/page", "--compact"].
             Connector-owned help is available as ["--help"].
 
     Returns:
@@ -307,6 +309,10 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             from agentgraph.connectors.command_effects import execute_deletions
 
             result["deleted_entities"] = await execute_deletions(effects)
+        if effects.fetch_references:
+            from agentgraph.connectors.command_effects import execute_fetches
+
+            result["fetched"] = await execute_fetches(effects)
         if effects.poll:
             from agentgraph.server.sync import schedule_poll_connector
 

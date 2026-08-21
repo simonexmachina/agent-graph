@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from agentgraph.connectors.base import ConnectorCommandEffects, EntityReference
+from agentgraph.connectors.base import ConnectorCommandEffects, EntityReference, SourceReference
 from agentgraph.core.context import set_backend
 
 # ---------------------------------------------------------------------------
@@ -1229,6 +1229,56 @@ async def test_mcp_connector_command_executes_requested_entity_deletion() -> Non
 
     assert json.loads(result)["deleted_entities"] == deleted
     execute_deletions.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mcp_connector_command_executes_requested_fetch() -> None:
+    from agentgraph.mcp.server import run_connector_command_tool
+
+    class Connector:
+        source = "web"
+
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "ok", "url": args[1]}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(
+                fetch_references=(
+                    SourceReference("web", "document", "https://example.com/page"),
+                )
+            )
+
+    fetched = [
+        {
+            "source": "web",
+            "resource_type": "document",
+            "resource_id": "https://example.com/page",
+            "entities": 1,
+            "persons": 0,
+            "edges": 0,
+        }
+    ]
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch(
+            "agentgraph.connectors.command_effects.execute_fetches",
+            new=AsyncMock(return_value=fetched),
+        ) as execute_fetches,
+    ):
+        result = await run_connector_command_tool(
+            "web", ["fetch", "https://example.com/page", "--compact"]
+        )
+
+    assert json.loads(result)["fetched"] == fetched
+    execute_fetches.assert_awaited_once()
 
 
 @pytest.mark.asyncio

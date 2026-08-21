@@ -5,12 +5,19 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from agentgraph.backends.sqlite.backend import SQLiteBackend
-from agentgraph.connectors.base import ConnectorCommandEffects, EntityReference
-from agentgraph.connectors.command_effects import execute_deletions
+from agentgraph.connectors.base import (
+    ConnectorCommandEffects,
+    EntityBatch,
+    EntityRecord,
+    EntityReference,
+    SourceReference,
+)
+from agentgraph.connectors.command_effects import execute_deletions, execute_fetches
 from agentgraph.core.context import set_backend
 
 
@@ -57,3 +64,52 @@ async def test_execute_deletions_removes_present_entities_and_edges(
     assert await sqlite_backend.get_entity_by_id("feed") is None
     assert await sqlite_backend.get_entity_by_id("article") is not None
     assert await sqlite_backend._fetchval("SELECT count(*) FROM edges") == 0
+
+
+async def test_execute_fetches_passes_metadata_and_upserts_batch() -> None:
+    batch = EntityBatch(
+        entities=[
+            EntityRecord(
+                entity_type="Document",
+                platform="web",
+                platform_entity_id="https://example.com/page",
+            )
+        ]
+    )
+
+    class Connector:
+        fetch = AsyncMock(return_value=batch)
+
+    upsert = AsyncMock()
+    effects = ConnectorCommandEffects(
+        fetch_references=(
+            SourceReference(
+                source="web",
+                resource_type="document",
+                resource_id="https://example.com/page",
+                fetch_meta={"compact_html": "true"},
+            ),
+        )
+    )
+    with (
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch("agentgraph.graph.upsert.upsert_batch", new=upsert),
+    ):
+        result = await execute_fetches(effects)
+
+    Connector.fetch.assert_awaited_once_with(
+        resource_type="document",
+        resource_id="https://example.com/page",
+        meta={"compact_html": "true"},
+    )
+    upsert.assert_awaited_once_with(batch)
+    assert result == [
+        {
+            "source": "web",
+            "resource_type": "document",
+            "resource_id": "https://example.com/page",
+            "entities": 1,
+            "persons": 0,
+            "edges": 0,
+        }
+    ]

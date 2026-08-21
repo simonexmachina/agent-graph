@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 
 class WebConfig(BaseModel):
     observation_urls: list[str] = Field(default_factory=list)
-    compact_html: bool = False
 
 
 def load_web_settings() -> WebConfig:
@@ -85,7 +84,6 @@ def save_web_config(config: WebConfig) -> None:
             begin,
             "[connectors.web]",
             f"observation_urls = [{', '.join(json.dumps(url) for url in config.observation_urls)}]",
-            f"compact_html = {str(config.compact_html).lower()}",
             end,
             "",
         ]
@@ -123,11 +121,7 @@ def _load_yaml_root(path: Path) -> dict[str, Any]:
 
 
 def _normalise_config(raw: dict[str, Any]) -> dict[str, Any]:
-    compact_html = raw.get("compact_html", False)
-    return {
-        "observation_urls": _normalise_urls(raw.get("observation_urls", [])),
-        "compact_html": compact_html if isinstance(compact_html, bool) else False,
-    }
+    return {"observation_urls": _normalise_urls(raw.get("observation_urls", []))}
 
 
 def _normalise_urls(urls: object) -> list[str]:

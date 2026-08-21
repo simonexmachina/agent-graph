@@ -18,6 +18,7 @@ import httpx
 
 from agentgraph.connectors.base import (
     BaseConnector,
+    ConnectorCommandEffects,
     EntityBatch,
     EntityRecord,
     FetchPolicy,
@@ -30,7 +31,6 @@ from agentgraph_connector_web.config import (
     add_observation_urls,
     load_web_settings,
     remove_observation_urls,
-    save_web_config,
 )
 from agentgraph_connector_web.http import HttpFetchResult, fetch_http_resource
 
@@ -78,18 +78,12 @@ class WebConnector(BaseConnector):
                 "status": "ok",
                 "source": cls.source,
                 "observation_urls": config.observation_urls,
-                "compact_html": config.compact_html,
             }
-        if command == "compact-html":
-            if len(rest) != 1 or rest[0].lower() not in {"on", "off"}:
-                raise ValueError("Usage: agentgraph connector web compact-html on|off")
-            config = load_web_settings()
-            compact_html = rest[0].lower() == "on"
-            updated = config.model_copy(update={"compact_html": compact_html})
-            save_web_config(updated)
-            return {"status": "ok", "source": cls.source, "compact_html": compact_html}
+        if command == "fetch":
+            url, compact = _parse_web_fetch_args(rest)
+            return {"status": "ok", "source": cls.source, "url": url, "compact": compact}
         raise ValueError(
-            f"Unknown web connector command '{command}'. Available: add, remove, list, compact-html"
+            f"Unknown web connector command '{command}'. Available: add, remove, list, fetch"
         )
 
     @classmethod
@@ -98,14 +92,41 @@ class WebConnector(BaseConnector):
 
     @classmethod
     def format_cli_result(cls, result: dict[str, object]) -> str:
+        fetched = result.get("fetched")
+        if isinstance(fetched, list) and fetched and isinstance(fetched[0], dict):
+            item = cast(dict[str, object], fetched[0])
+            return (
+                f"Fetched {item.get('resource_id')}: {item.get('entities', 0)} entities, "
+                f"{item.get('persons', 0)} persons, {item.get('edges', 0)} edges"
+            )
         raw_urls = result.get("observation_urls", [])
         urls: list[str] = []
         if isinstance(raw_urls, list):
             urls = [url for url in cast(list[object], raw_urls) if isinstance(url, str)]
-        lines = [f"Web observation URLs ({len(urls)}):", *[f"  {url}" for url in urls]]
-        if "compact_html" in result:
-            lines.append(f"Compact HTML: {'on' if result['compact_html'] else 'off'}")
-        return "\n".join(lines)
+        return "\n".join([f"Web observation URLs ({len(urls)}):", *[f"  {url}" for url in urls]])
+
+    @classmethod
+    def command_effects(
+        cls,
+        args: list[str],
+        result: dict[str, object],
+    ) -> ConnectorCommandEffects:
+        if not args or args[0] != "fetch":
+            return ConnectorCommandEffects()
+        url = result.get("url")
+        if not isinstance(url, str):
+            raise ValueError(_web_fetch_usage())
+        fetch_meta = {"compact_html": "true"} if result.get("compact") is True else None
+        return ConnectorCommandEffects(
+            fetch_references=(
+                SourceReference(
+                    source=cls.source,
+                    resource_type="document",
+                    resource_id=url,
+                    fetch_meta=fetch_meta,
+                ),
+            )
+        )
 
     def resolve_url(self, url: str) -> SourceReference | None:
         parsed = urlparse(url)
@@ -139,7 +160,7 @@ class WebConnector(BaseConnector):
         meta: dict[str, str] | None = None,
         account_id: str | None = None,
     ) -> EntityBatch:
-        _ = (resource_type, meta, account_id)
+        _ = (resource_type, account_id)
         ref = self.resolve_url(resource_id)
         if ref is None:
             raise ValueError("Web connector only supports http:// and https:// URLs")
@@ -148,7 +169,7 @@ class WebConnector(BaseConnector):
         entity = await _fetch_web_entity(
             ref.resource_id,
             existing_entity=existing,
-            compact_html=load_web_settings().compact_html,
+            compact_html=(meta or {}).get("compact_html") == "true",
         )
         batch = EntityBatch(entities=[entity])
         await upsert_batch(batch)
@@ -216,11 +237,7 @@ async def fetch_http_document(
     existing_entity: dict[str, object] | None = None,
 ) -> EntityRecord:
     """Fetch an HTTP-backed Document, using validators from existing metadata when present."""
-    return await _fetch_web_entity(
-        url,
-        existing_entity=existing_entity,
-        compact_html=load_web_settings().compact_html,
-    )
+    return await _fetch_web_entity(url, existing_entity=existing_entity)
 
 
 def _conditional_request_headers(metadata: dict[str, object]) -> dict[str, str]:
@@ -468,4 +485,31 @@ def _matches_observation_rule(url: str, rule: str) -> bool:
 
 
 def _web_usage() -> str:
-    return "Usage: agentgraph connector web add|remove <url> [url...] | list | compact-html on|off"
+    return (
+        "Usage: agentgraph connector web add|remove <url> [url...] | list\n"
+        "   or: agentgraph connector web fetch <url> [--compact]"
+    )
+
+
+def _web_fetch_usage() -> str:
+    return "Usage: agentgraph connector web fetch <url> [--compact]"
+
+
+def _parse_web_fetch_args(args: list[str]) -> tuple[str, bool]:
+    compact = False
+    urls: list[str] = []
+    for arg in args:
+        if arg == "--compact":
+            if compact:
+                raise ValueError(_web_fetch_usage())
+            compact = True
+        elif arg.startswith("-"):
+            raise ValueError(_web_fetch_usage())
+        else:
+            urls.append(arg)
+    if len(urls) != 1:
+        raise ValueError(_web_fetch_usage())
+    parsed = urlparse(urls[0])
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Web fetch URL must use http:// or https://")
+    return _canonical_url(urls[0]), compact

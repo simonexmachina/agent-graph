@@ -5,6 +5,7 @@ from __future__ import annotations
 # pyright: reportPrivateUsage=false
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import agentgraph_connector_web
@@ -106,14 +107,81 @@ def test_web_cli_add_remove_and_list(
     removed = WebConnector.run_cli_command(["remove", "http://localhost:3000/page"])
     assert removed["removed"] == ["http://localhost:3000/page"]
 
-    enabled = WebConnector.run_cli_command(["compact-html", "on"])
-    assert enabled["compact_html"] is True
 
-    from agentgraph_connector_web.config import load_web_settings
 
-    assert load_web_settings().compact_html is True
-    disabled = WebConnector.run_cli_command(["compact-html", "off"])
-    assert disabled["compact_html"] is False
+def test_web_cli_fetch_parses_compact_option() -> None:
+    result = WebConnector.run_cli_command(
+        ["fetch", "https://example.com/page#section", "--compact"]
+    )
+
+    assert result == {
+        "status": "ok",
+        "source": "web",
+        "url": "https://example.com/page",
+        "compact": True,
+    }
+    assert WebConnector.command_effects(
+        ["fetch", "https://example.com/page#section", "--compact"], result
+    ).fetch_references == (
+        SourceReference(
+            source="web",
+            resource_type="document",
+            resource_id="https://example.com/page",
+            fetch_meta={"compact_html": "true"},
+        ),
+    )
+
+
+def test_web_cli_fetch_without_compaction_has_no_fetch_metadata() -> None:
+    result = WebConnector.run_cli_command(["fetch", "https://example.com/page"])
+
+    assert WebConnector.command_effects(
+        ["fetch", "https://example.com/page"], result
+    ).fetch_references[0].fetch_meta is None
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["fetch"],
+        ["fetch", "not-a-url"],
+        ["fetch", "https://example.com", "https://example.org"],
+        ["fetch", "https://example.com", "--unknown"],
+        ["fetch", "https://example.com", "--compact", "--compact"],
+    ],
+)
+def test_web_cli_fetch_rejects_invalid_arguments(args: list[str]) -> None:
+    with pytest.raises(ValueError):
+        WebConnector.run_cli_command(args)
+
+
+@pytest.mark.asyncio
+async def test_web_fetch_uses_command_compaction_metadata() -> None:
+    entity = agentgraph_connector_web.EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/page",
+    )
+    backend = SimpleNamespace(get_entity_by_platform=AsyncMock(return_value=None))
+    with (
+        patch("agentgraph_connector_web.get_backend", return_value=backend),
+        patch(
+            "agentgraph_connector_web._fetch_web_entity",
+            new=AsyncMock(return_value=entity),
+        ) as fetch_web_entity,
+        patch("agentgraph_connector_web.upsert_batch", new=AsyncMock()),
+    ):
+        await WebConnector().fetch(
+            "document",
+            "https://example.com/page",
+            meta={"compact_html": "true"},
+        )
+
+    fetch_web_entity.assert_awaited_once_with(
+        "https://example.com/page",
+        existing_entity=None,
+        compact_html=True,
+    )
 
 
 @pytest.mark.asyncio

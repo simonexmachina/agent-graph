@@ -22,7 +22,9 @@ run_connector_command_tool(source, args) -> JSON string
 
 Historical ingest is connector-owned. Gmail exposes `["ingest"]` and
 `["ingest", "--account", "user@example.com"]`; there is no separate
-`ingest_connector_tool`. Discover other command sets with `args=["--help"]`.
+`ingest_connector_tool`. The web connector accepts
+`["fetch", "https://example.com/page", "--compact"]` for a one-off compact HTML
+fetch. Discover other command sets with `args=["--help"]`.
 
 ## Returns
 

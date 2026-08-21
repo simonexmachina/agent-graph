@@ -31,7 +31,12 @@ from agentgraph.auth.credentials import (
     upsert_platform_account,
 )
 from agentgraph.cli import app
-from agentgraph.connectors.base import ConnectorAccount, ConnectorCommandEffects, EntityReference
+from agentgraph.connectors.base import (
+    ConnectorAccount,
+    ConnectorCommandEffects,
+    EntityReference,
+    SourceReference,
+)
 from agentgraph.core.storage import EntityResult
 
 runner = CliRunner()
@@ -1217,6 +1222,55 @@ def test_connector_command_executes_requested_entity_deletion() -> None:
 
     assert result.exit_code == 0
     assert json.loads(result.output)["deleted_entities"] == deleted
+    run_operation.assert_called_once()
+
+
+def test_connector_command_executes_requested_fetch() -> None:
+    class _FetchingWebConnector(_FakeRssConnector):
+        source = "web"
+
+        @classmethod
+        def run_cli_command(cls, args: list[str]) -> dict[str, Any]:
+            return {"status": "ok", "url": args[1]}
+
+        @classmethod
+        def command_effects(
+            cls,
+            args: list[str],
+            result: dict[str, Any],
+        ) -> ConnectorCommandEffects:
+            _ = (args, result)
+            return ConnectorCommandEffects(
+                fetch_references=(
+                    SourceReference("web", "document", "https://example.com/page"),
+                )
+            )
+
+    fetched = [
+        {
+            "source": "web",
+            "resource_type": "document",
+            "resource_id": "https://example.com/page",
+            "entities": 1,
+            "persons": 0,
+            "edges": 0,
+        }
+    ]
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_connector",
+            return_value=_FetchingWebConnector(),
+        ),
+        patch("agentgraph.cli_query.run_graph_operation", return_value=fetched) as run_operation,
+    ):
+        result = runner.invoke(
+            app,
+            ["connector", "web", "fetch", "https://example.com/page", "--json"],
+        )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["fetched"] == fetched
     run_operation.assert_called_once()
 
 

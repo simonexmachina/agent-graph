@@ -45,6 +45,17 @@ agentgraph connector gmail ingest [--account <account-id>] [--json]
 The MCP form is `run_connector_command_tool("gmail", ["ingest", ...])`. There is no
 top-level `agentgraph ingest` command or `ingest_connector_tool`.
 
+For an oversized HTML page, request a one-off web fetch that removes style, script,
+noscript, and comment blocks before applying the response-size limit:
+
+```bash
+agentgraph connector web fetch <url> --compact [--json]
+```
+
+The MCP form is `run_connector_command_tool("web", ["fetch", "<url>", "--compact"])`.
+Compaction applies only to that command; ordinary fetches, bookmarks, observations, and
+RSS article hydration retain their default behavior.
+
 ## Files and retained context
 
 ```bash
