@@ -4,7 +4,7 @@ description = "CLI reference for agentgraph mcp-config."
 nav_title = "mcp-config"
 section = "Reference"
 order = 25
-summary = "`agentgraph mcp-config` prints the MCP client snippet for stdio clients and the HTTPS `/mcp` setup path for ChatGPT developer mode."
+summary = "`agentgraph mcp-config` prints local stdio setup instructions for ChatGPT Desktop Work Mode and Claude Desktop."
 output = "commands/mcp-config.html"
 source_path = "docs-src/commands/mcp-config.md"
 +++
@@ -17,9 +17,8 @@ agentgraph mcp-config
 
 ## Use it for
 
+- ChatGPT Desktop Work Mode local MCP setup
 - Claude Desktop config
-- Claude Code config
-- ChatGPT developer mode guidance for a remote HTTPS streamable HTTP endpoint
 
 ## Example
 
@@ -27,16 +26,6 @@ agentgraph mcp-config
 agentgraph mcp-config
 ```
 
-For ChatGPT, do not paste the stdio JSON config. Run AgentGraph with streamable HTTP instead:
+For ChatGPT Desktop Work Mode, add a local MCP server in the MCP configuration screen and enter the printed `agentgraph mcp-serve` command in **Command to launch**.
 
-```bash
-agentgraph mcp-serve --transport streamable-http --port 8808
-```
-
-The local endpoint is:
-
-```text
-http://127.0.0.1:8808/mcp
-```
-
-ChatGPT cannot connect to that local URL directly. Expose it through Secure MCP Tunnel, ngrok, Cloudflare Tunnel, or another HTTPS tunnel, then create an app/connector in ChatGPT developer mode using the public URL ending in `/mcp`.
+For Claude Desktop, add the printed JSON to `~/Library/Application Support/Claude/claude_desktop_config.json`.

@@ -81,7 +81,7 @@ Connect the agent you already use:
 agentgraph mcp-config
 ```
 
-Use the printed stdio configuration with Claude Desktop, Claude Code, Codex, or another compatible MCP client. ChatGPT developer mode uses the streamable HTTP `/mcp` endpoint through HTTPS. See [Install](docs-src/install.md) for the complete setup path.
+Use the printed instructions to connect ChatGPT Desktop Work Mode or Claude Desktop to the local stdio server. See [Install](docs-src/install.md) for the complete setup path.
 
 ## What AgentGraph is and is not
 

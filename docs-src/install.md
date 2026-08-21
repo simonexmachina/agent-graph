@@ -70,9 +70,17 @@ Install the [AgentGraph Chrome Extension](https://chromewebstore.google.com/deta
 
 After the extension is installed, start `agentgraph serve`, then open a supported resource and keep it focused past the default three-second observation threshold.
 
-## Optional: Connect ChatGPT or Claude
+## Optional: Connect ChatGPT Desktop or Claude Desktop
 
-If you want to use AgentGraph from ChatGPT or Claude instead of through your coding agent, connect it as an MCP client.
+If you want to use AgentGraph from ChatGPT Desktop Work Mode or Claude Desktop instead of through your coding agent, print the local MCP setup instructions:
+
+```bash
+agentgraph mcp-config
+```
+
+For ChatGPT Desktop Work Mode, enter the printed command in the local MCP server configuration screen. For Claude Desktop, add the printed JSON to its configuration file.
+
+For coding-agent clients, use their native terminal configuration commands instead.
 
 For ChatGPT's Codex client, register the local stdio server from your terminal:
 

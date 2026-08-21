@@ -477,16 +477,17 @@ def test_auth_help() -> None:
     assert "status" in result.output.lower()
 
 
-def test_mcp_config_includes_chatgpt() -> None:
+def test_mcp_config_includes_desktop_setup() -> None:
     result = runner.invoke(app, ["mcp-config"])
     assert result.exit_code == 0
     assert "Claude Desktop" in result.output
-    assert "Claude Code" in result.output
-    assert "ChatGPT" in result.output
-    assert "streamable-http" in result.output
-    assert "do not use the stdio JSON" in result.output
-    assert "http://127.0.0.1:8808/mcp" in result.output
-    assert "https://your-tunnel.example/mcp" in result.output
+    assert "ChatGPT Desktop Work Mode" in result.output
+    assert "Command to launch" in result.output
+    assert "mcp-serve" in result.output
+    assert "~/Library/Application Support/Claude/claude_desktop_config.json" in result.output
+    assert '"mcpServers"' in result.output
+    assert "streamable-http" not in result.output
+    assert "Secure MCP Tunnel" not in result.output
 
 
 def test_install_skill_defaults_to_user_agent_and_claude_skills(

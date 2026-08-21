@@ -5,8 +5,8 @@ retrieve, and traverse entities directly.
 
 Run via:
     agentgraph mcp
-or via the `agentgraph/mcp` stdio transport understood by Claude Desktop
-and other MCP clients.
+or via the `agentgraph/mcp` stdio transport understood by ChatGPT Desktop Work Mode,
+Claude Desktop, and other MCP clients.
 """
 
 from __future__ import annotations

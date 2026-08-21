@@ -692,6 +692,7 @@ def onboard() -> None:
 def mcp_config() -> None:
     """Print MCP client setup instructions."""
     import json
+    import shlex
     import sys
 
     binary = sys.argv[0]
@@ -705,24 +706,14 @@ def mcp_config() -> None:
         }
     }
 
-    typer.echo("\nFor stdio MCP clients, add this to your MCP client config:\n")
-    typer.echo("  Claude Desktop:  ~/Library/Application Support/Claude/claude_desktop_config.json")
-    typer.echo("  Claude Code:     ~/.claude/mcp.json  (or .claude/mcp.json in your project)\n")
+    typer.echo("\nChatGPT Desktop Work Mode:")
+    typer.echo("  Add a local MCP server in the MCP configuration screen.")
+    typer.echo("  Command to launch:")
+    typer.echo(f"  {shlex.join([binary, 'mcp-serve'])}")
+    typer.echo()
+    typer.echo("Claude Desktop:")
+    typer.echo("  Add this to ~/Library/Application Support/Claude/claude_desktop_config.json:\n")
     typer.echo(json.dumps(config, indent=2))
-    typer.echo()
-    typer.echo("For ChatGPT developer mode, do not use the stdio JSON above.")
-    typer.echo("Run a streamable HTTP MCP server:")
-    typer.echo(f"  {binary} mcp-serve --transport streamable-http --port 8808")
-    typer.echo("Local endpoint:")
-    typer.echo("  http://127.0.0.1:8808/mcp")
-    typer.echo("ChatGPT requires a reachable HTTPS URL. Use Secure MCP Tunnel, ngrok,")
-    typer.echo("or Cloudflare Tunnel, then create an app/connector in ChatGPT Developer mode")
-    typer.echo("with the public URL ending in /mcp, for example:")
-    typer.echo("  https://your-tunnel.example/mcp")
-    typer.echo()
-    typer.echo("SSE is also supported by the server if your MCP client needs it:")
-    typer.echo(f"  {binary} mcp-serve --transport sse --port 8808")
-    typer.echo("  http://127.0.0.1:8808/sse")
     typer.echo()
 
 

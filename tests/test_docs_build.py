@@ -171,7 +171,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "agentgraph-connector-google" not in install_html
     assert "uv sync" not in install_html
     assert "source .venv" not in install_html
-    assert "Optional: Connect ChatGPT or Claude" in install_html
+    assert "Optional: Connect ChatGPT Desktop or Claude Desktop" in install_html
     assert "instead of through your coding agent" in install_html
     assert "Connect sources" in install_html
     assert "onboard" in install_html
