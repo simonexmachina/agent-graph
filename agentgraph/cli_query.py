@@ -24,13 +24,19 @@ async def _with_backend[T](operation: Callable[[], Awaitable[T]]) -> T:
         return await operation()
 
 
-def _run[T](operation: Callable[[], Awaitable[T]]) -> T:
+def _run[T](
+    operation: Callable[[], Awaitable[T]],
+    error_hint: Callable[[Exception], str | None] | None = None,
+) -> T:
     """Run one graph operation with a configured backend and concise CLI errors."""
     try:
         return asyncio.run(_with_backend(operation))
     except Exception as exc:
         console.print("[red]AgentGraph command failed:[/red] ", end="")
         console.print(str(exc), markup=False, highlight=False)
+        hint = error_hint(exc) if error_hint is not None else None
+        if hint:
+            console.print(hint, markup=False, highlight=False)
         raise SystemExit(1) from exc
 
 
@@ -224,7 +230,13 @@ def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
 
         return await fetch_entity(platform, resource_id)
 
-    result = _run(operation)
+    def error_hint(error: Exception) -> str | None:
+        from agentgraph.connectors.registry import get_connector
+
+        connector = get_connector(platform)
+        return connector.fetch_error_hint(resource_id, error, "cli") if connector is not None else None
+
+    result = _run(operation, error_hint=error_hint)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return

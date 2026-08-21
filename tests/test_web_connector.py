@@ -474,11 +474,25 @@ async def test_fetch_web_entity_caps_response_size(monkeypatch: pytest.MonkeyPat
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(ValueError, match="Response too large"):
+        with pytest.raises(ValueError, match="Response too large for web document"):
             await agentgraph_connector_web._fetch_web_entity(  # noqa: SLF001
                 "https://example.com/large",
                 client=client,
             )
+
+
+def test_web_fetch_error_hint_only_handles_size_limit() -> None:
+    connector = WebConnector()
+    size_error = ValueError("Response too large for web document: limit is 2000000 bytes")
+
+    assert connector.fetch_error_hint("https://example.com/page", size_error, "cli") == (
+        "Try: agentgraph connector web fetch https://example.com/page --compact"
+    )
+    assert connector.fetch_error_hint("https://example.com/page", size_error, "mcp") == (
+        'Try: run_connector_command_tool("web", '
+        '["fetch", "https://example.com/page", "--compact"])'
+    )
+    assert connector.fetch_error_hint("https://example.com/page", ValueError("not found"), "cli") is None
 
 
 @pytest.mark.asyncio

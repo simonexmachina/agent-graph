@@ -426,6 +426,16 @@ class BaseConnector(ABC):
         """
         ...
 
+    def fetch_error_hint(
+        self,
+        resource_id: str,
+        error: Exception,
+        audience: Literal["cli", "mcp"],
+    ) -> str | None:
+        """Return connector-owned recovery guidance for a failed fetch, if available."""
+        _ = (resource_id, error, audience)
+        return None
+
     async def ingest(self, account_id: str | None = None) -> EntityBatch:
         """Run a one-shot bulk ingest of all available historical data for this connector.
 

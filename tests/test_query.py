@@ -671,6 +671,27 @@ async def test_cli_delete_deletes_entity() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_fetch_web_size_limit_suggests_compact_command() -> None:
+    from agentgraph_connector_web import WebConnector
+
+    from agentgraph.mcp.server import fetch_entity_tool
+
+    with (
+        patch(
+            "agentgraph.graph.fetch.fetch_entity",
+            new=AsyncMock(
+                side_effect=ValueError("Response too large for web document: limit is 2000000 bytes")
+            ),
+        ),
+        patch("agentgraph.connectors.registry.get_connector", return_value=WebConnector()),
+    ):
+        result = await fetch_entity_tool("web", "https://example.com/page")
+
+    assert "Response too large for web document" in json.loads(result)["error"]
+    assert 'run_connector_command_tool("web", ["fetch", "https://example.com/page", "--compact"])' in json.loads(result)["error"]
+
+
+@pytest.mark.asyncio
 async def test_mcp_search_entities_tool_returns_json() -> None:
     from agentgraph.mcp.server import search_entities_tool
 

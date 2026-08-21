@@ -373,6 +373,31 @@ def test_fetch_uses_graph_operation_without_http() -> None:
     fetch_entity.assert_awaited_once_with("gsheets", "sheet-id")
 
 
+def test_fetch_web_size_limit_suggests_compact_command(capsys: pytest.CaptureFixture[str]) -> None:
+    from agentgraph_connector_web import WebConnector
+
+    from agentgraph.cli_query import cmd_fetch
+
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.fetch.fetch_entity",
+            new=AsyncMock(
+                side_effect=ValueError("Response too large for web document: limit is 2000000 bytes")
+            ),
+        ),
+        patch("agentgraph.connectors.registry.get_connector", return_value=WebConnector()),
+        pytest.raises(SystemExit) as exc,
+    ):
+        cmd_fetch("web", "https://example.com/page", as_json=False)
+
+    assert exc.value.code == 1
+    output = capsys.readouterr().out
+    assert "Response too large for web document" in output
+    assert "agentgraph connector web fetch https://example.com/page --compact" in output
+
+
 def test_fetch_entity_uses_graph_operation_without_http() -> None:
     from agentgraph.cli_query import cmd_fetch_entity
 

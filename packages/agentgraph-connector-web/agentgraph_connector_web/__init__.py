@@ -6,11 +6,12 @@ import hashlib
 import html
 import json
 import re
+import shlex
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
-from typing import ClassVar, cast
+from typing import ClassVar, Literal, cast
 from urllib.parse import urldefrag, urlparse
 from xml.etree import ElementTree
 
@@ -37,6 +38,7 @@ from agentgraph_connector_web.http import HttpFetchResult, fetch_http_resource
 _STALE_AFTER = 24 * 60 * 60
 _MAX_BYTES = 2_000_000
 _MAX_REDIRECTS = 5
+_RESPONSE_TOO_LARGE_PREFIX = "Response too large for web document"
 _ACCEPT = (
     "text/markdown, text/html, application/json, text/plain, "
     "application/atom+xml, application/rss+xml, application/xml, text/xml, "
@@ -178,6 +180,21 @@ class WebConnector(BaseConnector):
     def entity_url(self, platform_entity_id: str) -> str | None:
         return platform_entity_id
 
+    def fetch_error_hint(
+        self,
+        resource_id: str,
+        error: Exception,
+        audience: Literal["cli", "mcp"],
+    ) -> str | None:
+        if not isinstance(error, ValueError) or not str(error).startswith(_RESPONSE_TOO_LARGE_PREFIX):
+            return None
+        if audience == "cli":
+            return f"Try: agentgraph connector web fetch {shlex.quote(resource_id)} --compact"
+        return (
+            'Try: run_connector_command_tool("web", '
+            f'["fetch", {json.dumps(resource_id)}, "--compact"])'
+        )
+
 
 async def _fetch_web_entity(
     url: str,
@@ -196,7 +213,7 @@ async def _fetch_web_entity(
         url,
         headers=headers,
         max_bytes=_MAX_BYTES,
-        too_large_message=f"Response too large for web bookmark: limit is {_MAX_BYTES} bytes",
+        too_large_message=f"{_RESPONSE_TOO_LARGE_PREFIX}: limit is {_MAX_BYTES} bytes",
         timeout=httpx.Timeout(10.0, connect=5.0),
         max_redirects=_MAX_REDIRECTS,
         client=client,

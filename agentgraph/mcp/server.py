@@ -635,7 +635,12 @@ async def fetch_entity_tool(platform: str, resource_id: str) -> str:
         result = await fetch_entity(platform, resource_id)
         return json.dumps(result)
     except ValueError as exc:
-        return json.dumps({"error": str(exc)})
+        from agentgraph.connectors.registry import get_connector
+
+        connector = get_connector(platform)
+        hint = connector.fetch_error_hint(resource_id, exc, "mcp") if connector is not None else None
+        error = f"{exc}\n{hint}" if hint else str(exc)
+        return json.dumps({"error": error})
 
 
 # ---------------------------------------------------------------------------
