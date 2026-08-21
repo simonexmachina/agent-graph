@@ -56,10 +56,10 @@ The MCP form is `run_connector_command_tool("web", ["fetch", "<url>", "--compact
 Compaction applies only to that command; ordinary fetches, bookmarks, observations, and
 RSS article hydration retain their default behavior.
 
-Configure browser observation rules with `agentgraph connector web watch <url-or-prefix>`
-and remove them with `agentgraph connector web unwatch <url-or-prefix>`. The MCP forms
-are `run_connector_command_tool("web", ["watch", "<url-or-prefix>"])` and
-`run_connector_command_tool("web", ["unwatch", "<url-or-prefix>"])`.
+Configure browser observation rules with `agentgraph connector web observe <url-or-prefix>`
+and remove them with `agentgraph connector web observe <url-or-prefix> --remove`. The MCP
+forms are `run_connector_command_tool("web", ["observe", "<url-or-prefix>"])` and
+`run_connector_command_tool("web", ["observe", "<url-or-prefix>", "--remove"])`.
 
 ## Files and retained context
 

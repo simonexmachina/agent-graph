@@ -30,8 +30,8 @@ from agentgraph.core.context import get_backend
 from agentgraph.graph.upsert import upsert_batch
 from agentgraph_connector_web.config import (
     load_web_settings,
-    unwatch_observation_urls,
-    watch_observation_urls,
+    observe_urls,
+    remove_observed_urls,
 )
 from agentgraph_connector_web.http import HttpFetchResult, fetch_http_resource
 
@@ -66,21 +66,22 @@ class WebConnector(BaseConnector):
         if not args:
             raise ValueError(_web_usage())
         command, *rest = args
-        if command == "watch":
-            config, watched = watch_observation_urls(rest)
+        if command == "observe":
+            urls, remove = _parse_web_observe_args(rest)
+            if remove:
+                config, removed = remove_observed_urls(urls)
+                return {
+                    "status": "ok",
+                    "source": cls.source,
+                    "observation_urls": config.observation_urls,
+                    "removed": removed,
+                }
+            config, observed = observe_urls(urls)
             return {
                 "status": "ok",
                 "source": cls.source,
                 "observation_urls": config.observation_urls,
-                "watched": watched,
-            }
-        if command == "unwatch":
-            config, unwatched = unwatch_observation_urls(rest)
-            return {
-                "status": "ok",
-                "source": cls.source,
-                "observation_urls": config.observation_urls,
-                "unwatched": unwatched,
+                "observed": observed,
             }
         if command == "list":
             if rest:
@@ -95,7 +96,7 @@ class WebConnector(BaseConnector):
             url, compact = _parse_web_fetch_args(rest)
             return {"status": "ok", "source": cls.source, "url": url, "compact": compact}
         raise ValueError(
-            f"Unknown web connector command '{command}'. Available: watch, unwatch, list, fetch"
+            f"Unknown web connector command '{command}'. Available: observe, list, fetch"
         )
 
     @classmethod
@@ -115,7 +116,7 @@ class WebConnector(BaseConnector):
         urls: list[str] = []
         if isinstance(raw_urls, list):
             urls = [url for url in cast(list[object], raw_urls) if isinstance(url, str)]
-        return "\n".join([f"Watched web URLs ({len(urls)}):", *[f"  {url}" for url in urls]])
+        return "\n".join([f"Observed web URLs ({len(urls)}):", *[f"  {url}" for url in urls]])
 
     @classmethod
     def command_effects(
@@ -513,13 +514,30 @@ def _matches_observation_rule(url: str, rule: str) -> bool:
 
 def _web_usage() -> str:
     return (
-        "Usage: agentgraph connector web watch|unwatch <url> [url...] | list\n"
+        "Usage: agentgraph connector web observe <url> [url...] [--remove] | list\n"
         "   or: agentgraph connector web fetch <url> [--compact]"
     )
 
 
 def _web_fetch_usage() -> str:
     return "Usage: agentgraph connector web fetch <url> [--compact]"
+
+
+def _parse_web_observe_args(args: list[str]) -> tuple[list[str], bool]:
+    remove = False
+    urls: list[str] = []
+    for arg in args:
+        if arg == "--remove":
+            if remove:
+                raise ValueError(_web_usage())
+            remove = True
+        elif arg.startswith("-"):
+            raise ValueError(_web_usage())
+        else:
+            urls.append(arg)
+    if not urls:
+        raise ValueError(_web_usage())
+    return urls, remove
 
 
 def _parse_web_fetch_args(args: list[str]) -> tuple[str, bool]:

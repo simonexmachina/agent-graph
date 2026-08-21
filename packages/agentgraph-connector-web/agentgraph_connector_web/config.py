@@ -21,36 +21,36 @@ def load_web_settings() -> WebConfig:
     return WebConfig(**raw) if raw is not None else WebConfig()
 
 
-def watch_observation_urls(urls: list[str]) -> tuple[WebConfig, list[str]]:
+def observe_urls(urls: list[str]) -> tuple[WebConfig, list[str]]:
     selected = _normalise_urls(urls)
     if not selected:
-        raise ValueError("Usage: agentgraph connector web watch <url> [url...]")
+        raise ValueError("Usage: agentgraph connector web observe <url> [url...] [--remove]")
     config = load_web_settings()
     merged = [*config.observation_urls]
-    watched: list[str] = []
+    observed: list[str] = []
     for url in selected:
         if url not in merged:
             merged.append(url)
-            watched.append(url)
+            observed.append(url)
     updated = WebConfig(observation_urls=merged)
     save_web_config(updated)
-    return updated, watched
+    return updated, observed
 
 
-def unwatch_observation_urls(urls: list[str]) -> tuple[WebConfig, list[str]]:
+def remove_observed_urls(urls: list[str]) -> tuple[WebConfig, list[str]]:
     selected = _normalise_urls(urls)
     if not selected:
-        raise ValueError("Usage: agentgraph connector web unwatch <url> [url...]")
+        raise ValueError("Usage: agentgraph connector web observe <url> [url...] [--remove]")
     config = load_web_settings()
     remove_set = set(selected)
-    unwatched = [url for url in config.observation_urls if url in remove_set]
-    if not unwatched:
-        raise ValueError("No matching watched web URLs are configured")
+    removed = [url for url in config.observation_urls if url in remove_set]
+    if not removed:
+        raise ValueError("No matching observed web URLs are configured")
     updated = WebConfig(
         observation_urls=[url for url in config.observation_urls if url not in remove_set]
     )
     save_web_config(updated)
-    return updated, unwatched
+    return updated, removed
 
 
 def save_web_config(config: WebConfig) -> None:

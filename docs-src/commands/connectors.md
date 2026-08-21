@@ -28,10 +28,10 @@ agentgraph connector rss remove https://simonwillison.net/atom/everything/
 agentgraph connector rss --help
 agentgraph connector rss import-opml feeds.opml --all
 agentgraph connector rss import-opml feeds.opml --select 1,3-5
-agentgraph connector web watch http://localhost:3000/*
-agentgraph connector web watch http://localhost:3000/content/research.md
+agentgraph connector web observe http://localhost:3000/*
+agentgraph connector web observe http://localhost:3000/content/research.md
 agentgraph connector web list
-agentgraph connector web unwatch http://localhost:3000/*
+agentgraph connector web observe http://localhost:3000/* --remove
 agentgraph connector web fetch https://www.thecgo.org/research/energy-superabundance/ --compact
 ```
 
@@ -44,8 +44,8 @@ RSS `remove` removes exact configured feed URLs without fetching or validating t
 For RSS OPML imports, omit `--all` and `--select` in an interactive terminal to choose
 feeds with a checkbox prompt.
 
-The web connector stores browser observation rules with `watch` and removes them with
-`unwatch`. A URL
+The web connector stores browser observation rules with `observe`; add `--remove` to
+remove a rule. A URL
 without a trailing `/*` observes that exact URL; a URL ending in `/*` observes every URL
 under that literal prefix. Rules are stored in `~/.agentgraph/config.toml`, or in
 `config.yaml` when that file exists. The browser extension refreshes the rules from the
