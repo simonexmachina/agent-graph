@@ -9,21 +9,6 @@ output = "retention.html"
 source_path = "docs-src/retention.md"
 +++
 
-AgentGraph treats browser observation, connector synchronization, and source-system dates as separate events. Fetching or changing an entity does not imply that you observed it.
-
-## Entity timestamps
-
-| Column | Meaning |
-| --- | --- |
-| `created_at` | Local graph insertion time. Always present and never changes. |
-| `updated_at` | Last material change to stored entity data. Always present. |
-| `source_created_at` | Creation or publication time reported by the source, when available. |
-| `source_updated_at` | Modification time reported by the source, when available. |
-| `synced_at` | Last successful connector synchronization. Null for unresolved stubs. |
-| `observed_at` | Last accepted browser observation of this exact entity. Null until observed. |
-
-Ingests, background polls, explicit `fetch` and `fetch-entity` commands, stub creation, source changes, and new graph edges do not set `observed_at`. The browser sends an observation report only after its observation threshold has elapsed. AgentGraph then fetches and persists the resource and records `observed_at`. Duration-only updates do not fetch the resource or change `observed_at`.
-
 ## Retention policies
 
 Entities use one of four policies:
@@ -45,25 +30,17 @@ Bookmarking an entity protects it from being removed when it expires. A bookmark
 
 ## Expiration
 
-The server runs expiration daily at 03:00:
+The server runs expiration daily and applies the following rules:
 
-1. Delete unbookmarked observed-policy entities whose effective retention timestamp is outside the window.
-2. Cascade deletion to their unbookmarked owned children.
+1. Bookmarked entities are never deleted
+1. Delete observed-policy entities whose effective retention timestamp is outside the window.
+2. Cascade deletion to their owned children.
 3. Detach bookmarked owned children before deleting an expired parent.
-4. Delete unbookmarked owned entities left without a parent, including detached children after they are unbookmarked.
-5. Delete unbookmarked connected-policy Persons that have no edges.
+4. Delete owned entities left without a parent, including detached children after they are unbookmarked.
+5. Delete connected-policy Persons that have no edges.
 
 The retention period is controlled using `AGENTGRAPH_RETENTION_DAYS`, which defaults to 90 days.
 
 ## RSS observations
 
-Configured RSS feeds are persistent source Folders. They are not observable and do not expire automatically. Removing a feed with `agentgraph connector rss remove` deletes its Folder and feed edges, while its articles remain subject to their normal retention.
-
-Article observation is stricter than the extension's URL-prefix filter:
-
-1. AgentGraph derives a small set of eligible URL prefixes from indexed RSS entry links.
-2. The extension may report observation for a page matching one of those prefixes.
-3. The server normalizes the URL and requires an exact match with the `web_url` of an existing RSS `Document`.
-4. Only the matched Document receives `observed_at`; unknown pages under the same prefix are ignored.
-
-RSS polling and article hydration can change content, source dates, `updated_at`, and `synced_at`, but they do not extend article observation-based retention.
+The RSS connector derives a small set of eligible URL prefixes from indexed RSS entry links, so that the browser extension can report observation for those RSS entries.
