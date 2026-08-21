@@ -32,6 +32,7 @@ agentgraph connector web add http://localhost:3000/*
 agentgraph connector web add http://localhost:3000/content/research.md
 agentgraph connector web list
 agentgraph connector web remove http://localhost:3000/*
+agentgraph connector web compact-html on
 ```
 
 RSS `add` validates each supplied URL as an RSS or Atom feed before saving, then
@@ -48,6 +49,18 @@ without a trailing `/*` observes that exact URL; a URL ending in `/*` observes e
 under that literal prefix. Rules are stored in `~/.agentgraph/config.toml`, or in
 `config.yaml` when that file exists. The browser extension refreshes the rules from the
 running server periodically.
+
+Web fetches preserve the original response by default. Enable compact HTML mode when
+pages exceed the fetch size limit because of inline styles, scripts, or comments:
+
+```bash
+agentgraph connector web compact-html on
+```
+
+This removes those non-content blocks while the response is streamed, before the size
+limit is applied. Disable it with `agentgraph connector web compact-html off` when the
+original HTML source should be retained. The setting also applies when RSS entries are
+hydrated through the web connector.
 
 Connectors that do not use credentials, such as RSS and generic web, omit auth
 status in the human output and report `null` auth fields in JSON.

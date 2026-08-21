@@ -30,6 +30,7 @@ from agentgraph_connector_web.config import (
     add_observation_urls,
     load_web_settings,
     remove_observation_urls,
+    save_web_config,
 )
 from agentgraph_connector_web.http import HttpFetchResult, fetch_http_resource
 
@@ -72,8 +73,24 @@ class WebConnector(BaseConnector):
         if command == "list":
             if rest:
                 raise ValueError(_web_usage())
-            return {"status": "ok", "source": cls.source, "observation_urls": load_web_settings().observation_urls}
-        raise ValueError(f"Unknown web connector command '{command}'. Available: add, remove, list")
+            config = load_web_settings()
+            return {
+                "status": "ok",
+                "source": cls.source,
+                "observation_urls": config.observation_urls,
+                "compact_html": config.compact_html,
+            }
+        if command == "compact-html":
+            if len(rest) != 1 or rest[0].lower() not in {"on", "off"}:
+                raise ValueError("Usage: agentgraph connector web compact-html on|off")
+            config = load_web_settings()
+            compact_html = rest[0].lower() == "on"
+            updated = config.model_copy(update={"compact_html": compact_html})
+            save_web_config(updated)
+            return {"status": "ok", "source": cls.source, "compact_html": compact_html}
+        raise ValueError(
+            f"Unknown web connector command '{command}'. Available: add, remove, list, compact-html"
+        )
 
     @classmethod
     def cli_help(cls) -> str:
@@ -85,7 +102,10 @@ class WebConnector(BaseConnector):
         urls: list[str] = []
         if isinstance(raw_urls, list):
             urls = [url for url in cast(list[object], raw_urls) if isinstance(url, str)]
-        return "\n".join([f"Web observation URLs ({len(urls)}):", *[f"  {url}" for url in urls]])
+        lines = [f"Web observation URLs ({len(urls)}):", *[f"  {url}" for url in urls]]
+        if "compact_html" in result:
+            lines.append(f"Compact HTML: {'on' if result['compact_html'] else 'off'}")
+        return "\n".join(lines)
 
     def resolve_url(self, url: str) -> SourceReference | None:
         parsed = urlparse(url)
@@ -125,7 +145,11 @@ class WebConnector(BaseConnector):
             raise ValueError("Web connector only supports http:// and https:// URLs")
 
         existing = await get_backend().get_entity_by_platform(self.source, ref.resource_id)
-        entity = await _fetch_web_entity(ref.resource_id, existing_entity=existing)
+        entity = await _fetch_web_entity(
+            ref.resource_id,
+            existing_entity=existing,
+            compact_html=load_web_settings().compact_html,
+        )
         batch = EntityBatch(entities=[entity])
         await upsert_batch(batch)
         return batch
@@ -139,6 +163,7 @@ async def _fetch_web_entity(
     *,
     client: httpx.AsyncClient | None = None,
     existing_entity: dict[str, object] | None = None,
+    compact_html: bool = False,
 ) -> EntityRecord:
     existing_metadata = _entity_metadata(existing_entity)
     headers = {
@@ -154,6 +179,7 @@ async def _fetch_web_entity(
         timeout=httpx.Timeout(10.0, connect=5.0),
         max_redirects=_MAX_REDIRECTS,
         client=client,
+        compact_html=compact_html,
     )
     if response.status_code == 304:
         if existing_entity is None:
@@ -190,7 +216,11 @@ async def fetch_http_document(
     existing_entity: dict[str, object] | None = None,
 ) -> EntityRecord:
     """Fetch an HTTP-backed Document, using validators from existing metadata when present."""
-    return await _fetch_web_entity(url, existing_entity=existing_entity)
+    return await _fetch_web_entity(
+        url,
+        existing_entity=existing_entity,
+        compact_html=load_web_settings().compact_html,
+    )
 
 
 def _conditional_request_headers(metadata: dict[str, object]) -> dict[str, str]:
@@ -438,4 +468,4 @@ def _matches_observation_rule(url: str, rule: str) -> bool:
 
 
 def _web_usage() -> str:
-    return "Usage: agentgraph connector web add|remove <url> [url...] | list"
+    return "Usage: agentgraph connector web add|remove <url> [url...] | list | compact-html on|off"

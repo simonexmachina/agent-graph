@@ -106,6 +106,15 @@ def test_web_cli_add_remove_and_list(
     removed = WebConnector.run_cli_command(["remove", "http://localhost:3000/page"])
     assert removed["removed"] == ["http://localhost:3000/page"]
 
+    enabled = WebConnector.run_cli_command(["compact-html", "on"])
+    assert enabled["compact_html"] is True
+
+    from agentgraph_connector_web.config import load_web_settings
+
+    assert load_web_settings().compact_html is True
+    disabled = WebConnector.run_cli_command(["compact-html", "off"])
+    assert disabled["compact_html"] is False
+
 
 @pytest.mark.asyncio
 async def test_web_observation_resolution_enforces_exact_and_prefix_rules(
@@ -402,3 +411,29 @@ async def test_fetch_web_entity_caps_response_size(monkeypatch: pytest.MonkeyPat
                 "https://example.com/large",
                 client=client,
             )
+
+
+@pytest.mark.asyncio
+async def test_fetch_web_entity_compacts_html_before_size_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(agentgraph_connector_web, "_MAX_BYTES", 64)
+    source = b"<html><head><style>" + (b"x" * 200) + b"</style></head><body><p>Keep me</p></body></html>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            content=source,
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        entity = await agentgraph_connector_web._fetch_web_entity(  # noqa: SLF001
+            "https://example.com/compact",
+            client=client,
+            compact_html=True,
+        )
+
+    assert "<style>" not in (entity.content or "")
+    assert "Keep me" in (entity.content or "")
