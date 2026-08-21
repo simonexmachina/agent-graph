@@ -1394,6 +1394,22 @@ def test_connector_command_dispatches_help_to_connector() -> None:
     assert result.output == "RSS connector help\n"
 
 
+def test_connector_command_reports_connector_load_error() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=None),
+        patch(
+            "agentgraph.connectors.registry.get_connector_load_error",
+            return_value="No module named 'curl_cffi'",
+        ),
+    ):
+        result = runner.invoke(app, ["connector", "web", "--help"])
+
+    assert result.exit_code == 1
+    assert "Failed to load connector 'web': No module named 'curl_cffi'" in result.output
+    assert "Unknown connector" not in result.output
+
+
 def test_connectors_reports_delegated_polling() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),

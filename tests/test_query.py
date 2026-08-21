@@ -1282,6 +1282,25 @@ async def test_mcp_connector_command_executes_requested_fetch() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_connector_command_reports_connector_load_error() -> None:
+    from agentgraph.mcp.server import run_connector_command_tool
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=None),
+        patch(
+            "agentgraph.connectors.registry.get_connector_load_error",
+            return_value="No module named 'curl_cffi'",
+        ),
+    ):
+        result = await run_connector_command_tool("web", ["--help"])
+
+    assert json.loads(result) == {
+        "error": "Failed to load connector 'web': No module named 'curl_cffi'"
+    }
+
+
+@pytest.mark.asyncio
 async def test_mcp_connector_command_queues_requested_ingest_for_account() -> None:
     from agentgraph.mcp.server import run_connector_command_tool
 

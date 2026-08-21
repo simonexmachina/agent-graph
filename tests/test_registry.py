@@ -89,3 +89,17 @@ def test_get_all_connectors_loads_discovered_entry_points(monkeypatch: Any) -> N
     assert {connector.source for connector in connectors} == {"lazy", "other"}
     assert lazy_ep.loaded is True
     assert other_ep.loaded is True
+
+
+def test_get_connector_records_entry_point_load_error(monkeypatch: Any) -> None:
+    from agentgraph.connectors import registry
+
+    failing_ep = _FakeEntryPoint("broken", lambda: (_ for _ in ()).throw(ModuleNotFoundError("missing")))
+    monkeypatch.setattr(registry, "_registry", {})
+    monkeypatch.setattr(registry, "_entry_points", {})
+    monkeypatch.setattr(registry, "_load_errors", {})
+    monkeypatch.setattr(registry, "_bootstrapped", False)
+    monkeypatch.setattr(registry, "_connector_entry_points", lambda: [failing_ep])
+
+    assert registry.get_connector("broken") is None
+    assert registry.get_connector_load_error("broken") == "missing"

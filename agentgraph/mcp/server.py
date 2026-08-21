@@ -294,11 +294,13 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
     Returns:
         JSON object returned by the connector, or an error.
     """
-    from agentgraph.connectors.registry import bootstrap, get_connector
+    from agentgraph.connectors.registry import bootstrap, get_connector, get_connector_load_error
 
     bootstrap()
     connector = get_connector(source)
     if connector is None:
+        if error := get_connector_load_error(source):
+            return json.dumps({"error": f"Failed to load connector {source!r}: {error}"})
         return json.dumps({"error": f"Unknown connector {source!r}"})
     if args in (["--help"], ["help"]):
         return json.dumps({"source": source, "help": type(connector).cli_help()})

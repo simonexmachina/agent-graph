@@ -368,7 +368,7 @@ def connector_command(
     help: bool = typer.Option(False, "--help", help="Show this message and exit."),
 ) -> None:
     """Run a connector-owned command."""
-    from agentgraph.connectors.registry import bootstrap, get_connector
+    from agentgraph.connectors.registry import bootstrap, get_connector, get_connector_load_error
 
     if source is None:
         from typer.rich_utils import rich_format_help
@@ -379,6 +379,10 @@ def connector_command(
     bootstrap()
     connector = get_connector(source)
     if connector is None:
+        if error := get_connector_load_error(source):
+            typer.echo(f"Failed to load connector '{source}': {error}", err=True)
+            typer.echo("Reinstall AgentGraph and its connector dependencies, then retry.", err=True)
+            raise typer.Exit(code=1)
         typer.echo(f"Unknown connector '{source}'", err=True)
         raise typer.Exit(code=1)
 

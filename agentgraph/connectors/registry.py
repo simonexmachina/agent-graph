@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _registry: dict[str, BaseConnector] = {}
 _entry_points: dict[str, importlib.metadata.EntryPoint] = {}
+_load_errors: dict[str, str] = {}
 _bootstrapped = False
 
 
@@ -29,6 +30,11 @@ def get_connector(source: str) -> BaseConnector | None:
     if source not in _registry and source in _entry_points:
         _load_entry_point(source, _entry_points[source])
     return _registry.get(source)
+
+
+def get_connector_load_error(source: str) -> str | None:
+    """Return the recorded entry-point import error for a connector, if any."""
+    return _load_errors.get(source)
 
 
 def registered_sources() -> list[str]:
@@ -70,9 +76,11 @@ def _load_entry_point(name: str, ep: importlib.metadata.EntryPoint) -> None:
         connector_class: type[BaseConnector] = ep.load()
         connector = connector_class()
         register(connector)
+        _load_errors.pop(name, None)
         logger.debug("Loaded connector %r from %s", ep.name, ep.value)
         if connector.source != name:
             _entry_points.pop(name, None)
     except Exception as exc:
         _entry_points.pop(name, None)
+        _load_errors[name] = str(exc)
         logger.warning("Failed to load connector %r: %s", ep.name, exc)
