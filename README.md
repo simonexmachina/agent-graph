@@ -70,7 +70,7 @@ agentgraph serve
 Install the [AgentGraph Chrome extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi), browse a supported resource, then verify that context landed:
 
 ```bash
-agentgraph connectors
+agentgraph list-connectors
 agentgraph search "project kickoff notes"
 agentgraph traverse <entity-id> --depth 2
 ```

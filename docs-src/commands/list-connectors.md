@@ -1,18 +1,18 @@
 +++
-title = "connectors"
-description = "CLI reference for agentgraph connectors."
-nav_title = "connectors"
+title = "list-connectors"
+description = "CLI reference for agentgraph list-connectors."
+nav_title = "list-connectors"
 section = "Reference"
 order = 19
-summary = "`agentgraph connectors` is the operator view of installed connectors, credential state where applicable, URL ownership, and sync behavior."
-output = "commands/connectors.html"
-source_path = "docs-src/commands/connectors.md"
+summary = "`agentgraph list-connectors` is the operator view of installed connectors, credential state where applicable, URL ownership, and sync behavior."
+output = "commands/list-connectors.html"
+source_path = "docs-src/commands/list-connectors.md"
 +++
 
 ## Synopsis
 
 ```bash
-agentgraph connectors [--verify] [--json]
+agentgraph list-connectors [--verify] [--json]
 agentgraph connector <source> <command> [args...] [--json]
 agentgraph connector <source> --help
 ```
@@ -20,9 +20,9 @@ agentgraph connector <source> --help
 ## Example
 
 ```bash
-agentgraph connectors
-agentgraph connectors --json
-agentgraph connectors --verify
+agentgraph list-connectors
+agentgraph list-connectors --json
+agentgraph list-connectors --verify
 agentgraph connector rss add https://simonwillison.net/atom/everything/
 agentgraph connector rss remove https://simonwillison.net/atom/everything/
 agentgraph connector rss --help

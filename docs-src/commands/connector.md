@@ -16,7 +16,7 @@ agentgraph connector SOURCE --help
 agentgraph connector SOURCE COMMAND [ARGS...] [--json]
 ```
 
-Connector names and command sets are dynamic. Inspect `agentgraph connectors`, then
+Connector names and command sets are dynamic. Inspect `agentgraph list-connectors`, then
 use connector-owned help rather than assuming a fixed platform or command list.
 
 ## Examples

@@ -29,7 +29,7 @@ aliases = ["commands.html"]
 ## Sync and connectors
 
 - [`connector`](/commands/connector.html) - discover and run commands owned by an installed connector.
-- [`connectors`](/commands/connectors.html) - inspect installed connectors and auth state.
+- [`list-connectors`](/commands/list-connectors.html) - inspect installed connectors and auth state.
 - [`poll`](/commands/poll.html) - run background polling now.
 
 ## Auth and setup

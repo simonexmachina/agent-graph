@@ -3,13 +3,13 @@
 ## Availability and authentication
 
 ```bash
-agentgraph connectors [--verify] [--json]
+agentgraph list-connectors [--verify] [--json]
 agentgraph auth [--verify] [--json] status
 agentgraph auth <provider> [--add] [--account <account-id>]
 agentgraph auth remove <provider> [--account <account-id>] [--json]
 ```
 
-Use `agentgraph connectors --json` to discover installed connector source names,
+Use `agentgraph list-connectors --json` to discover installed connector source names,
 valid platform values, URL ownership, polling delegation, and sync state. Do not rely
 on a hardcoded platform list. Use `--verify` only when a live provider check is
 needed.

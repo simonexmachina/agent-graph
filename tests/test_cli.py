@@ -1461,7 +1461,7 @@ def test_connector_command_reports_connector_load_error() -> None:
     assert "Unknown connector" not in result.output
 
 
-def test_connectors_reports_delegated_polling() -> None:
+def test_list_connectors_reports_delegated_polling() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
@@ -1470,7 +1470,7 @@ def test_connectors_reports_delegated_polling() -> None:
             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
         ),
     ):
-        result = runner.invoke(app, ["connectors"])
+        result = runner.invoke(app, ["list-connectors"])
 
     assert result.exit_code == 0
     assert "gdocs" in result.output
@@ -1480,7 +1480,7 @@ def test_connectors_reports_delegated_polling() -> None:
     assert "account:" not in result.output
 
 
-def test_connectors_json_reports_delegated_polling() -> None:
+def test_list_connectors_json_reports_delegated_polling() -> None:
     with (
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
@@ -1489,7 +1489,7 @@ def test_connectors_json_reports_delegated_polling() -> None:
             return_value=[_FakeGoogleConnector(), _FakeDriveConnector()],
         ),
     ):
-        result = runner.invoke(app, ["connectors", "--json"])
+        result = runner.invoke(app, ["list-connectors", "--json"])
 
     assert result.exit_code == 0
     parsed = json.loads(result.output)
@@ -1499,7 +1499,7 @@ def test_connectors_json_reports_delegated_polling() -> None:
     assert parsed[1]["poll_delegates"] == ["gdocs"]
 
 
-def test_connectors_default_uses_local_auth_status_without_live_verify() -> None:
+def test_list_connectors_default_uses_local_auth_status_without_live_verify() -> None:
     class _LocalConnector(_FakeGoogleConnector):
         verify_called = False
 
@@ -1515,7 +1515,7 @@ def test_connectors_default_uses_local_auth_status_without_live_verify() -> None
             "agentgraph.connectors.registry.get_all_connectors", return_value=[_LocalConnector()]
         ),
     ):
-        result = runner.invoke(app, ["connectors", "--json"])
+        result = runner.invoke(app, ["list-connectors", "--json"])
 
     assert result.exit_code == 0
     parsed = json.loads(result.output)
@@ -1524,7 +1524,7 @@ def test_connectors_default_uses_local_auth_status_without_live_verify() -> None
     assert _LocalConnector.verify_called is False
 
 
-def test_connectors_verify_runs_live_auth_check() -> None:
+def test_list_connectors_verify_runs_live_auth_check() -> None:
     class _VerifiedConnector(_FakeGoogleConnector):
         verify_called = False
 
@@ -1540,7 +1540,7 @@ def test_connectors_verify_runs_live_auth_check() -> None:
             "agentgraph.connectors.registry.get_all_connectors", return_value=[_VerifiedConnector()]
         ),
     ):
-        result = runner.invoke(app, ["connectors", "--verify", "--json"])
+        result = runner.invoke(app, ["list-connectors", "--verify", "--json"])
 
     assert result.exit_code == 0
     parsed = json.loads(result.output)
@@ -1550,7 +1550,7 @@ def test_connectors_verify_runs_live_auth_check() -> None:
     assert _VerifiedConnector.verify_called is True
 
 
-def test_connectors_omits_auth_status_for_non_auth_connectors() -> None:
+def test_list_connectors_omits_auth_status_for_non_auth_connectors() -> None:
     class _NonAuthRssConnector(_FakeRssConnector):
         verify_called = False
 
@@ -1567,8 +1567,8 @@ def test_connectors_omits_auth_status_for_non_auth_connectors() -> None:
             return_value=[_NonAuthRssConnector()],
         ),
     ):
-        json_result = runner.invoke(app, ["connectors", "--verify", "--json"])
-        text_result = runner.invoke(app, ["connectors", "--verify"])
+        json_result = runner.invoke(app, ["list-connectors", "--verify", "--json"])
+        text_result = runner.invoke(app, ["list-connectors", "--verify"])
 
     assert json_result.exit_code == 0
     parsed = json.loads(json_result.output)
@@ -1583,6 +1583,13 @@ def test_connectors_omits_auth_status_for_non_auth_connectors() -> None:
     assert "auth:" not in text_result.output
     assert "sync:" in text_result.output
     assert _NonAuthRssConnector.verify_called is False
+
+
+def test_connectors_legacy_command_is_rejected() -> None:
+    result = runner.invoke(app, ["connectors"])
+
+    assert result.exit_code != 0
+    assert "No such command 'connectors'" in result.output
 
 
 def test_auth_status_dedupes_shared_google_provider() -> None:

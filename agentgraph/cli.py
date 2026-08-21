@@ -434,8 +434,8 @@ def connector_command(
     typer.echo(type(connector).format_cli_result(result))
 
 
-@app.command()
-def connectors(
+@app.command(name="list-connectors")
+def list_connectors(
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
     verify: bool = typer.Option(
         False, "--verify", help="Live-check connector credentials with provider APIs"
