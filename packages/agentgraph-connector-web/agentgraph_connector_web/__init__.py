@@ -6,6 +6,7 @@ import hashlib
 import html
 import json
 import re
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -30,6 +31,7 @@ from agentgraph_connector_web.config import (
     load_web_settings,
     remove_observation_urls,
 )
+from agentgraph_connector_web.http import HttpFetchResult, fetch_http_resource
 
 _STALE_AFTER = 24 * 60 * 60
 _MAX_BYTES = 2_000_000
@@ -138,59 +140,48 @@ async def _fetch_web_entity(
     client: httpx.AsyncClient | None = None,
     existing_entity: dict[str, object] | None = None,
 ) -> EntityRecord:
-    if client is None:
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            max_redirects=_MAX_REDIRECTS,
-            timeout=httpx.Timeout(10.0, connect=5.0),
-        ) as owned_client:
-            return await _fetch_web_entity(
-                url,
-                client=owned_client,
-                existing_entity=existing_entity,
-            )
-
     existing_metadata = _entity_metadata(existing_entity)
     headers = {
         "Accept": _ACCEPT,
         "User-Agent": "AgentGraph/0.1",
         **_conditional_request_headers(existing_metadata),
     }
-    async with client.stream("GET", url, headers=headers) as response:
-        if response.status_code == 304:
-            if existing_entity is None:
-                raise ValueError(f"Received 304 for {url} without an existing Document")
-            return _not_modified_entity(url, response, existing_entity)
+    response = await fetch_http_resource(
+        url,
+        headers=headers,
+        max_bytes=_MAX_BYTES,
+        too_large_message=f"Response too large for web bookmark: limit is {_MAX_BYTES} bytes",
+        timeout=httpx.Timeout(10.0, connect=5.0),
+        max_redirects=_MAX_REDIRECTS,
+        client=client,
+    )
+    if response.status_code == 304:
+        if existing_entity is None:
+            raise ValueError(f"Received 304 for {url} without an existing Document")
+        return _not_modified_entity(url, response, existing_entity)
 
-        response.raise_for_status()
-        body = bytearray()
-        async for chunk in response.aiter_bytes():
-            body.extend(chunk)
-            if len(body) > _MAX_BYTES:
-                raise ValueError(f"Response too large for web bookmark: limit is {_MAX_BYTES} bytes")
-
-        content_type = _normalise_content_type(response.headers.get("content-type", ""))
-        final_url = _canonical_url(str(response.url))
-        parsed = _parse_content(bytes(body), content_type, final_url)
-        content_sha256 = hashlib.sha256(body).hexdigest()
-        return EntityRecord(
-            entity_type="Document",
-            platform="web",
-            platform_entity_id=final_url,
-            title=parsed.title,
-            content=parsed.content,
-            source_updated_at=_parse_http_date(response.headers.get("last-modified")),
-            metadata={
-                "url": url,
-                "final_url": final_url,
-                "web_url": final_url,
-                "content_type": content_type,
-                "status_code": response.status_code,
-                "fetched_at": datetime.now(UTC).isoformat(),
-                "content_sha256": content_sha256,
-                **_response_cache_metadata(response.headers),
-            },
-        )
+    content_type = _normalise_content_type(response.headers.get("content-type", ""))
+    final_url = _canonical_url(response.url)
+    parsed = _parse_content(response.content, content_type, final_url)
+    content_sha256 = hashlib.sha256(response.content).hexdigest()
+    return EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id=final_url,
+        title=parsed.title,
+        content=parsed.content,
+        source_updated_at=_parse_http_date(response.headers.get("last-modified")),
+        metadata={
+            "url": url,
+            "final_url": final_url,
+            "web_url": final_url,
+            "content_type": content_type,
+            "status_code": response.status_code,
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "content_sha256": content_sha256,
+            **_response_cache_metadata(response.headers),
+        },
+    )
 
 
 async def fetch_http_document(
@@ -213,7 +204,7 @@ def _conditional_request_headers(metadata: dict[str, object]) -> dict[str, str]:
     return headers
 
 
-def _response_cache_metadata(headers: httpx.Headers) -> dict[str, str]:
+def _response_cache_metadata(headers: Mapping[str, str]) -> dict[str, str]:
     metadata: dict[str, str] = {}
     etag = headers.get("etag")
     if etag:
@@ -241,7 +232,7 @@ def _entity_metadata(entity: dict[str, object] | None) -> dict[str, object]:
 
 def _not_modified_entity(
     url: str,
-    response: httpx.Response,
+    response: HttpFetchResult,
     existing_entity: dict[str, object],
 ) -> EntityRecord:
     metadata: dict[str, str | int | float | bool | None] = {

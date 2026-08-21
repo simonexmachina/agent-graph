@@ -5,11 +5,17 @@ from __future__ import annotations
 # pyright: reportPrivateUsage=false
 import hashlib
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import agentgraph_connector_web
 import httpx
 import pytest
 from agentgraph_connector_web import UnsupportedFormatError, WebConnector
+from agentgraph_connector_web.http import (
+    HttpFetchResult,
+    _impersonation_headers,
+    fetch_http_resource,
+)
 
 from agentgraph.connectors.base import SourceReference
 
@@ -204,6 +210,66 @@ def test_conditional_request_headers_use_document_metadata() -> None:
         "If-None-Match": '"abc123"',
         "If-Modified-Since": "Mon, 08 Jun 2026 00:00:00 GMT",
     }
+
+
+@pytest.mark.asyncio
+async def test_fetch_http_resource_retries_cloudflare_challenge() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            headers={"cf-mitigated": "challenge"},
+            request=request,
+        )
+
+    fallback = HttpFetchResult(
+        url="https://example.com/page",
+        status_code=200,
+        headers={"content-type": "text/html"},
+        content=b"<title>Fetched</title>",
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with patch(
+            "agentgraph_connector_web.http._fetch_with_impersonation",
+            new=AsyncMock(return_value=fallback),
+        ) as fetch_fallback:
+            result = await fetch_http_resource(
+                "https://example.com/page",
+                headers={"Accept": "text/html", "User-Agent": "AgentGraph/0.1"},
+                max_bytes=1_000,
+                too_large_message="too large",
+                client=client,
+            )
+
+    assert result is fallback
+    fetch_fallback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_http_resource_does_not_retry_an_ordinary_forbidden_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with patch(
+            "agentgraph_connector_web.http._fetch_with_impersonation",
+            new=AsyncMock(),
+        ) as fetch_fallback:
+            with pytest.raises(httpx.HTTPStatusError):
+                await fetch_http_resource(
+                    "https://example.com/page",
+                    headers={"Accept": "text/html"},
+                    max_bytes=1_000,
+                    too_large_message="too large",
+                    client=client,
+                )
+
+    fetch_fallback.assert_not_awaited()
+
+
+def test_impersonation_headers_preserve_request_headers_without_agent_user_agent() -> None:
+    assert _impersonation_headers(  # noqa: SLF001
+        {"Accept": "text/html", "User-Agent": "AgentGraph/0.1", "If-None-Match": '"abc"'}
+    ) == {"Accept": "text/html", "If-None-Match": '"abc"'}
 
 
 @pytest.mark.asyncio

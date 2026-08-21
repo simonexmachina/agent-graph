@@ -20,6 +20,7 @@ from agentgraph_connector_rss import (
     _feed_id,
     _fetch_feed,
     _parse_authors,
+    _parse_feed,
     derive_observation_url_patterns,
     normalise_article_url,
 )
@@ -31,12 +32,14 @@ from agentgraph_connector_rss.auth import (
     import_opml_feeds,
     load_rss_config,
     parse_opml_feeds,
+    preview_feed,
     remove_feed_urls,
     resolve_feed_source,
     save_rss_config,
     select_opml_feeds,
     verify_rss_auth,
 )
+from agentgraph_connector_web.http import HttpFetchResult
 
 from agentgraph.connectors.base import EntityBatch, EntityRecord
 from agentgraph.core.context import set_backend
@@ -56,6 +59,13 @@ class _ParsedNonFeed:
     bozo_exception = None
     feed: dict[str, str] = {}
     entries: list[dict[str, str]] = []
+
+
+def _stub_auth_feed_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth._fetch_feed_content",
+        AsyncMock(return_value=b"feed"),
+    )
 
 
 def test_rss_can_handle_configured_feed_urls() -> None:
@@ -282,6 +292,7 @@ def test_add_feed_urls_creates_rss_config(
     saved: dict[str, object] = {}
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
+    _stub_auth_feed_fetch(monkeypatch)
     monkeypatch.setattr(
         "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
@@ -305,6 +316,7 @@ def test_add_feed_urls_rejects_invalid_feed_before_saving(
     saved: dict[str, object] = {}
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedNonFeed())
+    _stub_auth_feed_fetch(monkeypatch)
     monkeypatch.setattr(
         "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
@@ -593,6 +605,7 @@ def test_import_opml_prompt_uses_existing_rss_feed_config(
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
+    _stub_auth_feed_fetch(monkeypatch)
 
     def fake_select(
         feeds: list[OpmlFeed],
@@ -636,6 +649,7 @@ def test_rss_connector_import_opml_all(
     saved: dict[str, object] = {}
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
+    _stub_auth_feed_fetch(monkeypatch)
     monkeypatch.setattr(
         "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
@@ -674,6 +688,7 @@ def test_rss_connector_import_opml_select(
     saved: dict[str, object] = {}
 
     monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedFeed())
+    _stub_auth_feed_fetch(monkeypatch)
     monkeypatch.setattr(
         "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
@@ -765,6 +780,64 @@ async def test_fetch_feed_maps_entries_to_documents(monkeypatch: pytest.MonkeyPa
     assert entry.metadata["web_url"] == "https://example.com/first"
     assert entry.metadata["author"] == "Author Name"
     assert batch.edges[0].edge_type == "posted_in"
+
+
+@pytest.mark.asyncio
+async def test_parse_feed_uses_shared_web_http_fetcher(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = HttpFetchResult(
+        url="https://example.com/feed.xml",
+        status_code=200,
+        headers={"content-type": "application/rss+xml"},
+        content=b"""<?xml version=\"1.0\"?>
+<rss version=\"2.0\"><channel><title>Example</title><item><title>One</title></item></channel></rss>""",
+    )
+    fetch = AsyncMock(return_value=response)
+    monkeypatch.setattr("agentgraph_connector_rss.fetch_http_resource", fetch)
+
+    parsed = await _parse_feed("https://example.com/feed.xml")
+
+    assert parsed.feed.title == "Example"
+    fetch.assert_awaited_once()
+    assert fetch.await_args.kwargs["max_bytes"] == 5_000_000
+
+
+def test_resolve_feed_source_uses_shared_web_http_fetcher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = HttpFetchResult(
+        url="https://example.com/feed.xml",
+        status_code=200,
+        headers={"content-type": "application/rss+xml"},
+        content=b"""<?xml version=\"1.0\"?>
+<rss version=\"2.0\"><channel><title>Example</title></channel></rss>""",
+    )
+    fetch = AsyncMock(return_value=response)
+    monkeypatch.setattr("agentgraph_connector_rss.auth.fetch_http_resource", fetch)
+
+    assert resolve_feed_source("https://example.com/feed.xml") == "https://example.com/feed.xml"
+    fetch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_preview_feed_uses_shared_web_http_fetcher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = HttpFetchResult(
+        url="https://example.com/feed.xml",
+        status_code=200,
+        headers={"content-type": "application/rss+xml"},
+        content=b"""<?xml version=\"1.0\"?>
+<rss version=\"2.0\"><channel><title>Example</title><item><title>One</title>
+<link>https://example.com/one</link></item></channel></rss>""",
+    )
+    fetch = AsyncMock(return_value=response)
+    monkeypatch.setattr("agentgraph_connector_rss.auth.fetch_http_resource", fetch)
+
+    preview = await preview_feed("https://example.com/feed.xml")
+
+    assert preview["title"] == "Example"
+    assert preview["entries"] == [{"title": "One", "link": "https://example.com/one"}]
+    fetch.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import tomllib
 from pathlib import Path
@@ -13,6 +14,7 @@ from urllib.parse import unquote, urlparse
 from xml.etree import ElementTree
 
 import yaml
+from agentgraph_connector_web import fetch_http_resource
 from pydantic import BaseModel, Field
 
 
@@ -255,7 +257,28 @@ def resolve_feed_source(source: str) -> str:
 def _parse_feed(feed_url: str) -> Any:
     import feedparser  # type: ignore[import-untyped]
 
-    return feedparser.parse(feed_url)
+    if urlparse(feed_url).scheme not in {"http", "https"}:
+        return feedparser.parse(feed_url)
+    return feedparser.parse(asyncio.run(_fetch_feed_content(feed_url)))
+
+
+async def _fetch_feed_content(feed_url: str) -> bytes:
+    response = await fetch_http_resource(
+        feed_url,
+        headers={
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+        },
+        max_bytes=5_000_000,
+        too_large_message="RSS feed response too large: limit is 5000000 bytes",
+    )
+    return response.content
+
+
+async def _parse_remote_feed(feed_url: str) -> Any:
+    import feedparser  # type: ignore[import-untyped]
+
+    content = await _fetch_feed_content(feed_url)
+    return await asyncio.to_thread(feedparser.parse, content)
 
 
 def _is_valid_feed(parsed: Any) -> bool:
@@ -441,11 +464,12 @@ def _prompt_for_opml_feeds_numeric(feeds: list[OpmlFeed]) -> list[OpmlFeed]:
 
 async def preview_feed(feed_url: str, *, count: int = 3) -> dict[str, Any]:
     """Fetch and parse a small preview from an RSS/Atom feed URL."""
-    import asyncio
-
     import feedparser  # type: ignore[import-untyped]
 
-    parsed: Any = await asyncio.to_thread(feedparser.parse, feed_url)
+    if urlparse(feed_url).scheme in {"http", "https"}:
+        parsed: Any = await _parse_remote_feed(feed_url)
+    else:
+        parsed = await asyncio.to_thread(feedparser.parse, feed_url)
     entries = [
         {
             "title": str(

@@ -17,6 +17,7 @@ from typing import Any, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
+from agentgraph_connector_web import fetch_http_resource
 
 from agentgraph.connectors.base import (
     BaseConnector,
@@ -387,20 +388,17 @@ async def _parse_feed(feed_url: str) -> Any:
 
     import feedparser  # type: ignore[import-untyped]
 
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        max_redirects=5,
-        timeout=_FEED_TIMEOUT,
+    response = await fetch_http_resource(
+        feed_url,
         headers={
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
         },
-    ) as client:
-        response = await client.get(feed_url)
-        response.raise_for_status()
-        content = response.content
-        if len(content) > _MAX_FEED_BYTES:
-            raise ValueError(f"RSS feed response too large: limit is {_MAX_FEED_BYTES} bytes")
-        return await asyncio.to_thread(feedparser.parse, content)
+        max_bytes=_MAX_FEED_BYTES,
+        too_large_message=f"RSS feed response too large: limit is {_MAX_FEED_BYTES} bytes",
+        timeout=_FEED_TIMEOUT,
+        max_redirects=5,
+    )
+    return await asyncio.to_thread(feedparser.parse, response.content)
 
 
 def _rss_usage() -> str:
