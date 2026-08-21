@@ -401,9 +401,15 @@ def connector_command(
             result["deleted_entities"] = run_graph_operation(lambda: execute_deletions(effects))
         if effects.fetch_references:
             from agentgraph.cli_query import run_graph_operation
-            from agentgraph.connectors.command_effects import execute_fetches
+            from agentgraph.connectors.command_effects import (
+                execute_fetches,
+                fetch_effect_error_hint,
+            )
 
-            result["fetched"] = run_graph_operation(lambda: execute_fetches(effects))
+            result["fetched"] = run_graph_operation(
+                lambda: execute_fetches(effects),
+                error_hint=lambda error: fetch_effect_error_hint(effects, error, "cli"),
+            )
         if effects.poll:
             from agentgraph.cli_sync import queue_connector_poll
 

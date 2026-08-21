@@ -1303,6 +1303,31 @@ async def test_mcp_connector_command_executes_requested_fetch() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mcp_connector_web_fetch_size_limit_suggests_compact_command() -> None:
+    from agentgraph_connector_web import WebConnector
+
+    from agentgraph.mcp.server import run_connector_command_tool
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=WebConnector()),
+        patch(
+            "agentgraph.connectors.command_effects.execute_fetches",
+            new=AsyncMock(
+                side_effect=ValueError(
+                    "Response too large for web document: limit is 2000000 bytes"
+                )
+            ),
+        ),
+    ):
+        result = await run_connector_command_tool("web", ["fetch", "https://example.com/page"])
+
+    error = json.loads(result)["error"]
+    assert "Response too large for web document" in error
+    assert 'run_connector_command_tool("web", ["fetch", "https://example.com/page", "--compact"])' in error
+
+
+@pytest.mark.asyncio
 async def test_mcp_connector_command_reports_connector_load_error() -> None:
     from agentgraph.mcp.server import run_connector_command_tool
 

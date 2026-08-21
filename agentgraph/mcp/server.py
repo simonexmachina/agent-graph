@@ -306,6 +306,7 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         return json.dumps({"error": f"Unknown connector {source!r}"})
     if args in (["--help"], ["help"]):
         return json.dumps({"source": source, "help": type(connector).cli_help()})
+    effects = None
     try:
         result = type(connector).run_cli_command(args)
         effects = type(connector).command_effects(args, result)
@@ -333,7 +334,13 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             }
         return json.dumps(result, default=str)
     except (NotImplementedError, OSError, ValueError) as exc:
-        return json.dumps({"error": str(exc)})
+        hint = None
+        if effects is not None:
+            from agentgraph.connectors.command_effects import fetch_effect_error_hint
+
+            hint = fetch_effect_error_hint(effects, exc, "mcp")
+        error = f"{exc}\n{hint}" if hint else str(exc)
+        return json.dumps({"error": error})
 
 
 @mcp.tool(

@@ -2,10 +2,31 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from agentgraph.connectors.base import ConnectorCommandEffects
 from agentgraph.graph.delete import delete_platform_entity
+
+
+def fetch_effect_error_hint(
+    effects: ConnectorCommandEffects,
+    error: Exception,
+    audience: Literal["cli", "mcp"],
+) -> str | None:
+    """Return recovery guidance for a failed single-reference command fetch."""
+    if len(effects.fetch_references) != 1:
+        return None
+    from agentgraph.connectors.registry import get_connector
+
+    reference = effects.fetch_references[0]
+    connector = get_connector(reference.source)
+    if connector is None:
+        return None
+    hint_factory = getattr(connector, "fetch_error_hint", None)
+    if not callable(hint_factory):
+        return None
+    hint = hint_factory(reference.resource_id, error, audience)
+    return hint if isinstance(hint, str) else None
 
 
 async def execute_deletions(effects: ConnectorCommandEffects) -> list[dict[str, Any]]:

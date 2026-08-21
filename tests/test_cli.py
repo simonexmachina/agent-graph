@@ -1299,6 +1299,32 @@ def test_connector_command_executes_requested_fetch() -> None:
     run_operation.assert_called_once()
 
 
+def test_connector_web_fetch_size_limit_suggests_compact_command() -> None:
+    from agentgraph_connector_web import WebConnector
+
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=WebConnector()),
+        patch(
+            "agentgraph.connectors.command_effects.execute_fetches",
+            new=AsyncMock(
+                side_effect=ValueError(
+                    "Response too large for web document: limit is 2000000 bytes"
+                )
+            ),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["connector", "web", "fetch", "https://example.com/page"],
+        )
+
+    assert result.exit_code == 1
+    assert "Response too large for web document" in result.output
+    assert "agentgraph connector web fetch https://example.com/page --compact" in result.output
+
+
 def test_connector_command_queues_requested_ingest_for_account() -> None:
     class _IngestingGmailConnector(_FakeRssConnector):
         source = "gmail"
