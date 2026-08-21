@@ -289,6 +289,8 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
             ingest_connector_tool; ingest is connector-owned.
             Compact one-off web fetches are available as
             ["fetch", "https://example.com/page", "--compact"].
+            Web observation rules use ["watch", "<url-or-prefix>"] and
+            ["unwatch", "<url-or-prefix>"].
             Connector-owned help is available as ["--help"].
 
     Returns:

@@ -88,7 +88,7 @@ def test_web_config_round_trips_yaml_and_preserves_other_connectors(
     assert load_web_settings().observation_urls == ["http://localhost:3000/content/*"]
 
 
-def test_web_cli_add_remove_and_list(
+def test_web_cli_watch_unwatch_and_list(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -96,16 +96,16 @@ def test_web_cli_add_remove_and_list(
     monkeypatch.setattr("agentgraph.config.CONFIG_FILE", tmp_path / "config.toml")
     monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
 
-    added = WebConnector.run_cli_command(
-        ["add", "http://localhost:3000/page#section", "http://localhost:3000/*"]
+    watched = WebConnector.run_cli_command(
+        ["watch", "http://localhost:3000/page#section", "http://localhost:3000/*"]
     )
-    assert added["added"] == ["http://localhost:3000/page", "http://localhost:3000/*"]
+    assert watched["watched"] == ["http://localhost:3000/page", "http://localhost:3000/*"]
     assert WebConnector.run_cli_command(["list"])["observation_urls"] == [
         "http://localhost:3000/page",
         "http://localhost:3000/*",
     ]
-    removed = WebConnector.run_cli_command(["remove", "http://localhost:3000/page"])
-    assert removed["removed"] == ["http://localhost:3000/page"]
+    unwatched = WebConnector.run_cli_command(["unwatch", "http://localhost:3000/page"])
+    assert unwatched["unwatched"] == ["http://localhost:3000/page"]
 
 
 

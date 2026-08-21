@@ -24,7 +24,9 @@ Historical ingest is connector-owned. Gmail exposes `["ingest"]` and
 `["ingest", "--account", "user@example.com"]`; there is no separate
 `ingest_connector_tool`. The web connector accepts
 `["fetch", "https://example.com/page", "--compact"]` for a one-off compact HTML
-fetch. Discover other command sets with `args=["--help"]`.
+fetch, `["watch", "<url-or-prefix>"]` to add a browser observation rule, and
+`["unwatch", "<url-or-prefix>"]` to remove one. Discover other command sets with
+`args=["--help"]`.
 
 ## Returns
 

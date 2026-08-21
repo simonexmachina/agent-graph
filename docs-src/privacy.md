@@ -57,7 +57,7 @@ See [Entity retention](/retention.html) for the complete policy and expiration b
 
 - Run `agentgraph auth remove <provider>` or use the corresponding MCP authentication-removal tool to remove locally stored provider credentials.
 - Revoke AgentGraph in the connected provider's account or application settings to invalidate access at the source.
-- Remove configured RSS feeds or Web observation URLs with their connector `remove` commands. Removing an RSS feed also removes its feed Folder and edges; indexed articles follow normal retention.
+- Remove configured RSS feeds with `agentgraph connector rss remove` or watched web URLs with `agentgraph connector web unwatch`. Removing an RSS feed also removes its feed Folder and edges; indexed articles follow normal retention.
 - Stop `agentgraph serve` and remove the Chrome extension to stop browser observation.
 - Remove AgentGraph from the MCP client to stop that client reading the local graph.
 
