@@ -6,7 +6,7 @@ AgentGraph is a local-first, self-hosted CLI and MCP server that turns the sourc
 
 > **AgentGraph stores context; your agent reasons over it.** It is not an agent, chatbot, hosted graph service, or replacement for the tools you already use.
 
-[See the demo](docs-src/demo.md) · [Install](docs-src/install.md) · [Documentation](https://simonexmachina.github.io/agent-graph/) · [Chrome extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi)
+[See the demo](docs-src/demo.md) · [Install](docs-src/install.md) · [Documentation](https://agentgraph.simonwa.de/) · [Chrome extension](https://chromewebstore.google.com/detail/agentgraph-extension/iilkfclglabllelhjacijldknapbhidi)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs-src/assets/diagrams/architecture-overview-dark.svg">

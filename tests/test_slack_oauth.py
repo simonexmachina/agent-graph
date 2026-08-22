@@ -642,7 +642,7 @@ def test_non_admin_missing_workspace_gets_copyable_admin_request(
     assert "using the JSON manifest below" in output
     assert "Example request" in output
     assert "No client secret is needed" in output
-    assert "https://simonexmachina.github.io/agent-graph/" in output
+    assert "https://agentgraph.simonwa.de/" in output
     assert "AgentGraph Slack app manifest (JSON)" in output
     assert '"display_information": {' in output
     assert "agentgraph auth slack --add --client-id <client-id>" in output
@@ -686,7 +686,7 @@ def test_authorization_instructions_cover_slack_outcomes() -> None:
     assert "Slackbot confirms approval" in instructions
     assert "Message for your Slack Admin" in instructions
     assert "I'd like approval to connect AgentGraph to Slack" in instructions
-    assert "https://simonexmachina.github.io/agent-graph/" in instructions
+    assert "https://agentgraph.simonwa.de/" in instructions
     message = instructions.split("Message for your Slack Admin, you can use:\n\n", 1)[1]
     message = message.split("\n\n    Rerun this command", 1)[0]
     assert "\n" not in message
