@@ -17,11 +17,13 @@ Desktop OAuth client. It applies to Google Cloud project `agentswarm-491211`.
 
 Complete these items before asking Google to review the app:
 
-- Host the AgentGraph homepage, privacy policy, and Terms of Service on a custom
-  domain controlled by the project. The current `simonexmachina.github.io`
-  address cannot be verified through a DNS record owned by AgentGraph.
-- Verify the custom domain in [Google Search Console](https://search.google.com/search-console/about)
-  using a Google account that is an Owner or Editor of the Cloud project.
+- Keep the AgentGraph homepage (`https://agentgraph.simonwa.de/`), privacy
+  policy (`https://agentgraph.simonwa.de/privacy.html`), and Terms of Service
+  (`https://agentgraph.simonwa.de/terms.html`) publicly accessible on the
+  project-controlled custom domain.
+- Verify `simonwa.de` in [Google Search Console](https://search.google.com/search-console/about)
+  using a Google account that is an Owner or Editor of the Cloud project, then
+  add `agentgraph.simonwa.de` to Google Auth Platform's authorized domains.
 - Make the homepage publicly accessible, describe AgentGraph's functionality,
   and link to the same privacy policy and Terms of Service supplied to Google.
 - Confirm the published privacy policy still matches the released application's
