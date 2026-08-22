@@ -477,12 +477,16 @@ def test_auth_help() -> None:
     assert "status" in result.output.lower()
 
 
-def test_mcp_config_includes_desktop_setup() -> None:
+def test_mcp_config_includes_desktop_setup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["agentgraph"])
     result = runner.invoke(app, ["mcp-config"])
     assert result.exit_code == 0
     assert "Claude Desktop" in result.output
     assert "ChatGPT Desktop Work Mode" in result.output
     assert "Command to launch" in result.output
+    assert "Arguments" in result.output
+    chatgpt_instructions = result.output.split("Claude Desktop:", maxsplit=1)[0]
+    assert "Command to launch:\n  agentgraph\n  Arguments:\n  mcp-serve" in chatgpt_instructions
     assert "mcp-serve" in result.output
     assert "~/Library/Application Support/Claude/claude_desktop_config.json" in result.output
     assert '"mcpServers"' in result.output

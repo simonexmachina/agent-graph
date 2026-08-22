@@ -692,7 +692,6 @@ def onboard() -> None:
 def mcp_config() -> None:
     """Print MCP client setup instructions."""
     import json
-    import shlex
     import sys
 
     binary = sys.argv[0]
@@ -709,7 +708,9 @@ def mcp_config() -> None:
     typer.echo("\nChatGPT Desktop Work Mode:")
     typer.echo("  Add a local MCP server in the MCP configuration screen.")
     typer.echo("  Command to launch:")
-    typer.echo(f"  {shlex.join([binary, 'mcp-serve'])}")
+    typer.echo(f"  {binary}")
+    typer.echo("  Arguments:")
+    typer.echo("  mcp-serve")
     typer.echo()
     typer.echo("Claude Desktop:")
     typer.echo("  Add this to ~/Library/Application Support/Claude/claude_desktop_config.json:\n")

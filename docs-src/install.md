@@ -78,7 +78,7 @@ If you want to use AgentGraph from ChatGPT Desktop Work Mode or Claude Desktop i
 agentgraph mcp-config
 ```
 
-For ChatGPT Desktop Work Mode, enter the printed command in the local MCP server configuration screen. For Claude Desktop, add the printed JSON to its configuration file.
+For ChatGPT Desktop Work Mode, enter the printed executable in **Command to launch** and `mcp-serve` in **Arguments**. For Claude Desktop, add the printed JSON to its configuration file.
 
 For coding-agent clients, use their native terminal configuration commands instead.
 

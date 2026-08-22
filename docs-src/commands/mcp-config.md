@@ -26,6 +26,6 @@ agentgraph mcp-config
 agentgraph mcp-config
 ```
 
-For ChatGPT Desktop Work Mode, add a local MCP server in the MCP configuration screen and enter the printed `agentgraph mcp-serve` command in **Command to launch**.
+For ChatGPT Desktop Work Mode, add a local MCP server in the MCP configuration screen. Enter the printed `agentgraph` executable in **Command to launch** and `mcp-serve` in **Arguments**.
 
 For Claude Desktop, add the printed JSON to `~/Library/Application Support/Claude/claude_desktop_config.json`.
