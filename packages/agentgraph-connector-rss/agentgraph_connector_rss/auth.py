@@ -8,13 +8,15 @@ from __future__ import annotations
 import asyncio
 import json
 import tomllib
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 from xml.etree import ElementTree
 
 import yaml
 from agentgraph_connector_web import fetch_http_resource
+from agentgraph_connector_web.http import HttpFetchResult
 from pydantic import BaseModel, Field
 
 
@@ -213,13 +215,13 @@ def add_feed_urls(
 def remove_feed_urls(
     feed_urls: list[str],
 ) -> tuple[RssConfig, list[str]]:
-    """Remove exact feed URLs from the configured RSS feed list."""
+    """Remove configured feeds supplied directly or through a feed discovery page."""
     selected_feed_urls = [part.strip() for part in feed_urls if part.strip()]
     if not selected_feed_urls:
         raise ValueError("Usage: agentgraph connector rss remove <feed-url> [feed-url...]")
 
     existing = load_rss_settings()
-    remove_set = set(selected_feed_urls)
+    remove_set = set(_resolve_configured_feed_sources(selected_feed_urls, existing.feed_urls))
     updated_feed_urls = [feed_url for feed_url in existing.feed_urls if feed_url not in remove_set]
     removed_feed_urls = [feed_url for feed_url in existing.feed_urls if feed_url in remove_set]
     if not removed_feed_urls:
@@ -243,15 +245,33 @@ def resolve_feed_sources(sources: list[str]) -> list[str]:
 
 
 def resolve_feed_source(source: str) -> str:
-    """Return the supplied source if it is a valid RSS/Atom feed."""
+    """Return a direct feed URL or the first RSS/Atom alternate link it advertises."""
     candidate = source.strip()
     if not candidate:
         raise ValueError("RSS feed URL cannot be empty")
 
-    parsed = _parse_feed(candidate)
+    parsed, content, base_url = _parse_feed_source(candidate)
     if _is_valid_feed(parsed):
         return candidate
+    alternate_feed_url = _find_alternate_feed_url(content, base_url)
+    if alternate_feed_url is not None and _is_valid_feed(_parse_feed(alternate_feed_url)):
+        return alternate_feed_url
     raise ValueError(f"Not a valid RSS/Atom feed: {candidate}")
+
+
+def _resolve_configured_feed_sources(sources: list[str], configured_feed_urls: list[str]) -> list[str]:
+    """Resolve page sources only when an input is not already a configured feed URL."""
+    configured = set(configured_feed_urls)
+    return [source if source in configured else resolve_feed_source(source) for source in sources]
+
+
+def _parse_feed_source(feed_url: str) -> tuple[Any, bytes | None, str]:
+    import feedparser  # type: ignore[import-untyped]
+
+    if urlparse(feed_url).scheme not in {"http", "https"}:
+        return feedparser.parse(feed_url), _read_local_source_content(feed_url), feed_url
+    response = asyncio.run(_fetch_feed_response(feed_url))
+    return feedparser.parse(response.content), response.content, response.url
 
 
 def _parse_feed(feed_url: str) -> Any:
@@ -262,8 +282,22 @@ def _parse_feed(feed_url: str) -> Any:
     return feedparser.parse(asyncio.run(_fetch_feed_content(feed_url)))
 
 
-async def _fetch_feed_content(feed_url: str) -> bytes:
-    response = await fetch_http_resource(
+def _read_local_source_content(source: str) -> bytes | None:
+    parsed = urlparse(source)
+    if parsed.scheme == "file":
+        path = Path(unquote(parsed.path))
+    elif not parsed.scheme:
+        path = Path(source)
+    else:
+        return None
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+async def _fetch_feed_response(feed_url: str) -> HttpFetchResult:
+    return await fetch_http_resource(
         feed_url,
         headers={
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
@@ -271,7 +305,10 @@ async def _fetch_feed_content(feed_url: str) -> bytes:
         max_bytes=5_000_000,
         too_large_message="RSS feed response too large: limit is 5000000 bytes",
     )
-    return response.content
+
+
+async def _fetch_feed_content(feed_url: str) -> bytes:
+    return (await _fetch_feed_response(feed_url)).content
 
 
 async def _parse_remote_feed(feed_url: str) -> Any:
@@ -288,6 +325,44 @@ def _is_valid_feed(parsed: Any) -> bool:
     feed = cast(dict[str, Any], getattr(parsed, "feed", {}) or {})
     entries = cast(list[Any], getattr(parsed, "entries", []) or [])
     return bool(feed or entries)
+
+
+class _AlternateFeedLinkParser(HTMLParser):
+    """Find the first RSS or Atom alternate link in an HTML document."""
+
+    def __init__(self, base_url: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._base_url = base_url
+        self.feed_url: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "link" or self.feed_url is not None:
+            return
+        attributes = dict(attrs)
+        rel = attributes.get("rel")
+        feed_type = attributes.get("type")
+        href = attributes.get("href")
+        if rel is None or feed_type is None or href is None:
+            return
+        if "alternate" not in rel.lower().split():
+            return
+        media_type = feed_type.split(";", maxsplit=1)[0].strip().lower()
+        if media_type not in {"application/rss+xml", "application/atom+xml"}:
+            return
+        feed_url = urljoin(self._base_url, href)
+        if urlparse(feed_url).scheme in {"", "file", "http", "https"}:
+            self.feed_url = feed_url
+
+
+def _find_alternate_feed_url(content: bytes | None, base_url: str) -> str | None:
+    if content is None:
+        return None
+    parser = _AlternateFeedLinkParser(base_url)
+    try:
+        parser.feed(content.decode("utf-8", errors="replace"))
+    except ValueError:
+        return None
+    return parser.feed_url
 
 
 def parse_opml_feeds(path: str | Path) -> list[OpmlFeed]:

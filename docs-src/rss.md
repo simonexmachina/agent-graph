@@ -31,25 +31,30 @@ uv sync --extra rss
 
 ## Add feeds
 
-Add one or more feed URLs:
+Add one or more feed URLs or pages that advertise a feed:
 
 ```bash
 agentgraph connector rss add https://example.com/feed.xml
 ```
 
-AgentGraph validates every supplied URL as an RSS or Atom feed before saving it.
-HTML pages and invalid feeds are rejected without changing the connector
-configuration. A successful add queues an RSS poll immediately.
+AgentGraph validates every supplied URL as an RSS or Atom feed before saving it. It
+also discovers the first `<link rel="alternate">` with type `application/rss+xml`
+or `application/atom+xml` on an HTML page, resolving relative links after redirects.
+Invalid feeds and pages without a valid advertised feed are rejected without changing
+the connector configuration. A successful add queues an RSS poll immediately.
 
 ## Remove feeds
 
-Remove one or more exact configured feed URLs:
+Remove one or more configured feed URLs or pages that advertise those feeds:
 
 ```bash
 agentgraph connector rss remove https://example.com/feed.xml
 ```
 
-Removing a feed also deletes its feed `Folder` and relationships. Indexed articles remain in the graph and expire under the normal retention policy.
+Direct feed URLs are matched exactly without a network request. A page URL is resolved
+to its first advertised RSS or Atom feed before removal. Removing a feed also deletes
+its feed `Folder` and relationships. Indexed articles remain in the graph and expire
+under the normal retention policy.
 
 ## Import OPML
 

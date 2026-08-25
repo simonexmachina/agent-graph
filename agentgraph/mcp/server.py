@@ -279,10 +279,13 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         source: Connector source, e.g. "rss".
         args: Connector command and arguments, e.g.
             ["add", "https://simonwillison.net/atom/everything/"].
-            RSS add validates the supplied URLs as feeds before saving and
-            queues an RSS poll after a successful change.
+            RSS add accepts direct RSS/Atom feeds or HTML pages advertising one
+            through their first alternate RSS/Atom link, validates the resolved
+            feed before saving, and queues an RSS poll after a successful change.
             RSS remove deletes the configured feed's local Folder and feed edges, while
-            leaving indexed articles subject to their normal retention. It is available as:
+            leaving indexed articles subject to their normal retention. It accepts
+            direct configured feed URLs or pages advertising configured feeds. It is
+            available as:
             ["remove", "https://simonwillison.net/atom/everything/"].
             RSS OPML import is also available as:
             ["import-opml", "/path/to/feeds.opml", "--all"] or

@@ -63,8 +63,15 @@ class _ParsedNonFeed:
 
 def _stub_auth_feed_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "agentgraph_connector_rss.auth._fetch_feed_content",
-        AsyncMock(return_value=b"feed"),
+        "agentgraph_connector_rss.auth.fetch_http_resource",
+        AsyncMock(
+            return_value=HttpFetchResult(
+                url="https://example.com/feed.xml",
+                status_code=200,
+                headers={"content-type": "application/rss+xml"},
+                content=b"feed",
+            )
+        ),
     )
 
 
@@ -336,6 +343,7 @@ def test_remove_feed_urls_updates_existing_rss_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     saved: dict[str, object] = {}
+    fetch = AsyncMock()
 
     monkeypatch.setattr(
         "agentgraph_connector_rss.auth.load_rss_settings",
@@ -350,6 +358,7 @@ def test_remove_feed_urls_updates_existing_rss_config(
         "agentgraph_connector_rss.auth.save_rss_config",
         lambda data: saved.update({"data": data.model_dump(mode="json")}),
     )
+    monkeypatch.setattr("agentgraph_connector_rss.auth.fetch_http_resource", fetch)
 
     config, removed = remove_feed_urls(["https://example.com/two.xml"])
 
@@ -360,6 +369,7 @@ def test_remove_feed_urls_updates_existing_rss_config(
             "feed_urls": ["https://example.com/one.xml"],
         },
     }
+    fetch.assert_not_awaited()
 
 
 def test_remove_feed_urls_rejects_unconfigured_feed(
@@ -371,12 +381,53 @@ def test_remove_feed_urls_rejects_unconfigured_feed(
             feed_urls=["https://example.com/one.xml"],
         ),
     )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.resolve_feed_source",
+        lambda source: source,
+    )
 
     with pytest.raises(ValueError, match="No matching RSS feed URLs"):
         remove_feed_urls(["https://example.com/missing.xml"])
 
 
-def test_resolve_feed_source_rejects_html_file(
+def test_remove_feed_urls_discovers_configured_feed_from_html_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: dict[str, object] = {}
+    fetch = AsyncMock(
+        side_effect=[
+            HttpFetchResult(
+                url="https://example.com/blog/",
+                status_code=200,
+                headers={"content-type": "text/html"},
+                content=b"<link rel=\"alternate\" type=\"application/rss+xml\" href=\"/feed.xml\">",
+            ),
+            HttpFetchResult(
+                url="https://example.com/feed.xml",
+                status_code=200,
+                headers={"content-type": "application/rss+xml"},
+                content=b"<rss version=\"2.0\"><channel><title>Example</title></channel></rss>",
+            ),
+        ]
+    )
+    monkeypatch.setattr("agentgraph_connector_rss.auth.fetch_http_resource", fetch)
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.load_rss_settings",
+        lambda account_id=None: RssConfig(feed_urls=["https://example.com/feed.xml"]),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.save_rss_config",
+        lambda data: saved.update({"data": data.model_dump(mode="json")}),
+    )
+
+    config, removed = remove_feed_urls(["https://example.com/blog"])
+
+    assert removed == ["https://example.com/feed.xml"]
+    assert config.feed_urls == []
+    assert saved == {"data": {"feed_urls": []}}
+
+
+def test_resolve_feed_source_discovers_rss_alternate_link_from_html_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -392,26 +443,105 @@ def test_resolve_feed_source_rejects_html_file(
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedNonFeed())
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.fetch_http_resource",
+        AsyncMock(
+            return_value=HttpFetchResult(
+                url="https://example.com/feed.xml",
+                status_code=200,
+                headers={"content-type": "application/rss+xml"},
+                content=b"<rss version=\"2.0\"><channel><title>Example</title></channel></rss>",
+            )
+        ),
+    )
 
-    with pytest.raises(ValueError, match="Not a valid RSS/Atom feed"):
-        resolve_feed_source(str(html_path))
+    assert resolve_feed_source(str(html_path)) == "https://example.com/feed.xml"
 
 
-def test_rss_connector_add_rejects_html_without_saving(
-    tmp_path: Path,
+def test_resolve_feed_source_discovers_first_atom_or_rss_alternate_link(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    html_path = tmp_path / "index.html"
-    html_path.write_text(
-        """<html><head>
-<link rel="alternate" type="application/atom+xml" href="https://example.com/atom.xml">
+    responses = [
+        HttpFetchResult(
+            url="https://www.example.com/blog/",
+            status_code=200,
+            headers={"content-type": "text/html"},
+            content=b"""<html><head>
+<link rel="alternate" type="application/atom+xml" href="feeds/first.atom">
+<link rel="alternate" type="application/rss+xml" href="/feeds/second.xml">
 </head></html>""",
-        encoding="utf-8",
+        ),
+        HttpFetchResult(
+            url="https://www.example.com/blog/feeds/first.atom",
+            status_code=200,
+            headers={"content-type": "application/atom+xml"},
+            content=b"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+<title>Example</title><entry><title>One</title><id>one</id></entry></feed>""",
+        ),
+    ]
+    fetch = AsyncMock(side_effect=responses)
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.fetch_http_resource",
+        fetch,
     )
-    saved: dict[str, object] = {}
 
-    monkeypatch.setattr(feedparser, "parse", lambda source: _ParsedNonFeed())
+    assert resolve_feed_source("https://example.com/redirected-blog") == (
+        "https://www.example.com/blog/feeds/first.atom"
+    )
+    assert fetch.await_count == 2
+
+
+def test_rss_connector_add_saves_discovered_feed_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: dict[str, object] = {}
+    fetch = AsyncMock(
+        side_effect=[
+            HttpFetchResult(
+                url="https://example.com/",
+                status_code=200,
+                headers={"content-type": "text/html"},
+                content=b"""<link rel="alternate" type="application/rss+xml" href="feed.xml">""",
+            ),
+            HttpFetchResult(
+                url="https://example.com/feed.xml",
+                status_code=200,
+                headers={"content-type": "application/rss+xml"},
+                content=b"<rss version=\"2.0\"><channel><title>Example</title></channel></rss>",
+            ),
+        ]
+    )
+    monkeypatch.setattr("agentgraph_connector_rss.auth.fetch_http_resource", fetch)
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.load_rss_settings",
+        lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
+    )
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.save_rss_config",
+        lambda data: saved.update({"data": data.model_dump(mode="json")}),
+    )
+
+    result = RssConnector.run_cli_command(["add", "https://example.com/home"])
+
+    assert result["added"] == ["https://example.com/feed.xml"]
+    assert saved == {"data": {"feed_urls": ["https://example.com/feed.xml"]}}
+
+
+def test_rss_connector_add_rejects_html_without_valid_alternate_feed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved: dict[str, object] = {}
+    monkeypatch.setattr(
+        "agentgraph_connector_rss.auth.fetch_http_resource",
+        AsyncMock(
+            return_value=HttpFetchResult(
+                url="https://example.com/",
+                status_code=200,
+                headers={"content-type": "text/html"},
+                content=b"<html><head><title>No feed</title></head></html>",
+            )
+        ),
+    )
     monkeypatch.setattr(
         "agentgraph_connector_rss.auth.load_rss_settings",
         lambda account_id=None: (_ for _ in ()).throw(RuntimeError("missing")),
@@ -422,7 +552,7 @@ def test_rss_connector_add_rejects_html_without_saving(
     )
 
     with pytest.raises(ValueError, match="Not a valid RSS/Atom feed"):
-        RssConnector.run_cli_command(["add", str(html_path)])
+        RssConnector.run_cli_command(["add", "https://example.com/home"])
 
     assert saved == {}
 

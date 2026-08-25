@@ -403,8 +403,8 @@ async def _parse_feed(feed_url: str) -> Any:
 
 def _rss_usage() -> str:
     return (
-        "Usage: agentgraph connector rss add <feed-url> [feed-url...]\n"
-        "   or: agentgraph connector rss remove <feed-url> [feed-url...]\n"
+        "Usage: agentgraph connector rss add <feed-or-page-url> [feed-or-page-url...]\n"
+        "   or: agentgraph connector rss remove <feed-or-page-url> [feed-or-page-url...]\n"
         "   or: agentgraph connector rss import-opml <file.opml> [--all | --select <indexes>]"
     )
 
@@ -417,10 +417,10 @@ def _rss_help() -> str:
             _rss_usage(),
             "",
             "Commands:",
-            "  add <feed-url> [feed-url...]",
-            "      Validate and add one or more RSS/Atom feeds, then queue an RSS poll.",
-            "  remove <feed-url> [feed-url...]",
-            "      Remove feed URLs and their local feed Folders; indexed articles remain.",
+            "  add <feed-or-page-url> [feed-or-page-url...]",
+            "      Add RSS/Atom feeds or pages advertising one, then queue an RSS poll.",
+            "  remove <feed-or-page-url> [feed-or-page-url...]",
+            "      Remove feeds or pages advertising them and their local feed Folders.",
             "  import-opml <file.opml> [--all | --select <indexes>]",
             "      Import RSS/Atom feed URLs from an OPML file. Omit flags for checkbox selection.",
             "",
