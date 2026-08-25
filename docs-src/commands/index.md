@@ -36,7 +36,7 @@ aliases = ["commands.html"]
 
 - [`onboard`](/commands/onboard.html) - interactive connector setup.
 - [`auth`](/commands/auth.html) - manage connector authentication.
-- [`install-skill`](/commands/install-skill.html) - install the bundled AgentGraph skill for an agent.
+- [`install-skill`](/commands/install-skill.html) - install the bundled agentgraph skill for an agent.
 
 ## Server and transport
 

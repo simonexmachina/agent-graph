@@ -59,7 +59,7 @@ def test_slack_auth_skill_documents_oauth_and_explicit_fallback() -> None:
 
 def test_agentgraph_skill_has_cli_and_mcp_auth_parity() -> None:
     operations = (
-        ROOT / ".agents" / "skills" / "AgentGraph" / "references" / "operations.md"
+        ROOT / ".agents" / "skills" / "agentgraph" / "references" / "operations.md"
     ).read_text()
     assert "agentgraph auth <provider>" in operations
     assert "list_auth_providers_tool" in operations

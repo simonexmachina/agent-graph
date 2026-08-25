@@ -87,7 +87,7 @@ commands, request permission to contact the configured localhost server and retr
 ```bash
 agentgraph mcp-config
 agentgraph mcp-serve
-agentgraph install-skill [AgentGraph] [--target user|project] [--no-claude] [--force] [--json]
+agentgraph install-skill [agentgraph] [--target user|project] [--no-claude] [--force] [--json]
 ```
 
 `agentgraph mcp-config` prints local stdio setup for ChatGPT Desktop Work Mode and

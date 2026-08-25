@@ -56,9 +56,9 @@ Run guided onboarding to set up each installed connector that provides an intera
 agentgraph onboard
 ```
 
-## Install the AgentGraph skill
+## Install the agentgraph skill
 
-The following command will install an AgentGraph skill in `~/.agents/skills` and `~/.claude/skills`:
+The following command installs the `agentgraph` skill in `~/.agents/skills` and `~/.claude/skills`:
 
 ```bash
 agentgraph install-skill

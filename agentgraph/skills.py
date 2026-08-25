@@ -46,9 +46,11 @@ def _bundled_skill_roots() -> list[Path]:
 def _find_source_skill(skill: str, source_root: Path | None) -> Path:
     roots = [source_root] if source_root is not None else _bundled_skill_roots()
     for root in roots:
-        candidate = root / skill
-        if (candidate / "SKILL.md").is_file():
-            return candidate
+        if not root.is_dir():
+            continue
+        for candidate in root.iterdir():
+            if candidate.name == skill and (candidate / "SKILL.md").is_file():
+                return candidate
 
     searched = ", ".join(str(root) for root in roots)
     raise SkillInstallError(f"Skill {skill!r} was not found. Searched: {searched}")
@@ -82,7 +84,7 @@ def _remove_path(path: Path) -> None:
 
 
 def install_skill(
-    skill: str = "AgentGraph",
+    skill: str = "agentgraph",
     *,
     target: SkillTarget = "user",
     force: bool = False,

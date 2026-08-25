@@ -1,5 +1,5 @@
 ---
-name: AgentGraph
+name: agentgraph
 description: Use AgentGraph through its CLI or MCP tools to search and traverse selected local context, retrieve full source-backed evidence, fetch missing or stale resources, and troubleshoot connector availability.
 ---
 
