@@ -299,6 +299,30 @@ def test_list_highlights_selected_entity_and_updates_on_row_click(page: Page) ->
         expect(second_row).to_have_attribute("aria-selected", "true")
 
 
+def test_list_displays_and_sorts_by_source_timestamps_without_an_id_column(page: Page) -> None:
+    node = _node(1, "Source timestamped document")
+    node.update(
+        {
+            "source_created_at": "2026-05-30T03:00:00Z",
+            "source_updated_at": "2026-05-31T04:00:00Z",
+        }
+    )
+    with _serve_viewer([node], []) as url:
+        page.goto(f"{url}?view=list")
+
+        headers = page.locator("#node-list thead th")
+        expect(headers).to_contain_text(["Source created", "Source updated"])
+        expect(headers.filter(has_text="ID")).to_have_count(0)
+
+        row = page.locator("#node-list-body tr")
+        expect(row).to_have_count(1)
+        expect(row).to_contain_text("5/30/2026")
+        expect(row).to_contain_text("5/31/2026")
+
+        page.locator('#viewer-order-select').select_option("source_created_at")
+        expect(page).to_have_url(f"{url}?limit=20&view=list&sort=source_created_at")
+
+
 def test_connected_long_label_graph_keeps_nodes_separate(page: Page) -> None:
     nodes = [
         _node(index, f"Long RSS article title {index}: " + "A detailed discussion of agent systems " * 3)

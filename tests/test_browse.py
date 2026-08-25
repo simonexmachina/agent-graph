@@ -337,6 +337,11 @@ def test_viewer_has_shared_order_controls() -> None:
     assert 'value="display_name">Name</option>' in viewer_html
     assert 'value="observed_at">Observed</option>' in viewer_html
     assert 'data-sort="observed_at">Observed</button>' in viewer_html
+    assert 'value="source_created_at">Source created</option>' in viewer_html
+    assert 'value="source_updated_at">Source updated</option>' in viewer_html
+    assert 'data-sort="source_created_at">Source created</button>' in viewer_html
+    assert 'data-sort="source_updated_at">Source updated</button>' in viewer_html
+    assert '<th scope="col">ID</th>' not in viewer_html
     assert 'id="viewer-order-direction"' in viewer_html
     assert '>↓</button>' in viewer_html
     assert "function updateViewerOrderControls(params)" in viewer_html

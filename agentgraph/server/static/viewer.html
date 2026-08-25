@@ -298,7 +298,7 @@
 
   #node-list {
     width: 100%;
-    min-width: 1120px;
+    min-width: 1290px;
     border-collapse: collapse;
     color: var(--text);
   }
@@ -340,9 +340,9 @@
   #node-list td:nth-child(4),
   #node-list td:nth-child(5),
   #node-list td:nth-child(6),
-  #node-list td:nth-child(7) { width: 175px; white-space: nowrap; }
-  #node-list td:nth-child(8) { width: 80px; text-align: right; }
-  #node-list td:nth-child(9) { min-width: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  #node-list td:nth-child(7),
+  #node-list td:nth-child(8) { width: 175px; white-space: nowrap; }
+  #node-list td:nth-child(9) { width: 80px; text-align: right; }
 
   .list-sort {
     width: auto;
@@ -963,6 +963,8 @@
         <option value="observed_at">Observed</option>
         <option value="created_at">Created</option>
         <option value="updated_at">Updated</option>
+        <option value="source_created_at">Source created</option>
+        <option value="source_updated_at">Source updated</option>
       </select>
       <button id="viewer-order-direction" type="button" aria-label="Toggle order direction">↓</button>
     </div>
@@ -978,8 +980,9 @@
               <th scope="col"><button class="list-sort" type="button" data-sort="observed_at">Observed</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="created_at">Created</button></th>
               <th scope="col"><button class="list-sort" type="button" data-sort="updated_at">Updated</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="source_created_at">Source created</button></th>
+              <th scope="col"><button class="list-sort" type="button" data-sort="source_updated_at">Source updated</button></th>
               <th scope="col">Observation time</th>
-              <th scope="col">ID</th>
             </tr>
           </thead>
           <tbody id="node-list-body"></tbody>
@@ -1827,8 +1830,9 @@
       addListCell(row, formatDate(entity.observed_at));
       addListCell(row, formatDate(entity.created_at));
       addListCell(row, formatDate(entity.updated_at));
+      addListCell(row, formatDate(entity.source_created_at));
+      addListCell(row, formatDate(entity.source_updated_at));
       addListCell(row, formatObservationDuration(entity.cumulative_observation_duration_ms));
-      addListCell(row, entity.id);
       row.addEventListener('click', () => showEntityDetail(entity.id));
       row.addEventListener('dblclick', () => focusNode(entity.id));
       row.addEventListener('keydown', event => {
