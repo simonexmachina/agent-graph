@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, cast
 
 import questionary  # type: ignore[import-untyped]
 import typer
+from rich.console import Console
+from rich.table import Table
 
 if TYPE_CHECKING:
     from agentgraph.connectors.base import BaseConnector
@@ -23,6 +25,7 @@ app = typer.Typer(
     help="Local knowledge graph for AI agents.",
     no_args_is_help=True,
 )
+console = Console()
 
 
 def _version_callback(value: bool) -> None:
@@ -80,6 +83,20 @@ def _status_label(status: str) -> str:
     return {"ok": "authenticated", "missing": "not authenticated", "invalid": "INVALID"}.get(
         status, status
     )
+
+
+def _connector_auth_label(item: dict[str, object]) -> str:
+    """Build the authentication cell for a connector status row."""
+    status = item["auth_status"]
+    if status is None:
+        return ""
+
+    status_label = str(status)
+    auth = _status_label(status_label)
+    detail = item["auth_detail"]
+    if detail:
+        auth = f"{auth} ({detail})" if status_label != "ok" else f"{auth} as {detail}"
+    return f"{auth} via {item['auth_provider']}"
 
 
 def _server_is_running() -> bool:
@@ -459,23 +476,22 @@ def list_connectors(
         typer.echo(_json.dumps(items, indent=2))
         return
 
+    table = Table(title="Connectors", show_lines=True)
+    table.add_column("Connector", style="bold", no_wrap=True)
+    table.add_column("Description", ratio=1)
+    table.add_column("Auth")
+    table.add_column("Sync")
+    table.add_column("Last sync", no_wrap=True)
     for item in items:
-        sync = str(item["sync"])
-        last_sync = str(item["last_sync"])
         desc = item["description"] or item["source"]
-        typer.echo(f"  {item['source']:<12}  {desc}")
-        status = item["auth_status"]
-        if status is None:
-            typer.echo(f"  {'':<12}  sync: {sync}  |  last sync: {last_sync}")
-            continue
-        status_label = str(status)
-        detail = item["auth_detail"]
-        auth = _status_label(status_label)
-        if detail:
-            auth = f"{auth} ({detail})" if status_label != "ok" else f"{auth} as {detail}"
-        typer.echo(
-            f"  {'':<12}  auth: {auth} via {item['auth_provider']}  |  sync: {sync}  |  last sync: {last_sync}"
+        table.add_row(
+            str(item["source"]),
+            str(desc),
+            _connector_auth_label(item),
+            str(item["sync"]),
+            str(item["last_sync"]),
         )
+    console.print(table)
 
 
 @app.command()

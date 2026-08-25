@@ -63,7 +63,7 @@ limit is applied. Compaction affects only that command; bookmarks, observations,
 article hydration, and background fetches retain the original HTML behavior.
 
 Connectors that do not use credentials, such as RSS and generic web, omit auth
-status in the human output and report `null` auth fields in JSON.
+status in the human-readable table and report `null` auth fields in JSON.
 
 Use `--verify` only when credential validity is uncertain; it performs live provider
 API checks before reporting connector status.

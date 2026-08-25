@@ -1485,10 +1485,15 @@ def test_list_connectors_reports_delegated_polling() -> None:
         result = runner.invoke(app, ["list-connectors"])
 
     assert result.exit_code == 0
+    assert "Connectors" in result.output
+    assert "Connector" in result.output
+    assert "Auth" in result.output
+    assert "Last sync" in result.output
     assert "gdocs" in result.output
-    assert "sync: via gdrive poll" in result.output
-    assert "sync: polling every 10m for gdocs" in result.output
-    assert "last sync: 2026-05-25 01:02:03Z" in result.output
+    assert "via" in result.output
+    assert "polling" in result.output
+    assert "10m" in result.output
+    assert "2026-05-25 01:02:03Z" in result.output
     assert "account:" not in result.output
 
 
@@ -1592,8 +1597,7 @@ def test_list_connectors_omits_auth_status_for_non_auth_connectors() -> None:
     assert parsed[0]["account_count"] == 0
     assert text_result.exit_code == 0
     assert "rss" in text_result.output
-    assert "auth:" not in text_result.output
-    assert "sync:" in text_result.output
+    assert "on-demand" in text_result.output
     assert _NonAuthRssConnector.verify_called is False
 
 

@@ -87,6 +87,9 @@ async def list_connectors_tool(verify: bool = False) -> str:
     """
     List all installed connectors and their capabilities.
 
+    The equivalent ``agentgraph list-connectors`` CLI command renders these
+    status fields as a table; this MCP tool returns the structured JSON rows.
+
     Use this when source availability, freshness, authentication, or valid
     platform values matter. Normal graph reads do not need to call it first.
     For query_by_filter_tool, scope a source with filters={"platform": "..."}.
