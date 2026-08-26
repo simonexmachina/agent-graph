@@ -211,6 +211,7 @@ class DiscordConnector(BaseConnector):
                 auth_group=cls.auth_label or cls.source,
                 source=cls.source,
                 user_id=account.get("bot_user_id"),
+                auth_method="bot-token",
             )
             for account in list_discord_accounts()
         ]

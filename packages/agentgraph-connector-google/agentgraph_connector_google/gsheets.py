@@ -129,6 +129,7 @@ class GoogleSheetsConnector(BaseConnector):
                 source=cls.source,
                 user_id=account.get("email"),
                 email=account.get("email"),
+                auth_method="oauth",
             )
             for account in list_google_accounts()
         ]
