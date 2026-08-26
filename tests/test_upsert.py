@@ -139,6 +139,66 @@ async def test_upsert_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
     assert edge_count == 1
 
 
+async def test_list_recent_metadata_by_group_returns_metadata_only_per_group(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    await upsert_batch(
+        EntityBatch(
+            entities=[
+                EntityRecord(
+                    entity_type="Document",
+                    platform="rss",
+                    platform_entity_id="feed-a-old",
+                    title="A old",
+                    content="old content",
+                    metadata={"feed_url": "https://example.com/a", "web_url": "https://a/old"},
+                    source_updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                EntityRecord(
+                    entity_type="Document",
+                    platform="rss",
+                    platform_entity_id="feed-a-new",
+                    title="A new",
+                    content="new content",
+                    metadata={"feed_url": "https://example.com/a", "web_url": "https://a/new"},
+                    source_updated_at=datetime(2026, 1, 2, tzinfo=UTC),
+                ),
+                EntityRecord(
+                    entity_type="Document",
+                    platform="rss",
+                    platform_entity_id="feed-b",
+                    title="B",
+                    content="other content",
+                    metadata={"feed_url": "https://example.com/b", "web_url": "https://b/post"},
+                    source_updated_at=datetime(2026, 1, 3, tzinfo=UTC),
+                ),
+            ]
+        )
+    )
+    await sqlite_backend._execute(
+        "UPDATE entities SET updated_at = ? WHERE platform_entity_id = ?",
+        ["2026-01-01T00:00:00Z", "feed-a-old"],
+    )
+    await sqlite_backend._execute(
+        "UPDATE entities SET updated_at = ? WHERE platform_entity_id = ?",
+        ["2026-01-02T00:00:00Z", "feed-a-new"],
+    )
+
+    metadata_rows = await sqlite_backend.list_recent_metadata_by_group(
+        "Document",
+        {"platform": "rss"},
+        "feed_url",
+        ["https://example.com/a", "https://example.com/b"],
+        1,
+        "updated_at",
+    )
+
+    assert metadata_rows == [
+        {"feed_url": "https://example.com/a", "web_url": "https://a/new"},
+        {"feed_url": "https://example.com/b", "web_url": "https://b/post"},
+    ]
+
+
 async def test_upsert_batch_maintains_one_current_fts_row_per_entity(
     sqlite_backend: SQLiteBackend,
 ) -> None:

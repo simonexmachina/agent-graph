@@ -137,6 +137,19 @@ class StorageBackend(ABC):
         has_attachments: bool = False,
     ) -> list[EntityResult]: ...
 
+    @abstractmethod
+    async def list_recent_metadata_by_group(
+        self,
+        entity_type: str,
+        filters: dict[str, str],
+        group_metadata_key: str,
+        group_values: list[str],
+        per_group_limit: int,
+        order_by: str,
+    ) -> list[dict[str, Any]]:
+        """Return metadata-only rows, capped per metadata group."""
+        ...
+
     # --- Read: edges ---
 
     @abstractmethod

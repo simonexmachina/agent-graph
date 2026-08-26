@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import feedparser  # type: ignore[import-untyped]
 import pytest
 from agentgraph_connector_rss import (
-    _MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES,
+    _MAX_OBSERVATION_ENTRIES_PER_FEED,
     FeedAuthor,
     RssConnector,
     _feed_id,
@@ -124,14 +124,9 @@ def test_derive_observation_patterns_remove_subsumed_specific_paths() -> None:
 async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None:
     feed_url = "https://example.com/feed.xml"
     backend = MagicMock()
-    backend.query_by_filter = AsyncMock(
+    backend.list_recent_metadata_by_group = AsyncMock(
         return_value=[
-            {
-                "metadata": {
-                    "feed_url": feed_url,
-                    "web_url": "https://example.com/articles/first",
-                }
-            }
+            {"feed_url": feed_url, "web_url": "https://example.com/articles/first"}
         ]
     )
     set_backend(backend)
@@ -143,13 +138,13 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
         patterns = await RssConnector().observation_url_patterns()
 
     assert patterns == ["https://example.com/*"]
-    backend.query_by_filter.assert_awaited_once_with(
+    backend.list_recent_metadata_by_group.assert_awaited_once_with(
         "Document",
         {"platform": "rss"},
-        _MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES,
+        "feed_url",
+        [feed_url],
+        _MAX_OBSERVATION_ENTRIES_PER_FEED,
         "updated_at",
-        None,
-        None,
     )
 
 
@@ -157,16 +152,11 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
 async def test_rss_observation_patterns_retry_after_an_empty_result() -> None:
     feed_url = "https://example.com/feed.xml"
     backend = MagicMock()
-    backend.query_by_filter = AsyncMock(
+    backend.list_recent_metadata_by_group = AsyncMock(
         side_effect=[
             [],
             [
-                {
-                    "metadata": {
-                        "feed_url": feed_url,
-                        "web_url": "https://example.com/articles/first",
-                    }
-                }
+                {"feed_url": feed_url, "web_url": "https://example.com/articles/first"}
             ],
         ]
     )

@@ -1454,6 +1454,59 @@ class SQLiteBackend(StorageBackend):
             )
         return [_row_to_entity(row) for row in rows]
 
+    async def list_recent_metadata_by_group(
+        self,
+        entity_type: str,
+        filters: dict[str, str],
+        group_metadata_key: str,
+        group_values: list[str],
+        per_group_limit: int,
+        order_by: str,
+    ) -> list[dict[str, Any]]:
+        if not group_values or per_group_limit <= 0:
+            return []
+        if order_by not in _VALID_ORDER_BY:
+            order_by = "updated_at"
+
+        params: list[Any] = [entity_type]
+        clauses: list[str] = []
+        for key, value in filters.items():
+            if key in _COLUMN_FILTERS:
+                clauses.append(f"e.{key} = ?")
+            else:
+                clauses.append(f"json_extract(e.metadata, '$.{key}') = ?")
+            params.append(value)
+
+        group_path = f"$.{group_metadata_key}"
+        value_placeholders = ", ".join("?" for _ in group_values)
+        clauses.append(f"json_extract(e.metadata, ?) IN ({value_placeholders})")
+        where_extra = " AND ".join(clauses)
+
+        with timed(
+            "sqlite.list_recent_metadata_by_group",
+            entity_type=entity_type,
+            per_group_limit=per_group_limit,
+            group_count=len(group_values),
+        ):
+            rows = await self._fetchall(
+                f"""
+                SELECT metadata FROM (
+                    SELECT e.metadata,
+                           json_extract(e.metadata, ?) AS group_value,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY json_extract(e.metadata, ?)
+                               ORDER BY e.{order_by} DESC
+                           ) AS group_rank
+                    FROM entities e
+                    WHERE e.entity_type = ? AND {where_extra}
+                )
+                WHERE group_rank <= ?
+                ORDER BY group_value, group_rank
+                """,
+                [group_path, group_path, *params, group_path, *group_values, per_group_limit],
+            )
+        return [json.loads(row["metadata"]) if row["metadata"] else {} for row in rows]
+
     # --- Read: edges ---
 
     async def get_edges(

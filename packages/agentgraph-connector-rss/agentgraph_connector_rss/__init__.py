@@ -48,7 +48,6 @@ _FEED_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _MAX_FEED_BYTES = 5_000_000
 _MAX_OBSERVATION_ENTRIES_PER_FEED = 8
 _MAX_OBSERVATION_PATTERNS_PER_FEED = 5
-_MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES = 2_000
 _TRACKING_QUERY_KEYS = {
     "fbclid",
     "gclid",
@@ -233,16 +232,16 @@ class RssConnector(BaseConnector):
             return []
 
         backend = get_backend()
-        entries = await backend.query_by_filter(
+        metadata_rows = await backend.list_recent_metadata_by_group(
             "Document",
             {"platform": self.source},
-            _MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES,
+            "feed_url",
+            settings.feed_urls,
+            _MAX_OBSERVATION_ENTRIES_PER_FEED,
             "updated_at",
-            None,
-            None,
         )
         derived_patterns = derive_observation_url_patterns(
-            _recent_entry_links_by_feed(entries, settings.feed_urls)
+            _recent_entry_links_by_feed(metadata_rows, settings.feed_urls)
         )
         patterns = list(dict.fromkeys(derived_patterns))
         # A transient database timeout must not prevent later metadata refreshes
@@ -808,15 +807,12 @@ def _is_tracking_query_key(key: str) -> bool:
 
 
 def _recent_entry_links_by_feed(
-    entries: Sequence[Mapping[str, object]],
+    metadata_rows: Sequence[Mapping[str, object]],
     feed_urls: Sequence[str],
 ) -> dict[str, list[str]]:
     configured_feeds = set(feed_urls)
     links_by_feed: dict[str, list[str]] = {}
-    for entry in entries:
-        metadata = entry.get("metadata")
-        if not isinstance(metadata, Mapping):
-            continue
+    for metadata in metadata_rows:
         feed_url = _metadata_str(metadata, "feed_url")
         if feed_url not in configured_feeds:
             continue
