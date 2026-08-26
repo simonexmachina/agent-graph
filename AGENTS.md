@@ -18,6 +18,10 @@ Whenever a CLI command is added or changed (`agentgraph/cli.py`, `agentgraph/cli
 
 - **Use `jq` for JSON parsing** in shell scripts and one-liners — prefer it over Python for command-line JSON manipulation.
 
+## Server Logs
+
+- For AgentGraph server runtime diagnostics, read `~/.agentgraph/agentgraph.log`. Do not use MCP transport logs as a substitute.
+
 ## Documentation Website
 
 - In this repository, “website” means the public documentation site hosted on GitHub Pages, built from `docs-src/` and previewed with `uv run python scripts/serve_docs.py` at `http://127.0.0.1:8001/`.
