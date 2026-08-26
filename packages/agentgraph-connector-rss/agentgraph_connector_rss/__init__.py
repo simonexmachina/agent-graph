@@ -253,6 +253,7 @@ class RssConnector(BaseConnector):
         settings = load_rss_settings(account_id)
         combined = EntityBatch()
         for feed_url in settings.feed_urls:
+            logger.info("Polling RSS feed %s", feed_url)
             try:
                 batch = await _fetch_feed(
                     feed_url,
