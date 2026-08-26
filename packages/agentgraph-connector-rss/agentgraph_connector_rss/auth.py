@@ -192,7 +192,7 @@ def _strip_managed_rss_config(content: str) -> str:
 def _strip_unmanaged_rss_config(content: str) -> str:
     """Remove a legacy RSS TOML table before replacing it with the managed block."""
     return re.sub(
-        r"(?ms)^\[connectors\.rss\]\s*\n.*?(?=^\[(?!\[?connectors\.rss(?:\.|\]))|\Z)",
+        r"(?ms)^\[connectors\.rss\]\s*\n.*?(?=^# BEGIN AgentGraph managed |^\[(?!\[?connectors\.rss(?:\.|\]))|\Z)",
         "",
         content,
     )

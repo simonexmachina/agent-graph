@@ -251,8 +251,10 @@ def test_save_rss_config_replaces_unmanaged_toml_table(
 default_account_id = "rss"
 feed_urls = ["https://example.com/old.xml"]
 
+# BEGIN AgentGraph managed web config
 [connectors.web]
 observation_urls = ["https://example.com/*"]
+# END AgentGraph managed web config
 """,
         encoding="utf-8",
     )
@@ -267,6 +269,8 @@ observation_urls = ["https://example.com/*"]
     assert parsed["connectors"]["rss"] == {"feed_urls": ["https://example.com/new.xml"]}
     assert parsed["connectors"]["web"] == {"observation_urls": ["https://example.com/*"]}
     assert rendered.count("[connectors.rss]") == 1
+    assert "# BEGIN AgentGraph managed web config" in rendered
+    assert "# END AgentGraph managed web config" in rendered
 
 
 def test_load_rss_config_recovers_duplicate_toml_tables(
