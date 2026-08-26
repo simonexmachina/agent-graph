@@ -241,7 +241,7 @@ class RssConnector(BaseConnector):
         for feed_url, entries in results:
             links_by_feed[feed_url] = _entry_links(entries)
         derived_patterns = derive_observation_url_patterns(links_by_feed)
-        self._observation_patterns = list(dict.fromkeys(derived_patterns))
+        self._observation_patterns = list(dict.fromkeys([*settings.feed_urls, *derived_patterns]))
         return self._observation_patterns
 
     async def ingest(
@@ -272,8 +272,13 @@ class RssConnector(BaseConnector):
             combined.entities.extend(batch.entities)
             combined.edges.extend(batch.edges)
             combined.persons.extend(batch.persons)
-        self._observation_patterns = derive_observation_url_patterns(
-            _entry_links_by_feed(combined.entities)
+        self._observation_patterns = list(
+            dict.fromkeys(
+                [
+                    *settings.feed_urls,
+                    *derive_observation_url_patterns(_entry_links_by_feed(combined.entities)),
+                ]
+            )
         )
         return combined
 

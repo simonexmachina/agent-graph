@@ -141,7 +141,7 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
     ):
         patterns = await RssConnector().observation_url_patterns()
 
-    assert patterns == ["https://example.com/*"]
+    assert patterns == [feed_url, "https://example.com/*"]
     backend.query_by_filter.assert_awaited_once_with(
         "Document",
         {"platform": "rss", "feed_url": feed_url},
