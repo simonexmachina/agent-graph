@@ -153,6 +153,28 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
 
 
 @pytest.mark.asyncio
+async def test_rss_observation_patterns_retry_after_an_empty_result() -> None:
+    feed_url = "https://example.com/feed.xml"
+    backend = MagicMock()
+    backend.query_by_filter = AsyncMock(
+        side_effect=[
+            [],
+            [{"metadata": {"web_url": "https://example.com/articles/first"}}],
+        ]
+    )
+    set_backend(backend)
+
+    with patch(
+        "agentgraph_connector_rss.load_rss_settings",
+        return_value=RssConfig(feed_urls=[feed_url]),
+    ):
+        connector = RssConnector()
+        assert await connector.observation_url_patterns() == []
+        assert connector._observation_patterns is None
+        assert await connector.observation_url_patterns() == ["https://example.com/*"]
+
+
+@pytest.mark.asyncio
 async def test_rss_observation_resolution_requires_an_exact_known_entry() -> None:
     known_entry = {
         "platform_entity_id": "entry/known",

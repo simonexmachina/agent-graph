@@ -241,8 +241,12 @@ class RssConnector(BaseConnector):
         for feed_url, entries in results:
             links_by_feed[feed_url] = _entry_links(entries)
         derived_patterns = derive_observation_url_patterns(links_by_feed)
-        self._observation_patterns = list(dict.fromkeys(derived_patterns))
-        return self._observation_patterns
+        patterns = list(dict.fromkeys(derived_patterns))
+        # A transient database timeout must not prevent later metadata refreshes
+        # from discovering patterns once the database is responsive again.
+        if patterns:
+            self._observation_patterns = patterns
+        return patterns
 
     async def ingest(
         self,
