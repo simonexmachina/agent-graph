@@ -346,17 +346,8 @@ async def _fetch_feed(
         authors = _parse_authors(entry) or feed_authors
         entity = _entry_to_entity(feed_url, feed_entity_id, entry, authors)
         article_url = _metadata_str(entity.metadata, "web_url")
-        if skip_existing_urls and article_url is not None:
-            existing_by_url = await get_backend().query_by_filter(
-                "Document",
-                {"platform": "rss", "web_url": article_url},
-                1,
-                "updated_at",
-                None,
-                None,
-            )
-            if existing_by_url:
-                continue
+        if skip_existing_urls and article_url is not None and await _rss_article_url_exists(article_url):
+            continue
         include_entity = True
         if new_documents_only:
             existing = await get_backend().get_entity_by_platform(
@@ -403,6 +394,23 @@ async def _fetch_feed(
     batch.edges = [*edges, *batch.edges]
     batch.persons = [*persons.values(), *batch.persons]
     return batch
+
+
+async def _rss_article_url_exists(article_url: str) -> bool:
+    """Return whether a normalized RSS article URL is already stored."""
+    backend = get_backend()
+    for metadata_key in ("link", "web_url"):
+        entries = await backend.query_by_filter(
+            "Document",
+            {"platform": "rss", metadata_key: article_url},
+            1,
+            "updated_at",
+            None,
+            None,
+        )
+        if entries:
+            return True
+    return False
 
 
 async def _parse_feed(feed_url: str) -> Any:
