@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 router = APIRouter(prefix="/api", tags=["metadata"])
 
-_DYNAMIC_PATTERN_TIMEOUT_SECONDS = 2.0
+_DYNAMIC_PATTERN_TIMEOUT_SECONDS = 4.0
 logger = logging.getLogger(__name__)
 
 
