@@ -18,6 +18,7 @@ from agentgraph.connectors.base import (
     FetchPolicy,
     PersonRecord,
     ResourceType,
+    ResourceUnavailableError,
     SourceReference,
     get_known_channel_syncs,
 )
@@ -38,6 +39,21 @@ _PADDING_MESSAGES = 20  # messages to fetch on first visit as immediate context
 _SLACK_CHANNEL_URL_RE = re.compile(
     r"https://app\.slack\.com/client/(?P<workspace_id>[A-Z0-9]+)/(?P<channel_id>[A-Z0-9]+)"
 )
+_INACCESSIBLE_CHANNEL_ERROR_CODES = frozenset({
+    "channel_not_found",
+    "missing_scope",
+    "not_in_channel",
+    "restricted_action",
+})
+
+
+class SlackApiError(RuntimeError):
+    """A Slack Web API response where the request completed but was rejected."""
+
+    def __init__(self, method: str, error_code: str) -> None:
+        self.method = method
+        self.error_code = error_code
+        super().__init__(f"Slack API error on {method}: {error_code}")
 
 
 def _team_id_from_token(account_id: str | None = None) -> str | None:
@@ -102,9 +118,10 @@ async def _api_get(
         data: dict[str, Any] = resp.json()
         if data.get("ok"):
             return data
-        if data.get("error") != "token_expired" or attempt == 1:
-            raise RuntimeError(f"Slack API error on {method}: {data.get('error', 'unknown')}")
-    raise RuntimeError(f"Slack API error on {method}: token_expired")
+        error_code = str(data.get("error", "unknown"))
+        if error_code != "token_expired" or attempt == 1:
+            raise SlackApiError(method, error_code)
+    raise SlackApiError(method, "token_expired")
 
 
 async def _fetch_channel_info(client: httpx.AsyncClient, channel_id: str, account_id: str | None = None) -> dict[str, Any]:
@@ -390,7 +407,12 @@ class SlackConnector(BaseConnector):
         team_id, _ = _split_channel_ref(resource_id)
         selected_account_id = account_id or account_id_for_team(team_id)
         logger.info("Fetching Slack channel %s (policy=%s)", resource_id, decision)
-        batch = await _fetch_channel(resource_id, oldest=oldest, account_id=selected_account_id)
+        try:
+            batch = await _fetch_channel(resource_id, oldest=oldest, account_id=selected_account_id)
+        except SlackApiError as exc:
+            if exc.error_code in _INACCESSIBLE_CHANNEL_ERROR_CODES:
+                raise ResourceUnavailableError("Slack channel is unavailable to this account") from exc
+            raise
         await upsert_batch(batch)
         return batch
 

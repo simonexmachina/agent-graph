@@ -14,11 +14,18 @@ from agentgraph_connector_google.gdocs import GoogleDocsConnector, _fetch_doc
 from agentgraph_connector_google.gdrive import DriveChangesConnector, _fetch_drive_file
 from agentgraph_connector_google.gmail import GmailConnector, _thread_to_items
 from agentgraph_connector_google.gsheets import GoogleSheetsConnector
-from agentgraph_connector_slack import SlackConnector, _edited_at, _fetch_channel, _parse_mentions
+from agentgraph_connector_slack import (
+    SlackApiError,
+    SlackConnector,
+    _edited_at,
+    _fetch_channel,
+    _parse_mentions,
+)
 
 from agentgraph.connectors.base import (
     RESOURCE_TYPE_TO_ENTITY_TYPE,
     EntityBatch,
+    ResourceUnavailableError,
     SourceReference,
 )
 
@@ -534,6 +541,26 @@ async def test_slack_fetch_first_visit_calls_fetch_channel_no_oldest(
         await slack_connector.fetch("channel", "T123/C99999")
 
     mock_fetch.assert_awaited_once_with("T123/C99999", oldest=None, account_id=None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error_code",
+    ["channel_not_found", "missing_scope", "not_in_channel", "restricted_action"],
+)
+async def test_slack_fetch_marks_inaccessible_channel_as_unavailable(
+    slack_connector: SlackConnector,
+    error_code: str,
+) -> None:
+    with (
+        patch.object(slack_connector, "last_synced_at", new=AsyncMock(return_value=None)),
+        patch(
+            "agentgraph_connector_slack._fetch_channel",
+            new=AsyncMock(side_effect=SlackApiError("conversations.info", error_code)),
+        ),
+        pytest.raises(ResourceUnavailableError, match="unavailable to this account"),
+    ):
+        await slack_connector.fetch("channel", "T123/C99999")
 
 
 # ---------------------------------------------------------------------------

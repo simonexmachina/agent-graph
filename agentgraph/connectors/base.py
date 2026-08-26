@@ -226,6 +226,10 @@ class FetchPolicy:
         return self.FRESH
 
 
+class ResourceUnavailableError(RuntimeError):
+    """A connector cannot retrieve a resource because it is unavailable to the account."""
+
+
 class BaseConnector(ABC):
     source: ClassVar[str]  # platform name, e.g. "slack" — must be set by subclass
     fetch_policy: ClassVar[FetchPolicy]  # staleness policy — must be set by subclass

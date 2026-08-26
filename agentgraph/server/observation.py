@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any
 
-from agentgraph.connectors.base import ResourceType
+from agentgraph.connectors.base import ResourceType, ResourceUnavailableError
 from agentgraph.server.router import classify_observation_url
 
 logger = logging.getLogger(__name__)
@@ -105,6 +105,15 @@ async def record_observation(
             **result,
             "observation_created": bool(result["observation_created"] and owns_task),
         }
+    except ResourceUnavailableError as exc:
+        logger.info(
+            "Ignoring observation for unavailable %s %s/%s: %s",
+            ref.source,
+            ref.resource_type,
+            ref.resource_id,
+            exc,
+        )
+        return {"status": "ignored", "reason": "resource unavailable"}
     except ObservationFetchError:
         raise
     except Exception:
@@ -179,7 +188,7 @@ async def _dispatch(
             "persons": len(batch.persons),
             "edges": len(batch.edges),
         }
-    except ObservationFetchError:
+    except (ObservationFetchError, ResourceUnavailableError):
         raise
     except Exception as exc:
         logger.exception("Connector fetch failed: %s/%s/%s", source, resource_type, resource_id)

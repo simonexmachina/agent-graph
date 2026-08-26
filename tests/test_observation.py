@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -322,6 +323,40 @@ async def test_failed_observation_does_not_create_or_mark_entity() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unavailable_observation_is_ignored_without_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from agentgraph.connectors.base import ResourceUnavailableError
+    from agentgraph.server.observation import record_observation
+
+    backend = MagicMock()
+    backend.observation_exists = AsyncMock(return_value=False)
+    backend.record_observation_once = AsyncMock()
+    set_backend(backend)
+    ref = SourceReference(source="slack", resource_type="channel", resource_id="T123/C99999")
+    caplog.set_level(logging.INFO, logger="agentgraph.server.observation")
+
+    with (
+        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.observation._dispatch",
+            new=AsyncMock(side_effect=ResourceUnavailableError("Slack channel is unavailable to this account")),
+        ),
+    ):
+        result = await record_observation(
+            "https://app.slack.com/client/T123/C99999",
+            3000,
+            "observation-1",
+            True,
+        )
+
+    assert result == {"status": "ignored", "reason": "resource unavailable"}
+    backend.record_observation_once.assert_not_awaited()
+    assert "Ignoring observation for unavailable slack channel/T123/C99999" in caplog.text
+    assert not [record for record in caplog.records if record.exc_info is not None]
+
+
+@pytest.mark.asyncio
 async def test_observation_rejects_fetch_without_persisted_target() -> None:
     from agentgraph.server.observation import ObservationFetchError, record_observation
 
@@ -406,3 +441,22 @@ def test_report_observation_returns_bad_gateway_for_connector_failure(client: Te
 
     assert response.status_code == 502
     assert response.json() == {"detail": "Connector fetch failed"}
+
+
+def test_report_observation_returns_accepted_for_unavailable_resource(client: TestClient) -> None:
+    with patch(
+        "agentgraph.server.observation.record_observation",
+        new=AsyncMock(return_value={"status": "ignored", "reason": "resource unavailable"}),
+    ):
+        response = client.post(
+            "/report-observation",
+            json={
+                "url": "https://app.slack.com/client/T123/C99999",
+                "observation_duration_ms": 3000,
+                "observation_id": "34b2ad4d-55e3-4599-bf35-1e258a704bcd",
+                "observed": True,
+            },
+        )
+
+    assert response.status_code == 202
+    assert response.json() == {"status": "ignored", "reason": "resource unavailable"}
