@@ -365,7 +365,7 @@ async def test_get_entity_by_url_uses_web_canonical_url() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_entity_by_url_falls_back_to_web_metadata_urls() -> None:
+async def test_get_entity_by_url_falls_back_to_connector_metadata_urls() -> None:
     from agentgraph.connectors.base import SourceReference
     from agentgraph.graph.query import get_entity_by_url
 
@@ -393,7 +393,7 @@ async def test_get_entity_by_url_falls_back_to_web_metadata_urls() -> None:
     assert result is entity
     backend.query_by_filter.assert_any_await(
         "Document",
-        {"platform": "web", "url": "https://example.com/original"},
+        {"web_url": "https://example.com/original"},
         1,
         "updated_at",
         None,
@@ -401,11 +401,44 @@ async def test_get_entity_by_url_falls_back_to_web_metadata_urls() -> None:
     )
     backend.query_by_filter.assert_any_await(
         "Document",
-        {"platform": "web", "final_url": "https://example.com/original"},
+        {"url": "https://example.com/original"},
         1,
         "updated_at",
         None,
         None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_entity_by_url_finds_rss_document_by_web_url() -> None:
+    from agentgraph.connectors.base import SourceReference
+    from agentgraph.graph.query import get_entity_by_url
+
+    url = "https://marginalrevolution.com/article.html?utm_source=rss"
+    entity = _entity(platform="rss", title="RSS Article")
+    backend = _mock_backend(
+        get_entity_by_platform=AsyncMock(return_value=None),
+        query_by_filter=AsyncMock(side_effect=[[entity]]),
+    )
+    set_backend(backend)
+
+    class FakeWebConnector:
+        def resolve_url(self, raw_url: str) -> SourceReference | None:
+            return SourceReference("web", "document", raw_url)
+
+        def entity_url(self, platform_entity_id: str) -> str:
+            return platform_entity_id
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.server.router.classify_url", return_value=None),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()),
+    ):
+        result = await get_entity_by_url(url)
+
+    assert result is entity
+    backend.query_by_filter.assert_awaited_once_with(
+        "Document", {"web_url": url}, 1, "updated_at", None, None
     )
 
 

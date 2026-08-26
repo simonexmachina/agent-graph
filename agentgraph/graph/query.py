@@ -120,7 +120,7 @@ async def get_entity_by_url(url: str) -> EntityResult | None:
 
     entity = await backend.get_entity_by_platform(web_ref.source, web_ref.resource_id)
     if entity is None:
-        entity = await _get_web_entity_by_metadata_url(normalised_url)
+        entity = await _get_entity_by_metadata_url(normalised_url)
     if entity is not None:
         _enrich_web_url([entity])
     return entity
@@ -210,12 +210,13 @@ def _resolve_me() -> list[str] | None:
     return user_ids or None
 
 
-async def _get_web_entity_by_metadata_url(url: str) -> EntityResult | None:
+async def _get_entity_by_metadata_url(url: str) -> EntityResult | None:
+    """Find a document whose connector metadata identifies the browser URL."""
     backend = get_backend()
-    for key in ("url", "final_url"):
+    for key in ("web_url", "url", "final_url"):
         results = await backend.query_by_filter(
             "Document",
-            {"platform": "web", key: url},
+            {key: url},
             1,
             "updated_at",
             None,
