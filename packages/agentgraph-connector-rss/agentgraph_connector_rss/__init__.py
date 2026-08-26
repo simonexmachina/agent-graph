@@ -244,12 +244,21 @@ class RssConnector(BaseConnector):
         self._observation_patterns = list(dict.fromkeys(derived_patterns))
         return self._observation_patterns
 
-    async def ingest(self, account_id: str | None = None) -> EntityBatch:
+    async def ingest(
+        self,
+        account_id: str | None = None,
+        *,
+        skip_existing_urls: bool = False,
+    ) -> EntityBatch:
         settings = load_rss_settings(account_id)
         combined = EntityBatch()
         for feed_url in settings.feed_urls:
             try:
-                batch = await _fetch_feed(feed_url, hydrate_documents=True)
+                batch = await _fetch_feed(
+                    feed_url,
+                    hydrate_documents=True,
+                    skip_existing_urls=skip_existing_urls,
+                )
             except Exception as exc:
                 logger.warning(
                     "Skipping RSS feed %s (%s: %s)",
@@ -273,7 +282,7 @@ class RssConnector(BaseConnector):
         account_id: str | None = None,
     ) -> tuple[EntityBatch, dict[str, Any]]:
         _ = cursor
-        batch = await self.ingest(account_id=account_id)
+        batch = await self.ingest(account_id=account_id, skip_existing_urls=True)
         return batch, {"last_polled_at": datetime.now(UTC).isoformat()}
 
     async def preview_feed(self, feed_url: str, *, count: int = 3) -> dict[str, Any]:
@@ -307,6 +316,7 @@ async def _fetch_feed(
     *,
     hydrate_documents: bool = False,
     new_documents_only: bool = False,
+    skip_existing_urls: bool = False,
 ) -> EntityBatch:
     parsed = await _parse_feed(feed_url)
     feed_title = str(cast(dict[str, Any], parsed.feed).get("title") or feed_url)
@@ -335,6 +345,18 @@ async def _fetch_feed(
         # RFC 4287 §4.2.1: feed-level authors apply to entries that declare none.
         authors = _parse_authors(entry) or feed_authors
         entity = _entry_to_entity(feed_url, feed_entity_id, entry, authors)
+        article_url = _metadata_str(entity.metadata, "web_url")
+        if skip_existing_urls and article_url is not None:
+            existing_by_url = await get_backend().query_by_filter(
+                "Document",
+                {"platform": "rss", "web_url": article_url},
+                1,
+                "updated_at",
+                None,
+                None,
+            )
+            if existing_by_url:
+                continue
         include_entity = True
         if new_documents_only:
             existing = await get_backend().get_entity_by_platform(
