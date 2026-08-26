@@ -237,8 +237,9 @@ def test_rss_config_roundtrip_uses_config_toml(
     assert load_rss_config() == {"feed_urls": ["https://example.com/feed.xml"]}
     rendered = config_file.read_text(encoding="utf-8")
     assert "[connectors.rss]" in rendered
+    assert not rendered.startswith("\n")
     assert "[[connectors.rss.accounts]]" not in rendered
-    assert 'feed_urls = ["https://example.com/feed.xml"]' in rendered
+    assert 'feed_urls = [\n  "https://example.com/feed.xml",\n]' in rendered
 
 
 def test_save_rss_config_replaces_unmanaged_toml_table(

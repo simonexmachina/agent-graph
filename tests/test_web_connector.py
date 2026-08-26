@@ -45,7 +45,10 @@ def test_web_config_round_trips_toml(
 
     save_web_config(WebConfig(observation_urls=["http://localhost:3000/*", "https://example.com/page#part"]))
 
-    assert "[connectors.web]" in config_file.read_text()
+    rendered = config_file.read_text()
+    assert "[connectors.web]" in rendered
+    assert not rendered.startswith("\n")
+    assert 'observation_urls = [\n  "http://localhost:3000/*",\n  "https://example.com/page#part",\n]' in rendered
     assert load_web_settings().observation_urls == [
         "http://localhost:3000/*",
         "https://example.com/page",

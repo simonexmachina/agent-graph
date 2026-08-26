@@ -83,12 +83,14 @@ def save_web_config(config: WebConfig) -> None:
         [
             begin,
             "[connectors.web]",
-            f"observation_urls = [{', '.join(json.dumps(url) for url in config.observation_urls)}]",
+            "observation_urls = [",
+            *(f"  {json.dumps(url)}," for url in config.observation_urls),
+            "]",
             end,
             "",
         ]
     )
-    prefix = existing.rstrip()
+    prefix = existing.strip()
     CONFIG_FILE.write_text(f"{prefix}\n\n{block}" if prefix else block, encoding="utf-8")
 
 

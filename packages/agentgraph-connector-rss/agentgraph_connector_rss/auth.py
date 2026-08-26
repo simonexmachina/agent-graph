@@ -134,7 +134,7 @@ def _write_rss_config(config: dict[str, Any]) -> None:
         _write_rss_yaml_config(CONFIG_YAML_FILE, config)
         return
     existing = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
-    prefix = _strip_unmanaged_rss_config(_strip_managed_rss_config(existing)).rstrip()
+    prefix = _strip_unmanaged_rss_config(_strip_managed_rss_config(existing)).strip()
     block = _format_rss_config_block(config)
     content = f"{prefix}\n\n{block}" if prefix else block
     CONFIG_FILE.write_text(content, encoding="utf-8")
@@ -208,7 +208,9 @@ def _format_rss_config_block(config: dict[str, Any]) -> str:
         for feed_url in config.get("feed_urls", [])
         if isinstance(feed_url, str) and feed_url
     ]
-    lines.append(f"feed_urls = [{', '.join(_toml_string(url) for url in feed_urls)}]")
+    lines.append("feed_urls = [")
+    lines.extend(f"  {_toml_string(url)}," for url in feed_urls)
+    lines.append("]")
     lines.append(_RSS_CONFIG_END)
     return "\n".join(lines) + "\n"
 
