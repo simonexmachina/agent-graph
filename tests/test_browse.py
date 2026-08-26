@@ -325,7 +325,8 @@ def test_viewer_persists_list_sort_in_url_state() -> None:
     assert "q.set('sort_dir', params.sort_dir);" in viewer_html
     assert "function updateListSortHeaders(params)" in viewer_html
     assert "button.dataset.direction = direction;" in viewer_html
-    assert "const sortDir = current.sort === sort && current.sort_dir === 'asc' ? 'desc' : 'asc';" in viewer_html
+    assert "const DATE_LIST_SORTS = new Set([" in viewer_html
+    assert "DATE_LIST_SORTS.has(sort) ? 'desc' : 'asc'" in viewer_html
 
 
 def test_viewer_has_shared_order_controls() -> None:

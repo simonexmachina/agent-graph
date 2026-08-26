@@ -1635,6 +1635,13 @@
   const DEFAULT_LIMIT = 20;
   const DEFAULT_LIST_SORT = 'observed_at';
   const DEFAULT_LIST_SORT_DIR = 'desc';
+  const DATE_LIST_SORTS = new Set([
+    'observed_at',
+    'created_at',
+    'updated_at',
+    'source_created_at',
+    'source_updated_at',
+  ]);
 
   function focusedNodeTitle(nodeId) {
     const entity = viewerCache?.rawNodes.find(candidate => candidate.id === nodeId);
@@ -1897,7 +1904,9 @@
         const sort = button.dataset.sort;
         if (!sort) return;
         const current = readUrlState();
-        const sortDir = current.sort === sort && current.sort_dir === 'asc' ? 'desc' : 'asc';
+        const sortDir = current.sort === sort
+          ? (current.sort_dir === 'asc' ? 'desc' : 'asc')
+          : (DATE_LIST_SORTS.has(sort) ? 'desc' : 'asc');
         refreshView(collectParams({ view: 'list', sort, sort_dir: sortDir }, true));
       });
     });

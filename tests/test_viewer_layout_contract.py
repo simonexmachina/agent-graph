@@ -323,6 +323,20 @@ def test_list_displays_and_sorts_by_source_timestamps_without_an_id_column(page:
         expect(page).to_have_url(f"{url}?limit=20&view=list&sort=source_created_at")
 
 
+def test_first_click_on_date_list_header_sorts_descending(page: Page) -> None:
+    nodes = [_node(1, "Timestamped document")]
+    with _serve_viewer(nodes, []) as url:
+        page.goto(f"{url}?view=list")
+
+        page.locator('[data-sort="created_at"]').click()
+        expect(page).to_have_url(f"{url}?limit=20&view=list&sort=created_at")
+
+        page.locator('[data-sort="created_at"]').click()
+        expect(page).to_have_url(
+            f"{url}?limit=20&view=list&sort=created_at&sort_dir=asc"
+        )
+
+
 def test_connected_long_label_graph_keeps_nodes_separate(page: Page) -> None:
     nodes = [
         _node(index, f"Long RSS article title {index}: " + "A detailed discussion of agent systems " * 3)
