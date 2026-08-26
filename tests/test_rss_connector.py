@@ -7,6 +7,7 @@ from __future__ import annotations
 # pyright: reportUnknownArgumentType=false, reportUnknownLambdaType=false, reportUnknownMemberType=false
 import logging
 import sys
+import tomllib
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -238,6 +239,59 @@ def test_rss_config_roundtrip_uses_config_toml(
     assert "[connectors.rss]" in rendered
     assert "[[connectors.rss.accounts]]" not in rendered
     assert 'feed_urls = ["https://example.com/feed.xml"]' in rendered
+
+
+def test_save_rss_config_replaces_unmanaged_toml_table(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        """[connectors.rss]
+default_account_id = "rss"
+feed_urls = ["https://example.com/old.xml"]
+
+[connectors.web]
+observation_urls = ["https://example.com/*"]
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("agentgraph.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", config_file)
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
+
+    save_rss_config(RssConfig(feed_urls=["https://example.com/new.xml"]))
+
+    rendered = config_file.read_text(encoding="utf-8")
+    parsed = tomllib.loads(rendered)
+    assert parsed["connectors"]["rss"] == {"feed_urls": ["https://example.com/new.xml"]}
+    assert parsed["connectors"]["web"] == {"observation_urls": ["https://example.com/*"]}
+    assert rendered.count("[connectors.rss]") == 1
+
+
+def test_load_rss_config_recovers_duplicate_toml_tables(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        """[connectors.rss]
+feed_urls = ["https://example.com/old.xml"]
+
+[connectors.web]
+observation_urls = ["https://example.com/*"]
+
+[connectors.rss]
+feed_urls = ["https://example.com/new.xml"]
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("agentgraph.config.CONFIG_FILE", config_file)
+    monkeypatch.setattr("agentgraph.config.CONFIG_YAML_FILE", tmp_path / "config.yaml")
+
+    assert load_rss_config() == {
+        "feed_urls": ["https://example.com/old.xml", "https://example.com/new.xml"]
+    }
 
 
 def test_rss_config_roundtrip_uses_config_yaml_when_present(

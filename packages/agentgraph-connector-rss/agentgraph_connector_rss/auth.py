@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import tomllib
 from html.parser import HTMLParser
 from pathlib import Path
@@ -69,11 +70,33 @@ def _load_rss_config() -> dict[str, Any] | None:
 def _load_rss_toml_config(config_file: Path) -> dict[str, Any] | None:
     if not config_file.exists():
         return None
+    content = config_file.read_text(encoding="utf-8")
     try:
-        raw = tomllib.loads(config_file.read_text(encoding="utf-8"))
+        raw = tomllib.loads(content)
     except Exception:
-        return None
+        return _recover_rss_toml_config(content)
     return _extract_rss_config(raw)
+
+
+def _recover_rss_toml_config(content: str) -> dict[str, Any] | None:
+    """Recover feed URLs from duplicate RSS tables written by older CLI versions."""
+    headers = list(re.finditer(r"(?m)^\[connectors\.rss\]\s*$", content))
+    feed_urls: list[str] = []
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(content)
+        next_table = re.search(r"(?m)^\[", content[header.end() : end])
+        if next_table is not None:
+            end = header.end() + next_table.start()
+        try:
+            raw = tomllib.loads(content[header.start() : end])
+        except Exception:
+            continue
+        recovered = _extract_rss_config(raw)
+        if recovered is not None:
+            feed_urls.extend(cast(list[str], recovered["feed_urls"]))
+    if not feed_urls:
+        return None
+    return _normalise_rss_config({"feed_urls": list(dict.fromkeys(feed_urls))})
 
 
 def _load_rss_yaml_config(config_file: Path) -> dict[str, Any] | None:
@@ -111,7 +134,7 @@ def _write_rss_config(config: dict[str, Any]) -> None:
         _write_rss_yaml_config(CONFIG_YAML_FILE, config)
         return
     existing = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
-    prefix = _strip_managed_rss_config(existing).rstrip()
+    prefix = _strip_unmanaged_rss_config(_strip_managed_rss_config(existing)).rstrip()
     block = _format_rss_config_block(config)
     content = f"{prefix}\n\n{block}" if prefix else block
     CONFIG_FILE.write_text(content, encoding="utf-8")
@@ -164,6 +187,15 @@ def _strip_managed_rss_config(content: str) -> str:
     if end == -1:
         return content[:begin]
     return f"{content[:begin]}{content[end + len(_RSS_CONFIG_END) :]}"
+
+
+def _strip_unmanaged_rss_config(content: str) -> str:
+    """Remove a legacy RSS TOML table before replacing it with the managed block."""
+    return re.sub(
+        r"(?ms)^\[connectors\.rss\]\s*\n.*?(?=^\[(?!\[?connectors\.rss(?:\.|\]))|\Z)",
+        "",
+        content,
+    )
 
 
 def _format_rss_config_block(config: dict[str, Any]) -> str:
