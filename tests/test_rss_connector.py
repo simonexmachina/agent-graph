@@ -1544,8 +1544,8 @@ async def test_rss_ingest_skips_failed_feed(
 
     assert batch.entities == [entity]
     assert fetch_feed.await_count == 2
-    assert "Polling RSS feed https://example.com/bad.xml" in caplog.text
-    assert "Polling RSS feed https://example.com/ok.xml" in caplog.text
+    assert "Fetching RSS feed https://example.com/bad.xml" in caplog.text
+    assert "Fetching RSS feed https://example.com/ok.xml" in caplog.text
     assert "Skipping RSS feed https://example.com/bad.xml" in caplog.text
 
 
