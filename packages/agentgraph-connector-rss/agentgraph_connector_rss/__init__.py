@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 from collections.abc import Mapping, Sequence
@@ -49,7 +48,7 @@ _FEED_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _MAX_FEED_BYTES = 5_000_000
 _MAX_OBSERVATION_ENTRIES_PER_FEED = 8
 _MAX_OBSERVATION_PATTERNS_PER_FEED = 5
-_OBSERVATION_QUERY_TIMEOUT_SECONDS = 2.0
+_MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES = 2_000
 _TRACKING_QUERY_KEYS = {
     "fbclid",
     "gclid",
@@ -233,14 +232,18 @@ class RssConnector(BaseConnector):
         except RuntimeError:
             return []
 
-        links_by_feed: dict[str, list[str]] = {}
         backend = get_backend()
-        results = await asyncio.gather(
-            *(_query_observation_entries(backend, self.source, feed_url) for feed_url in settings.feed_urls)
+        entries = await backend.query_by_filter(
+            "Document",
+            {"platform": self.source},
+            _MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES,
+            "updated_at",
+            None,
+            None,
         )
-        for feed_url, entries in results:
-            links_by_feed[feed_url] = _entry_links(entries)
-        derived_patterns = derive_observation_url_patterns(links_by_feed)
+        derived_patterns = derive_observation_url_patterns(
+            _recent_entry_links_by_feed(entries, settings.feed_urls)
+        )
         patterns = list(dict.fromkeys(derived_patterns))
         # A transient database timeout must not prevent later metadata refreshes
         # from discovering patterns once the database is responsive again.
@@ -804,39 +807,26 @@ def _is_tracking_query_key(key: str) -> bool:
     return key.lower().startswith("utm_") or key.lower() in _TRACKING_QUERY_KEYS
 
 
-def _entry_links(entries: Sequence[Mapping[str, object]]) -> list[str]:
-    links: list[str] = []
+def _recent_entry_links_by_feed(
+    entries: Sequence[Mapping[str, object]],
+    feed_urls: Sequence[str],
+) -> dict[str, list[str]]:
+    configured_feeds = set(feed_urls)
+    links_by_feed: dict[str, list[str]] = {}
     for entry in entries:
         metadata = entry.get("metadata")
         if not isinstance(metadata, Mapping):
             continue
+        feed_url = _metadata_str(metadata, "feed_url")
+        if feed_url not in configured_feeds:
+            continue
+        links = links_by_feed.setdefault(feed_url, [])
+        if len(links) == _MAX_OBSERVATION_ENTRIES_PER_FEED:
+            continue
         link = _metadata_str(metadata, "web_url") or _metadata_str(metadata, "link")
         if link is not None:
             links.append(link)
-    return links
-
-
-async def _query_observation_entries(
-    backend: Any,
-    source: str,
-    feed_url: str,
-) -> tuple[str, list[Mapping[str, object]]]:
-    try:
-        entries = await asyncio.wait_for(
-            backend.query_by_filter(
-                "Document",
-                {"platform": source, "feed_url": feed_url},
-                _MAX_OBSERVATION_ENTRIES_PER_FEED,
-                "updated_at",
-                None,
-                None,
-            ),
-            timeout=_OBSERVATION_QUERY_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        logger.debug("Timed out loading RSS observation entries for %s", feed_url)
-        return feed_url, []
-    return feed_url, entries
+    return links_by_feed
 
 
 def _entry_text(entry: dict[str, Any]) -> str:

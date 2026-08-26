@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import feedparser  # type: ignore[import-untyped]
 import pytest
 from agentgraph_connector_rss import (
-    _MAX_OBSERVATION_ENTRIES_PER_FEED,
+    _MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES,
     FeedAuthor,
     RssConnector,
     _feed_id,
@@ -128,6 +128,7 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
         return_value=[
             {
                 "metadata": {
+                    "feed_url": feed_url,
                     "web_url": "https://example.com/articles/first",
                 }
             }
@@ -144,8 +145,8 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
     assert patterns == ["https://example.com/*"]
     backend.query_by_filter.assert_awaited_once_with(
         "Document",
-        {"platform": "rss", "feed_url": feed_url},
-        _MAX_OBSERVATION_ENTRIES_PER_FEED,
+        {"platform": "rss"},
+        _MAX_OBSERVATION_PATTERN_LOOKUP_ENTRIES,
         "updated_at",
         None,
         None,
@@ -159,7 +160,14 @@ async def test_rss_observation_patterns_retry_after_an_empty_result() -> None:
     backend.query_by_filter = AsyncMock(
         side_effect=[
             [],
-            [{"metadata": {"web_url": "https://example.com/articles/first"}}],
+            [
+                {
+                    "metadata": {
+                        "feed_url": feed_url,
+                        "web_url": "https://example.com/articles/first",
+                    }
+                }
+            ],
         ]
     )
     set_backend(backend)
