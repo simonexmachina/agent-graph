@@ -64,7 +64,7 @@ _LIST_PAGE_ORDER_BY = {
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 _FTS_DELETE_CHUNK_SIZE = 500
 _BUSY_TIMEOUT_MS = 5_000
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 
 
 def _now() -> str:
@@ -290,6 +290,10 @@ class SQLiteBackend(StorageBackend):
         )
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_feed_updated "
+            "ON entities(platform, entity_type, json_extract(metadata, '$.feed_url'), updated_at DESC)"
         )
 
     async def _retention_policy_needs_migration(self) -> bool:
