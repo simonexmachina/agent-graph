@@ -272,9 +272,9 @@ class RssConnector(BaseConnector):
             combined.entities.extend(batch.entities)
             combined.edges.extend(batch.edges)
             combined.persons.extend(batch.persons)
-        self._observation_patterns = derive_observation_url_patterns(
-            _entry_links_by_feed(combined.entities)
-        )
+        # The batch may omit already-indexed articles during polling, so it cannot
+        # represent the complete set of patterns. Reload from indexed entries.
+        self._observation_patterns = None
         return combined
 
     async def poll(
@@ -833,18 +833,6 @@ async def _query_observation_entries(
         logger.debug("Timed out loading RSS observation entries for %s", feed_url)
         return feed_url, []
     return feed_url, entries
-
-
-def _entry_links_by_feed(entities: list[EntityRecord]) -> dict[str, list[str]]:
-    links_by_feed: dict[str, list[str]] = {}
-    for entity in entities:
-        if entity.entity_type != "Document":
-            continue
-        feed_url = _metadata_str(entity.metadata, "feed_url")
-        link = _metadata_str(entity.metadata, "web_url") or _metadata_str(entity.metadata, "link")
-        if feed_url is not None and link is not None:
-            links_by_feed.setdefault(feed_url, []).append(link)
-    return links_by_feed
 
 
 def _entry_text(entry: dict[str, Any]) -> str:

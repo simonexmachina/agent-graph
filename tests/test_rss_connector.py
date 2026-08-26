@@ -1609,6 +1609,34 @@ async def test_rss_ingest_skips_failed_feed(
 
 
 @pytest.mark.asyncio
+async def test_rss_ingest_invalidates_observation_pattern_cache() -> None:
+    connector = RssConnector()
+    connector._observation_patterns = ["https://example.com/articles/*"]
+    batch = EntityBatch(
+        entities=[
+            EntityRecord(
+                entity_type="Folder",
+                platform="rss",
+                platform_entity_id="feed/example",
+                title="Example feed",
+                content="RSS feed: Example feed",
+            )
+        ]
+    )
+
+    with (
+        patch(
+            "agentgraph_connector_rss.load_rss_settings",
+            return_value=RssConfig(feed_urls=["https://example.com/feed.xml"]),
+        ),
+        patch("agentgraph_connector_rss._fetch_feed", new=AsyncMock(return_value=batch)),
+    ):
+        await connector.ingest(skip_existing_urls=True)
+
+    assert connector._observation_patterns is None
+
+
+@pytest.mark.asyncio
 async def test_rss_fetch_entry_document_uses_http_document_cache() -> None:
     existing = {
         "entity_type": "Document",
