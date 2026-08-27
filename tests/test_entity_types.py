@@ -43,7 +43,7 @@ def test_entity_types_include_task_and_video(entity_type: str) -> None:
 
 @pytest.mark.parametrize(
     ("resource_type", "entity_type"),
-    [("workitem", "Task"), ("video", "Video")],
+    [("work-item", "Task"), ("video", "Video")],
 )
 def test_resource_type_round_trips_to_entity_type(resource_type: str, entity_type: str) -> None:
     connector = _StubConnector()
@@ -54,7 +54,7 @@ def test_resource_type_round_trips_to_entity_type(resource_type: str, entity_typ
 
 @pytest.mark.parametrize(
     ("resource_type", "entity_type"),
-    [("workitem", "Task"), ("video", "Video")],
+    [("work-item", "Task"), ("video", "Video")],
 )
 def test_add_stubs_from_creates_typed_stub_for_new_resource_types(
     resource_type: str,

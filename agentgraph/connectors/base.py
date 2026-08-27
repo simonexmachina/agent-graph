@@ -24,7 +24,7 @@ ResourceType = Literal[
     "spreadsheet",
     "thread",
     "video",
-    "workitem",
+    "work-item",
 ]
 RetentionPolicy = Literal["observed", "owned", "connected", "persistent"]
 
@@ -54,7 +54,7 @@ RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
     "spreadsheet": "Spreadsheet",
     "thread": "Email",
     "video": "Video",
-    "workitem": "Task",
+    "work-item": "Task",
 }
 
 
@@ -379,7 +379,7 @@ class BaseConnector(ABC):
             "Channel": "channel",
             "Message": "message",
             "Email": "thread",
-            "Task": "workitem",
+            "Task": "work-item",
             "Video": "video",
         }
         return resource_id, resource_type_map.get(entity_type, "document")  # type: ignore[return-value]
