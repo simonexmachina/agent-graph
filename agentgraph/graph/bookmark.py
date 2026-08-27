@@ -19,7 +19,28 @@ async def set_entity_bookmark(entity_id: str, bookmarked: bool) -> EntityResult:
     entity = await get_entity(entity_id)
     if entity is None:
         raise ValueError(f"Entity {entity_id!r} not found")
-    return await get_backend().set_entity_bookmarked(entity["id"], bookmarked)
+    return await _set_entity_bookmark(entity, bookmarked)
+
+
+async def _set_entity_bookmark(entity: EntityResult, bookmarked: bool) -> EntityResult:
+    if bool(entity.get("bookmarked")) == bookmarked:
+        return entity
+
+    result = await get_backend().set_entity_bookmarked(entity["id"], bookmarked)
+
+    from agentgraph.connectors.feed import (
+        BookmarkMutation,
+        mutation_target_from_entity,
+        notify_feed_connectors,
+    )
+
+    await notify_feed_connectors(
+        BookmarkMutation(
+            target=mutation_target_from_entity(result),
+            bookmarked=bookmarked,
+        )
+    )
+    return result
 
 
 async def bookmark_target(target: str) -> EntityResult:
@@ -63,7 +84,7 @@ async def bookmark_url(url: str) -> EntityResult:
 
     if entity is None:
         raise ValueError(f"URL {url!r} was fetched but no graph entity was created")
-    return await backend.set_entity_bookmarked(entity["id"], True)
+    return await _set_entity_bookmark(entity, True)
 
 
 async def _find_batch_entity(batch: object) -> EntityResult | None:
