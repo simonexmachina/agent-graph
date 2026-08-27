@@ -67,13 +67,56 @@ const observations = new Map<number, ObservationStatus>();
 // ---------------------------------------------------------------------------
 
 /**
- * Match exact URL rules and Chrome-style path-prefix rules.
+ * Match a URL against Chrome-style match patterns.
+ *
+ * Connectors declare patterns as `<scheme>://<host>/<path>`, where the host may
+ * begin with `*.` to cover a domain and its subdomains, and `*` in the path
+ * matches any span of characters. Patterns without a wildcard match exactly.
  */
-function matchesAny(url: string, pats: string[]): boolean {
-  for (const pat of pats) {
-    if (pat.endsWith("/*") ? url.startsWith(pat.slice(0, -1)) : url === pat) return true;
+export function matchesPattern(url: string, pattern: string): boolean {
+  const patternParts = splitPattern(pattern);
+  if (patternParts === null) return url === pattern;
+
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return false;
   }
-  return false;
+
+  if (patternParts.scheme !== "*" && `${patternParts.scheme}:` !== target.protocol) return false;
+  if (!hostMatches(target.hostname, patternParts.host)) return false;
+  return wildcardRegExp(patternParts.path).test(`${target.pathname}${target.search}`);
+}
+
+function splitPattern(pattern: string): { scheme: string; host: string; path: string } | null {
+  const schemeEnd = pattern.indexOf("://");
+  if (schemeEnd === -1) return null;
+  const scheme = pattern.slice(0, schemeEnd);
+  const rest = pattern.slice(schemeEnd + 3);
+  const pathStart = rest.indexOf("/");
+  if (pathStart === -1) return { scheme, host: rest, path: "/*" };
+  return { scheme, host: rest.slice(0, pathStart), path: rest.slice(pathStart) };
+}
+
+function hostMatches(hostname: string, hostPattern: string): boolean {
+  const host = hostname.toLowerCase();
+  const expected = hostPattern.toLowerCase();
+  if (expected === "*") return true;
+  if (expected.startsWith("*.")) {
+    const domain = expected.slice(2);
+    return host === domain || host.endsWith(`.${domain}`);
+  }
+  return host === expected;
+}
+
+function wildcardRegExp(pathPattern: string): RegExp {
+  const escaped = pathPattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+
+function matchesAny(url: string, pats: string[]): boolean {
+  return pats.some((pattern) => matchesPattern(url, pattern));
 }
 
 // ---------------------------------------------------------------------------
