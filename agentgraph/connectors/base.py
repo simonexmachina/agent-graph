@@ -15,7 +15,17 @@ from pydantic import BaseModel, Field
 
 # All resource_type values understood by the connector layer.
 # Each value maps to a distinct fetch strategy within a connector.
-ResourceType = Literal["channel", "dm", "document", "folder", "message", "spreadsheet", "thread"]
+ResourceType = Literal[
+    "channel",
+    "dm",
+    "document",
+    "folder",
+    "message",
+    "spreadsheet",
+    "thread",
+    "video",
+    "workitem",
+]
 RetentionPolicy = Literal["observed", "owned", "connected", "persistent"]
 
 # All valid entity_type values stored in the DB.
@@ -27,6 +37,8 @@ ENTITY_TYPES: tuple[str, ...] = (
     "Person",
     "Spreadsheet",
     "Email",
+    "Task",
+    "Video",
 )
 
 # Broad URL extractor — classify_url does fine-grained matching
@@ -41,6 +53,8 @@ RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
     "message": "Message",
     "spreadsheet": "Spreadsheet",
     "thread": "Email",
+    "video": "Video",
+    "workitem": "Task",
 }
 
 
@@ -365,6 +379,8 @@ class BaseConnector(ABC):
             "Channel": "channel",
             "Message": "message",
             "Email": "thread",
+            "Task": "workitem",
+            "Video": "video",
         }
         return resource_id, resource_type_map.get(entity_type, "document")  # type: ignore[return-value]
 

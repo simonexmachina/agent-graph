@@ -966,6 +966,10 @@ async def query_by_filter_tool(
       - Folder: a Google Drive folder containing other entities.
       - Channel: a chat channel or DM thread (Discord, Slack, etc.).
       - Email: an email thread (Gmail).
+      - Task: a tracked work item such as a Jira issue. Status, assignee,
+          and issue key live in metadata.
+      - Video: a recorded video such as a Loom. The transcript is indexed as
+          content, and metadata.web_url links to the video.
       - Person: a source identity or confirmed cross-source identity merge.
 
     Example — find images uploaded in the last 7 days:
