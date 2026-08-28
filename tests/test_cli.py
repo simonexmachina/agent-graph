@@ -1619,9 +1619,14 @@ def test_auth_status_dedupes_shared_google_provider() -> None:
         result = runner.invoke(app, ["auth", "status"])
 
     assert result.exit_code == 0
-    assert result.output.count("account: User Example [acct-google]") == 1
-    assert "method: oauth" in result.output
-    assert "connectors: gdocs, gdrive" in result.output
+    assert "Authentication status" in result.output
+    assert "Provider" in result.output
+    assert "Account ID" in result.output
+    assert result.output.count("User Example") == 1
+    assert "acct-google" in result.output
+    assert "oauth" in result.output
+    assert "OK" in result.output
+    assert "gdocs, gdrive" in result.output
 
 
 def test_auth_status_exposes_slack_auth_method(tmp_creds: Path) -> None:
@@ -1644,8 +1649,28 @@ def test_auth_status_exposes_slack_auth_method(tmp_creds: Path) -> None:
         result = runner.invoke(app, ["auth", "status"])
 
     assert result.exit_code == 0
+    assert "Provider" in result.output
+    assert "Account" in result.output
+    assert "Method" in result.output
+    assert "Status" in result.output
+    assert "Connectors" in result.output
     assert "slack:T1:U1" in result.output
-    assert "method: browser" in result.output
+    assert "browser" in result.output
+
+
+def test_auth_status_renders_provider_without_accounts() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeConnector()],
+        ),
+    ):
+        result = runner.invoke(app, ["auth", "status"])
+
+    assert result.exit_code == 0
+    assert "slack" in result.output
+    assert "Missing" in result.output
 
 
 def test_auth_status_excludes_non_auth_connectors() -> None:

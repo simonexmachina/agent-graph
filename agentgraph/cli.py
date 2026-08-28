@@ -99,6 +99,18 @@ def _connector_auth_label(item: dict[str, object]) -> str:
     return f"{auth} via {item['auth_provider']}"
 
 
+def _auth_status_display(
+    status: str,
+    detail: object,
+    *,
+    include_success_detail: bool = True,
+) -> str:
+    label = {"ok": "OK", "missing": "Missing", "invalid": "Invalid"}.get(status, status)
+    if not detail or (status == "ok" and not include_success_detail):
+        return label
+    return f"{label}: {detail}" if status != "ok" else f"{label} as {detail}"
+
+
 def _server_is_running() -> bool:
     """Return whether the configured AgentGraph server responds to health checks."""
     from agentgraph.config import get_settings
@@ -341,32 +353,40 @@ def auth(
         typer.echo(_json.dumps(items, indent=2))
         return
 
+    table = Table(title="Authentication status", show_lines=True)
+    table.add_column("Provider", no_wrap=True)
+    table.add_column("Account")
+    table.add_column("Account ID", style="dim")
+    table.add_column("Method", no_wrap=True)
+    table.add_column("Status")
+    table.add_column("Connectors")
     for item in items:
-        status = str(item["auth_status"])
-        detail = item["auth_detail"]
-        auth_state = _status_label(status)
-        if detail:
-            auth_state = (
-                f"{auth_state} ({detail})" if status != "ok" else f"{auth_state} as {detail}"
-            )
         connectors = ", ".join(str(source) for source in cast(list[object], item["connectors"]))
-        typer.echo(f"  {item['provider']:<12}  {item['description']}")
-        typer.echo(f"  {'':<12}  auth: {auth_state}  |  connectors: {connectors}")
         accounts = cast(list[dict[str, object]], item.get("accounts") or [])
-        for account_row in accounts:
-            account_status = str(account_row["auth_status"])
-            account_auth = _status_label(account_status)
-            account_detail = account_row.get("auth_detail")
-            if account_detail:
-                account_auth = (
-                    f"{account_auth} ({account_detail})"
-                    if account_status != "ok"
-                    else f"{account_auth} as {account_detail}"
-                )
-            typer.echo(
-                f"  {'':<12}  account: {account_row['label']} [{account_row['account_id']}]"
-                f"  |  method: {account_row.get('auth_method') or 'unknown'}  |  {account_auth}"
+        if not accounts:
+            table.add_row(
+                str(item["provider"]),
+                "",
+                "",
+                "",
+                _auth_status_display(str(item["auth_status"]), item["auth_detail"]),
+                connectors,
             )
+            continue
+        for account_row in accounts:
+            table.add_row(
+                str(item["provider"]),
+                str(account_row.get("label") or ""),
+                str(account_row.get("account_id") or ""),
+                str(account_row.get("auth_method") or "unknown"),
+                _auth_status_display(
+                    str(account_row["auth_status"]),
+                    account_row.get("auth_detail"),
+                    include_success_detail=False,
+                ),
+                connectors,
+            )
+    console.print(table)
 
 
 @app.command(

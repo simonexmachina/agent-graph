@@ -12,7 +12,7 @@ agentgraph auth remove <provider> [--account <account-id>] [--json]
 Use `agentgraph list-connectors --json` to discover installed connector source names,
 valid platform values, URL ownership, polling delegation, and sync state. Do not rely
 on a hardcoded platform list. Use `--verify` only when a live provider check is
-needed. Without `--json`, the CLI renders the same status as an operator-facing table.
+needed.
 
 MCP equivalents are `list_connectors_tool`, `list_auth_providers_tool`,
 `authenticate_provider_tool`, and `remove_auth_provider_tool`.

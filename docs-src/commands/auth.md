@@ -22,7 +22,8 @@ agentgraph auth remove PLATFORM [--account ACCOUNT_ID] [--json]
 
 - `PLATFORM` is the auth label, such as `google`, `slack`, or `discord`
 - omit `PLATFORM`, or pass `status`, to list provider and account authentication state;
-  use `--verify` only for a live provider credential check
+  the default output is a table with one row per account; use `--json` for structured output
+  and `--verify` only for a live provider credential check
 - Google uses AgentGraph's packaged Desktop OAuth client
 - Slack prompts between user OAuth with PKCE and browser-session credentials when `--method` is omitted
 - OAuth asks whether you administer the target workspace; non-admins can enter an admin-provided Client ID or follow the app-request flow
