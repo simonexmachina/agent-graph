@@ -1,2 +1,5 @@
 [features]
 hooks = true
+
+[shell_environment_policy]
+set = { UV_DEFAULT_INDEX = "https://pypi.org/simple" }
