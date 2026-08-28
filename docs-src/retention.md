@@ -15,7 +15,7 @@ Entities use one of four policies:
 
 | Policy | Entity types | Collection rule |
 | --- | --- | --- |
-| Observed | `Channel`, `Document`, `Email`, `Folder`, `Spreadsheet` | Delete when `observed_at` (or `created_at` if never observed) is outside the retention window. |
+| Observed | `Channel`, `Document`, `Email`, `Folder`, `Spreadsheet`, `Task`, `Video` | Delete when `observed_at` (or `created_at` if never observed) is outside the retention window. |
 | Owned | `Message` and Gmail attachment `Document` entities | Delete with the parent Channel or Email. |
 | Connected | `Person` | Delete when the Person has no incoming or outgoing edges. |
 | Persistent | Configured RSS feed `Folder` entities | Never delete automatically. |

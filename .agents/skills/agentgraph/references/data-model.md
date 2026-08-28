@@ -11,8 +11,10 @@
 | `Message` | Chat messages. Chat images and uploads are stored in `metadata.attachments`. |
 | `Person` | Source identities and confirmed cross-source identity merges. |
 | `Spreadsheet` | Google Sheets and other spreadsheet resources. |
+| `Task` | Tracked work items such as Jira issues. Issue key, status, and assignee live in `metadata`. |
+| `Video` | Recorded videos such as Looms. The transcript is indexed as content and `metadata.web_url` links to the video. |
 
-The valid core model does not currently include `Task` or `Project`.
+The valid core model does not currently include `Project`.
 
 ## Relationships
 

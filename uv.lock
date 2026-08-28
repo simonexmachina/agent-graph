@@ -113,7 +113,7 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-server"
-version = "0.6.0"
+version = "0.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "agentgraph-connector-web" },

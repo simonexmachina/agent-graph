@@ -21,7 +21,7 @@ query_by_filter_tool(entity_type, filters=null, since=null, authored_by_me=false
 - `has_attachments=True` only applies to `Message`
 - Gmail email attachments are represented as Gmail `Document` stubs referenced by the owning `Email`
 - current entity types are `Channel`, `Document`, `Email`, `Folder`, `Message`,
-  `Person`, and `Spreadsheet`
+  `Person`, `Spreadsheet`, `Task`, and `Video`
 - scope by source with a column filter such as `filters={"platform": "gmail"}`
 - results contain bounded content and set `content_truncated` when shortened
 - `refresh=true` refreshes connector-owned presentation metadata before returning;

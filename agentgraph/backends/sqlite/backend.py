@@ -352,7 +352,8 @@ class SQLiteBackend(StorageBackend):
         observed = "NULL"
         if "observed_at" in columns and "cumulative_observation_duration_ms" in columns:
             observed = (
-                "CASE WHEN entity_type IN ('Channel', 'Document', 'Email', 'Folder', 'Spreadsheet') "
+                "CASE WHEN entity_type IN "
+                "('Channel', 'Document', 'Email', 'Folder', 'Spreadsheet', 'Task', 'Video') "
                 "AND cumulative_observation_duration_ms > 0 THEN observed_at ELSE NULL END"
             )
         observed = (

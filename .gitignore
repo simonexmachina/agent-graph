@@ -37,4 +37,5 @@ docs-src/node_modules/
 
 .env
 AGENTS.local.md
+CLAUDE.local.md
 .envrc

@@ -1047,6 +1047,8 @@
     Spreadsheet: '#34d399',
     Folder:      '#fbbf24',
     Email:       '#f97316',
+    Task:        '#818cf8',
+    Video:       '#fb7185',
   };
 
   const EDGE_COLORS = {
@@ -1621,7 +1623,6 @@
         resolveNodeOverlaps();
         fitGraphToViewport();
         resolveNodeOverlaps();
-        fitGraphToViewport();
       });
       refinedLayout.run();
     });
@@ -1629,7 +1630,7 @@
   }
 
   // ── URL state ─────────────────────────────────────────────────────────────
-  let ALL_TYPES = ['Channel', 'Document', 'Email', 'Folder', 'Message', 'Person', 'Spreadsheet'];
+  let ALL_TYPES = ['Channel', 'Document', 'Email', 'Folder', 'Message', 'Person', 'Spreadsheet', 'Task', 'Video'];
   let FETCHABLE_PLATFORMS = new Set();
   const DEFAULT_PAGE_TITLE = 'AgentGraph Viewer';
   const DEFAULT_LIMIT = 20;

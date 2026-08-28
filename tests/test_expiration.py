@@ -193,6 +193,34 @@ async def test_sqlite_expiration_uses_created_at_for_never_observed_entities(
     assert await sqlite_backend.get_entity_by_id("never-observed") is None
 
 
+@pytest.mark.parametrize("entity_type", ["Task", "Video"])
+async def test_sqlite_expiration_treats_task_and_video_as_observable(
+    sqlite_backend: SQLiteBackend,
+    entity_type: str,
+) -> None:
+    stale_time = (datetime.now(UTC) - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    await sqlite_backend._execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, observed_at, bookmarked
+        ) VALUES ('stale-item', ?, 'example', 'item-1', ?, 0)
+        """,
+        [entity_type, stale_time],
+    )
+    await sqlite_backend._execute(
+        """
+        INSERT INTO entities (
+            id, entity_type, platform, platform_entity_id, observed_at, bookmarked
+        ) VALUES ('bookmarked-item', ?, 'example', 'item-2', ?, 1)
+        """,
+        [entity_type, stale_time],
+    )
+
+    assert await sqlite_backend.expire_entities(90) == 1
+    assert await sqlite_backend.get_entity_by_id("stale-item") is None
+    assert await sqlite_backend.get_entity_by_id("bookmarked-item") is not None
+
+
 async def test_sqlite_expiration_keeps_persistent_entities(
     sqlite_backend: SQLiteBackend,
 ) -> None:
