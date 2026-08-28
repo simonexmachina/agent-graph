@@ -19,6 +19,7 @@ globalThis.chrome = {
 const {
   cancelObservation,
   getObservationStatus,
+  matchesPattern,
   refreshMeta,
   startObservation,
   updateMeta,
@@ -243,4 +244,72 @@ test("discards trailing duration when the initial observation fails", async () =
   await new Promise((resolve) => setTimeout(resolve, 10));
 
   assert.equal(reports.length, 1);
+});
+
+
+test("matches host wildcards across subdomains", () => {
+  const pattern = "https://*.atlassian.net/wiki/*";
+
+  assert.equal(
+    matchesPattern(
+      "https://hello.atlassian.net/wiki/spaces/~71202099c5dd/pages/7650323840/Team+Brain",
+      pattern,
+    ),
+    true,
+  );
+  assert.equal(matchesPattern("https://atlassian.net/wiki/spaces/ENG", pattern), true);
+  assert.equal(matchesPattern("https://hello.atlassian.net/browse/ENG-1", pattern), false);
+  assert.equal(matchesPattern("https://hello.atlassian.net.evil.test/wiki/x", pattern), false);
+  assert.equal(matchesPattern("http://hello.atlassian.net/wiki/x", pattern), false);
+});
+
+test("matches literal host path prefixes", () => {
+  assert.equal(
+    matchesPattern("https://mail.google.com/mail/u/0/#inbox", "https://mail.google.com/*"),
+    true,
+  );
+  assert.equal(matchesPattern("https://mail.google.com", "https://mail.google.com/*"), true);
+  assert.equal(
+    matchesPattern("https://docs.google.com/document/d/abc/edit", "https://docs.google.com/document/*"),
+    true,
+  );
+  assert.equal(
+    matchesPattern("https://docs.google.com/spreadsheets/d/abc", "https://docs.google.com/document/*"),
+    false,
+  );
+  assert.equal(matchesPattern("https://evil.test/https://mail.google.com/x", "https://mail.google.com/*"), false);
+});
+
+test("matches wildcards in the middle of a path and query", () => {
+  assert.equal(
+    matchesPattern(
+      "https://acme.atlassian.net/jira/software/projects/ENG/boards/1?selectedIssue=ENG-2",
+      "https://*.atlassian.net/jira/*",
+    ),
+    true,
+  );
+  assert.equal(matchesPattern("https://example.com/a/b/c", "https://example.com/a/*/c"), true);
+});
+
+test("patterns without wildcards match exactly", () => {
+  assert.equal(matchesPattern("https://example.com/page", "https://example.com/page"), true);
+  assert.equal(matchesPattern("https://example.com/page/other", "https://example.com/page"), false);
+});
+
+test("observation is skipped for a non-matching tenant path", async () => {
+  globalThis.fetch = async () =>
+    Response.json({
+      url_patterns: ["https://*.atlassian.net/wiki/*"],
+      observation_threshold_ms: 5,
+    });
+  await refreshMeta();
+
+  const matched = "https://hello.atlassian.net/wiki/spaces/ENG/pages/1/Plan";
+  const unmatched = "https://hello.atlassian.net/browse/ENG-1";
+  startObservation(41, matched);
+  assert.equal(getObservationStatus(41, matched).matches, true);
+  cancelObservation(41);
+  startObservation(42, unmatched);
+  assert.equal(getObservationStatus(42, unmatched).matches, false);
+  cancelObservation(42);
 });

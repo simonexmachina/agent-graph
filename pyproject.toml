@@ -1,12 +1,12 @@
 [project]
 name = "agentgraph-server"
-version = "0.6.0"
+version = "0.6.1"
 description = "A local-first CLI and MCP server that turns selected digital sources into a searchable graph for the AI agent you already use."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.20.0",
-    "agentgraph-connector-web>=0.5.0,<0.6",
+    "agentgraph-connector-web>=0.5.4,<0.7",
     "apscheduler>=3.11.2",
     "click<8.4",
     "fastapi>=0.135.2",
@@ -24,17 +24,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-google     = ["agentgraph-connector-google>=0.5.0,<0.6"]
-slack      = ["agentgraph-connector-slack>=0.5.0,<0.6"]
-discord    = ["agentgraph-connector-discord>=0.5.0,<0.6"]
-rss        = ["agentgraph-connector-rss>=0.5.0,<0.6"]
-web        = ["agentgraph-connector-web>=0.5.0,<0.6"]
+google     = ["agentgraph-connector-google>=0.5.4,<0.7"]
+slack      = ["agentgraph-connector-slack>=0.5.4,<0.7"]
+discord    = ["agentgraph-connector-discord>=0.5.4,<0.7"]
+rss        = ["agentgraph-connector-rss>=0.5.4,<0.7"]
+web        = ["agentgraph-connector-web>=0.5.4,<0.7"]
 all        = [
-    "agentgraph-connector-web>=0.5.0,<0.6",
-    "agentgraph-connector-google>=0.5.0,<0.6",
-    "agentgraph-connector-slack>=0.5.0,<0.6",
-    "agentgraph-connector-discord>=0.5.0,<0.6",
-    "agentgraph-connector-rss>=0.5.0,<0.6",
+    "agentgraph-connector-web>=0.5.4,<0.7",
+    "agentgraph-connector-google>=0.5.4,<0.7",
+    "agentgraph-connector-slack>=0.5.4,<0.7",
+    "agentgraph-connector-discord>=0.5.4,<0.7",
+    "agentgraph-connector-rss>=0.5.4,<0.7",
 ]
 
 [dependency-groups]

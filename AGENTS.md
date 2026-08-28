@@ -3,8 +3,6 @@
 - Commit each completed and validated logical unit as you work; do not wait until the end of the session.
 - Keep implementation and its tests in the same commit.
 - Stage only files that belong to the current task. Never include unrelated user changes in a commit.
-- At successful session close, run the relevant quality gates and push the current branch. Direct pushes to the active branch, including `main`, are authorized unless the user or orchestrator says otherwise.
-- If synchronization or push fails, do not force-push or use destructive recovery. Report the exact command and error.
 
 ## Questions and Changes
 
