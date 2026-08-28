@@ -51,6 +51,10 @@ under that literal prefix. Rules are stored in `~/.agentgraph/config.toml`, or i
 `config.yaml` when that file exists. The browser extension refreshes the rules from the
 running server periodically.
 
+Web is a required dependency of `agentgraph-server`, so `list-connectors` includes it
+even when no web URLs are configured. Removing it from an environment is undone by
+normal `uv run` synchronization while the core package declares that dependency.
+
 Web fetches preserve the original response by default. Use `--compact` for a one-off
 fetch when a page exceeds the size limit because of inline styles, scripts, or comments:
 
