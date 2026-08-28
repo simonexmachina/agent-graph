@@ -112,6 +112,16 @@ FastEmbed model used for embeddings.
 Optional prompt override for Slack OAuth. Use the Client ID of the admin-created
 internal Slack app. AgentGraph stores it per authenticated account.
 
+### `AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT`
+
+Default: `8766`
+
+Port for the temporary local Slack OAuth callback listener. Set this when another
+process already uses `8766`; the callback URL remains on `localhost` at
+`/slack/oauth/callback`. A custom port must also be registered in the Slack app's
+redirect URLs. AgentGraph prints a manifest with the configured callback URL during
+Slack app setup.
+
 ## Slack workspace filter
 
 If you only want Slack data from one workspace, set `AGENTGRAPH_SLACK_WORKSPACE_ID`.

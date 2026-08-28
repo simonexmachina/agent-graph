@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import json
 import os
 import secrets
 import time
@@ -21,7 +22,8 @@ from pydantic import BaseModel, Field, TypeAdapter
 
 SLACK_TOKEN_URL = "https://slack.com/api/oauth.v2.user.access"
 SLACK_AUTHORIZE_URL = "https://slack.com/oauth/v2_user/authorize"
-DEFAULT_REDIRECT_URI = "http://localhost:8766/slack/oauth/callback"
+DEFAULT_OAUTH_CALLBACK_PORT = 8766
+DEFAULT_REDIRECT_URI = f"http://localhost:{DEFAULT_OAUTH_CALLBACK_PORT}/slack/oauth/callback"
 REQUIRED_SCOPES: frozenset[str] = frozenset({
     "channels:history",
     "channels:read",
@@ -71,6 +73,24 @@ SlackCredentials = SlackBrowserCredentials
 _refresh_locks: WeakKeyDictionary[
     asyncio.AbstractEventLoop, dict[str, asyncio.Lock]
 ] = WeakKeyDictionary()
+
+
+def oauth_redirect_uri() -> str:
+    """Return the configured local callback URL for Slack OAuth."""
+    raw_port = os.environ.get(
+        "AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT", str(DEFAULT_OAUTH_CALLBACK_PORT)
+    )
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise ValueError(
+            "AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT must be an integer from 1 through 65535"
+        ) from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(
+            "AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT must be an integer from 1 through 65535"
+        )
+    return f"http://localhost:{port}/slack/oauth/callback"
 
 
 class SlackOAuthCallback(BaseModel):
@@ -235,7 +255,15 @@ def _exchange_oauth_code(
 
 def _manifest_text() -> str:
     manifest_path = Path(__file__).with_name("slack-app-manifest.json")
-    return manifest_path.read_text().rstrip()
+    manifest_text = manifest_path.read_text().rstrip()
+    redirect_uri = oauth_redirect_uri()
+    if redirect_uri == DEFAULT_REDIRECT_URI:
+        return manifest_text
+
+    manifest = cast(dict[str, Any], json.loads(manifest_text))
+    oauth_config = cast(dict[str, Any], manifest["oauth_config"])
+    oauth_config["redirect_urls"] = [redirect_uri]
+    return json.dumps(manifest, indent=2)
 
 
 def _manifest_block() -> str:
@@ -438,12 +466,13 @@ def run_oauth_flow(
     resolved_client_id = client_id or _available_oauth_client_id(account_id, add=add)
     if resolved_client_id is None:
         resolved_client_id = _prompt_oauth_client_id()
+    redirect_uri = oauth_redirect_uri()
     verifier, challenge = _pkce_pair()
     state = secrets.token_urlsafe(32)
     authorize_url = f"{SLACK_AUTHORIZE_URL}?{urlencode({
         'client_id': resolved_client_id,
         'scope': ','.join(sorted(REQUIRED_SCOPES | OPTIONAL_SCOPES)),
-        'redirect_uri': DEFAULT_REDIRECT_URI,
+        'redirect_uri': redirect_uri,
         'state': state,
         'code_challenge': challenge,
         'code_challenge_method': 'S256',
@@ -451,7 +480,7 @@ def run_oauth_flow(
     typer.echo(_authorization_instructions())
     typer.echo(f"Opening Slack authorization in your browser:\n{authorize_url}")
     webbrowser.open(authorize_url)
-    callback = _wait_for_oauth_callback(DEFAULT_REDIRECT_URI)
+    callback = _wait_for_oauth_callback(redirect_uri)
     if not callback.state or not secrets.compare_digest(callback.state, state):
         raise RuntimeError("Slack OAuth callback state did not match")
     if callback.error:
@@ -463,7 +492,7 @@ def run_oauth_flow(
         code=callback.code,
         verifier=verifier,
         client_id=resolved_client_id,
-        redirect_uri=DEFAULT_REDIRECT_URI,
+        redirect_uri=redirect_uri,
     )
     access_token, refresh_token, expires_in, scopes = _oauth_values(data)
     missing_scopes = validate_required_scopes(scopes)
