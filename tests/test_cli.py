@@ -737,6 +737,16 @@ class _FakeRssConnector:
         return ConnectorCommandEffects()
 
 
+class _FakeFeedConnector:
+    source = "feed"
+    auth_label = "feed"
+    auth_description = "Shares local observations and bookmarks through an AgentGraph feed server."
+    appears_in_auth_status = False
+    poll_interval = timedelta(minutes=1)
+    poll_delegates: list[str] = []
+    url_patterns: list[str] = []
+
+
 class _FakeGoogleToken:
     token = "new-access-token"
     refresh_token = "new-refresh-token"
@@ -1599,6 +1609,40 @@ def test_list_connectors_omits_auth_status_for_non_auth_connectors() -> None:
     assert "rss" in text_result.output
     assert "on-demand" in text_result.output
     assert _NonAuthRssConnector.verify_called is False
+
+
+def test_list_connectors_includes_feed_connector() -> None:
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.core.runtime.backend_context", _fake_backend_context),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[_FakeFeedConnector()],
+        ),
+    ):
+        result = runner.invoke(app, ["list-connectors", "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [
+        {
+            "source": "feed",
+            "description": "Shares local observations and bookmarks through an AgentGraph feed server.",
+            "auth_provider": None,
+            "shared_auth": False,
+            "auth_status": None,
+            "auth_detail": None,
+            "auth_verified": False,
+            "account_count": 0,
+            "url_patterns": [],
+            "polls": True,
+            "poll_interval_seconds": 60,
+            "poll_delegates": [],
+            "polled_by": [],
+            "sync": "polling every 1m",
+            "last_synced_at": None,
+            "last_sync": "never",
+        }
+    ]
 
 
 def test_connectors_legacy_command_is_rejected() -> None:
