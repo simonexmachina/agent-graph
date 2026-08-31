@@ -299,6 +299,9 @@ async def test_command_and_mcp_reference_pages_match_runtime_interfaces() -> Non
     assert "agentgraph list-connectors [--verify] [--json]" in source_for(
         "commands/list-connectors.html"
     )
+    assert "Web is a required dependency of `agentgraph-server`" in source_for(
+        "commands/list-connectors.html"
+    )
     assert "get_entity_tool(entity_id, resolve=false) -> JSON string" in source_for(
         "mcp/get-entity.html"
     )

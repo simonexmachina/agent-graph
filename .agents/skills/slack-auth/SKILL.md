@@ -28,8 +28,10 @@ permission in the target workspace.
 Admins create AgentGraph at `https://api.slack.com/apps` with **Create New App →
 From an app manifest**, select the target workspace, paste the manifest printed by
 AgentGraph into Slack's **JSON** tab, approve it, and enter its Client ID. The
-manifest includes the only
-supported callback, `http://localhost:8766/slack/oauth/callback`.
+manifest includes the callback, which defaults to `http://localhost:8766/slack/oauth/callback`; set
+`AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT` before setup to use another local port. The
+manifest printed by AgentGraph uses that port, which must match the Slack app's
+registered redirect URL.
 
 Non-admins choose either **Enter a Client ID provided by a Slack admin** or **Set up
 the AgentGraph Slack App**. The setup path checks whether the target workspace

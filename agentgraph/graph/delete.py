@@ -14,6 +14,7 @@ async def delete_entity(target: str) -> dict[str, Any]:
     if entity is None:
         raise ValueError(f"Entity {target!r} not found")
     deleted = await get_backend().delete_entity(entity["id"])
+    await _notify_deleted(deleted)
     return {"deleted": True, "entity": deleted}
 
 
@@ -23,4 +24,17 @@ async def delete_platform_entity(platform: str, platform_entity_id: str) -> dict
     if entity is None:
         return None
     deleted = await get_backend().delete_entity(entity["id"])
+    await _notify_deleted(deleted)
     return {"deleted": True, "entity": deleted}
+
+
+async def _notify_deleted(entity: dict[str, Any]) -> None:
+    from agentgraph.connectors.feed import (
+        TombstoneMutation,
+        mutation_target_from_entity,
+        notify_feed_connectors,
+    )
+
+    await notify_feed_connectors(
+        TombstoneMutation(target=mutation_target_from_entity(entity))
+    )

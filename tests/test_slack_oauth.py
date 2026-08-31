@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -24,9 +25,11 @@ from agentgraph_connector_slack.auth import (
     _admin_setup_instructions,
     _authorization_instructions,
     _available_oauth_client_id,
+    _manifest_text,
     _member_missing_workspace_instructions,
     _member_visible_workspace_instructions,
     load_slack_creds,
+    oauth_redirect_uri,
     refresh_oauth_credentials,
     run_guided_oauth_flow,
     run_interactive_auth_flow,
@@ -269,7 +272,7 @@ def _exchange_result(scopes: set[str] | frozenset[str] = REQUIRED_SCOPES) -> dic
     }
 
 
-def test_oauth_flow_uses_pkce_state_and_default_redirect(
+def test_oauth_flow_uses_pkce_state_and_configured_callback_port(
     tmp_creds: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -278,6 +281,7 @@ def test_oauth_flow_uses_pkce_state_and_default_redirect(
         "AGENTGRAPH_SLACK_REDIRECT_URI",
         "http://localhost:9999/unsupported",
     )
+    monkeypatch.setenv("AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT", "9876")
     opened: list[str] = []
     exchange = MagicMock(return_value=_exchange_result())
 
@@ -298,18 +302,40 @@ def test_oauth_flow_uses_pkce_state_and_default_redirect(
     assert query["code_challenge"] == ["challenge"]
     assert query["code_challenge_method"] == ["S256"]
     assert query["state"] == ["state-value"]
-    assert query["redirect_uri"] == [DEFAULT_REDIRECT_URI]
-    wait.assert_called_once_with(DEFAULT_REDIRECT_URI)
+    redirect_uri = "http://localhost:9876/slack/oauth/callback"
+    assert query["redirect_uri"] == [redirect_uri]
+    wait.assert_called_once_with(redirect_uri)
     exchange.assert_called_once_with(
         code="code",
         verifier="verifier",
         client_id="123.456",
-        redirect_uri=DEFAULT_REDIRECT_URI,
+        redirect_uri=redirect_uri,
     )
     stored = load_platform_account("slack", "slack:T1:U1")
     assert stored is not None
     assert stored["auth_method"] == "oauth"
     assert stored["client_id"] == "123.456"
+
+
+def test_oauth_redirect_uri_uses_default_and_validates_callback_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT", raising=False)
+    assert oauth_redirect_uri() == DEFAULT_REDIRECT_URI
+
+    monkeypatch.setenv("AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT", "0")
+    with pytest.raises(ValueError, match="1 through 65535"):
+        oauth_redirect_uri()
+
+
+def test_manifest_uses_configured_callback_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTGRAPH_SLACK_OAUTH_CALLBACK_PORT", "9876")
+
+    manifest = json.loads(_manifest_text())
+
+    assert manifest["oauth_config"]["redirect_urls"] == [
+        "http://localhost:9876/slack/oauth/callback"
+    ]
 
 
 @pytest.mark.parametrize(

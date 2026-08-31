@@ -48,6 +48,15 @@ async def record_observation(
         backend = get_backend()
         if not observed:
             await backend.increment_observation_duration(ref.source, ref.resource_id, observation_duration_ms)
+            if observation_duration_ms > 0:
+                await _notify_observation(
+                    source=ref.source,
+                    resource_id=ref.resource_id,
+                    resource_type=ref.resource_type,
+                    url=url,
+                    observation_duration_ms=observation_duration_ms,
+                    meta=meta,
+                )
             logger.debug(
                 "Recorded observation-duration update: +%dms for %s %s/%s (observation_id=%s)",
                 observation_duration_ms,
@@ -149,6 +158,15 @@ async def _fetch_and_record_observation(
         url,
         observation_duration_ms,
     )
+    if observation_created and observation_duration_ms > 0:
+        await _notify_observation(
+            source=source,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            url=url,
+            observation_duration_ms=observation_duration_ms,
+            meta=meta,
+        )
     return {
         "status": "accepted",
         "source": source,
@@ -156,6 +174,35 @@ async def _fetch_and_record_observation(
         "observation_created": observation_created,
         "fetch": counts,
     }
+
+
+async def _notify_observation(
+    *,
+    source: str,
+    resource_id: str,
+    resource_type: ResourceType,
+    url: str,
+    observation_duration_ms: int,
+    meta: dict[str, str] | None,
+) -> None:
+    from agentgraph.connectors.feed import (
+        ObservationMutation,
+        mutation_target_from_reference,
+        notify_feed_connectors,
+    )
+
+    await notify_feed_connectors(
+        ObservationMutation(
+            target=mutation_target_from_reference(
+                platform=source,
+                platform_entity_id=resource_id,
+                resource_type=resource_type,
+                url=url,
+            ),
+            observation_duration_ms=observation_duration_ms,
+            meta=meta,
+        )
+    )
 
 
 async def _dispatch(
