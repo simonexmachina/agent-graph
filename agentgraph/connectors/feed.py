@@ -37,6 +37,28 @@ class MutationTarget(BaseModel):
     url: str | None = None
 
 
+class EntitySnapshot(BaseModel):
+    """Committed graph entity state delivered with an update mutation."""
+
+    id: str
+    entity_type: str
+    platform: str
+    platform_entity_id: str
+    title: str | None = None
+    content: str | None = None
+    metadata: dict[str, Any]
+    created_at: str
+    updated_at: str
+    source_created_at: str | None = None
+    source_updated_at: str | None = None
+    synced_at: str | None = None
+    observed_at: str | None = None
+    retention_policy: str
+    retention_parent_id: str | None = None
+    cumulative_observation_duration_ms: int
+    bookmarked: bool
+
+
 class ObservationMutation(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     kind: Literal["observation"] = "observation"
@@ -61,7 +83,17 @@ class TombstoneMutation(BaseModel):
     target: MutationTarget
 
 
-type MutationEvent = ObservationMutation | BookmarkMutation | TombstoneMutation
+class EntityUpdateMutation(BaseModel):
+    event_id: UUID = Field(default_factory=uuid4)
+    kind: Literal["update"] = "update"
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    target: MutationTarget
+    entity: EntitySnapshot
+
+
+type MutationEvent = (
+    ObservationMutation | BookmarkMutation | TombstoneMutation | EntityUpdateMutation
+)
 
 
 class FeedConnector(BaseConnector):
@@ -133,6 +165,12 @@ def mutation_target_from_entity(
         resource_type=resource_type,
         url=url or (metadata_url if isinstance(metadata_url, str) else None),
     )
+
+
+def entity_snapshot_from_entity(entity: dict[str, Any]) -> EntitySnapshot:
+    """Validate a committed storage result for use in an update mutation."""
+
+    return EntitySnapshot.model_validate(entity)
 
 
 def mutation_target_from_reference(

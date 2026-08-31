@@ -477,7 +477,7 @@ class SQLiteBackend(StorageBackend):
         batch: EntityBatch,
         person_embeddings: dict[str, list[float] | None],
         entity_embeddings: dict[str, list[float] | None],
-    ) -> None:
+    ) -> list[EntityResult]:
         assert self._write_lock is not None
         async with self._write_lock:
             conn = self._conn_or_raise()
@@ -489,10 +489,10 @@ class SQLiteBackend(StorageBackend):
             ):
                 await conn.execute("BEGIN IMMEDIATE")
                 try:
-                    person_id_map = await self._upsert_persons(
+                    person_id_map, updated_person_ids = await self._upsert_persons(
                         conn, batch.persons, person_embeddings
                     )
-                    entity_id_map = await self._upsert_entities(
+                    entity_id_map, updated_entity_ids = await self._upsert_entities(
                         conn, batch.entities, entity_embeddings
                     )
                     await self._upsert_edges(conn, batch, person_id_map, entity_id_map)
@@ -500,14 +500,20 @@ class SQLiteBackend(StorageBackend):
                 except Exception:
                     await conn.execute("ROLLBACK")
                     raise
+            return await self._get_entities_by_ids_in_order(
+                [*updated_person_ids, *updated_entity_ids]
+            )
 
     async def _upsert_persons(
         self,
         conn: aiosqlite.Connection,
         persons: list[PersonRecord],
         embeddings: dict[str, list[float] | None],
-    ) -> dict[str, str]:
+    ) -> tuple[dict[str, str], list[str]]:
         id_map: dict[str, str] = {}
+        updated_ids: list[str] = []
+        updated_id_set: set[str] = set()
+        created_ids: set[str] = set()
         for p in persons:
             canonical_key = p.canonical_email or f"{p.platform}:{p.platform_user_id}"
             meta: dict[str, str] = {}
@@ -573,6 +579,9 @@ class SQLiteBackend(StorageBackend):
                     ],
                 )
                 entity_id = existing_id
+                if changed and entity_id not in created_ids and entity_id not in updated_id_set:
+                    updated_ids.append(entity_id)
+                    updated_id_set.add(entity_id)
             else:
                 cursor = await conn.execute(
                     """
@@ -595,6 +604,7 @@ class SQLiteBackend(StorageBackend):
                 if row is None:
                     raise RuntimeError("Failed to upsert person entity")
                 entity_id = str(row[0])
+                created_ids.add(entity_id)
                 fts_title = p.display_name or ""
                 fts_content = p.canonical_email or ""
                 rewrite_fts = bool(fts_title or fts_content)
@@ -610,7 +620,7 @@ class SQLiteBackend(StorageBackend):
             id_map[p.platform_user_id] = entity_id
             if p.canonical_email:
                 id_map[p.canonical_email] = entity_id
-        return id_map
+        return id_map, updated_ids
 
     async def _resolve_person_for_upsert(
         self,
@@ -639,8 +649,11 @@ class SQLiteBackend(StorageBackend):
         conn: aiosqlite.Connection,
         entities: list[EntityRecord],
         embeddings: dict[str, list[float] | None],
-    ) -> dict[str, str]:
+    ) -> tuple[dict[str, str], list[str]]:
         id_map: dict[str, str] = {}
+        updated_ids: list[str] = []
+        updated_id_set: set[str] = set()
+        created_ids: set[str] = set()
         # FTS maintenance is independent of edge resolution. Deferring it avoids
         # two SQLite round trips for every entity in a connector-sized batch.
         fts_delete_ids: list[str] = []
@@ -809,6 +822,16 @@ class SQLiteBackend(StorageBackend):
                         f"Failed to upsert entity {e.platform}:{e.platform_entity_id}"
                     )
                 entity_id: str = row[0]
+                if (
+                    existing_row is not None
+                    and changed
+                    and entity_id not in created_ids
+                    and entity_id not in updated_id_set
+                ):
+                    updated_ids.append(entity_id)
+                    updated_id_set.add(entity_id)
+                if existing_row is None:
+                    created_ids.add(entity_id)
                 if rewrite_fts:
                     if existing_row is not None:
                         fts_delete_ids.append(entity_id)
@@ -837,7 +860,7 @@ class SQLiteBackend(StorageBackend):
             await conn.executemany(
                 "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)", inserts
             )
-        return id_map
+        return id_map, updated_ids
 
     async def _upsert_edges(
         self,
@@ -1269,6 +1292,13 @@ class SQLiteBackend(StorageBackend):
             entity_ids,
         )
         return [_row_to_entity(r) for r in rows]
+
+    async def _get_entities_by_ids_in_order(self, entity_ids: list[str]) -> list[EntityResult]:
+        """Return stored entities in caller order after an upsert commit."""
+
+        entities = await self.get_entities_by_ids(entity_ids)
+        by_id = {str(entity["id"]): entity for entity in entities}
+        return [by_id[entity_id] for entity_id in entity_ids if entity_id in by_id]
 
     async def get_entities_by_id_prefix(self, prefix: str) -> list[EntityResult]:
         rows = await self._fetchall(

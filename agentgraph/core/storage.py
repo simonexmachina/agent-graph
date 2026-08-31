@@ -39,11 +39,12 @@ class StorageBackend(ABC):
         batch: EntityBatch,
         person_embeddings: dict[str, list[float] | None],
         entity_embeddings: dict[str, list[float] | None],
-    ) -> None:
+    ) -> list[EntityResult]:
         """Atomically persist an EntityBatch.
 
         person_embeddings: canonical_key (email or "platform:user_id") → vector
         entity_embeddings: platform_entity_id → vector
+        Returns committed snapshots for material changes to existing entities.
         """
         ...
 

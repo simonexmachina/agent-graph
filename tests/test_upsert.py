@@ -97,6 +97,25 @@ async def test_upsert_person_idempotent(sqlite_backend: SQLiteBackend) -> None:
     assert count == 1
 
 
+async def test_changed_person_upsert_returns_committed_snapshot(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    person = PersonRecord(
+        platform="slack",
+        platform_user_id="U123",
+        canonical_email="alice@example.com",
+        display_name="Alice",
+    )
+    assert await sqlite_backend.upsert_batch(EntityBatch(persons=[person]), {}, {}) == []
+
+    updated_person = person.model_copy(update={"display_name": "Alice Updated"})
+    updated = await sqlite_backend.upsert_batch(EntityBatch(persons=[updated_person]), {}, {})
+
+    assert len(updated) == 1
+    assert updated[0]["entity_type"] == "Person"
+    assert updated[0]["title"] == "Alice Updated"
+
+
 async def test_upsert_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
     batch = EntityBatch(
         persons=[
@@ -310,7 +329,8 @@ async def test_changed_upsert_refreshes_updated_at_but_not_observed_at(
         title="Original title",
         content="Original content",
     )
-    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+    inserted = await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+    assert inserted == []
     await sqlite_backend._execute(
         "UPDATE entities SET observed_at = ?, updated_at = ? "
         "WHERE platform = ? AND platform_entity_id = ?",
@@ -323,12 +343,28 @@ async def test_changed_upsert_refreshes_updated_at_but_not_observed_at(
     )
 
     changed = entity.model_copy(update={"content": "Changed content"})
-    await sqlite_backend.upsert_batch(EntityBatch(entities=[changed]), {}, {})
+    updated = await sqlite_backend.upsert_batch(EntityBatch(entities=[changed]), {}, {})
 
     stored = await sqlite_backend.get_entity_by_platform("web", "https://example.com/changed")
     assert stored is not None
     assert stored["observed_at"] == "2020-01-01T00:00:00Z"
     assert stored["updated_at"] > "2020-01-01T00:00:00Z"
+    assert [snapshot["id"] for snapshot in updated] == [stored["id"]]
+    assert updated[0]["content"] == "Changed content"
+
+
+async def test_unchanged_upsert_returns_no_changed_entity_snapshots(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/noop",
+        content="Unchanged content",
+    )
+
+    assert await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {}) == []
+    assert await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {}) == []
 
 
 async def test_upsert_batch_skips_fts_rewrites_for_unchanged_text(

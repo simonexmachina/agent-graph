@@ -12,7 +12,21 @@ async def upsert_batch(batch: EntityBatch) -> None:
     """Persist an EntityBatch to the graph, generating embeddings as needed."""
     person_embeddings, entity_embeddings = await asyncio.to_thread(_build_embeddings, batch)
 
-    await get_backend().upsert_batch(batch, person_embeddings, entity_embeddings)
+    updated_entities = await get_backend().upsert_batch(batch, person_embeddings, entity_embeddings)
+    from agentgraph.connectors.feed import (
+        EntityUpdateMutation,
+        entity_snapshot_from_entity,
+        mutation_target_from_entity,
+        notify_feed_connectors,
+    )
+
+    for entity in updated_entities:
+        await notify_feed_connectors(
+            EntityUpdateMutation(
+                target=mutation_target_from_entity(entity),
+                entity=entity_snapshot_from_entity(entity),
+            )
+        )
     await _link_references(batch)
 
 
