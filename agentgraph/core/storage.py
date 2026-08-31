@@ -44,7 +44,7 @@ class StorageBackend(ABC):
 
         person_embeddings: canonical_key (email or "platform:user_id") → vector
         entity_embeddings: platform_entity_id → vector
-        Returns committed snapshots for material changes to existing entities.
+        Returns committed snapshots for inserted or materially changed entities.
         """
         ...
 

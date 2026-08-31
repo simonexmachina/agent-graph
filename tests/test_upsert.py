@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -16,6 +17,7 @@ from agentgraph.connectors.base import (
     EntityRecord,
     FetchPolicy,
     PersonRecord,
+    SourceReference,
 )
 from agentgraph.core.context import set_backend
 from agentgraph.graph.upsert import upsert_batch
@@ -106,7 +108,9 @@ async def test_changed_person_upsert_returns_committed_snapshot(
         canonical_email="alice@example.com",
         display_name="Alice",
     )
-    assert await sqlite_backend.upsert_batch(EntityBatch(persons=[person]), {}, {}) == []
+    inserted = await sqlite_backend.upsert_batch(EntityBatch(persons=[person]), {}, {})
+    assert len(inserted) == 1
+    assert inserted[0]["entity_type"] == "Person"
 
     updated_person = person.model_copy(update={"display_name": "Alice Updated"})
     updated = await sqlite_backend.upsert_batch(EntityBatch(persons=[updated_person]), {}, {})
@@ -330,7 +334,8 @@ async def test_changed_upsert_refreshes_updated_at_but_not_observed_at(
         content="Original content",
     )
     inserted = await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
-    assert inserted == []
+    assert len(inserted) == 1
+    assert inserted[0]["platform_entity_id"] == "https://example.com/changed"
     await sqlite_backend._execute(
         "UPDATE entities SET observed_at = ?, updated_at = ? "
         "WHERE platform = ? AND platform_entity_id = ?",
@@ -353,7 +358,7 @@ async def test_changed_upsert_refreshes_updated_at_but_not_observed_at(
     assert updated[0]["content"] == "Changed content"
 
 
-async def test_unchanged_upsert_returns_no_changed_entity_snapshots(
+async def test_unchanged_upsert_returns_no_upserted_entity_snapshots(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     entity = EntityRecord(
@@ -363,8 +368,68 @@ async def test_unchanged_upsert_returns_no_changed_entity_snapshots(
         content="Unchanged content",
     )
 
+    inserted = await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+    assert len(inserted) == 1
     assert await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {}) == []
-    assert await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {}) == []
+
+
+async def test_stub_insert_returns_one_upserted_snapshot(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    stub = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/stub",
+        is_stub=True,
+    )
+
+    inserted = await sqlite_backend.upsert_batch(EntityBatch(entities=[stub]), {}, {})
+    assert len(inserted) == 1
+    assert inserted[0]["platform_entity_id"] == "https://example.com/stub"
+    assert inserted[0]["synced_at"] is None
+    assert await sqlite_backend.upsert_batch(EntityBatch(entities=[stub]), {}, {}) == []
+
+
+async def test_upsert_event_includes_reference_edge_created_after_storage_commit(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    from agentgraph.connectors.feed import EntityUpsertMutation
+
+    source_url = "https://example.com/source"
+    target_url = "https://example.com/target"
+    batch = EntityBatch(
+        entities=[
+            EntityRecord(
+                entity_type="Document",
+                platform="web",
+                platform_entity_id=source_url,
+                content=f"See {target_url}",
+            )
+        ]
+    )
+    target_ref = SourceReference(
+        source="web",
+        resource_type="document",
+        resource_id=target_url,
+    )
+
+    with (
+        patch("agentgraph.graph.upsert._build_embeddings", return_value=({}, {})),
+        patch("agentgraph.server.router.classify_url", return_value=target_ref),
+        patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
+    ):
+        await upsert_batch(batch)
+
+    notify_args = notify.await_args
+    assert notify_args is not None
+    event = notify_args.args[0]
+    assert isinstance(event, EntityUpsertMutation)
+    assert event.entity.platform_entity_id == source_url
+    assert len(event.edges) == 1
+    assert event.edges[0].edge_type == "references"
+    assert event.edges[0].source_ref == source_url
+    assert event.edges[0].target_ref == target_url
+    assert notify.await_count == 1
 
 
 async def test_upsert_batch_skips_fts_rewrites_for_unchanged_text(

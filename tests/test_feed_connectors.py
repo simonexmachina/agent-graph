@@ -11,13 +11,14 @@ import pytest
 
 from agentgraph.connectors.base import (
     EntityBatch,
+    EntityRecord,
     FetchPolicy,
     ResourceType,
     SourceReference,
 )
 from agentgraph.connectors.feed import (
     BookmarkMutation,
-    EntityUpdateMutation,
+    EntityUpsertMutation,
     FeedConnector,
     MutationEvent,
     MutationTarget,
@@ -146,28 +147,67 @@ def _stored_entity(
     }
 
 
+def _stored_edge(entity_id: str) -> dict[str, object]:
+    return {
+        "id": str(uuid4()),
+        "edge_type": "references",
+        "platform": "cross",
+        "properties": {"label": "related"},
+        "source_entity_id": entity_id,
+        "target_entity_id": "target-id",
+        "source_ref": "https://example.com",
+        "target_ref": "https://example.net",
+    }
+
+
 @pytest.mark.asyncio
-async def test_changed_upsert_notifies_with_committed_entity_snapshot() -> None:
+async def test_upsert_notifies_with_committed_entity_and_edges() -> None:
     from agentgraph.graph.upsert import upsert_batch
 
     entity = _stored_entity(content="Updated content")
+    edge = _stored_edge(str(entity["id"]))
     backend = MagicMock()
     backend.upsert_batch = AsyncMock(return_value=[entity])
+    backend.get_edges_for_entities = AsyncMock(return_value=[edge])
     set_backend(backend)
+    batch = EntityBatch(
+        entities=[
+            EntityRecord(
+                entity_type="Document",
+                platform="web",
+                platform_entity_id="https://example.com",
+                content="Updated content",
+            ),
+            EntityRecord(
+                entity_type="Document",
+                platform="web",
+                platform_entity_id="https://unchanged.example.com",
+                content="Unchanged content",
+            ),
+        ]
+    )
 
     with (
         patch("agentgraph.graph.upsert._build_embeddings", return_value=({}, {})),
+        patch("agentgraph.graph.link.link_entity_to_urls", new=AsyncMock()) as link,
         patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
     ):
-        await upsert_batch(EntityBatch())
+        await upsert_batch(batch)
 
+    link.assert_awaited_once_with(
+        "https://example.com", "web", "Updated content"
+    )
     notify_args = notify.await_args
     assert notify_args is not None
     event = notify_args.args[0]
-    assert isinstance(event, EntityUpdateMutation)
+    assert isinstance(event, EntityUpsertMutation)
+    assert event.kind == "upsert"
     assert event.target.platform == "web"
     assert event.entity.content == "Updated content"
     assert event.entity.updated_at == "2026-08-31T00:00:01Z"
+    assert len(event.edges) == 1
+    assert event.edges[0].id == edge["id"]
+    assert event.edges[0].properties == {"label": "related"}
 
 
 @pytest.mark.asyncio
@@ -177,6 +217,7 @@ async def test_suppressed_changed_upsert_does_not_notify() -> None:
     connector = _RecordingFeedConnector()
     backend = MagicMock()
     backend.upsert_batch = AsyncMock(return_value=[_stored_entity()])
+    backend.get_edges_for_entities = AsyncMock(return_value=[])
     set_backend(backend)
 
     with (
@@ -209,6 +250,9 @@ async def test_person_unification_notifies_primary_update_and_duplicate_tombston
     updated = {**primary, "content": "Merged content"}
     backend = MagicMock()
     backend.merge_person_entities = AsyncMock(return_value=updated)
+    backend.get_edges_for_entities = AsyncMock(
+        return_value=[_stored_edge(str(primary["id"]))]
+    )
     set_backend(backend)
 
     with (
@@ -221,8 +265,9 @@ async def test_person_unification_notifies_primary_update_and_duplicate_tombston
     assert merge_args is not None
     assert merge_args.args == ("primary", ["duplicate"])
     events = [call.args[0] for call in notify.await_args_list]
-    assert isinstance(events[0], EntityUpdateMutation)
+    assert isinstance(events[0], EntityUpsertMutation)
     assert events[0].entity.content == "Merged content"
+    assert len(events[0].edges) == 1
     assert isinstance(events[1], TombstoneMutation)
     assert events[1].target.platform_entity_id == "duplicate@example.com"
 

@@ -489,10 +489,10 @@ class SQLiteBackend(StorageBackend):
             ):
                 await conn.execute("BEGIN IMMEDIATE")
                 try:
-                    person_id_map, updated_person_ids = await self._upsert_persons(
+                    person_id_map, upserted_person_ids = await self._upsert_persons(
                         conn, batch.persons, person_embeddings
                     )
-                    entity_id_map, updated_entity_ids = await self._upsert_entities(
+                    entity_id_map, upserted_entity_ids = await self._upsert_entities(
                         conn, batch.entities, entity_embeddings
                     )
                     await self._upsert_edges(conn, batch, person_id_map, entity_id_map)
@@ -501,7 +501,7 @@ class SQLiteBackend(StorageBackend):
                     await conn.execute("ROLLBACK")
                     raise
             return await self._get_entities_by_ids_in_order(
-                [*updated_person_ids, *updated_entity_ids]
+                [*upserted_person_ids, *upserted_entity_ids]
             )
 
     async def _upsert_persons(
@@ -511,9 +511,8 @@ class SQLiteBackend(StorageBackend):
         embeddings: dict[str, list[float] | None],
     ) -> tuple[dict[str, str], list[str]]:
         id_map: dict[str, str] = {}
-        updated_ids: list[str] = []
-        updated_id_set: set[str] = set()
-        created_ids: set[str] = set()
+        upserted_ids: list[str] = []
+        upserted_id_set: set[str] = set()
         for p in persons:
             canonical_key = p.canonical_email or f"{p.platform}:{p.platform_user_id}"
             meta: dict[str, str] = {}
@@ -579,9 +578,9 @@ class SQLiteBackend(StorageBackend):
                     ],
                 )
                 entity_id = existing_id
-                if changed and entity_id not in created_ids and entity_id not in updated_id_set:
-                    updated_ids.append(entity_id)
-                    updated_id_set.add(entity_id)
+                if changed and entity_id not in upserted_id_set:
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
             else:
                 cursor = await conn.execute(
                     """
@@ -604,7 +603,9 @@ class SQLiteBackend(StorageBackend):
                 if row is None:
                     raise RuntimeError("Failed to upsert person entity")
                 entity_id = str(row[0])
-                created_ids.add(entity_id)
+                if entity_id not in upserted_id_set:
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
                 fts_title = p.display_name or ""
                 fts_content = p.canonical_email or ""
                 rewrite_fts = bool(fts_title or fts_content)
@@ -620,7 +621,7 @@ class SQLiteBackend(StorageBackend):
             id_map[p.platform_user_id] = entity_id
             if p.canonical_email:
                 id_map[p.canonical_email] = entity_id
-        return id_map, updated_ids
+        return id_map, upserted_ids
 
     async def _resolve_person_for_upsert(
         self,
@@ -651,9 +652,8 @@ class SQLiteBackend(StorageBackend):
         embeddings: dict[str, list[float] | None],
     ) -> tuple[dict[str, str], list[str]]:
         id_map: dict[str, str] = {}
-        updated_ids: list[str] = []
-        updated_id_set: set[str] = set()
-        created_ids: set[str] = set()
+        upserted_ids: list[str] = []
+        upserted_id_set: set[str] = set()
         # FTS maintenance is independent of edge resolution. Deferring it avoids
         # two SQLite round trips for every entity in a connector-sized batch.
         fts_delete_ids: list[str] = []
@@ -678,18 +678,18 @@ class SQLiteBackend(StorageBackend):
                 )
 
             if e.is_stub:
+                new_id = _new_id()
                 cursor = await conn.execute(
                     """
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, metadata,
                          created_at, updated_at, retention_policy, retention_parent_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
-                        entity_type = entities.entity_type
+                    ON CONFLICT (platform, platform_entity_id) DO NOTHING
                     RETURNING id
                     """,
                     [
-                        _new_id(),
+                        new_id,
                         e.entity_type,
                         e.platform,
                         e.platform_entity_id,
@@ -701,6 +701,22 @@ class SQLiteBackend(StorageBackend):
                         parent_id,
                     ],
                 )
+                row = await cursor.fetchone()
+                if row is not None:
+                    entity_id = str(row[0])
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
+                else:
+                    existing_id = await self._resolve_existing_entity_id(
+                        conn, e.platform, e.platform_entity_id
+                    )
+                    if existing_id is None:
+                        raise RuntimeError(
+                            f"Failed to resolve stub entity {e.platform}:{e.platform_entity_id}"
+                        )
+                    entity_id = existing_id
+                id_map[e.platform_entity_id] = entity_id
+                continue
             else:
                 existing_cursor = await conn.execute(
                     """
@@ -822,16 +838,9 @@ class SQLiteBackend(StorageBackend):
                         f"Failed to upsert entity {e.platform}:{e.platform_entity_id}"
                     )
                 entity_id: str = row[0]
-                if (
-                    existing_row is not None
-                    and changed
-                    and entity_id not in created_ids
-                    and entity_id not in updated_id_set
-                ):
-                    updated_ids.append(entity_id)
-                    updated_id_set.add(entity_id)
-                if existing_row is None:
-                    created_ids.add(entity_id)
+                if (existing_row is None or changed) and entity_id not in upserted_id_set:
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
                 if rewrite_fts:
                     if existing_row is not None:
                         fts_delete_ids.append(entity_id)
@@ -839,13 +848,6 @@ class SQLiteBackend(StorageBackend):
                         fts_entries[entity_id] = (fts_title, fts_content)
                 id_map[e.platform_entity_id] = entity_id
                 continue
-
-            row = await cursor.fetchone()
-            if row is None:
-                raise RuntimeError(
-                    f"Failed to upsert stub entity {e.platform}:{e.platform_entity_id}"
-                )
-            id_map[e.platform_entity_id] = row[0]
 
         for start in range(0, len(fts_delete_ids), _FTS_DELETE_CHUNK_SIZE):
             ids = fts_delete_ids[start : start + _FTS_DELETE_CHUNK_SIZE]
@@ -860,7 +862,7 @@ class SQLiteBackend(StorageBackend):
             await conn.executemany(
                 "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)", inserts
             )
-        return id_map, updated_ids
+        return id_map, upserted_ids
 
     async def _upsert_edges(
         self,

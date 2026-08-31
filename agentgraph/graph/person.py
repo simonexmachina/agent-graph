@@ -27,19 +27,13 @@ async def unify_persons(
 
     if duplicate_ids:
         from agentgraph.connectors.feed import (
-            EntityUpdateMutation,
             TombstoneMutation,
-            entity_snapshot_from_entity,
             mutation_target_from_entity,
             notify_feed_connectors,
         )
+        from agentgraph.graph.upsert import notify_entity_upserts
 
-        await notify_feed_connectors(
-            EntityUpdateMutation(
-                target=mutation_target_from_entity(updated),
-                entity=entity_snapshot_from_entity(updated),
-            )
-        )
+        await notify_entity_upserts([updated])
         for duplicate in duplicate_entities:
             if duplicate["id"] != primary["id"]:
                 await notify_feed_connectors(

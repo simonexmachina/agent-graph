@@ -38,7 +38,7 @@ class MutationTarget(BaseModel):
 
 
 class EntitySnapshot(BaseModel):
-    """Committed graph entity state delivered with an update mutation."""
+    """Committed graph entity state delivered with an upsert mutation."""
 
     id: str
     entity_type: str
@@ -57,6 +57,19 @@ class EntitySnapshot(BaseModel):
     retention_parent_id: str | None = None
     cumulative_observation_duration_ms: int
     bookmarked: bool
+
+
+class EdgeSnapshot(BaseModel):
+    """Committed graph edge state incident to an upserted entity."""
+
+    id: str
+    edge_type: str
+    platform: str
+    properties: dict[str, Any]
+    source_entity_id: str
+    target_entity_id: str
+    source_ref: str
+    target_ref: str
 
 
 class ObservationMutation(BaseModel):
@@ -83,16 +96,17 @@ class TombstoneMutation(BaseModel):
     target: MutationTarget
 
 
-class EntityUpdateMutation(BaseModel):
+class EntityUpsertMutation(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
-    kind: Literal["update"] = "update"
+    kind: Literal["upsert"] = "upsert"
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     target: MutationTarget
     entity: EntitySnapshot
+    edges: list[EdgeSnapshot]
 
 
 type MutationEvent = (
-    ObservationMutation | BookmarkMutation | TombstoneMutation | EntityUpdateMutation
+    ObservationMutation | BookmarkMutation | TombstoneMutation | EntityUpsertMutation
 )
 
 
@@ -168,9 +182,15 @@ def mutation_target_from_entity(
 
 
 def entity_snapshot_from_entity(entity: dict[str, Any]) -> EntitySnapshot:
-    """Validate a committed storage result for use in an update mutation."""
+    """Validate a committed storage result for use in an upsert mutation."""
 
     return EntitySnapshot.model_validate(entity)
+
+
+def edge_snapshot_from_edge(edge: dict[str, Any]) -> EdgeSnapshot:
+    """Validate a committed storage edge for use in an upsert mutation."""
+
+    return EdgeSnapshot.model_validate(edge)
 
 
 def mutation_target_from_reference(
