@@ -232,16 +232,24 @@ class RssConnector(BaseConnector):
             return []
 
         backend = get_backend()
-        metadata_rows = await backend.list_recent_metadata_by_group(
+        feed_urls_by_entity_id = {
+            f"feed/{_feed_id(feed_url)}": feed_url for feed_url in settings.feed_urls
+        }
+        metadata_by_feed_entity_id = await backend.list_recent_metadata_by_edge_target(
             "Document",
             {"platform": self.source},
-            "feed_url",
-            settings.feed_urls,
+            "posted_in",
+            self.source,
+            list(feed_urls_by_entity_id),
             _MAX_OBSERVATION_ENTRIES_PER_FEED,
             "updated_at",
         )
         derived_patterns = derive_observation_url_patterns(
-            _recent_entry_links_by_feed(metadata_rows, settings.feed_urls)
+            {
+                feed_urls_by_entity_id[feed_entity_id]: _entry_links(metadata_rows)
+                for feed_entity_id, metadata_rows in metadata_by_feed_entity_id.items()
+                if feed_entity_id in feed_urls_by_entity_id
+            }
         )
         patterns = list(dict.fromkeys(derived_patterns))
         # A transient database timeout must not prevent later metadata refreshes
@@ -806,23 +814,13 @@ def _is_tracking_query_key(key: str) -> bool:
     return key.lower().startswith("utm_") or key.lower() in _TRACKING_QUERY_KEYS
 
 
-def _recent_entry_links_by_feed(
-    metadata_rows: Sequence[Mapping[str, object]],
-    feed_urls: Sequence[str],
-) -> dict[str, list[str]]:
-    configured_feeds = set(feed_urls)
-    links_by_feed: dict[str, list[str]] = {}
+def _entry_links(metadata_rows: Sequence[Mapping[str, object]]) -> list[str]:
+    links: list[str] = []
     for metadata in metadata_rows:
-        feed_url = _metadata_str(metadata, "feed_url")
-        if feed_url not in configured_feeds:
-            continue
-        links = links_by_feed.setdefault(feed_url, [])
-        if len(links) == _MAX_OBSERVATION_ENTRIES_PER_FEED:
-            continue
         link = _metadata_str(metadata, "web_url") or _metadata_str(metadata, "link")
         if link is not None:
             links.append(link)
-    return links_by_feed
+    return links
 
 
 def _entry_text(entry: dict[str, Any]) -> str:

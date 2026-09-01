@@ -123,11 +123,10 @@ def test_derive_observation_patterns_remove_subsumed_specific_paths() -> None:
 @pytest.mark.asyncio
 async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None:
     feed_url = "https://example.com/feed.xml"
+    feed_entity_id = f"feed/{_feed_id(feed_url)}"
     backend = MagicMock()
-    backend.list_recent_metadata_by_group = AsyncMock(
-        return_value=[
-            {"feed_url": feed_url, "web_url": "https://example.com/articles/first"}
-        ]
+    backend.list_recent_metadata_by_edge_target = AsyncMock(
+        return_value={feed_entity_id: [{"web_url": "https://example.com/articles/first"}]}
     )
     set_backend(backend)
 
@@ -138,11 +137,12 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
         patterns = await RssConnector().observation_url_patterns()
 
     assert patterns == ["https://example.com/*"]
-    backend.list_recent_metadata_by_group.assert_awaited_once_with(
+    backend.list_recent_metadata_by_edge_target.assert_awaited_once_with(
         "Document",
         {"platform": "rss"},
-        "feed_url",
-        [feed_url],
+        "posted_in",
+        "rss",
+        [feed_entity_id],
         _MAX_OBSERVATION_ENTRIES_PER_FEED,
         "updated_at",
     )
@@ -151,13 +151,12 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
 @pytest.mark.asyncio
 async def test_rss_observation_patterns_retry_after_an_empty_result() -> None:
     feed_url = "https://example.com/feed.xml"
+    feed_entity_id = f"feed/{_feed_id(feed_url)}"
     backend = MagicMock()
-    backend.list_recent_metadata_by_group = AsyncMock(
+    backend.list_recent_metadata_by_edge_target = AsyncMock(
         side_effect=[
-            [],
-            [
-                {"feed_url": feed_url, "web_url": "https://example.com/articles/first"}
-            ],
+            {},
+            {feed_entity_id: [{"web_url": "https://example.com/articles/first"}]},
         ]
     )
     set_backend(backend)

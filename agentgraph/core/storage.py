@@ -139,16 +139,17 @@ class StorageBackend(ABC):
     ) -> list[EntityResult]: ...
 
     @abstractmethod
-    async def list_recent_metadata_by_group(
+    async def list_recent_metadata_by_edge_target(
         self,
         entity_type: str,
         filters: dict[str, str],
-        group_metadata_key: str,
-        group_values: list[str],
-        per_group_limit: int,
+        edge_type: str,
+        target_platform: str,
+        target_platform_entity_ids: list[str],
+        per_target_limit: int,
         order_by: str,
-    ) -> list[dict[str, Any]]:
-        """Return metadata-only rows, capped per metadata group."""
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return metadata-only source rows, capped and grouped by edge target."""
         ...
 
     # --- Read: edges ---

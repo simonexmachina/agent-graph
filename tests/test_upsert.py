@@ -162,19 +162,29 @@ async def test_upsert_entity_and_edge(sqlite_backend: SQLiteBackend) -> None:
     assert edge_count == 1
 
 
-async def test_list_recent_metadata_by_group_returns_metadata_only_per_group(
+async def test_list_recent_metadata_by_edge_target_returns_newest_metadata_per_target(
     sqlite_backend: SQLiteBackend,
 ) -> None:
     await upsert_batch(
         EntityBatch(
             entities=[
                 EntityRecord(
+                    entity_type="Folder",
+                    platform="rss",
+                    platform_entity_id="feed/a",
+                ),
+                EntityRecord(
+                    entity_type="Folder",
+                    platform="rss",
+                    platform_entity_id="feed/b",
+                ),
+                EntityRecord(
                     entity_type="Document",
                     platform="rss",
                     platform_entity_id="feed-a-old",
                     title="A old",
                     content="old content",
-                    metadata={"feed_url": "https://example.com/a", "web_url": "https://a/old"},
+                    metadata={"web_url": "https://a/old"},
                     source_updated_at=datetime(2026, 1, 1, tzinfo=UTC),
                 ),
                 EntityRecord(
@@ -183,7 +193,7 @@ async def test_list_recent_metadata_by_group_returns_metadata_only_per_group(
                     platform_entity_id="feed-a-new",
                     title="A new",
                     content="new content",
-                    metadata={"feed_url": "https://example.com/a", "web_url": "https://a/new"},
+                    metadata={"web_url": "https://a/new"},
                     source_updated_at=datetime(2026, 1, 2, tzinfo=UTC),
                 ),
                 EntityRecord(
@@ -192,10 +202,42 @@ async def test_list_recent_metadata_by_group_returns_metadata_only_per_group(
                     platform_entity_id="feed-b",
                     title="B",
                     content="other content",
-                    metadata={"feed_url": "https://example.com/b", "web_url": "https://b/post"},
+                    metadata={"web_url": "https://b/post"},
                     source_updated_at=datetime(2026, 1, 3, tzinfo=UTC),
                 ),
-            ]
+                EntityRecord(
+                    entity_type="Document",
+                    platform="rss",
+                    platform_entity_id="wrong-edge",
+                    metadata={"web_url": "https://a/wrong"},
+                ),
+            ],
+            edges=[
+                EdgeRecord(
+                    edge_type="posted_in",
+                    source_platform_entity_id="feed-a-old",
+                    target_platform_entity_id="feed/a",
+                    platform="rss",
+                ),
+                EdgeRecord(
+                    edge_type="posted_in",
+                    source_platform_entity_id="feed-a-new",
+                    target_platform_entity_id="feed/a",
+                    platform="rss",
+                ),
+                EdgeRecord(
+                    edge_type="posted_in",
+                    source_platform_entity_id="feed-b",
+                    target_platform_entity_id="feed/b",
+                    platform="rss",
+                ),
+                EdgeRecord(
+                    edge_type="references",
+                    source_platform_entity_id="wrong-edge",
+                    target_platform_entity_id="feed/a",
+                    platform="rss",
+                ),
+            ],
         )
     )
     await sqlite_backend._execute(
@@ -207,19 +249,48 @@ async def test_list_recent_metadata_by_group_returns_metadata_only_per_group(
         ["2026-01-02T00:00:00Z", "feed-a-new"],
     )
 
-    metadata_rows = await sqlite_backend.list_recent_metadata_by_group(
-        "Document",
-        {"platform": "rss"},
-        "feed_url",
-        ["https://example.com/a", "https://example.com/b"],
-        1,
-        "updated_at",
-    )
+    with patch.object(sqlite_backend, "_fetchall", wraps=sqlite_backend._fetchall) as fetchall:
+        metadata_by_target = await sqlite_backend.list_recent_metadata_by_edge_target(
+            "Document",
+            {"platform": "rss"},
+            "posted_in",
+            "rss",
+            ["feed/a", "feed/b"],
+            1,
+            "updated_at",
+        )
 
-    assert metadata_rows == [
-        {"feed_url": "https://example.com/a", "web_url": "https://a/new"},
-        {"feed_url": "https://example.com/b", "web_url": "https://b/post"},
-    ]
+    assert metadata_by_target == {
+        "feed/a": [{"web_url": "https://a/new"}],
+        "feed/b": [{"web_url": "https://b/post"}],
+    }
+    assert fetchall.await_args is not None
+    sql, params = fetchall.await_args.args
+    plan = await sqlite_backend._fetchall(f"EXPLAIN QUERY PLAN {sql}", params)
+    details = [str(row["detail"]) for row in plan]
+    assert any(
+        "SEARCH target" in detail and "platform=? AND platform_entity_id=?" in detail
+        for detail in details
+    )
+    assert any("idx_edges_target_type_source" in detail for detail in details)
+    assert not any("SCAN source" in detail for detail in details)
+
+
+async def test_list_recent_metadata_by_edge_target_returns_empty_for_no_work(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    assert (
+        await sqlite_backend.list_recent_metadata_by_edge_target(
+            "Document", {}, "posted_in", "rss", [], 8, "updated_at"
+        )
+        == {}
+    )
+    assert (
+        await sqlite_backend.list_recent_metadata_by_edge_target(
+            "Document", {}, "posted_in", "rss", ["feed/a"], 0, "updated_at"
+        )
+        == {}
+    )
 
 
 async def test_upsert_batch_maintains_one_current_fts_row_per_entity(
