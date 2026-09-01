@@ -19,8 +19,10 @@ from pydantic import BaseModel
 
 from agentgraph.core.runtime import backend_context
 from agentgraph.graph.expiration import run_expiration
+from agentgraph.server import uds
 from agentgraph.server.cli_api import router as cli_router
 from agentgraph.server.meta_api import router as meta_router
+from agentgraph.server.query_api import router as query_router
 from agentgraph.server.sync import setup_sync, shutdown_poll_tasks
 from agentgraph.server.sync_api import router as sync_router
 
@@ -68,6 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if _scheduler:
                 _scheduler.shutdown(wait=False)
             await shutdown_poll_tasks()
+            uds.release_owned_socket()
     logger.info("AgentGraph server stopped")
 
 
@@ -92,6 +95,7 @@ async def log_request_timing(request: Request, call_next: Any) -> Any:
 
 app.include_router(cli_router)
 app.include_router(meta_router)
+app.include_router(query_router)
 app.include_router(sync_router)
 
 

@@ -114,8 +114,14 @@ def _auth_status_display(
 def _server_is_running() -> bool:
     """Return whether the configured AgentGraph server responds to health checks."""
     from agentgraph.config import get_settings
+    from agentgraph.server import uds
 
     settings = get_settings()
+    # Prefer the socket: a sandbox may deny loopback TCP while allowing the socket,
+    # in which case a TCP probe would report a running server as down.
+    if settings.server_uds_path is not None and uds.socket_is_live(settings.server_uds_path):
+        return True
+
     host = "127.0.0.1" if settings.server_host in ("", "0.0.0.0", "::") else settings.server_host
     url = f"http://{host}:{settings.server_port}/health"
     try:
@@ -528,12 +534,45 @@ def serve(
     configure_logging(settings.log_level, settings.log_file)
     typer.echo(f"AgentGraph config directory: {get_config_paths()[0]}")
     typer.echo(f"AgentGraph log file: {settings.log_file.expanduser()}")
-    uvicorn.run(
+
+    uds_path = settings.server_uds_path
+    if uds_path is None or reload:
+        # Reload runs a supervisor that rebinds on its own, so it cannot take the
+        # pre-bound sockets below; serve TCP only and say so.
+        if reload and uds_path is not None:
+            typer.echo(f"Reload mode serves TCP only; not listening on {uds_path}")
+        uvicorn.run(
+            "agentgraph.server.app:app",
+            host=settings.server_host,
+            port=settings.server_port,
+            reload=reload,
+        )
+        return
+
+    from agentgraph.server import uds
+
+    # TCP stays bound for the browser extension and graph viewer; the socket is for
+    # CLI clients in sandboxes that deny loopback TCP.
+    config = uvicorn.Config(
         "agentgraph.server.app:app",
         host=settings.server_host,
         port=settings.server_port,
-        reload=reload,
     )
+    try:
+        uds_socket = uds.bind_socket(uds_path, backlog=config.backlog)
+    except OSError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"AgentGraph socket: {uds_path}")
+    # The app's shutdown hook does the removal: uvicorn's signal handling exits
+    # without unwinding this frame, so a finally here would not run on SIGTERM.
+    uds.set_owned_socket(uds_path)
+    try:
+        uvicorn.Server(config).run(sockets=[config.bind_socket(), uds_socket])
+    finally:
+        uds_socket.close()
+        uds.release_owned_socket()
 
 
 @app.command()
