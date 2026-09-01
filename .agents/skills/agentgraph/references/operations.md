@@ -80,9 +80,16 @@ first Person is canonical and keeps its ID. Deletion removes connected edges.
 process-management instructions rather than starting a duplicate foreground server
 when a service manager already owns it.
 
+The server listens on a Unix socket (`AGENTGRAPH_SERVER_UDS_PATH`, default
+`~/.agentgraph/agentgraph.sock`) as well as TCP, because most agent sandboxes deny
+loopback TCP while permitting an allowlisted socket.
+
 `agentgraph poll` and connector or authentication commands that queue a poll or ingest
-contact that service over localhost. If sandboxed execution blocks one of those
-commands, request permission to contact the configured localhost server and retry it.
+always contact that service and have no local fallback; if sandboxed execution blocks
+one, request permission to contact the server or ask for the socket to be allowlisted,
+then retry. Reads and `fetch`/`download` follow `AGENTGRAPH_QUERY_TRANSPORT`
+(`auto` by default: socket, then TCP, then in-process), so they keep working when the
+server is unreachable.
 
 ```bash
 agentgraph mcp-config

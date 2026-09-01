@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import dotenv_values
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -77,6 +77,29 @@ class Settings(BaseSettings):
     # Server
     server_host: str = Field(default="127.0.0.1")
     server_port: int = Field(default=8765)
+    server_uds_path: Path | None = Field(
+        default_factory=lambda: get_config_paths()[0] / "agentgraph.sock",
+        description=(
+            "Unix socket the server listens on in addition to TCP, and the first "
+            "transport CLI clients try. A socket crosses agent sandboxes that block "
+            "loopback TCP; set to null to serve and query over TCP only."
+        ),
+    )
+
+    # Query transport
+    query_transport: Literal["auto", "in-process", "server"] = Field(
+        default="auto",
+        description=(
+            "How CLI reads reach the graph. 'in-process' opens the backend directly; "
+            "'server' requires the running server and fails loudly if unreachable; "
+            "'auto' tries the socket, then TCP, then falls back to in-process."
+        ),
+    )
+    server_connect_timeout_seconds: float = Field(
+        default=0.2,
+        gt=0,
+        description="Connect timeout when probing the server before falling back to in-process",
+    )
 
     # Browser observation detection
     observation_threshold_seconds: int = Field(
@@ -134,6 +157,14 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = Field(default="INFO")
     log_file: Path = Field(default_factory=lambda: get_config_paths()[0] / "agentgraph.log")
+
+    @field_validator("server_uds_path", mode="before")
+    @classmethod
+    def _allow_disabling_uds(cls, value: object) -> object:
+        """Treat an empty or "none"/"null" env value as "serve over TCP only"."""
+        if isinstance(value, str) and value.strip().lower() in {"", "none", "null"}:
+            return None
+        return value
 
     def __init__(self, **values: Any) -> None:
         # Resolve the config-directory .env at instantiation time as well as

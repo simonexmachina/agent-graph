@@ -1,4 +1,9 @@
-"""CLI graph commands executed directly against the configured backend."""
+"""CLI graph commands, run in-process or through the local server.
+
+Which transport is used comes from ``AGENTGRAPH_QUERY_TRANSPORT``; see
+``agentgraph.query_client``. The transport is resolved before any backend is opened,
+so the server path never touches SQLite or imports the embedding model.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +16,8 @@ from rich.console import Console
 from rich.table import Table
 
 from agentgraph.core.runtime import backend_context
-from agentgraph.graph.operations import is_stub, summarize_entities
+from agentgraph.graph.operations import is_stub
+from agentgraph.query_client import QueryClient, resolve_query_client
 
 console = Console()
 
@@ -24,19 +30,56 @@ async def _with_backend[T](operation: Callable[[], Awaitable[T]]) -> T:
         return await operation()
 
 
+def _report_failure(
+    exc: Exception,
+    error_hint: Callable[[Exception], str | None] | None,
+) -> None:
+    console.print("[red]AgentGraph command failed:[/red] ", end="")
+    console.print(str(exc), markup=False, highlight=False)
+    if error_hint is None:
+        return
+    # Hints resolve connectors, which the server transport has not bootstrapped.
+    # Only pay for that import when a command has actually failed.
+    from agentgraph.connectors.registry import bootstrap
+
+    bootstrap()
+    hint = error_hint(exc)
+    if hint:
+        console.print(hint, markup=False, highlight=False)
+
+
 def _run[T](
     operation: Callable[[], Awaitable[T]],
     error_hint: Callable[[Exception], str | None] | None = None,
 ) -> T:
-    """Run one graph operation with a configured backend and concise CLI errors."""
+    """Run one graph operation in-process with a configured backend."""
     try:
         return asyncio.run(_with_backend(operation))
     except Exception as exc:
-        console.print("[red]AgentGraph command failed:[/red] ", end="")
+        _report_failure(exc, error_hint)
+        raise SystemExit(1) from exc
+
+
+def _run_with_client[T](
+    operation: Callable[[QueryClient], Awaitable[T]],
+    error_hint: Callable[[Exception], str | None] | None = None,
+) -> T:
+    """Resolve the transport, then run one operation through it."""
+    try:
+        client = resolve_query_client()
+    except ConnectionError as exc:
         console.print(str(exc), markup=False, highlight=False)
-        hint = error_hint(exc) if error_hint is not None else None
-        if hint:
-            console.print(hint, markup=False, highlight=False)
+        raise SystemExit(1) from exc
+
+    async def run() -> T:
+        if not client.needs_backend:
+            return await operation(client)
+        return await _with_backend(lambda: operation(client))
+
+    try:
+        return asyncio.run(run())
+    except Exception as exc:
+        _report_failure(exc, error_hint)
         raise SystemExit(1) from exc
 
 
@@ -44,7 +87,7 @@ def run_graph_operation[T](
     operation: Callable[[], Awaitable[T]],
     error_hint: Callable[[Exception], str | None] | None = None,
 ) -> T:
-    """Run a graph operation from another CLI command."""
+    """Run a graph operation in-process, for callers holding their own coroutines."""
     return _run(operation, error_hint=error_hint)
 
 
@@ -56,19 +99,16 @@ def cmd_search(
     as_json: bool,
     platform: str | None = None,
 ) -> None:
-    async def operation() -> list[dict[str, Any]]:
-        from agentgraph.graph.query import search_entities
-
-        results = await search_entities(
+    async def operation(client: QueryClient) -> list[dict[str, Any]]:
+        return await client.search(
             query,
-            entity_types=entity_types or None,
-            limit=limit,
-            min_score=min_score,
-            platform=platform,
+            entity_types or None,
+            limit,
+            min_score,
+            platform,
         )
-        return summarize_entities(results)
 
-    results = _run(operation)
+    results = _run_with_client(operation)
 
     if as_json:
         console.print_json(json.dumps(results, default=str))
@@ -115,12 +155,10 @@ def _print_entity(entity: dict[str, Any]) -> None:
 
 
 def cmd_get(entity_id: str, as_json: bool, resolve: bool = False) -> None:
-    async def operation() -> dict[str, Any] | None:
-        from agentgraph.graph.operations import get_entity_details
+    async def operation(client: QueryClient) -> dict[str, Any] | None:
+        return await client.get_entity(entity_id, resolve)
 
-        return await get_entity_details(entity_id, resolve=resolve)
-
-    entity = _run(operation)
+    entity = _run_with_client(operation)
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
@@ -136,16 +174,12 @@ def cmd_edges(
     direction: str,
     as_json: bool,
 ) -> None:
-    async def operation() -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-        from agentgraph.graph.operations import get_entity_edges
+    async def operation(
+        client: QueryClient,
+    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        return await client.edges(entity_id, edge_type, direction)
 
-        return await get_entity_edges(
-            entity_id,
-            edge_type=edge_type,
-            direction=direction,
-        )
-
-    entity, edges = _run(operation)
+    entity, edges = _run_with_client(operation)
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
@@ -184,16 +218,12 @@ def cmd_traverse(
     as_json: bool,
     resolve: bool = False,
 ) -> None:
-    async def operation() -> tuple[dict[str, Any] | None, dict[str, Any]]:
-        from agentgraph.graph.operations import traverse_entity
+    async def operation(
+        client: QueryClient,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        return await client.traverse(entity_id, max_depth, resolve)
 
-        return await traverse_entity(
-            entity_id,
-            max_depth=max_depth,
-            resolve=resolve,
-        )
-
-    entity, result = _run(operation)
+    entity, result = _run_with_client(operation)
     if entity is None:
         console.print(f"[red]Entity {entity_id!r} not found.[/red]")
         return
@@ -228,10 +258,8 @@ def _print_fetch_result(result: dict[str, Any]) -> None:
 
 
 def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
-    async def operation() -> dict[str, Any]:
-        from agentgraph.graph.fetch import fetch_entity
-
-        return await fetch_entity(platform, resource_id)
+    async def operation(client: QueryClient) -> dict[str, Any]:
+        return await client.fetch(platform, resource_id)
 
     def error_hint(error: Exception) -> str | None:
         from agentgraph.connectors.registry import get_connector
@@ -239,7 +267,7 @@ def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
         connector = get_connector(platform)
         return connector.fetch_error_hint(resource_id, error, "cli") if connector is not None else None
 
-    result = _run(operation, error_hint=error_hint)
+    result = _run_with_client(operation, error_hint=error_hint)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -247,12 +275,10 @@ def cmd_fetch(platform: str, resource_id: str, as_json: bool) -> None:
 
 
 def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
-    async def operation() -> dict[str, Any]:
-        from agentgraph.graph.fetch import fetch_entity_by_id
+    async def operation(client: QueryClient) -> dict[str, Any]:
+        return await client.fetch_entity(entity_id)
 
-        return await fetch_entity_by_id(entity_id)
-
-    result = _run(operation)
+    result = _run_with_client(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -260,12 +286,10 @@ def cmd_fetch_entity(entity_id: str, as_json: bool) -> None:
 
 
 def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None:
-    async def operation() -> dict[str, Any]:
-        from agentgraph.graph.download import download_entity
+    async def operation(client: QueryClient) -> dict[str, Any]:
+        return await client.download(entity_id, output_path)
 
-        return await download_entity(entity_id, output_path)
-
-    result = _run(operation)
+    result = _run_with_client(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -276,14 +300,10 @@ def cmd_download(entity_id: str, output_path: str | None, as_json: bool) -> None
 
 
 def cmd_bookmark(target: str, bookmarked: bool, as_json: bool) -> None:
-    async def operation() -> dict[str, Any]:
-        from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
+    async def operation(client: QueryClient) -> dict[str, Any]:
+        return await client.bookmark(target, bookmarked)
 
-        if bookmarked:
-            return await bookmark_target(target)
-        return await set_entity_bookmark(target, False)
-
-    result = _run(operation)
+    result = _run_with_client(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -293,12 +313,10 @@ def cmd_bookmark(target: str, bookmarked: bool, as_json: bool) -> None:
 
 
 def cmd_delete(target: str, as_json: bool) -> None:
-    async def operation() -> dict[str, Any]:
-        from agentgraph.graph.delete import delete_entity
+    async def operation(client: QueryClient) -> dict[str, Any]:
+        return await client.delete(target)
 
-        return await delete_entity(target)
-
-    result = _run(operation)
+    result = _run_with_client(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -312,12 +330,10 @@ def cmd_unify_persons(
     duplicate_entity_ids: list[str],
     as_json: bool,
 ) -> None:
-    async def operation() -> dict[str, Any]:
-        from agentgraph.graph.person import unify_persons
+    async def operation(client: QueryClient) -> dict[str, Any]:
+        return await client.unify_persons(primary_entity_id, duplicate_entity_ids)
 
-        return await unify_persons(primary_entity_id, duplicate_entity_ids)
-
-    result = _run(operation)
+    result = _run_with_client(operation)
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return
@@ -338,21 +354,18 @@ def cmd_query(
     as_json: bool,
     has_attachments: bool = False,
 ) -> None:
-    async def operation() -> list[dict[str, Any]]:
-        from agentgraph.graph.query import query_by_filter
-
-        results = await query_by_filter(
+    async def operation(client: QueryClient) -> list[dict[str, Any]]:
+        return await client.query_by_filter(
             entity_type,
-            filters=filters,
-            limit=limit,
-            order_by=order_by,
-            since=since,
-            authored_by_me=authored_by_me,
-            has_attachments=has_attachments,
+            filters,
+            limit,
+            order_by,
+            since,
+            authored_by_me,
+            has_attachments,
         )
-        return summarize_entities(results)
 
-    results = _run(operation)
+    results = _run_with_client(operation)
     if as_json:
         console.print_json(json.dumps(results, default=str))
         return

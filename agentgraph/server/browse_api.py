@@ -1,19 +1,25 @@
-"""HTTP data endpoints retained for the local graph viewer and extension."""
+"""Paginated graph browse: the node/edge windows a graph view renders.
+
+Single-entity reads and mutations live in ``graph_api``; this module keeps the
+node-set resolution and pagination that only the browse views need. The thin
+``async def`` wrappers below exist so tests can substitute the graph layer at module
+scope (``tests/test_browse.py``).
+"""
 
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-router = APIRouter(prefix="/api/cli", tags=["cli"])
+from agentgraph.server.graph_api import GraphAPIRoute
+from agentgraph.server.presentation import entity_display_name, with_display_names
 
-_WHITESPACE_RE = re.compile(r"\s+")
+router = APIRouter(prefix="/api/graph", tags=["graph"], route_class=GraphAPIRoute)
 
 
 async def search_entities(
@@ -83,55 +89,6 @@ def parse_since(since: str) -> datetime:
     return impl(since)
 
 
-def _normalise_display_text(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    text = _WHITESPACE_RE.sub(" ", value).strip()
-    return text or None
-
-
-def _entity_display_name(entity: dict[str, Any]) -> str:
-    metadata = entity.get("metadata")
-    metadata_dict = metadata if isinstance(metadata, dict) else {}
-    candidates = (
-        entity.get("title"),
-        metadata_dict.get("display_name"),
-        metadata_dict.get("canonical_email"),
-        entity.get("content"),
-        entity.get("platform_entity_id"),
-        entity.get("id"),
-    )
-    for candidate in candidates:
-        text = _normalise_display_text(candidate)
-        if text:
-            return text
-    return "Untitled"
-
-
-def _truncate_text(value: str, limit: int) -> str:
-    if len(value) <= limit:
-        return value
-    return value[: max(limit - 1, 0)].rstrip() + "…"
-
-
-def _entity_viewer_label(entity: dict[str, Any]) -> str:
-    display_name = _entity_display_name(entity)
-    if entity.get("entity_type") == "Message":
-        return _truncate_text(display_name, 80)
-    return display_name
-
-
-def _with_display_name(entity: dict[str, Any]) -> dict[str, Any]:
-    enriched = dict(entity)
-    enriched["display_name"] = _entity_display_name(entity)
-    enriched["viewer_label"] = _entity_viewer_label(entity)
-    return enriched
-
-
-def _with_display_names(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [_with_display_name(entity) for entity in entities]
-
-
 def _summarize_entities(
     entities: list[dict[str, Any]],
     *,
@@ -140,34 +97,6 @@ def _summarize_entities(
     from agentgraph.graph.operations import summarize_entities
 
     return summarize_entities(entities, content_limit=content_limit)
-
-
-@router.get("/entity/{entity_id:path}")
-async def cli_get_entity(entity_id: str) -> dict[str, Any]:
-    from agentgraph.graph.operations import get_entity_details
-
-    entity = await get_entity_details(entity_id)
-    if entity is None:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    return _with_display_name(entity)
-
-
-@router.get("/edges/{entity_id:path}")
-async def cli_get_edges(
-    entity_id: str,
-    edge_type: str | None = Query(default=None),
-    direction: str = Query(default="both"),
-) -> list[dict[str, Any]]:
-    from agentgraph.graph.operations import get_entity_edges
-
-    entity, edges = await get_entity_edges(
-        entity_id,
-        edge_type=edge_type,
-        direction=direction,
-    )
-    if entity is None:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    return edges
 
 
 _VIEWER_ORDER_FIELDS = {
@@ -185,7 +114,7 @@ _VIEWER_ORDER_FIELDS = {
 
 def _viewer_sort_value(node: dict[str, Any], order_by: str) -> str:
     if order_by == "display_name":
-        return _entity_display_name(node).casefold()
+        return entity_display_name(node).casefold()
     value = node.get(order_by)
     return value.casefold() if isinstance(value, str) else ""
 
@@ -391,13 +320,13 @@ async def cli_browse(
         limit,
     )
     return {
-        "nodes": _with_display_names(_summarize_entities(nodes, content_limit=300)),
+        "nodes": with_display_names(_summarize_entities(nodes, content_limit=300)),
         "edges": await _viewer_edges(nodes),
     }
 
 
-@router.get("/browse/nodes")
-async def cli_browse_nodes(
+@router.get("/nodes")
+async def browse_nodes(
     search: str | None = Query(default=None),
     entity_type: list[str] = Query(default=[]),
     platform: str | None = Query(default=None),
@@ -421,15 +350,15 @@ async def cli_browse_nodes(
         ordered=ordered,
     )
     return {
-        "data": _with_display_names(_summarize_entities(nodes, content_limit=300)),
+        "data": with_display_names(_summarize_entities(nodes, content_limit=300)),
         "last_page": max(1, (total + size - 1) // size),
         "total": total,
         "has_more": has_more,
     }
 
 
-@router.get("/browse/edges")
-async def cli_browse_edges(node_ids: str = Query(default="")) -> dict[str, Any]:
+@router.get("/edges")
+async def browse_edges(node_ids: str = Query(default="")) -> dict[str, Any]:
     """Return edges whose endpoints are both in comma-separated node_ids."""
     ids = list(dict.fromkeys(node_id.strip() for node_id in node_ids.split(",") if node_id.strip()))
     if len(ids) > 1000:
@@ -442,65 +371,3 @@ async def cli_browse_edges(node_ids: str = Query(default="")) -> dict[str, Any]:
             if edge["source_entity_id"] in visible_ids and edge["target_entity_id"] in visible_ids
         ]
     }
-
-
-@router.post("/bookmark")
-async def cli_bookmark(
-    target: str | None = Query(default=None),
-    entity_id: str | None = Query(default=None),
-    bookmarked: bool = Query(default=True),
-) -> dict[str, Any]:
-    """Set bookmark state for an entity or URL."""
-    from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
-
-    try:
-        bookmark_target_value = target or entity_id
-        if bookmark_target_value is None:
-            raise ValueError("Missing bookmark target")
-        if not bookmarked:
-            return await set_entity_bookmark(bookmark_target_value, False)
-        return await bookmark_target(bookmark_target_value)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.post("/delete")
-async def cli_delete(
-    target: str = Query(...),
-) -> dict[str, Any]:
-    """Delete an entity from the graph."""
-    from agentgraph.graph.delete import delete_entity
-
-    try:
-        return await delete_entity(target)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.post("/unify-persons")
-async def cli_unify_persons(
-    primary: str = Query(...),
-    duplicate: list[str] = Query(...),
-) -> dict[str, Any]:
-    """Merge duplicate Person entities into a chosen primary Person."""
-    from agentgraph.graph.person import unify_persons
-
-    try:
-        return await unify_persons(primary, duplicate)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/fetch-entity")
-async def cli_fetch_entity(
-    entity_id: str = Query(...),
-) -> dict[str, Any]:
-    """Trigger a connector fetch for an entity by its internal UUID."""
-    from agentgraph.graph.fetch import fetch_entity_by_id
-
-    try:
-        return await fetch_entity_by_id(entity_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc

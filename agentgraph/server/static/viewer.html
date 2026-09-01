@@ -1424,6 +1424,13 @@
     return s ? `${base}?${s}` : base;
   }
 
+  // An entity ref may be a UUID, a platform path (slack/T1/C1), or an http URL.
+  // The server matches it with a path converter, so keep the separators and escape
+  // only what would otherwise start a query string or fragment.
+  function encodeRef(ref) {
+    return String(ref).replace(/\?/g, '%3F').replace(/#/g, '%23');
+  }
+
   // ── Cytoscape formatting ───────────────────────────────────────────────────
   function entityToNode(entity) {
     const label = entity.viewer_label || entity.display_name || entity.title || entity.platform_entity_id || entity.id || '';
@@ -1458,7 +1465,7 @@
   }
 
   function viewerScopeKey(params) {
-    return buildUrl('/api/cli/browse/nodes', {
+    return buildUrl('/api/graph/nodes', {
       search: params.search,
       entity_type: params.entity_type,
       platform: params.platform,
@@ -1509,7 +1516,7 @@
 
   async function loadGraph(params) {
     const requestParams = graphRequestParams(params);
-    const url = buildUrl('/api/cli/browse/nodes', {
+    const url = buildUrl('/api/graph/nodes', {
       ...requestParams,
       page: 1,
       size: params.limit,
@@ -1524,7 +1531,7 @@
       const data = await res.json();
       const nodes = (data.data || []).map(entityToNode);
       const nodeIdSet = new Set(nodes.map(n => n.data.id));
-      const edgeUrl = buildUrl('/api/cli/browse/edges', { node_ids: [...nodeIdSet].join(',') });
+      const edgeUrl = buildUrl('/api/graph/edges', { node_ids: [...nodeIdSet].join(',') });
       const edgesRes = await fetch(edgeUrl);
       if (!edgesRes.ok) throw new Error(`HTTP ${edgesRes.status}`);
       const edgeData = await edgesRes.json();
@@ -1858,7 +1865,7 @@
 
     const nodeIds = rawNodes.map(node => node.id).join(',');
     if (!nodeIds) return;
-    fetch(buildUrl('/api/cli/browse/edges', { node_ids: nodeIds }))
+    fetch(buildUrl('/api/graph/edges', { node_ids: nodeIds }))
       .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
       .then(edgeData => {
         if (!viewerCache || viewerCache.key !== key) return;
@@ -1872,7 +1879,7 @@
   }
 
   async function loadList(params) {
-    const url = buildUrl('/api/cli/browse/nodes', { ...params, page: 1, size: params.limit });
+    const url = buildUrl('/api/graph/nodes', { ...params, page: 1, size: params.limit });
     if (url === _lastListUrl) return;
     _lastListUrl = url;
     setMoreAvailable(false);
@@ -1963,7 +1970,7 @@
     lookupError.style.display = 'none';
     showSpinner();
     try {
-      const res = await fetch('/api/cli/entity/' + q);
+      const res = await fetch(buildUrl('/api/entities/' + encodeRef(q), { include: 'display' }));
       if (res.status === 404) {
         lookupError.textContent = 'Not found';
         lookupError.style.display = 'block';
@@ -2069,12 +2076,14 @@
     showSpinner();
     try {
       const [entityRes, edgesRes] = await Promise.all([
-        fetch('/api/cli/entity/' + entityId),
-        fetch('/api/cli/edges/' + entityId),
+        fetch(buildUrl('/api/entities/' + encodeRef(entityId), { include: 'display' })),
+        fetch('/api/entities/' + encodeRef(entityId) + '/edges'),
       ]);
       if (!entityRes.ok) throw new Error(`HTTP ${entityRes.status}`);
       const entity = await entityRes.json();
-      const edges = edgesRes.ok ? await edgesRes.json() : [];
+      // The edges route returns { entity, edges } so callers that only have a ref can
+      // resolve it in one request; the detail panel already has the entity.
+      const edges = edgesRes.ok ? (await edgesRes.json()).edges || [] : [];
       if (requestId !== detailRequestId) return;
       renderDetail({ ...entity, edges });
     } catch (err) {
@@ -2270,7 +2279,7 @@
       bookmarkError.style.display = 'none';
       try {
         const res = await fetch(
-          `/api/cli/bookmark?entity_id=${encodeURIComponent(entity.id)}&bookmarked=${desiredBookmarked ? 'true' : 'false'}`,
+          `/api/entities/${encodeRef(entity.id)}/bookmark?bookmarked=${desiredBookmarked ? 'true' : 'false'}`,
           { method: 'POST' }
         );
         if (!res.ok) throw new Error(await readErrorDetail(res));
@@ -2302,8 +2311,8 @@
       detailDelete.title = 'Deleting…';
       try {
         const res = await fetch(
-          `/api/cli/delete?target=${encodeURIComponent(entity.id)}`,
-          { method: 'POST' }
+          `/api/entities/${encodeRef(entity.id)}`,
+          { method: 'DELETE' }
         );
         if (!res.ok) throw new Error(await readErrorDetail(res));
         const node = cy.getElementById(entity.id);
@@ -2394,7 +2403,7 @@
         fetchError.style.display = 'none';
         try {
           const res = await fetch(
-            `/api/cli/fetch-entity?entity_id=${encodeURIComponent(entity.id)}`,
+            `/api/entities/${encodeRef(entity.id)}/fetch`,
             { method: 'POST' }
           );
           if (!res.ok) throw new Error(await readErrorDetail(res));
@@ -2539,7 +2548,7 @@
       mergeError.style.display = 'none';
       try {
         const res = await fetch(
-          buildUrl('/api/cli/unify-persons', { primary: entity.id, duplicate: duplicateIds }),
+          buildUrl('/api/persons/unify', { canonical_id: entity.id, duplicate_ids: duplicateIds }),
           { method: 'POST' },
         );
         if (!res.ok) throw new Error(await readErrorDetail(res));

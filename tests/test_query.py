@@ -537,8 +537,8 @@ async def test_set_entity_bookmark_can_clear_bookmark() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cli_bookmark_can_clear_bookmark() -> None:
-    from agentgraph.server.cli_api import cli_bookmark
+async def test_bookmark_route_can_clear_bookmark() -> None:
+    from agentgraph.server.graph_api import bookmark_entity
 
     fake_result = _entity(title="Target")
     fake_result["bookmarked"] = False
@@ -547,7 +547,7 @@ async def test_cli_bookmark_can_clear_bookmark() -> None:
         "agentgraph.graph.bookmark.set_entity_bookmark",
         new=AsyncMock(return_value=fake_result),
     ) as set_bookmark:
-        result = await cli_bookmark(target=None, entity_id="abc123", bookmarked=False)
+        result = await bookmark_entity(ref="abc123", bookmarked=False)
 
     assert result["bookmarked"] is False
     set_bookmark.assert_awaited_once_with("abc123", False)
@@ -683,8 +683,8 @@ async def test_delete_entity_missing_raises_value_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cli_delete_deletes_entity() -> None:
-    from agentgraph.server.cli_api import cli_delete
+async def test_delete_route_deletes_entity() -> None:
+    from agentgraph.server.graph_api import delete_entity as delete_route
 
     fake_result = {"deleted": True, "entity": _entity(title="Target")}
 
@@ -692,7 +692,7 @@ async def test_cli_delete_deletes_entity() -> None:
         "agentgraph.graph.delete.delete_entity",
         new=AsyncMock(return_value=fake_result),
     ) as delete_entity:
-        result = await cli_delete(target="abc123")
+        result = await delete_route(ref="abc123")
 
     assert result["deleted"] is True
     delete_entity.assert_awaited_once_with("abc123")

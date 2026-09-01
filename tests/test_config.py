@@ -6,11 +6,22 @@ import importlib
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 import agentgraph.config as config
 
+# conftest pins these so unit tests never reach a real server; clear them where the
+# point of the test is what the shipped defaults are.
+_TRANSPORT_ENV = ("AGENTGRAPH_QUERY_TRANSPORT", "AGENTGRAPH_SERVER_UDS_PATH")
 
-def test_defaults() -> None:
+
+def _use_shipped_transport_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _TRANSPORT_ENV:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_shipped_transport_defaults(monkeypatch)
     s = config.Settings(_env_file=None)
     assert s.server_port == 8765
     assert s.observation_threshold_seconds == 3
@@ -18,6 +29,7 @@ def test_defaults() -> None:
     assert s.embedding_model == "BAAI/bge-small-en-v1.5"
     assert s.embedding_dimensions == 384
     assert s.poll_interval_seconds is None
+    assert s.query_transport == "auto"
 
 
 def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,6 +80,7 @@ def test_config_dir_env_controls_default_paths(
 ) -> None:
     monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(tmp_path))
     monkeypatch.delenv("AGENTGRAPH_BACKEND_SQLITE_PATH", raising=False)
+    _use_shipped_transport_defaults(monkeypatch)
     reloaded = importlib.reload(config)
     try:
         settings = reloaded.Settings()
@@ -77,6 +90,7 @@ def test_config_dir_env_controls_default_paths(
         assert settings.backend_sqlite_path == str(tmp_path / "agentgraph.db")
         assert settings.log_file == tmp_path / "agentgraph.log"
         assert settings.embedding_cache_dir == tmp_path / "models"
+        assert settings.server_uds_path == tmp_path / "agentgraph.sock"
         env_files = settings.model_config["env_file"]
         assert env_files == [str(tmp_path / ".env"), ".env"]
     finally:
@@ -137,6 +151,36 @@ def test_embedding_cache_dir_env_override(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("AGENTGRAPH_EMBEDDING_CACHE_DIR", "/opt/models")
 
     assert config.Settings(_env_file=None).embedding_cache_dir == Path("/opt/models")
+
+
+def test_query_transport_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTGRAPH_QUERY_TRANSPORT", "in-process")
+
+    assert config.Settings(_env_file=None).query_transport == "in-process"
+
+
+def test_query_transport_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTGRAPH_QUERY_TRANSPORT", "grpc")
+
+    with pytest.raises(ValidationError):
+        config.Settings(_env_file=None)
+
+
+@pytest.mark.parametrize("value", ["", "none", "null", "NONE", "  "])
+def test_server_uds_path_can_be_disabled(
+    value: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty or none/null socket path serves and queries over TCP only."""
+    monkeypatch.setenv("AGENTGRAPH_SERVER_UDS_PATH", value)
+
+    assert config.Settings(_env_file=None).server_uds_path is None
+
+
+def test_server_uds_path_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTGRAPH_SERVER_UDS_PATH", "/tmp/custom.sock")
+
+    assert config.Settings(_env_file=None).server_uds_path == Path("/tmp/custom.sock")
 
 
 def test_memory_sqlite_path_is_preserved(

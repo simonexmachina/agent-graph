@@ -71,14 +71,19 @@ def test_version() -> None:
     assert result.output == "agentgraph 0.6.1\n"
 
 
-def test_serve_outputs_log_file_path() -> None:
-    log_file = Path("/tmp/agentgraph-test/agentgraph.log")
-    settings = SimpleNamespace(
+def _serve_settings(uds_path: Path | None) -> SimpleNamespace:
+    return SimpleNamespace(
         log_level="INFO",
-        log_file=log_file,
+        log_file=Path("/tmp/agentgraph-test/agentgraph.log"),
         server_host="127.0.0.1",
         server_port=8765,
+        server_uds_path=uds_path,
     )
+
+
+def test_serve_outputs_log_file_path() -> None:
+    """With the socket disabled, serve keeps the plain TCP uvicorn.run path."""
+    settings = _serve_settings(None)
     with (
         patch("agentgraph.config.get_settings", return_value=settings),
         patch("agentgraph.logging.configure_logging"),
@@ -87,12 +92,87 @@ def test_serve_outputs_log_file_path() -> None:
         result = runner.invoke(app, ["serve"])
 
     assert result.exit_code == 0
-    assert f"AgentGraph log file: {log_file}" in result.output
+    assert f"AgentGraph log file: {settings.log_file}" in result.output
     run.assert_called_once_with(
         "agentgraph.server.app:app",
         host="127.0.0.1",
         port=8765,
         reload=False,
+    )
+
+
+def test_serve_listens_on_both_tcp_and_the_socket() -> None:
+    """Uvicorn takes one config, so both listeners are pre-bound and passed in."""
+    uds_path = Path("/tmp/agentgraph-test/ag.sock")
+    tcp_socket = object()
+    uds_socket = MagicMock()
+    settings = _serve_settings(uds_path)
+
+    with (
+        patch("agentgraph.config.get_settings", return_value=settings),
+        patch("agentgraph.logging.configure_logging"),
+        patch("agentgraph.server.uds.bind_socket", return_value=uds_socket) as bind,
+        patch("agentgraph.server.uds.set_owned_socket") as set_owned,
+        patch("agentgraph.server.uds.release_owned_socket") as release,
+        patch("uvicorn.Config") as config_cls,
+        patch("uvicorn.Server") as server_cls,
+    ):
+        config_cls.return_value.bind_socket.return_value = tcp_socket
+        config_cls.return_value.backlog = 2048
+        result = runner.invoke(app, ["serve"])
+
+    assert result.exit_code == 0
+    assert f"AgentGraph socket: {uds_path}" in result.output
+    bind.assert_called_once_with(uds_path, backlog=2048)
+    server_cls.return_value.run.assert_called_once_with(sockets=[tcp_socket, uds_socket])
+    # The socket file must not outlive the server that bound it. Ownership is claimed
+    # before serving so the app's shutdown hook can remove it on SIGTERM.
+    set_owned.assert_called_once_with(uds_path)
+    uds_socket.close.assert_called_once()
+    release.assert_called_once()
+
+
+def test_serve_reports_a_socket_already_in_use() -> None:
+    settings = _serve_settings(Path("/tmp/agentgraph-test/ag.sock"))
+
+    with (
+        patch("agentgraph.config.get_settings", return_value=settings),
+        patch("agentgraph.logging.configure_logging"),
+        patch(
+            "agentgraph.server.uds.bind_socket",
+            side_effect=OSError("Another AgentGraph server is already listening"),
+        ),
+        patch("uvicorn.Config"),
+        patch("uvicorn.Server") as server_cls,
+    ):
+        result = runner.invoke(app, ["serve"])
+
+    assert result.exit_code == 1
+    assert "already listening" in result.output
+    server_cls.return_value.run.assert_not_called()
+
+
+def test_serve_with_reload_skips_the_socket() -> None:
+    """Reload runs its own supervisor, which cannot inherit pre-bound sockets."""
+    uds_path = Path("/tmp/agentgraph-test/ag.sock")
+    settings = _serve_settings(uds_path)
+
+    with (
+        patch("agentgraph.config.get_settings", return_value=settings),
+        patch("agentgraph.logging.configure_logging"),
+        patch("agentgraph.server.uds.bind_socket") as bind,
+        patch("uvicorn.run") as run,
+    ):
+        result = runner.invoke(app, ["serve", "--reload"])
+
+    assert result.exit_code == 0
+    assert f"Reload mode serves TCP only; not listening on {uds_path}" in result.output
+    bind.assert_not_called()
+    run.assert_called_once_with(
+        "agentgraph.server.app:app",
+        host="127.0.0.1",
+        port=8765,
+        reload=True,
     )
 
 
@@ -509,7 +589,8 @@ def test_install_skill_defaults_to_user_agent_and_claude_skills(
     skill_content = skill_path.read_text(encoding="utf-8")
     assert "AgentGraph CLI skill" in skill_content
     assert "`agentgraph poll`" in skill_content
-    assert "request permission to contact that localhost server" in skill_content
+    assert "request permission to\n  contact the local server" in skill_content
+    assert "AGENTGRAPH_QUERY_TRANSPORT=in-process" in skill_content
     assert "AgentGraph normally connects to a server" not in skill_content
     assert "cloud, remote, or containerized environment" not in skill_content
     references = skill_path.parent / "references"

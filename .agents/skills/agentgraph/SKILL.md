@@ -17,12 +17,26 @@ Use `agentgraph demo add` or `add_demo_tool` to add the fictional Atlas fixtures
 the configured graph. Remove them afterward with `agentgraph demo remove` or
 `remove_demo_tool`.
 
-## Commands that use localhost
+## Commands that use the local server
 
 `agentgraph poll` and connector or authentication commands that queue a poll or
-historical ingest call the configured local AgentGraph HTTP server. If a sandbox blocks
-one of these commands, request permission to contact that localhost server and retry
-the command after approval.
+historical ingest always call the local AgentGraph server. Reads (`search`, `get`,
+`edges`, `traverse`, `query`) and `fetch`/`download` use it when it is reachable and
+otherwise read the database directly, so they work with no server running.
+
+Many agent sandboxes deny loopback TCP but allow an allowlisted Unix socket, so the
+server listens on both and clients prefer the socket. If a command fails because the
+sandbox blocked it:
+
+- For `poll`, ingest, or auth commands there is no fallback — request permission to
+  contact the local server, or ask the user to allowlist the socket
+  (`~/.agentgraph/agentgraph.sock`), then retry.
+- For reads, `AGENTGRAPH_QUERY_TRANSPORT=in-process` bypasses the server entirely.
+- `AGENTGRAPH_QUERY_TRANSPORT=server agentgraph search x --limit 1` reports plainly
+  whether the server is reachable, instead of silently falling back.
+
+See the Coding agent sandboxes section of the configuration docs for the per-agent
+allowlist settings.
 
 ## Investigation workflow
 
