@@ -64,7 +64,7 @@ _LIST_PAGE_ORDER_BY = {
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 _FTS_DELETE_CHUNK_SIZE = 500
 _BUSY_TIMEOUT_MS = 5_000
-_SCHEMA_VERSION = 5
+_SCHEMA_VERSION = 6
 
 
 def _now() -> str:
@@ -292,9 +292,10 @@ class SQLiteBackend(StorageBackend):
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC)"
         )
         await conn.execute("DROP INDEX IF EXISTS idx_entities_platform_type_feed_updated")
+        await conn.execute("DROP INDEX IF EXISTS idx_edges_target_type_source")
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_edges_target_type_source "
-            "ON edges(target_entity_id, edge_type, source_entity_id)"
+            "CREATE INDEX IF NOT EXISTS idx_edges_target_type_created_source "
+            "ON edges(target_entity_id, edge_type, created_at DESC, source_entity_id)"
         )
 
     async def _retention_policy_needs_migration(self) -> bool:
@@ -1500,28 +1501,19 @@ class SQLiteBackend(StorageBackend):
         target_platform: str,
         target_platform_entity_ids: list[str],
         per_target_limit: int,
-        order_by: str,
     ) -> dict[str, list[dict[str, Any]]]:
         if not target_platform_entity_ids or per_target_limit <= 0:
             return {}
-        if order_by not in _VALID_ORDER_BY:
-            order_by = "updated_at"
 
-        params: list[Any] = [
-            edge_type,
-            target_platform,
-            *target_platform_entity_ids,
-            entity_type,
-        ]
         clauses: list[str] = []
+        filter_params: list[str] = []
         for key, value in filters.items():
             if key in _COLUMN_FILTERS:
                 clauses.append(f"source.{key} = ?")
             else:
                 clauses.append(f"json_extract(source.metadata, '$.{key}') = ?")
-            params.append(value)
+            filter_params.append(value)
 
-        target_placeholders = ", ".join("?" for _ in target_platform_entity_ids)
         where_extra = (" AND " + " AND ".join(clauses)) if clauses else ""
 
         with timed(
@@ -1530,37 +1522,36 @@ class SQLiteBackend(StorageBackend):
             per_target_limit=per_target_limit,
             target_count=len(target_platform_entity_ids),
         ):
-            # CROSS JOIN preserves the target-first plan so the query never scans all
-            # edges or source entities before applying the configured target IDs.
-            rows = await self._fetchall(
-                f"""
-                SELECT target_platform_entity_id, metadata FROM (
-                    SELECT target.platform_entity_id AS target_platform_entity_id,
-                           source.metadata,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY target.id
-                               ORDER BY source.{order_by} DESC
-                           ) AS target_rank
+            grouped: dict[str, list[dict[str, Any]]] = {}
+            for target_platform_entity_id in target_platform_entity_ids:
+                rows = await self._fetchall(
+                    f"""
+                    SELECT source.metadata
                     FROM entities target
-                    CROSS JOIN edges relationship
+                    CROSS JOIN edges relationship INDEXED BY idx_edges_target_type_created_source
                         ON relationship.target_entity_id = target.id
                        AND relationship.edge_type = ?
                     CROSS JOIN entities source
                         ON source.id = relationship.source_entity_id
                     WHERE target.platform = ?
-                      AND target.platform_entity_id IN ({target_placeholders})
+                      AND target.platform_entity_id = ?
                       AND source.entity_type = ?{where_extra}
+                    ORDER BY relationship.created_at DESC
+                    LIMIT ?
+                    """,
+                    [
+                        edge_type,
+                        target_platform,
+                        target_platform_entity_id,
+                        entity_type,
+                        *filter_params,
+                        per_target_limit,
+                    ],
                 )
-                WHERE target_rank <= ?
-                ORDER BY target_platform_entity_id, target_rank
-                """,
-                [*params, per_target_limit],
-            )
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for row in rows:
-            target_id = str(row["target_platform_entity_id"])
-            metadata = json.loads(row["metadata"]) if row["metadata"] else {}
-            grouped.setdefault(target_id, []).append(metadata)
+                if rows:
+                    grouped[target_platform_entity_id] = [
+                        json.loads(row["metadata"]) if row["metadata"] else {} for row in rows
+                    ]
         return grouped
 
     # --- Read: edges ---

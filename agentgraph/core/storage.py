@@ -147,9 +147,8 @@ class StorageBackend(ABC):
         target_platform: str,
         target_platform_entity_ids: list[str],
         per_target_limit: int,
-        order_by: str,
     ) -> dict[str, list[dict[str, Any]]]:
-        """Return metadata-only source rows, capped and grouped by edge target."""
+        """Return source metadata for each target's newest matching edges."""
         ...
 
     # --- Read: edges ---

@@ -45,7 +45,7 @@ async def test_version_four_migration_replaces_rss_metadata_index(tmp_path: Path
     db_path = tmp_path / "v4.db"
     conn = sqlite3.connect(db_path)
     conn.executescript(_SCHEMA_SQL)
-    conn.execute("DROP INDEX idx_edges_target_type_source")
+    conn.execute("DROP INDEX idx_edges_target_type_created_source")
     conn.execute(
         "CREATE INDEX idx_entities_platform_type_feed_updated "
         "ON entities(platform, entity_type, json_extract(metadata, '$.feed_url'), updated_at DESC)"
@@ -85,8 +85,39 @@ async def test_version_four_migration_replaces_rss_metadata_index(tmp_path: Path
         await backend.close()
 
     assert "idx_entities_platform_type_feed_updated" not in indexes
-    assert "idx_edges_target_type_source" in indexes
+    assert "idx_edges_target_type_created_source" in indexes
     assert edge_count == 1
+    assert schema_version == _SCHEMA_VERSION
+
+
+async def test_version_five_migration_replaces_edge_target_index(tmp_path: Path) -> None:
+    db_path = tmp_path / "v5.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_SCHEMA_SQL)
+    conn.execute("DROP INDEX idx_edges_target_type_created_source")
+    conn.execute(
+        "CREATE INDEX idx_edges_target_type_source "
+        "ON edges(target_entity_id, edge_type, source_entity_id)"
+    )
+    conn.execute("PRAGMA user_version=5")
+    conn.commit()
+    conn.close()
+
+    backend = SQLiteBackend(str(db_path), vector_mode="bm25-only")
+    await backend.initialize()
+    try:
+        indexes = {
+            str(row["name"])
+            for row in await backend._fetchall(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        schema_version = await backend._fetchval("PRAGMA user_version")
+    finally:
+        await backend.close()
+
+    assert "idx_edges_target_type_source" not in indexes
+    assert "idx_edges_target_type_created_source" in indexes
     assert schema_version == _SCHEMA_VERSION
 
 

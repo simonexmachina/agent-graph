@@ -241,11 +241,21 @@ async def test_list_recent_metadata_by_edge_target_returns_newest_metadata_per_t
         )
     )
     await sqlite_backend._execute(
-        "UPDATE entities SET updated_at = ? WHERE platform_entity_id = ?",
+        """
+        UPDATE edges SET created_at = ?
+        WHERE source_entity_id = (
+            SELECT id FROM entities WHERE platform = 'rss' AND platform_entity_id = ?
+        )
+        """,
         ["2026-01-01T00:00:00Z", "feed-a-old"],
     )
     await sqlite_backend._execute(
-        "UPDATE entities SET updated_at = ? WHERE platform_entity_id = ?",
+        """
+        UPDATE edges SET created_at = ?
+        WHERE source_entity_id = (
+            SELECT id FROM entities WHERE platform = 'rss' AND platform_entity_id = ?
+        )
+        """,
         ["2026-01-02T00:00:00Z", "feed-a-new"],
     )
 
@@ -257,22 +267,21 @@ async def test_list_recent_metadata_by_edge_target_returns_newest_metadata_per_t
             "rss",
             ["feed/a", "feed/b"],
             1,
-            "updated_at",
         )
 
     assert metadata_by_target == {
         "feed/a": [{"web_url": "https://a/new"}],
         "feed/b": [{"web_url": "https://b/post"}],
     }
-    assert fetchall.await_args is not None
-    sql, params = fetchall.await_args.args
+    assert fetchall.await_args_list
+    sql, params = fetchall.await_args_list[0].args
     plan = await sqlite_backend._fetchall(f"EXPLAIN QUERY PLAN {sql}", params)
     details = [str(row["detail"]) for row in plan]
     assert any(
         "SEARCH target" in detail and "platform=? AND platform_entity_id=?" in detail
         for detail in details
     )
-    assert any("idx_edges_target_type_source" in detail for detail in details)
+    assert any("idx_edges_target_type_created_source" in detail for detail in details)
     assert not any("SCAN source" in detail for detail in details)
 
 
@@ -281,13 +290,13 @@ async def test_list_recent_metadata_by_edge_target_returns_empty_for_no_work(
 ) -> None:
     assert (
         await sqlite_backend.list_recent_metadata_by_edge_target(
-            "Document", {}, "posted_in", "rss", [], 8, "updated_at"
+            "Document", {}, "posted_in", "rss", [], 8
         )
         == {}
     )
     assert (
         await sqlite_backend.list_recent_metadata_by_edge_target(
-            "Document", {}, "posted_in", "rss", ["feed/a"], 0, "updated_at"
+            "Document", {}, "posted_in", "rss", ["feed/a"], 0
         )
         == {}
     )

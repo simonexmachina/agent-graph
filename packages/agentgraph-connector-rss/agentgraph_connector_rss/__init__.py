@@ -242,7 +242,6 @@ class RssConnector(BaseConnector):
             self.source,
             list(feed_urls_by_entity_id),
             _MAX_OBSERVATION_ENTRIES_PER_FEED,
-            "updated_at",
         )
         derived_patterns = derive_observation_url_patterns(
             {

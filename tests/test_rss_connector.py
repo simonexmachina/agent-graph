@@ -144,7 +144,6 @@ async def test_rss_observation_patterns_use_a_bounded_recent_entry_set() -> None
         "rss",
         [feed_entity_id],
         _MAX_OBSERVATION_ENTRIES_PER_FEED,
-        "updated_at",
     )
 
 
