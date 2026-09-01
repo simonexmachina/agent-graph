@@ -132,11 +132,11 @@ def test_uds_probe_skips_when_socket_is_disabled() -> None:
     ("status", "expected"),
     [(200, True), (404, False), (500, False)],
 )
-def test_is_available_requires_the_query_routes(status: int, expected: bool) -> None:
-    """A server predating /api/query 404s the probe, so it must not be selected."""
+def test_is_available_requires_the_resource_routes(status: int, expected: bool) -> None:
+    """A server predating these routes 404s the probe, so it must not be selected."""
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/query/health"
+        assert request.url.path == "/api/capabilities"
         return httpx.Response(status, json={})
 
     client = HttpQueryClient("http://t", probe_transport=httpx.MockTransport(handler))

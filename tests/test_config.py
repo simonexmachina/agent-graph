@@ -10,8 +10,18 @@ from pydantic import ValidationError
 
 import agentgraph.config as config
 
+# conftest pins these so unit tests never reach a real server; clear them where the
+# point of the test is what the shipped defaults are.
+_TRANSPORT_ENV = ("AGENTGRAPH_QUERY_TRANSPORT", "AGENTGRAPH_SERVER_UDS_PATH")
 
-def test_defaults() -> None:
+
+def _use_shipped_transport_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _TRANSPORT_ENV:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_shipped_transport_defaults(monkeypatch)
     s = config.Settings(_env_file=None)
     assert s.server_port == 8765
     assert s.observation_threshold_seconds == 3
@@ -70,6 +80,7 @@ def test_config_dir_env_controls_default_paths(
 ) -> None:
     monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(tmp_path))
     monkeypatch.delenv("AGENTGRAPH_BACKEND_SQLITE_PATH", raising=False)
+    _use_shipped_transport_defaults(monkeypatch)
     reloaded = importlib.reload(config)
     try:
         settings = reloaded.Settings()

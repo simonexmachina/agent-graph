@@ -216,7 +216,7 @@ class InProcessQueryClient:
 
 
 class HttpQueryClient:
-    """Call the local server's ``/api/query`` routes over a Unix socket or TCP."""
+    """Call the local server's resource routes over a Unix socket or TCP."""
 
     needs_backend = False
 
@@ -252,9 +252,9 @@ class HttpQueryClient:
     def is_available(self, timeout: float) -> bool:
         """Return whether a server new enough to serve these routes is reachable.
 
-        A plain connect is not enough: a server from before ``/api/query`` existed
-        accepts the connection and then 404s every call, so `auto` would hard-fail
-        where it should fall back to in-process.
+        A plain connect is not enough: a server predating these routes accepts the
+        connection and then 404s every call, so `auto` would hard-fail where it should
+        fall back to in-process.
         """
         import httpx
 
@@ -267,27 +267,42 @@ class HttpQueryClient:
                 transport=transport,
                 timeout=timeout,
             ) as client:
-                return client.get("/api/query/health").status_code == 200
+                return client.get("/api/capabilities").status_code == 200
         except (httpx.HTTPError, OSError):
             return False
 
-    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        missing_ok: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Issue one request, translating errors back into graph-layer exceptions.
+
+        ``missing_ok`` turns a 404 into ``_MISSING`` so callers can mirror the
+        in-process functions that return ``None`` for an absent entity.
+        """
         import httpx
 
         async with self._client() as client:
             response = await client.request(method, path, **kwargs)
+        if missing_ok and response.status_code == 404:
+            return _MISSING
         if response.status_code == 400:
-            # The route mapped a ValueError to 400; re-raise it so callers see the
-            # same exception and message they would get in-process.
-            raise ValueError(_detail(response))
+            # The route mapped a graph-layer exception to 400; re-raise the same class
+            # so callers behave as they would in-process. Connector error hints branch
+            # on the type, not just the message.
+            message, error_type = _error_detail(response)
+            raise _EXCEPTION_TYPES.get(error_type, RuntimeError)(message)
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise RuntimeError(_detail(response)) from exc
+            raise RuntimeError(_error_detail(response)[0]) from exc
         return response.json()
 
-    async def _get(self, path: str, params: dict[str, Any]) -> Any:
-        return await self._request("GET", path, params=_clean(params))
+    async def _get(self, path: str, params: dict[str, Any], missing_ok: bool = False) -> Any:
+        return await self._request("GET", path, missing_ok=missing_ok, params=_clean(params))
 
     async def _post(self, path: str, params: dict[str, Any], json: Any = None) -> Any:
         return await self._request("POST", path, params=_clean(params), json=json)
@@ -303,7 +318,7 @@ class HttpQueryClient:
         return cast(
             list[dict[str, Any]],
             await self._get(
-                "/api/query/search",
+                "/api/entities/search",
                 {
                     "query": query,
                     "entity_types": entity_types,
@@ -315,10 +330,12 @@ class HttpQueryClient:
         )
 
     async def get_entity(self, entity_id: str, resolve: bool) -> dict[str, Any] | None:
-        return cast(
-            "dict[str, Any] | None",
-            await self._get("/api/query/entity", {"entity_id": entity_id, "resolve": resolve}),
+        payload = await self._get(
+            f"/api/entities/{_ref(entity_id)}",
+            {"resolve": resolve},
+            missing_ok=True,
         )
+        return None if isinstance(payload, _Missing) else cast(dict[str, Any], payload)
 
     async def edges(
         self,
@@ -327,9 +344,12 @@ class HttpQueryClient:
         direction: str,
     ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
         payload = await self._get(
-            "/api/query/edges",
-            {"entity_id": entity_id, "edge_type": edge_type, "direction": direction},
+            f"/api/entities/{_ref(entity_id)}/edges",
+            {"edge_type": edge_type, "direction": direction},
+            missing_ok=True,
         )
+        if isinstance(payload, _Missing):
+            return None, []
         return payload["entity"], payload["edges"]
 
     async def traverse(
@@ -339,9 +359,12 @@ class HttpQueryClient:
         resolve: bool,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         payload = await self._get(
-            "/api/query/traverse",
-            {"entity_id": entity_id, "max_depth": max_depth, "resolve": resolve},
+            f"/api/graph/traverse/{_ref(entity_id)}",
+            {"max_depth": max_depth, "resolve": resolve},
+            missing_ok=True,
         )
+        if isinstance(payload, _Missing):
+            return None, {}
         return payload["entity"], payload["result"]
 
     async def query_by_filter(
@@ -357,7 +380,7 @@ class HttpQueryClient:
         return cast(
             list[dict[str, Any]],
             await self._post(
-                "/api/query/filter",
+                "/api/entities/filter",
                 {
                     "entity_type": entity_type,
                     "limit": limit,
@@ -374,14 +397,14 @@ class HttpQueryClient:
         return cast(
             dict[str, Any],
             await self._post(
-                "/api/query/fetch", {"platform": platform, "resource_id": resource_id}
+                "/api/fetches", {"platform": platform, "resource_id": resource_id}
             ),
         )
 
     async def fetch_entity(self, entity_id: str) -> dict[str, Any]:
         return cast(
             dict[str, Any],
-            await self._post("/api/query/fetch-entity", {"entity_id": entity_id}),
+            await self._post(f"/api/entities/{_ref(entity_id)}/fetch", {}),
         )
 
     async def download(self, entity_id: str, output_path: str | None) -> dict[str, Any]:
@@ -391,18 +414,23 @@ class HttpQueryClient:
         return cast(
             dict[str, Any],
             await self._post(
-                "/api/query/download", {"entity_id": entity_id, "output_path": resolved}
+                f"/api/entities/{_ref(entity_id)}/download", {"output_path": resolved}
             ),
         )
 
     async def bookmark(self, target: str, bookmarked: bool) -> dict[str, Any]:
         return cast(
             dict[str, Any],
-            await self._post("/api/query/bookmark", {"target": target, "bookmarked": bookmarked}),
+            await self._post(
+                f"/api/entities/{_ref(target)}/bookmark", {"bookmarked": bookmarked}
+            ),
         )
 
     async def delete(self, target: str) -> dict[str, Any]:
-        return cast(dict[str, Any], await self._post("/api/query/delete", {"target": target}))
+        return cast(
+            dict[str, Any],
+            await self._request("DELETE", f"/api/entities/{_ref(target)}"),
+        )
 
     async def unify_persons(
         self,
@@ -412,10 +440,21 @@ class HttpQueryClient:
         return cast(
             dict[str, Any],
             await self._post(
-                "/api/query/unify-persons",
+                "/api/persons/unify",
                 {"canonical_id": canonical_id, "duplicate_ids": duplicate_ids},
             ),
         )
+
+
+def _ref(value: str) -> str:
+    """Encode an entity ref for a path segment.
+
+    Refs can be a UUID, a ``platform/id`` path, or an http URL, so the separators are
+    preserved and only the characters that would break the path are escaped.
+    """
+    from urllib.parse import quote
+
+    return quote(value, safe="/:")
 
 
 def _clean(params: dict[str, Any]) -> dict[str, Any]:
@@ -423,17 +462,46 @@ def _clean(params: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in params.items() if value is not None}
 
 
-def _detail(response: httpx.Response) -> str:
-    """Prefer FastAPI's ``detail`` field so errors read the same as in-process ones."""
+class _Missing:
+    """Distinguishes "the server said 404" from a body that is literally null."""
+
+
+_MISSING = _Missing()
+
+# Exception classes the routes report by name. Anything unrecognised becomes a
+# RuntimeError, which is the safer default for an unexpected server-side failure.
+_EXCEPTION_TYPES: dict[str, type[Exception]] = {
+    "ValueError": ValueError,
+    "RuntimeError": RuntimeError,
+}
+
+
+def _error_detail(response: httpx.Response) -> tuple[str, str]:
+    """Return ``(message, error_type)`` from an error response.
+
+    Routes send ``detail`` as ``{"message", "error_type"}``. A plain-string ``detail``
+    is also accepted, so a server that predates that shape still yields a useful
+    message rather than a repr.
+    """
     try:
         payload: object = response.json()
     except ValueError:
-        return response.text or f"HTTP {response.status_code}"
-    if isinstance(payload, dict):
-        mapping = cast("dict[str, object]", payload)
-        detail = mapping.get("detail")
-        return str(detail) if detail is not None else str(mapping)
-    return str(payload)
+        return response.text or f"HTTP {response.status_code}", ""
+    if not isinstance(payload, dict):
+        return str(payload), ""
+    body = cast("dict[str, object]", payload)
+    detail = body.get("detail")
+    if isinstance(detail, dict):
+        structured = cast("dict[str, object]", detail)
+        message = structured.get("message")
+        error_type = structured.get("error_type")
+        return (
+            str(message) if message is not None else str(structured),
+            str(error_type) if error_type is not None else "",
+        )
+    if detail is not None:
+        return str(detail), ""
+    return str(body), ""
 
 
 def _tcp_base_url(host: str, port: int) -> str:

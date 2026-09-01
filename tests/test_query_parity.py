@@ -199,3 +199,34 @@ async def test_http_client_reraises_value_error_with_the_same_message(
         await over_http.delete("no-such-entity")
 
     assert str(local.value) == str(remote.value)
+
+
+@pytest.mark.parametrize("error", [ValueError, RuntimeError])
+@pytest.mark.asyncio
+async def test_exception_class_survives_the_http_boundary(
+    error: type[Exception],
+    seeded_clients: tuple[QueryClient, QueryClient, dict[str, Any]],
+) -> None:
+    """Both transports must raise the same class, not just the same message.
+
+    Connectors raise RuntimeError for missing credentials ("Run: agentgraph auth
+    slack"). Catching only ValueError server-side turned that into a 500 whose body
+    lost the message. Type matters too: the web connector's fetch_error_hint branches
+    on isinstance(error, ValueError).
+    """
+    from unittest.mock import AsyncMock, patch
+
+    in_process, over_http, _ = seeded_clients
+    message = "Slack credentials not configured. Run: agentgraph auth slack"
+
+    with patch(
+        "agentgraph.graph.fetch.fetch_entity_by_id",
+        new=AsyncMock(side_effect=error(message)),
+    ):
+        with pytest.raises(error) as local:
+            await in_process.fetch_entity("some-id")
+        with pytest.raises(error) as remote:
+            await over_http.fetch_entity("some-id")
+
+    assert type(local.value) is type(remote.value) is error
+    assert str(local.value) == str(remote.value) == message

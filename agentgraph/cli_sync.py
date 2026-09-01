@@ -16,7 +16,7 @@ POST_TIMEOUT = httpx.Timeout(30, connect=0.5)
 
 def _server_base() -> str:
     settings = get_settings()
-    return f"http://{settings.server_host}:{settings.server_port}/api/cli"
+    return f"http://{settings.server_host}:{settings.server_port}/api/sync"
 
 
 def _server_unavailable(exc: Exception) -> NoReturn:
