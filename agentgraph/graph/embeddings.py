@@ -24,8 +24,11 @@ _model_lock = Lock()
 @lru_cache(maxsize=1)
 def _get_model() -> TextEmbedding:
     settings = get_settings()
-    logger.info("Loading embedding model: %s", settings.embedding_model)
-    return TextEmbedding(model_name=settings.embedding_model)
+    cache_dir = str(settings.embedding_cache_dir)
+    logger.info("Loading embedding model: %s (cache: %s)", settings.embedding_model, cache_dir)
+    # Pin the cache dir: FastEmbed otherwise derives it from $TMPDIR, so a caller
+    # with a different temp dir re-downloads the model from HuggingFace.
+    return TextEmbedding(model_name=settings.embedding_model, cache_dir=cache_dir)
 
 
 def _normalise(vec: NDArray[Any]) -> list[float]:

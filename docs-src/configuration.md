@@ -107,6 +107,16 @@ Default: `BAAI/bge-small-en-v1.5`
 
 FastEmbed model used for embeddings.
 
+### `AGENTGRAPH_EMBEDDING_CACHE_DIR`
+
+Default: `$AGENTGRAPH_CONFIG_DIR/models`
+
+Directory holding the downloaded FastEmbed ONNX model (~64 MB). The default lives
+in the per-user config directory rather than FastEmbed's own `$TMPDIR` default:
+`$TMPDIR` varies between callers and is periodically purged by the OS, which would
+make the model re-download from HuggingFace — and make `agentgraph search` fail
+outright when the network is unavailable or restricted.
+
 ### `AGENTGRAPH_SLACK_CLIENT_ID`
 
 Optional prompt override for Slack OAuth. Use the Client ID of the admin-created

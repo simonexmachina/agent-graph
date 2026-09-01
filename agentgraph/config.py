@@ -116,6 +116,14 @@ class Settings(BaseSettings):
         default="BAAI/bge-small-en-v1.5",
         description="FastEmbed model name for content embeddings",
     )
+    embedding_cache_dir: Path = Field(
+        default_factory=lambda: get_config_paths()[0] / "models",
+        description=(
+            "Directory holding the downloaded FastEmbed ONNX model. Defaults to the "
+            "config directory rather than FastEmbed's own $TMPDIR default, which "
+            "changes between processes and is periodically purged by the OS."
+        ),
+    )
     embedding_dimensions: int = Field(default=384)
 
     # Connectors

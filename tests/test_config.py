@@ -76,6 +76,7 @@ def test_config_dir_env_controls_default_paths(
         assert tmp_path / "config.yaml" == reloaded.CONFIG_YAML_FILE
         assert settings.backend_sqlite_path == str(tmp_path / "agentgraph.db")
         assert settings.log_file == tmp_path / "agentgraph.log"
+        assert settings.embedding_cache_dir == tmp_path / "models"
         env_files = settings.model_config["env_file"]
         assert env_files == [str(tmp_path / ".env"), ".env"]
     finally:
@@ -117,6 +118,25 @@ def test_config_dir_is_resolved_after_module_import(
     assert config_file == config_dir / "config.toml"
     assert settings.server_port == 9123
     assert settings.backend_sqlite_path == str(database_file)
+
+
+def test_embedding_cache_dir_is_independent_of_tmpdir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The model cache must not follow $TMPDIR, which FastEmbed would default to."""
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "temp"))
+
+    cache_dir = config.Settings(_env_file=None).embedding_cache_dir
+
+    assert cache_dir == config.get_config_paths()[0] / "models"
+    assert tmp_path / "temp" not in cache_dir.parents
+
+
+def test_embedding_cache_dir_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTGRAPH_EMBEDDING_CACHE_DIR", "/opt/models")
+
+    assert config.Settings(_env_file=None).embedding_cache_dir == Path("/opt/models")
 
 
 def test_memory_sqlite_path_is_preserved(
