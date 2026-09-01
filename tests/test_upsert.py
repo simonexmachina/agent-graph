@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # pyright: reportPrivateUsage=false
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -242,6 +242,49 @@ async def test_upsert_preserves_source_updated_at_when_connector_omits_it(
     stored = await sqlite_backend.get_entity_by_platform(
         "web", "https://example.com/unchanged"
     )
+    assert stored is not None
+    assert stored["source_updated_at"] == "2026-06-08T01:23:45Z"
+
+
+async def test_upsert_converts_offset_source_timestamps_to_utc(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    """Jira renders `updated` at the caller's offset; storing the wall clock as Z skews it."""
+    melbourne = timezone(timedelta(hours=10))
+    entity = EntityRecord(
+        entity_type="Task",
+        platform="twg",
+        platform_entity_id="jira/hello/PROJ-1",
+        title="PROJ-1: offset timestamps",
+        content="body",
+        source_created_at=datetime(2026, 8, 12, 9, 16, 31, tzinfo=melbourne),
+        source_updated_at=datetime(2026, 9, 1, 16, 29, 17, tzinfo=melbourne),
+    )
+
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+
+    stored = await sqlite_backend.get_entity_by_platform("twg", "jira/hello/PROJ-1")
+    assert stored is not None
+    assert stored["source_created_at"] == "2026-08-11T23:16:31Z"
+    assert stored["source_updated_at"] == "2026-09-01T06:29:17Z"
+
+
+async def test_upsert_treats_naive_source_timestamps_as_utc(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    """Naive values must not be reinterpreted as local time by the UTC conversion."""
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/naive",
+        title="Naive",
+        content="body",
+        source_updated_at=datetime(2026, 6, 8, 1, 23, 45),
+    )
+
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+
+    stored = await sqlite_backend.get_entity_by_platform("web", "https://example.com/naive")
     assert stored is not None
     assert stored["source_updated_at"] == "2026-06-08T01:23:45Z"
 

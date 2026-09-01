@@ -71,6 +71,19 @@ def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _utc_stamp(value: datetime) -> str:
+    """Render a source timestamp as UTC in the schema's `...Z` text format.
+
+    Connectors may supply an aware datetime at the source's own offset — Jira
+    renders `fields.updated` in the caller's profile timezone — so the offset
+    has to be applied before the literal Z is stamped on. Naive values are
+    assumed to already be UTC, which is how they have always been stored.
+    """
+    if value.tzinfo is None:
+        return value.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _new_id() -> str:
     return str(uuid.uuid4())
 
@@ -715,16 +728,8 @@ class SQLiteBackend(StorageBackend):
                 )
                 embedding = embeddings.get(e.platform_entity_id)
                 emb_blob = pack_embedding(embedding) if embedding else None
-                source_created = (
-                    e.source_created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                    if e.source_created_at
-                    else None
-                )
-                source_updated = (
-                    e.source_updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                    if e.source_updated_at
-                    else None
-                )
+                source_created = _utc_stamp(e.source_created_at) if e.source_created_at else None
+                source_updated = _utc_stamp(e.source_updated_at) if e.source_updated_at else None
                 metadata = dict(e.metadata)
                 if existing_row is None:
                     changed = True
@@ -1318,7 +1323,7 @@ class SQLiteBackend(StorageBackend):
             params.append(platform)
         if since:
             clauses.append("updated_at >= ?")
-            params.append(since.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            params.append(_utc_stamp(since))
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)
         rows = await self._fetchall(
@@ -1367,7 +1372,7 @@ class SQLiteBackend(StorageBackend):
             params.append(platform)
         if since:
             clauses.append("updated_at >= ?")
-            params.append(since.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            params.append(_utc_stamp(since))
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
         count_row = await self._fetchone(f"SELECT COUNT(*) AS count FROM entities {where}", params)
@@ -1411,7 +1416,7 @@ class SQLiteBackend(StorageBackend):
             params.append(v)
         if since:
             extra_clauses.append("e.updated_at >= ?")
-            params.append(since.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            params.append(_utc_stamp(since))
         if has_attachments:
             extra_clauses.append(
                 "json_extract(e.metadata, '$.attachments') IS NOT NULL"
