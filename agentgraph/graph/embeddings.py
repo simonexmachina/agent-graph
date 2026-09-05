@@ -28,6 +28,12 @@ def _get_model() -> TextEmbedding:
     return TextEmbedding(model_name=settings.embedding_model)
 
 
+def load_model() -> None:
+    """Load and cache the configured embedding model without running inference."""
+    with _model_lock:
+        _get_model()
+
+
 def _normalise(vec: NDArray[Any]) -> list[float]:
     norm = float(np.linalg.norm(vec))
     if norm > 0:
