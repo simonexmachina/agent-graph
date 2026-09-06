@@ -574,6 +574,18 @@ def test_mcp_config_includes_desktop_setup(monkeypatch: pytest.MonkeyPatch) -> N
     assert "Secure MCP Tunnel" not in result.output
 
 
+def test_mcp_config_covers_the_coding_agent_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Codex and Claude Code register the same server from the terminal."""
+    monkeypatch.setattr(sys, "argv", ["agentgraph"])
+    result = runner.invoke(app, ["mcp-config"])
+
+    assert result.exit_code == 0
+    assert "codex mcp add agentgraph -- agentgraph mcp-serve" in result.output
+    assert "claude mcp add agentgraph -- agentgraph mcp-serve" in result.output
+    # Every client shares one transport setting, so say so once rather than per client.
+    assert "AGENTGRAPH_QUERY_TRANSPORT" in result.output
+
+
 def test_install_skill_defaults_to_user_agent_and_claude_skills(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

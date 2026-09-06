@@ -791,6 +791,18 @@ def mcp_config() -> None:
     typer.echo("  Add this to ~/Library/Application Support/Claude/claude_desktop_config.json:\n")
     typer.echo(json.dumps(config, indent=2))
     typer.echo()
+    typer.echo("Codex:")
+    typer.echo("  Register the server from your terminal:\n")
+    typer.echo(f"  codex mcp add agentgraph -- {binary} mcp-serve")
+    typer.echo()
+    typer.echo("Claude Code:")
+    typer.echo("  Register the server from your terminal:\n")
+    typer.echo(f"  claude mcp add agentgraph -- {binary} mcp-serve")
+    typer.echo()
+    typer.echo("Every client above runs the same server. Reads follow")
+    typer.echo("AGENTGRAPH_QUERY_TRANSPORT: by default the local server when one is")
+    typer.echo("reachable, otherwise the database directly.")
+    typer.echo()
 
 
 @app.command()

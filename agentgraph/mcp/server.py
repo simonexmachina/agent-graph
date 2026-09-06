@@ -1,12 +1,12 @@
 """AgentGraph MCP server.
 
-Exposes the knowledge graph as MCP tools so AI agents can search,
-retrieve, and traverse entities directly.
+Exposes the knowledge graph as MCP tools so AI agents can search, retrieve, and
+traverse entities directly.
 
-Run via:
-    agentgraph mcp
-or via the `agentgraph/mcp` stdio transport understood by ChatGPT Desktop Work Mode,
-Claude Desktop, and other MCP clients.
+Run via ``agentgraph mcp-serve``, which speaks stdio by default — the transport used by
+ChatGPT Desktop Work Mode, Codex, Claude Desktop, and Claude Code. ``agentgraph
+mcp-config`` prints the setup for each. Tools reach the graph through the same
+transport the CLI uses; see ``agentgraph.query_client``.
 """
 
 from __future__ import annotations

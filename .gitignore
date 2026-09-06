@@ -39,3 +39,6 @@ docs-src/node_modules/
 AGENTS.local.md
 CLAUDE.local.md
 .envrc
+
+# Claude Code worktrees (local scratch checkouts)
+.claude/worktrees/

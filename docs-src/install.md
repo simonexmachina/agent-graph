@@ -70,29 +70,35 @@ Install the [AgentGraph Chrome Extension](https://chromewebstore.google.com/deta
 
 After the extension is installed, start `agentgraph serve`, then open a supported resource and keep it focused past the default three-second observation threshold.
 
-## Optional: Connect ChatGPT Desktop or Claude Desktop
+## Optional: Connect an MCP client
 
-If you want to use AgentGraph from ChatGPT Desktop Work Mode or Claude Desktop instead of through your coding agent, print the local MCP setup instructions:
+AgentGraph ships an MCP server, so any MCP client can search and traverse the graph.
+It is supported in **ChatGPT Desktop Work Mode**, **Codex**, **Claude Desktop**, and
+**Claude Code**. To print the setup for all of them:
 
 ```bash
 agentgraph mcp-config
 ```
 
-For ChatGPT Desktop Work Mode, enter the printed executable in **Command to launch** and `mcp-serve` in **Arguments**. For Claude Desktop, add the printed JSON to its configuration file.
-
-For coding-agent clients, use their native terminal configuration commands instead.
-
-For ChatGPT's Codex client, register the local stdio server from your terminal:
+**Codex** and **Claude Code** register the server from your terminal:
 
 ```bash
 codex mcp add agentgraph -- "$(which agentgraph)" mcp-serve
-```
-
-For Claude Code, use the equivalent command:
-
-```bash
 claude mcp add agentgraph -- "$(which agentgraph)" mcp-serve
 ```
+
+**ChatGPT Desktop Work Mode** takes the same command through its MCP configuration
+screen: enter the printed executable under **Command to launch** and `mcp-serve` under
+**Arguments**.
+
+**Claude Desktop** reads a config file — add the printed JSON to
+`~/Library/Application Support/Claude/claude_desktop_config.json`.
+
+Every client runs the same `agentgraph mcp-serve` process and exposes the same tools.
+How those tools reach the graph follows
+[`AGENTGRAPH_QUERY_TRANSPORT`](configuration.html#agentgraph-query-transport): by
+default the local server when one is reachable, otherwise the database directly, so
+the MCP client works whether or not `agentgraph serve` is running.
 
 ## Run in the background
 

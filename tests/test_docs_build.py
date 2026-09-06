@@ -171,8 +171,13 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "agentgraph-connector-google" not in install_html
     assert "uv sync" not in install_html
     assert "source .venv" not in install_html
-    assert "Optional: Connect ChatGPT Desktop or Claude Desktop" in install_html
-    assert "instead of through your coding agent" in install_html
+    assert "Optional: Connect an MCP client" in install_html
+    # The supported clients are named explicitly rather than split into "desktop" and
+    # "coding agent", which put Codex on the wrong side of the distinction.
+    for client in ("ChatGPT Desktop Work Mode", "Codex", "Claude Desktop", "Claude Code"):
+        assert client in install_html
+    # Highlighting wraps the whitespace in spans, so match the start of the block.
+    assert '<code class="language-bash">codex' in install_html
     assert "Connect sources" in install_html
     assert "onboard" in install_html
     assert "Authenticate connectors" not in install_html
