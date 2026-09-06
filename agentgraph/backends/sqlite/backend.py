@@ -22,7 +22,12 @@ from agentgraph.backends.sqlite.vector import (
     pack_embedding,
     vector_ranked,
 )
-from agentgraph.connectors.base import EntityBatch, EntityRecord, PersonRecord
+from agentgraph.connectors.base import (
+    EntityBatch,
+    EntityMetadataPatch,
+    EntityRecord,
+    PersonRecord,
+)
 from agentgraph.core.storage import EdgeResult, EntityResult, StorageBackend
 from agentgraph.perf import timed
 
@@ -486,6 +491,7 @@ class SQLiteBackend(StorageBackend):
             with timed(
                 "sqlite.upsert_batch",
                 entities=len(batch.entities),
+                metadata_patches=len(batch.metadata_patches),
                 persons=len(batch.persons),
                 edges=len(batch.edges),
             ):
@@ -497,6 +503,7 @@ class SQLiteBackend(StorageBackend):
                     entity_id_map, upserted_entity_ids = await self._upsert_entities(
                         conn, batch.entities, entity_embeddings
                     )
+                    await self._apply_metadata_patches(conn, batch.metadata_patches)
                     await self._upsert_edges(conn, batch, person_id_map, entity_id_map)
                     await conn.execute("COMMIT")
                 except Exception:
@@ -504,6 +511,35 @@ class SQLiteBackend(StorageBackend):
                     raise
             return await self._get_entities_by_ids_in_order(
                 [*upserted_person_ids, *upserted_entity_ids]
+            )
+
+    async def _apply_metadata_patches(
+        self,
+        conn: aiosqlite.Connection,
+        patches: list[EntityMetadataPatch],
+    ) -> None:
+        """Merge connector-declared non-material metadata without emitting changes."""
+        now = _now()
+        for patch in patches:
+            cursor = await conn.execute(
+                """
+                SELECT id, metadata
+                FROM entities
+                WHERE platform = ? AND platform_entity_id = ?
+                """,
+                [patch.platform, patch.platform_entity_id],
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                raise ValueError(
+                    "Cannot patch metadata for missing entity "
+                    f"{patch.platform}:{patch.platform_entity_id}"
+                )
+            metadata = json.loads(row["metadata"] or "{}")
+            metadata.update(patch.metadata)
+            await conn.execute(
+                "UPDATE entities SET metadata = ?, synced_at = ? WHERE id = ?",
+                [json.dumps(metadata), now, str(row["id"])],
             )
 
     async def _upsert_persons(

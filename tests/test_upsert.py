@@ -14,6 +14,7 @@ from agentgraph.backends.sqlite.backend import SQLiteBackend
 from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
+    EntityMetadataPatch,
     EntityRecord,
     FetchPolicy,
     PersonRecord,
@@ -342,9 +343,7 @@ async def test_upsert_preserves_source_updated_at_when_connector_omits_it(
     unchanged = entity.model_copy(update={"source_updated_at": None})
     await sqlite_backend.upsert_batch(EntityBatch(entities=[unchanged]), {}, {})
 
-    stored = await sqlite_backend.get_entity_by_platform(
-        "web", "https://example.com/unchanged"
-    )
+    stored = await sqlite_backend.get_entity_by_platform("web", "https://example.com/unchanged")
     assert stored is not None
     assert stored["source_updated_at"] == "2026-06-08T01:23:45Z"
 
@@ -451,6 +450,168 @@ async def test_unchanged_upsert_returns_no_upserted_entity_snapshots(
     inserted = await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
     assert len(inserted) == 1
     assert await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {}) == []
+
+
+async def test_metadata_patch_updates_only_metadata_and_synced_at(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    source_time = datetime(2026, 6, 8, 1, 23, 45, tzinfo=UTC)
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/patched",
+        title="Original title",
+        content="Original content",
+        source_created_at=source_time,
+        source_updated_at=source_time,
+        metadata={"author": "Alice", "http_etag": '"old"'},
+    )
+    await sqlite_backend.upsert_batch(
+        EntityBatch(entities=[entity]),
+        {},
+        {entity.platform_entity_id: [1.0, 2.0]},
+    )
+    await sqlite_backend._execute(
+        "UPDATE entities SET updated_at = ?, synced_at = ? WHERE platform = ? AND platform_entity_id = ?",
+        [
+            "2020-01-01T00:00:00Z",
+            "2020-01-02T00:00:00Z",
+            "web",
+            entity.platform_entity_id,
+        ],
+    )
+
+    changed = await sqlite_backend.upsert_batch(
+        EntityBatch(
+            metadata_patches=[
+                EntityMetadataPatch(
+                    platform="web",
+                    platform_entity_id=entity.platform_entity_id,
+                    metadata={"http_etag": '"new"', "status_code": 304},
+                )
+            ]
+        ),
+        {},
+        {},
+    )
+
+    stored = await sqlite_backend.get_entity_by_platform("web", entity.platform_entity_id)
+    assert stored is not None
+    assert changed == []
+    assert stored["title"] == "Original title"
+    assert stored["content"] == "Original content"
+    assert stored["source_created_at"] == "2026-06-08T01:23:45Z"
+    assert stored["source_updated_at"] == "2026-06-08T01:23:45Z"
+    assert stored["metadata"] == {
+        "author": "Alice",
+        "http_etag": '"new"',
+        "status_code": 304,
+    }
+    assert stored["updated_at"] == "2020-01-01T00:00:00Z"
+    assert stored["synced_at"] > "2020-01-02T00:00:00Z"
+    row = await sqlite_backend._fetchone(
+        "SELECT content_embedding FROM entities WHERE platform = ? AND platform_entity_id = ?",
+        ["web", entity.platform_entity_id],
+    )
+    assert row is not None
+    assert row["content_embedding"] is not None
+
+
+async def test_metadata_patches_apply_in_order_after_entity_upsert(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/mixed",
+        content="New content",
+        metadata={"author": "Alice", "http_etag": '"entity"'},
+    )
+    committed = await sqlite_backend.upsert_batch(
+        EntityBatch(
+            entities=[entity],
+            metadata_patches=[
+                EntityMetadataPatch(
+                    platform="web",
+                    platform_entity_id=entity.platform_entity_id,
+                    metadata={"http_etag": '"first"'},
+                ),
+                EntityMetadataPatch(
+                    platform="web",
+                    platform_entity_id=entity.platform_entity_id,
+                    metadata={"http_etag": '"last"', "status_code": 200},
+                ),
+            ],
+        ),
+        {},
+        {},
+    )
+
+    assert len(committed) == 1
+    assert committed[0]["metadata"] == {
+        "author": "Alice",
+        "http_etag": '"last"',
+        "status_code": 200,
+    }
+
+
+async def test_missing_metadata_patch_target_rolls_back_batch(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/rolled-back",
+        content="Should not persist",
+    )
+
+    with pytest.raises(ValueError, match="Cannot patch metadata for missing entity"):
+        await sqlite_backend.upsert_batch(
+            EntityBatch(
+                entities=[entity],
+                metadata_patches=[
+                    EntityMetadataPatch(
+                        platform="web",
+                        platform_entity_id="https://example.com/missing",
+                        metadata={"status_code": 304},
+                    )
+                ],
+            ),
+            {},
+            {},
+        )
+
+    assert await sqlite_backend.get_entity_by_platform("web", entity.platform_entity_id) is None
+
+
+async def test_metadata_patch_does_not_notify_or_link(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    entity = EntityRecord(
+        entity_type="Document",
+        platform="web",
+        platform_entity_id="https://example.com/no-patch-event",
+        content="Existing content",
+    )
+    await sqlite_backend.upsert_batch(EntityBatch(entities=[entity]), {}, {})
+    batch = EntityBatch(
+        metadata_patches=[
+            EntityMetadataPatch(
+                platform="web",
+                platform_entity_id=entity.platform_entity_id,
+                metadata={"status_code": 304},
+            )
+        ]
+    )
+
+    with (
+        patch("agentgraph.graph.link.link_entity_to_urls", new=AsyncMock()) as link,
+        patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
+    ):
+        await upsert_batch(batch)
+
+    link.assert_not_awaited()
+    notify.assert_not_awaited()
 
 
 async def test_stub_insert_returns_one_upserted_snapshot(

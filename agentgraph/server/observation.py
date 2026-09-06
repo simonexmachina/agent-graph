@@ -47,7 +47,9 @@ async def record_observation(
     try:
         backend = get_backend()
         if not observed:
-            await backend.increment_observation_duration(ref.source, ref.resource_id, observation_duration_ms)
+            await backend.increment_observation_duration(
+                ref.source, ref.resource_id, observation_duration_ms
+            )
             if observation_duration_ms > 0:
                 await _notify_observation(
                     source=ref.source,
@@ -221,17 +223,22 @@ async def _dispatch(
         batch = await connector.fetch(
             resource_type=resource_type, resource_id=resource_id, meta=meta
         )
-        if batch.entities or batch.persons or batch.edges:
+        if batch.has_writes():
             from agentgraph.graph.upsert import upsert_batch
 
             await upsert_batch(batch)
         logger.info(
             "Fetch complete %s/%s/%s — %d entities, %d persons, %d edges",
-            source, resource_type, resource_id,
-            len(batch.entities), len(batch.persons), len(batch.edges),
+            source,
+            resource_type,
+            resource_id,
+            len(batch.entities),
+            len(batch.persons),
+            len(batch.edges),
         )
         return {
             "entities": len(batch.entities),
+            "metadata_patches": len(batch.metadata_patches),
             "persons": len(batch.persons),
             "edges": len(batch.edges),
         }
