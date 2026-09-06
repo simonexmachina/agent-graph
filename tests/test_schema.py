@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agentgraph.backends.sqlite.backend import SQLiteBackend
+from agentgraph.backends.sqlite.backend import _SCHEMA_SQL, _SCHEMA_VERSION, SQLiteBackend
 from agentgraph.connectors.base import EntityBatch, EntityRecord
 from agentgraph.core.context import set_backend
 
@@ -39,6 +39,86 @@ async def test_tables_exist(sqlite_backend: SQLiteBackend) -> None:
 
     columns = await sqlite_backend._fetchall("PRAGMA table_info(entities)")
     assert "observed_at" in {row["name"] for row in columns}
+
+
+async def test_version_four_migration_replaces_rss_metadata_index(tmp_path: Path) -> None:
+    db_path = tmp_path / "v4.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_SCHEMA_SQL)
+    conn.execute("DROP INDEX idx_edges_target_type_created_source")
+    conn.execute(
+        "CREATE INDEX idx_entities_platform_type_feed_updated "
+        "ON entities(platform, entity_type, json_extract(metadata, '$.feed_url'), updated_at DESC)"
+    )
+    conn.executemany(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id)
+        VALUES (?, ?, 'rss', ?)
+        """,
+        [
+            ("feed", "Folder", "feed/example"),
+            ("article", "Document", "entry/example"),
+        ],
+    )
+    conn.execute(
+        """
+        INSERT INTO edges (id, edge_type, source_entity_id, target_entity_id, platform)
+        VALUES ('edge', 'posted_in', 'article', 'feed', 'rss')
+        """
+    )
+    conn.execute("PRAGMA user_version=4")
+    conn.commit()
+    conn.close()
+
+    backend = SQLiteBackend(str(db_path), vector_mode="bm25-only")
+    await backend.initialize()
+    try:
+        indexes = {
+            str(row["name"])
+            for row in await backend._fetchall(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        edge_count = await backend._fetchval("SELECT count(*) FROM edges")
+        schema_version = await backend._fetchval("PRAGMA user_version")
+    finally:
+        await backend.close()
+
+    assert "idx_entities_platform_type_feed_updated" not in indexes
+    assert "idx_edges_target_type_created_source" in indexes
+    assert edge_count == 1
+    assert schema_version == _SCHEMA_VERSION
+
+
+async def test_version_five_migration_replaces_edge_target_index(tmp_path: Path) -> None:
+    db_path = tmp_path / "v5.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_SCHEMA_SQL)
+    conn.execute("DROP INDEX idx_edges_target_type_created_source")
+    conn.execute(
+        "CREATE INDEX idx_edges_target_type_source "
+        "ON edges(target_entity_id, edge_type, source_entity_id)"
+    )
+    conn.execute("PRAGMA user_version=5")
+    conn.commit()
+    conn.close()
+
+    backend = SQLiteBackend(str(db_path), vector_mode="bm25-only")
+    await backend.initialize()
+    try:
+        indexes = {
+            str(row["name"])
+            for row in await backend._fetchall(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+        }
+        schema_version = await backend._fetchval("PRAGMA user_version")
+    finally:
+        await backend.close()
+
+    assert "idx_edges_target_type_source" not in indexes
+    assert "idx_edges_target_type_created_source" in indexes
+    assert schema_version == _SCHEMA_VERSION
 
 
 async def test_schema_migration_makes_rss_folders_persistent(tmp_path: Path) -> None:

@@ -39,6 +39,25 @@ class FakeTextEmbedding:
         return [np.array([5.0, 12.0], dtype=np.float32)]
 
 
+def test_load_model_warms_cached_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    FakeTextEmbedding.model_names = []
+    embeddings_module = importlib.reload(embeddings)
+    monkeypatch.setattr(embeddings_module, "TextEmbedding", FakeTextEmbedding)
+    monkeypatch.setattr(
+        embeddings_module,
+        "get_settings",
+        lambda: SimpleNamespace(embedding_model="test/model"),
+    )
+
+    try:
+        embeddings_module.load_model()
+        embeddings_module.load_model()
+
+        assert FakeTextEmbedding.model_names == ["test/model"]
+    finally:
+        importlib.reload(embeddings_module)
+
+
 def test_encode_passage_uses_configured_fastembed_model_and_normalizes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

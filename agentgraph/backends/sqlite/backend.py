@@ -22,7 +22,12 @@ from agentgraph.backends.sqlite.vector import (
     pack_embedding,
     vector_ranked,
 )
-from agentgraph.connectors.base import EntityBatch, EntityRecord, PersonRecord
+from agentgraph.connectors.base import (
+    EntityBatch,
+    EntityMetadataPatch,
+    EntityRecord,
+    PersonRecord,
+)
 from agentgraph.core.storage import EdgeResult, EntityResult, StorageBackend
 from agentgraph.perf import timed
 
@@ -64,7 +69,7 @@ _LIST_PAGE_ORDER_BY = {
 _COLUMN_FILTERS = {"platform", "platform_entity_id", "entity_type"}
 _FTS_DELETE_CHUNK_SIZE = 500
 _BUSY_TIMEOUT_MS = 5_000
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 6
 
 
 def _now() -> str:
@@ -291,9 +296,11 @@ class SQLiteBackend(StorageBackend):
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC)"
         )
+        await conn.execute("DROP INDEX IF EXISTS idx_entities_platform_type_feed_updated")
+        await conn.execute("DROP INDEX IF EXISTS idx_edges_target_type_source")
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_entities_platform_type_feed_updated "
-            "ON entities(platform, entity_type, json_extract(metadata, '$.feed_url'), updated_at DESC)"
+            "CREATE INDEX IF NOT EXISTS idx_edges_target_type_created_source "
+            "ON edges(target_entity_id, edge_type, created_at DESC, source_entity_id)"
         )
 
     async def _retention_policy_needs_migration(self) -> bool:
@@ -477,37 +484,73 @@ class SQLiteBackend(StorageBackend):
         batch: EntityBatch,
         person_embeddings: dict[str, list[float] | None],
         entity_embeddings: dict[str, list[float] | None],
-    ) -> None:
+    ) -> list[EntityResult]:
         assert self._write_lock is not None
         async with self._write_lock:
             conn = self._conn_or_raise()
             with timed(
                 "sqlite.upsert_batch",
                 entities=len(batch.entities),
+                metadata_patches=len(batch.metadata_patches),
                 persons=len(batch.persons),
                 edges=len(batch.edges),
             ):
                 await conn.execute("BEGIN IMMEDIATE")
                 try:
-                    person_id_map = await self._upsert_persons(
+                    person_id_map, upserted_person_ids = await self._upsert_persons(
                         conn, batch.persons, person_embeddings
                     )
-                    entity_id_map = await self._upsert_entities(
+                    entity_id_map, upserted_entity_ids = await self._upsert_entities(
                         conn, batch.entities, entity_embeddings
                     )
+                    await self._apply_metadata_patches(conn, batch.metadata_patches)
                     await self._upsert_edges(conn, batch, person_id_map, entity_id_map)
                     await conn.execute("COMMIT")
                 except Exception:
                     await conn.execute("ROLLBACK")
                     raise
+            return await self._get_entities_by_ids_in_order(
+                [*upserted_person_ids, *upserted_entity_ids]
+            )
+
+    async def _apply_metadata_patches(
+        self,
+        conn: aiosqlite.Connection,
+        patches: list[EntityMetadataPatch],
+    ) -> None:
+        """Merge connector-declared non-material metadata without emitting changes."""
+        now = _now()
+        for patch in patches:
+            cursor = await conn.execute(
+                """
+                SELECT id, metadata
+                FROM entities
+                WHERE platform = ? AND platform_entity_id = ?
+                """,
+                [patch.platform, patch.platform_entity_id],
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                raise ValueError(
+                    "Cannot patch metadata for missing entity "
+                    f"{patch.platform}:{patch.platform_entity_id}"
+                )
+            metadata = json.loads(row["metadata"] or "{}")
+            metadata.update(patch.metadata)
+            await conn.execute(
+                "UPDATE entities SET metadata = ?, synced_at = ? WHERE id = ?",
+                [json.dumps(metadata), now, str(row["id"])],
+            )
 
     async def _upsert_persons(
         self,
         conn: aiosqlite.Connection,
         persons: list[PersonRecord],
         embeddings: dict[str, list[float] | None],
-    ) -> dict[str, str]:
+    ) -> tuple[dict[str, str], list[str]]:
         id_map: dict[str, str] = {}
+        upserted_ids: list[str] = []
+        upserted_id_set: set[str] = set()
         for p in persons:
             canonical_key = p.canonical_email or f"{p.platform}:{p.platform_user_id}"
             meta: dict[str, str] = {}
@@ -573,6 +616,9 @@ class SQLiteBackend(StorageBackend):
                     ],
                 )
                 entity_id = existing_id
+                if changed and entity_id not in upserted_id_set:
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
             else:
                 cursor = await conn.execute(
                     """
@@ -595,6 +641,9 @@ class SQLiteBackend(StorageBackend):
                 if row is None:
                     raise RuntimeError("Failed to upsert person entity")
                 entity_id = str(row[0])
+                if entity_id not in upserted_id_set:
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
                 fts_title = p.display_name or ""
                 fts_content = p.canonical_email or ""
                 rewrite_fts = bool(fts_title or fts_content)
@@ -610,7 +659,7 @@ class SQLiteBackend(StorageBackend):
             id_map[p.platform_user_id] = entity_id
             if p.canonical_email:
                 id_map[p.canonical_email] = entity_id
-        return id_map
+        return id_map, upserted_ids
 
     async def _resolve_person_for_upsert(
         self,
@@ -639,8 +688,10 @@ class SQLiteBackend(StorageBackend):
         conn: aiosqlite.Connection,
         entities: list[EntityRecord],
         embeddings: dict[str, list[float] | None],
-    ) -> dict[str, str]:
+    ) -> tuple[dict[str, str], list[str]]:
         id_map: dict[str, str] = {}
+        upserted_ids: list[str] = []
+        upserted_id_set: set[str] = set()
         # FTS maintenance is independent of edge resolution. Deferring it avoids
         # two SQLite round trips for every entity in a connector-sized batch.
         fts_delete_ids: list[str] = []
@@ -665,18 +716,18 @@ class SQLiteBackend(StorageBackend):
                 )
 
             if e.is_stub:
+                new_id = _new_id()
                 cursor = await conn.execute(
                     """
                     INSERT INTO entities
                         (id, entity_type, platform, platform_entity_id, title, metadata,
                          created_at, updated_at, retention_policy, retention_parent_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (platform, platform_entity_id) DO UPDATE SET
-                        entity_type = entities.entity_type
+                    ON CONFLICT (platform, platform_entity_id) DO NOTHING
                     RETURNING id
                     """,
                     [
-                        _new_id(),
+                        new_id,
                         e.entity_type,
                         e.platform,
                         e.platform_entity_id,
@@ -688,6 +739,22 @@ class SQLiteBackend(StorageBackend):
                         parent_id,
                     ],
                 )
+                row = await cursor.fetchone()
+                if row is not None:
+                    entity_id = str(row[0])
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
+                else:
+                    existing_id = await self._resolve_existing_entity_id(
+                        conn, e.platform, e.platform_entity_id
+                    )
+                    if existing_id is None:
+                        raise RuntimeError(
+                            f"Failed to resolve stub entity {e.platform}:{e.platform_entity_id}"
+                        )
+                    entity_id = existing_id
+                id_map[e.platform_entity_id] = entity_id
+                continue
             else:
                 existing_cursor = await conn.execute(
                     """
@@ -809,6 +876,9 @@ class SQLiteBackend(StorageBackend):
                         f"Failed to upsert entity {e.platform}:{e.platform_entity_id}"
                     )
                 entity_id: str = row[0]
+                if (existing_row is None or changed) and entity_id not in upserted_id_set:
+                    upserted_ids.append(entity_id)
+                    upserted_id_set.add(entity_id)
                 if rewrite_fts:
                     if existing_row is not None:
                         fts_delete_ids.append(entity_id)
@@ -816,13 +886,6 @@ class SQLiteBackend(StorageBackend):
                         fts_entries[entity_id] = (fts_title, fts_content)
                 id_map[e.platform_entity_id] = entity_id
                 continue
-
-            row = await cursor.fetchone()
-            if row is None:
-                raise RuntimeError(
-                    f"Failed to upsert stub entity {e.platform}:{e.platform_entity_id}"
-                )
-            id_map[e.platform_entity_id] = row[0]
 
         for start in range(0, len(fts_delete_ids), _FTS_DELETE_CHUNK_SIZE):
             ids = fts_delete_ids[start : start + _FTS_DELETE_CHUNK_SIZE]
@@ -837,7 +900,7 @@ class SQLiteBackend(StorageBackend):
             await conn.executemany(
                 "INSERT INTO entities_fts (id, title, content) VALUES (?, ?, ?)", inserts
             )
-        return id_map
+        return id_map, upserted_ids
 
     async def _upsert_edges(
         self,
@@ -1270,6 +1333,13 @@ class SQLiteBackend(StorageBackend):
         )
         return [_row_to_entity(r) for r in rows]
 
+    async def _get_entities_by_ids_in_order(self, entity_ids: list[str]) -> list[EntityResult]:
+        """Return stored entities in caller order after an upsert commit."""
+
+        entities = await self.get_entities_by_ids(entity_ids)
+        by_id = {str(entity["id"]): entity for entity in entities}
+        return [by_id[entity_id] for entity_id in entity_ids if entity_id in by_id]
+
     async def get_entities_by_id_prefix(self, prefix: str) -> list[EntityResult]:
         rows = await self._fetchall(
             """
@@ -1459,58 +1529,66 @@ class SQLiteBackend(StorageBackend):
             )
         return [_row_to_entity(row) for row in rows]
 
-    async def list_recent_metadata_by_group(
+    async def list_recent_metadata_by_edge_target(
         self,
         entity_type: str,
         filters: dict[str, str],
-        group_metadata_key: str,
-        group_values: list[str],
-        per_group_limit: int,
-        order_by: str,
-    ) -> list[dict[str, Any]]:
-        if not group_values or per_group_limit <= 0:
-            return []
-        if order_by not in _VALID_ORDER_BY:
-            order_by = "updated_at"
+        edge_type: str,
+        target_platform: str,
+        target_platform_entity_ids: list[str],
+        per_target_limit: int,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if not target_platform_entity_ids or per_target_limit <= 0:
+            return {}
 
-        params: list[Any] = [entity_type]
         clauses: list[str] = []
+        filter_params: list[str] = []
         for key, value in filters.items():
             if key in _COLUMN_FILTERS:
-                clauses.append(f"e.{key} = ?")
+                clauses.append(f"source.{key} = ?")
             else:
-                clauses.append(f"json_extract(e.metadata, '$.{key}') = ?")
-            params.append(value)
+                clauses.append(f"json_extract(source.metadata, '$.{key}') = ?")
+            filter_params.append(value)
 
-        group_path = f"$.{group_metadata_key}"
-        value_placeholders = ", ".join("?" for _ in group_values)
-        clauses.append(f"json_extract(e.metadata, ?) IN ({value_placeholders})")
-        where_extra = " AND ".join(clauses)
+        where_extra = (" AND " + " AND ".join(clauses)) if clauses else ""
 
         with timed(
-            "sqlite.list_recent_metadata_by_group",
+            "sqlite.list_recent_metadata_by_edge_target",
             entity_type=entity_type,
-            per_group_limit=per_group_limit,
-            group_count=len(group_values),
+            per_target_limit=per_target_limit,
+            target_count=len(target_platform_entity_ids),
         ):
-            rows = await self._fetchall(
-                f"""
-                SELECT metadata FROM (
-                    SELECT e.metadata,
-                           json_extract(e.metadata, ?) AS group_value,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY json_extract(e.metadata, ?)
-                               ORDER BY e.{order_by} DESC
-                           ) AS group_rank
-                    FROM entities e
-                    WHERE e.entity_type = ? AND {where_extra}
+            grouped: dict[str, list[dict[str, Any]]] = {}
+            for target_platform_entity_id in target_platform_entity_ids:
+                rows = await self._fetchall(
+                    f"""
+                    SELECT source.metadata
+                    FROM entities target
+                    CROSS JOIN edges relationship INDEXED BY idx_edges_target_type_created_source
+                        ON relationship.target_entity_id = target.id
+                       AND relationship.edge_type = ?
+                    CROSS JOIN entities source
+                        ON source.id = relationship.source_entity_id
+                    WHERE target.platform = ?
+                      AND target.platform_entity_id = ?
+                      AND source.entity_type = ?{where_extra}
+                    ORDER BY relationship.created_at DESC
+                    LIMIT ?
+                    """,
+                    [
+                        edge_type,
+                        target_platform,
+                        target_platform_entity_id,
+                        entity_type,
+                        *filter_params,
+                        per_target_limit,
+                    ],
                 )
-                WHERE group_rank <= ?
-                ORDER BY group_value, group_rank
-                """,
-                [group_path, group_path, *params, group_path, *group_values, per_group_limit],
-            )
-        return [json.loads(row["metadata"]) if row["metadata"] else {} for row in rows]
+                if rows:
+                    grouped[target_platform_entity_id] = [
+                        json.loads(row["metadata"]) if row["metadata"] else {} for row in rows
+                    ]
+        return grouped
 
     # --- Read: edges ---
 

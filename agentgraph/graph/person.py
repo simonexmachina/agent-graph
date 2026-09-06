@@ -24,6 +24,21 @@ async def unify_persons(
         if entity["id"] != primary["id"]
     ]
     updated = await get_backend().merge_person_entities(primary["id"], duplicate_ids)
+
+    if duplicate_ids:
+        from agentgraph.connectors.feed import (
+            TombstoneMutation,
+            mutation_target_from_entity,
+            notify_feed_connectors,
+        )
+        from agentgraph.graph.upsert import notify_entity_upserts
+
+        await notify_entity_upserts([updated])
+        for duplicate in duplicate_entities:
+            if duplicate["id"] != primary["id"]:
+                await notify_feed_connectors(
+                    TombstoneMutation(target=mutation_target_from_entity(duplicate))
+                )
     return {
         "primary": updated,
         "merged_ids": duplicate_ids,

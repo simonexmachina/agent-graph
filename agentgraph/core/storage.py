@@ -39,11 +39,12 @@ class StorageBackend(ABC):
         batch: EntityBatch,
         person_embeddings: dict[str, list[float] | None],
         entity_embeddings: dict[str, list[float] | None],
-    ) -> None:
+    ) -> list[EntityResult]:
         """Atomically persist an EntityBatch.
 
         person_embeddings: canonical_key (email or "platform:user_id") → vector
         entity_embeddings: platform_entity_id → vector
+        Returns committed snapshots for inserted or materially changed entities.
         """
         ...
 
@@ -138,16 +139,16 @@ class StorageBackend(ABC):
     ) -> list[EntityResult]: ...
 
     @abstractmethod
-    async def list_recent_metadata_by_group(
+    async def list_recent_metadata_by_edge_target(
         self,
         entity_type: str,
         filters: dict[str, str],
-        group_metadata_key: str,
-        group_values: list[str],
-        per_group_limit: int,
-        order_by: str,
-    ) -> list[dict[str, Any]]:
-        """Return metadata-only rows, capped per metadata group."""
+        edge_type: str,
+        target_platform: str,
+        target_platform_entity_ids: list[str],
+        per_target_limit: int,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return source metadata for each target's newest matching edges."""
         ...
 
     # --- Read: edges ---

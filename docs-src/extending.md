@@ -59,6 +59,7 @@ The [type-checked custom connector example](https://github.com/simonexmachina/ag
 ### Output model
 
 - `EntityRecord` for messages, documents, channels, folders, spreadsheets, and emails.
+- `EntityMetadataPatch` for connector-declared, non-material metadata changes to an existing entity. Patches merge metadata and refresh `synced_at` without changing content, `updated_at`, or publishing an entity upsert event.
 - `PersonRecord` for authors and participants.
 - `EdgeRecord` for authored, posted-in, replied-to, mentions, references, and similar relationships.
 

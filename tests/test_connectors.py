@@ -451,6 +451,74 @@ def gmail_connector() -> GmailConnector:
     return GmailConnector()
 
 
+@pytest.mark.asyncio
+async def test_gmail_poll_initializes_checkpoint_without_historical_ingest(
+    gmail_connector: GmailConnector,
+) -> None:
+    service = MagicMock()
+    service.users().getProfile().execute.return_value = {"historyId": "history-123"}
+    with (
+        patch(
+            "agentgraph_connector_google.gmail._build_service_for", return_value=service
+        ) as build_service,
+        patch("agentgraph_connector_google.gmail._list_threads", new=AsyncMock()) as list_threads,
+    ):
+        batch, cursor = await gmail_connector.poll({}, account_id="user@example.com")
+
+    assert not batch.has_writes()
+    assert cursor == {"history_id": "history-123"}
+    build_service.assert_called_once_with("user@example.com")
+    list_threads.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_gmail_ingest_fetches_historical_threads_only_when_explicit(
+    gmail_connector: GmailConnector,
+) -> None:
+    service = MagicMock()
+    expected_batch = EntityBatch()
+    with (
+        patch("agentgraph_connector_google.gmail._build_service_for", return_value=service),
+        patch(
+            "agentgraph_connector_google.gmail._list_threads",
+            new=AsyncMock(return_value=expected_batch),
+        ) as list_threads,
+    ):
+        batch = await gmail_connector.ingest(account_id="user@example.com")
+
+    assert batch is expected_batch
+    await_args = list_threads.await_args
+    assert await_args is not None
+    query = await_args.args[2]
+    assert query.startswith("after:")
+    assert query.endswith("-in:spam -in:trash")
+    assert await_args.kwargs["account_id"] == "user@example.com"
+
+
+@pytest.mark.asyncio
+async def test_gmail_poll_reinitializes_expired_history_without_historical_ingest(
+    gmail_connector: GmailConnector,
+) -> None:
+    from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
+
+    service = MagicMock()
+    expired_response = MagicMock()
+    expired_response.status = 404
+    service.users().history().list().execute.side_effect = HttpError(expired_response, b"expired")
+    service.users().getProfile().execute.return_value = {"historyId": "history-456"}
+    with (
+        patch("agentgraph_connector_google.gmail._build_service_for", return_value=service),
+        patch("agentgraph_connector_google.gmail._list_threads", new=AsyncMock()) as list_threads,
+    ):
+        _, reset_cursor = await gmail_connector.poll({"history_id": "expired-history"})
+        batch, cursor = await gmail_connector.poll(reset_cursor)
+
+    assert reset_cursor == {}
+    assert not batch.has_writes()
+    assert cursor == {"history_id": "history-456"}
+    list_threads.assert_not_awaited()
+
+
 def test_slack_edit_timestamp_is_optional_source_update_time() -> None:
     assert _edited_at({"ts": "1710000000.000000"}) is None
     assert _edited_at({"edited": {"ts": "1710000001.000000"}}) == datetime.fromtimestamp(

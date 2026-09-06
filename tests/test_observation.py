@@ -9,7 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from agentgraph.connectors.base import EntityBatch, EntityRecord, SourceReference
+from agentgraph.connectors.base import (
+    EntityBatch,
+    EntityMetadataPatch,
+    EntityRecord,
+    SourceReference,
+)
 from agentgraph.core.context import set_backend
 from agentgraph.server.app import viewer_url
 
@@ -30,6 +35,7 @@ def client() -> TestClient:
         patch("agentgraph.server.app.AsyncIOScheduler"),
     ):
         from agentgraph.server.app import app
+
         return TestClient(app, raise_server_exceptions=True)
 
 
@@ -145,7 +151,10 @@ async def test_meta_skips_slow_dynamic_connector_and_returns_remaining_patterns(
     settings = MagicMock(observation_threshold_seconds=3)
 
     with (
-        patch("agentgraph.connectors.registry.get_all_connectors", return_value=[slow_connector, fast_connector]),
+        patch(
+            "agentgraph.connectors.registry.get_all_connectors",
+            return_value=[slow_connector, fast_connector],
+        ),
         patch("agentgraph.config.get_settings", return_value=settings),
         patch("agentgraph.server.meta_api._DYNAMIC_PATTERN_TIMEOUT_SECONDS", 0.01),
     ):
@@ -168,7 +177,10 @@ async def test_rss_duration_uses_exact_observation_reference() -> None:
         fetch_meta={"web_url": "https://example.com/articles/known"},
     )
     with (
-        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
     ):
         result = await record_observation(
             "https://example.com/articles/known",
@@ -197,7 +209,10 @@ async def test_duration_passes_metadata_to_observation_resolution() -> None:
     meta = {"gmail_thread_id": "api-thread"}
 
     with (
-        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)) as classify,
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ) as classify,
     ):
         result = await record_observation(
             "https://mail.google.com/mail/u/0/#inbox/opaque",
@@ -228,7 +243,10 @@ async def test_new_observation_dispatches_once() -> None:
     ref = SourceReference(source="gmail", resource_type="thread", resource_id="thread-1")
 
     with (
-        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
         patch(
             "agentgraph.server.observation._dispatch",
             new=AsyncMock(return_value={"entities": 1, "persons": 0, "edges": 0}),
@@ -273,7 +291,10 @@ async def test_concurrent_duplicate_observation_awaits_one_fetch() -> None:
         return {"entities": 1, "persons": 0, "edges": 0}
 
     with (
-        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
         patch("agentgraph.server.observation._dispatch", side_effect=dispatch) as mocked_dispatch,
     ):
         first_task = asyncio.create_task(
@@ -304,7 +325,10 @@ async def test_failed_observation_does_not_create_or_mark_entity() -> None:
     ref = SourceReference(source="gdrive", resource_type="folder", resource_id="folder-1")
 
     with (
-        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
         patch(
             "agentgraph.server.observation._dispatch",
             new=AsyncMock(side_effect=ObservationFetchError("Drive unavailable")),
@@ -337,10 +361,15 @@ async def test_unavailable_observation_is_ignored_without_traceback(
     caplog.set_level(logging.INFO, logger="agentgraph.server.observation")
 
     with (
-        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
         patch(
             "agentgraph.server.observation._dispatch",
-            new=AsyncMock(side_effect=ResourceUnavailableError("Slack channel is unavailable to this account")),
+            new=AsyncMock(
+                side_effect=ResourceUnavailableError("Slack channel is unavailable to this account")
+            ),
         ),
     ):
         result = await record_observation(
@@ -368,7 +397,10 @@ async def test_observation_rejects_fetch_without_persisted_target() -> None:
     ref = SourceReference(source="gdrive", resource_type="folder", resource_id="folder-1")
 
     with (
-        patch("agentgraph.server.observation.classify_observation_url", new=AsyncMock(return_value=ref)),
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
         patch(
             "agentgraph.server.observation._dispatch",
             new=AsyncMock(return_value={"entities": 0, "persons": 0, "edges": 0}),
@@ -419,7 +451,33 @@ async def test_observation_dispatch_upserts_returned_batch() -> None:
         meta={"web_url": "https://example.com/articles/known"},
     )
     upsert_batch.assert_awaited_once_with(batch)
-    assert result == {"entities": 1, "persons": 0, "edges": 0}
+    assert result == {"entities": 1, "metadata_patches": 0, "persons": 0, "edges": 0}
+
+
+@pytest.mark.asyncio
+async def test_observation_dispatch_persists_metadata_patch_batch() -> None:
+    from agentgraph.server.observation import _dispatch  # pyright: ignore[reportPrivateUsage]
+
+    batch = EntityBatch(
+        metadata_patches=[
+            EntityMetadataPatch(
+                platform="rss",
+                platform_entity_id="entry/known",
+                metadata={"http_etag": '"fresh"'},
+            )
+        ]
+    )
+    connector = MagicMock()
+    connector.fetch = AsyncMock(return_value=batch)
+
+    with (
+        patch("agentgraph.connectors.registry.get_connector", return_value=connector),
+        patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert_batch,
+    ):
+        result = await _dispatch("rss", "document", "entry/known")
+
+    upsert_batch.assert_awaited_once_with(batch)
+    assert result == {"entities": 0, "metadata_patches": 1, "persons": 0, "edges": 0}
 
 
 def test_report_observation_returns_bad_gateway_for_connector_failure(client: TestClient) -> None:

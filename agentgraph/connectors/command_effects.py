@@ -54,7 +54,7 @@ async def execute_fetches(effects: ConnectorCommandEffects) -> list[dict[str, An
             resource_id=reference.resource_id,
             meta=reference.fetch_meta,
         )
-        if batch.entities or batch.persons or batch.edges:
+        if batch.has_writes():
             await upsert_batch(batch)
         fetched.append(
             {
@@ -62,6 +62,7 @@ async def execute_fetches(effects: ConnectorCommandEffects) -> list[dict[str, An
                 "resource_type": reference.resource_type,
                 "resource_id": reference.resource_id,
                 "entities": len(batch.entities),
+                "metadata_patches": len(batch.metadata_patches),
                 "persons": len(batch.persons),
                 "edges": len(batch.edges),
             }

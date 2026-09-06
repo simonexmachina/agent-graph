@@ -9,7 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agentgraph.connectors.base import BaseConnector, EntityBatch, FetchPolicy, ResourceType
+from agentgraph.connectors.base import (
+    BaseConnector,
+    EntityBatch,
+    EntityMetadataPatch,
+    FetchPolicy,
+    ResourceType,
+)
 from agentgraph.server import sync
 
 
@@ -87,6 +93,29 @@ class _ScheduledConnector(BaseConnector):
         return EntityBatch()
 
 
+class _PatchPollConnector(_ScheduledConnector):
+    source: ClassVar[str] = "patch-poll"
+
+    async def poll(
+        self,
+        cursor: dict[str, Any],
+        account_id: str | None = None,
+    ) -> tuple[EntityBatch, dict[str, Any]]:
+        _ = (cursor, account_id)
+        return (
+            EntityBatch(
+                metadata_patches=[
+                    EntityMetadataPatch(
+                        platform="web",
+                        platform_entity_id="https://example.com/page",
+                        metadata={"http_etag": '"fresh"'},
+                    )
+                ]
+            ),
+            {"cursor": "next"},
+        )
+
+
 class _BlockingConnector(_ScheduledConnector):
     source: ClassVar[str] = "blocking"
 
@@ -162,6 +191,25 @@ async def test_poll_connector_backs_off_after_failure() -> None:
         await sync.poll_connector(connector)
 
     backend.load_cursor.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_poll_connector_persists_metadata_patch_batch() -> None:
+    backend = MagicMock()
+    backend.load_cursor = AsyncMock(return_value={"cursor": "previous"})
+    backend.save_cursor = AsyncMock()
+
+    with (
+        patch("agentgraph.server.sync.get_backend", return_value=backend),
+        patch("agentgraph.server.sync.upsert_batch", new=AsyncMock()) as upsert_batch,
+    ):
+        await sync.poll_connector(_PatchPollConnector())
+
+    upsert_args = upsert_batch.await_args
+    assert upsert_args is not None
+    batch = upsert_args.args[0]
+    assert len(batch.metadata_patches) == 1
+    backend.save_cursor.assert_awaited_once_with("patch-poll", {"cursor": "next"})
 
 
 @pytest.mark.asyncio
@@ -282,7 +330,9 @@ async def test_sync_api_queues_manual_poll() -> None:
 def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:
     scheduler = MagicMock()
 
-    with patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_ScheduledConnector()]):
+    with patch(
+        "agentgraph.connectors.registry.get_all_connectors", return_value=[_ScheduledConnector()]
+    ):
         sync.setup_sync(scheduler)
 
     scheduler.add_job.assert_called_once()
@@ -294,7 +344,9 @@ def test_setup_sync_names_scheduler_jobs_with_connector_source() -> None:
 def test_setup_sync_overrides_connector_interval() -> None:
     scheduler = MagicMock()
 
-    with patch("agentgraph.connectors.registry.get_all_connectors", return_value=[_ScheduledConnector()]):
+    with patch(
+        "agentgraph.connectors.registry.get_all_connectors", return_value=[_ScheduledConnector()]
+    ):
         sync.setup_sync(scheduler, poll_interval_seconds=120)
 
     args, kwargs = scheduler.add_job.call_args

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -29,6 +30,21 @@ _STATIC_DIR = Path(__file__).parent / "static"
 logger = logging.getLogger(__name__)
 
 _scheduler: AsyncIOScheduler | None = None
+
+
+def _load_embedding_model() -> None:
+    from agentgraph.graph.embeddings import load_model
+
+    load_model()
+
+
+async def _preload_embedding_model() -> None:
+    """Warm the embedding model off the event loop without making startup fail."""
+    try:
+        await asyncio.to_thread(_load_embedding_model)
+        logger.info("Embedding model ready")
+    except Exception:
+        logger.exception("Failed to preload embedding model")
 
 
 def viewer_url(host: str, port: int) -> str:
@@ -62,9 +78,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             get_config_paths()[0],
         )
         logger.info("Web viewer: %s", viewer_url(settings.server_host, settings.server_port))
+        embedding_load_task = asyncio.create_task(_preload_embedding_model())
         try:
             yield
         finally:
+            if not embedding_load_task.done():
+                embedding_load_task.cancel()
+            await asyncio.gather(embedding_load_task, return_exceptions=True)
             if _scheduler:
                 _scheduler.shutdown(wait=False)
             await shutdown_poll_tasks()
@@ -89,6 +109,7 @@ async def log_request_timing(request: Request, call_next: Any) -> Any:
         f" bytes={size}" if size else "",
     )
     return response
+
 
 app.include_router(cli_router)
 app.include_router(meta_router)
