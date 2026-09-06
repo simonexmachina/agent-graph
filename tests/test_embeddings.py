@@ -41,19 +41,17 @@ class FakeTextEmbedding:
 
 def test_load_model_warms_cached_model(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeTextEmbedding.model_names = []
+    FakeTextEmbedding.cache_dirs = []
     embeddings_module = importlib.reload(embeddings)
     monkeypatch.setattr(embeddings_module, "TextEmbedding", FakeTextEmbedding)
-    monkeypatch.setattr(
-        embeddings_module,
-        "get_settings",
-        lambda: SimpleNamespace(embedding_model="test/model"),
-    )
+    monkeypatch.setattr(embeddings_module, "get_settings", _fake_settings)
 
     try:
         embeddings_module.load_model()
         embeddings_module.load_model()
 
         assert FakeTextEmbedding.model_names == ["test/model"]
+        assert FakeTextEmbedding.cache_dirs == ["/cache/models"]
     finally:
         importlib.reload(embeddings_module)
 
