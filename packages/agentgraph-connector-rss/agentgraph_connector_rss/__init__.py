@@ -24,6 +24,7 @@ from agentgraph.connectors.base import (
     ConnectorCommandEffects,
     EdgeRecord,
     EntityBatch,
+    EntityMetadataPatch,
     EntityRecord,
     EntityReference,
     FetchPolicy,
@@ -283,6 +284,7 @@ class RssConnector(BaseConnector):
                 logger.debug("RSS feed fetch failure", exc_info=True)
                 continue
             combined.entities.extend(batch.entities)
+            combined.metadata_patches.extend(batch.metadata_patches)
             combined.edges.extend(batch.edges)
             combined.persons.extend(batch.persons)
         # The batch may omit already-indexed articles during polling, so it cannot
@@ -320,8 +322,10 @@ class RssConnector(BaseConnector):
                 new_documents_only=True,
             )
         if resource_type == "document" and meta and meta.get("web_url"):
-            entity = await _fetch_entry_document(resource_id, meta)
-            return EntityBatch(entities=[entity])
+            result = await _fetch_entry_document(resource_id, meta)
+            if isinstance(result, EntityMetadataPatch):
+                return EntityBatch(metadata_patches=[result])
+            return EntityBatch(entities=[result])
         return EntityBatch()
 
 
@@ -371,8 +375,14 @@ async def _fetch_feed(
             include_entity = existing is None
         if include_entity:
             if hydrate_documents:
-                entity = await _hydrate_entry_document(entity)
-            entities.append(entity)
+                hydrated = await _hydrate_entry_document(entity)
+                if isinstance(hydrated, EntityMetadataPatch):
+                    batch.metadata_patches.append(hydrated)
+                    include_entity = False
+                else:
+                    entity = hydrated
+            if include_entity:
+                entities.append(entity)
         edges.append(
             EdgeRecord(
                 edge_type="posted_in",
@@ -658,13 +668,19 @@ async def _fetch_entry_document(
     metadata: Mapping[str, object],
     *,
     fallback: EntityRecord | None = None,
-) -> EntityRecord:
+) -> EntityRecord | EntityMetadataPatch:
     web_url = _metadata_str(metadata, "web_url")
     if web_url is None:
         raise ValueError(f"RSS document {platform_entity_id} has no web_url")
     existing = await get_backend().get_entity_by_platform("rss", platform_entity_id)
     http_existing = _http_existing_entity(existing, web_url)
     fetched = await _fetch_http_document(web_url, existing_entity=http_existing)
+    if isinstance(fetched, EntityMetadataPatch):
+        return EntityMetadataPatch(
+            platform="rss",
+            platform_entity_id=platform_entity_id,
+            metadata=dict(fetched.metadata),
+        )
     fetched_metadata = dict(fetched.metadata)
     rss_metadata: dict[str, str | int | float | bool | None] = {
         **_entity_record_metadata(metadata),
@@ -672,7 +688,6 @@ async def _fetch_entry_document(
         "web_url": str(fetched_metadata.get("web_url") or web_url),
         "link": _metadata_str(metadata, "link") or web_url,
     }
-    not_modified = fetched_metadata.get("status_code") == 304
     return EntityRecord(
         entity_type="Document",
         platform="rss",
@@ -680,17 +695,15 @@ async def _fetch_entry_document(
         title=fetched.title or (fallback.title if fallback else None),
         content=fetched.content or (fallback.content if fallback else None),
         source_created_at=fallback.source_created_at if fallback else None,
-        source_updated_at=(
-            None
-            if not_modified
-            else fetched.source_updated_at
-            or (fallback.source_updated_at if fallback else None)
-        ),
+        source_updated_at=fetched.source_updated_at
+        or (fallback.source_updated_at if fallback else None),
         metadata=rss_metadata,
     )
 
 
-async def _hydrate_entry_document(entity: EntityRecord) -> EntityRecord:
+async def _hydrate_entry_document(
+    entity: EntityRecord,
+) -> EntityRecord | EntityMetadataPatch:
     if _metadata_str(entity.metadata, "web_url") is None:
         return entity
     try:
@@ -725,10 +738,10 @@ async def _fetch_http_document(
     url: str,
     *,
     existing_entity: dict[str, object] | None,
-) -> EntityRecord:
+) -> EntityRecord | EntityMetadataPatch:
     module: Any = import_module("agentgraph_connector_web")
     result = await module.fetch_http_document(url, existing_entity=existing_entity)
-    return cast(EntityRecord, result)
+    return cast(EntityRecord | EntityMetadataPatch, result)
 
 
 def _entity_record_metadata(

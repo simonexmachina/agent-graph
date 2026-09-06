@@ -65,6 +65,8 @@ async def bookmark_url(url: str) -> EntityResult:
     resource_type = ref.resource_type if ref is not None else "document"
     resource_id = ref.resource_id if ref is not None else url
     batch = await connector.fetch(resource_type, resource_id)
+    if batch.has_writes():
+        await upsert_batch(batch)
 
     backend = get_backend()
     if ref is not None:
@@ -74,13 +76,6 @@ async def bookmark_url(url: str) -> EntityResult:
 
     if entity is None:
         entity = await _find_batch_entity(batch)
-
-    if entity is None and batch.entities:
-        await upsert_batch(batch)
-        if ref is not None:
-            entity = await backend.get_entity_by_platform(ref.source, ref.resource_id)
-        else:
-            entity = await _find_batch_entity(batch)
 
     if entity is None:
         raise ValueError(f"URL {url!r} was fetched but no graph entity was created")
@@ -94,6 +89,13 @@ async def _find_batch_entity(batch: object) -> EntityResult | None:
         return None
     backend = get_backend()
     for candidate in batch.entities:
+        entity = await backend.get_entity_by_platform(
+            candidate.platform,
+            candidate.platform_entity_id,
+        )
+        if entity is not None:
+            return entity
+    for candidate in batch.metadata_patches:
         entity = await backend.get_entity_by_platform(
             candidate.platform,
             candidate.platform_entity_id,

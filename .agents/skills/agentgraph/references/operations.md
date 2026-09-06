@@ -30,8 +30,10 @@ agentgraph connector <source> --help
 The MCP equivalents are `fetch_entity_tool`, `fetch_entity_by_id_tool`,
 `poll_connectors_tool`, and `run_connector_command_tool`.
 
-Fetch persists the connector's complete returned batch before reporting counts and
-does not update `observed_at`. Poll reports `polled`, `already_running`, and `skipped`.
+Fetch persists the connector's complete returned batch before reporting entity,
+metadata-patch, person, and edge counts. Metadata patches record successful non-material
+refreshes without entity upsert events. Fetch does not update `observed_at`. Poll reports
+`polled`, `already_running`, and `skipped`.
 A connector can be refreshed by another connector, so also inspect `polled_by` and
 `sync` in connector status.
 

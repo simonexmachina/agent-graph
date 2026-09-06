@@ -648,6 +648,45 @@ async def test_bookmark_url_falls_back_to_web_connector() -> None:
     backend.set_entity_bookmarked.assert_awaited_once_with(entity["id"], True)
 
 
+@pytest.mark.asyncio
+async def test_bookmark_url_persists_metadata_patch_before_resolving_entity() -> None:
+    from agentgraph.connectors.base import EntityBatch, EntityMetadataPatch
+    from agentgraph.graph.bookmark import bookmark_target
+
+    entity = _entity(platform="web", title="Fetched Page")
+    updated = {**entity, "bookmarked": True}
+    backend = _mock_backend(
+        get_entity_by_platform=AsyncMock(return_value=entity),
+        set_entity_bookmarked=AsyncMock(return_value=updated),
+    )
+    set_backend(backend)
+    batch = EntityBatch(
+        metadata_patches=[
+            EntityMetadataPatch(
+                platform="web",
+                platform_entity_id="https://example.com/page",
+                metadata={"http_etag": '"fresh"'},
+            )
+        ]
+    )
+
+    class FakeWebConnector:
+        async def fetch(self, resource_type: str, resource_id: str) -> EntityBatch:
+            _ = (resource_type, resource_id)
+            return batch
+
+    with (
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch("agentgraph.connectors.registry.get_connector", return_value=FakeWebConnector()),
+        patch("agentgraph.server.router.classify_url", return_value=None),
+        patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert_batch,
+    ):
+        result = await bookmark_target("https://example.com/page")
+
+    upsert_batch.assert_awaited_once_with(batch)
+    assert result["bookmarked"] is True
+
+
 # ---------------------------------------------------------------------------
 # delete_entity
 # ---------------------------------------------------------------------------
