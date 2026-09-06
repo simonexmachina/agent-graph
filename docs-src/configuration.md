@@ -84,7 +84,7 @@ Set this to an empty value, `none`, or `null` to serve and query over TCP only.
 
 Default: `auto`
 
-How CLI reads reach the graph.
+How the CLI and the MCP server (`agentgraph mcp-serve`) reach the graph.
 
 | Value | Behaviour |
 | :--- | :--- |
@@ -92,10 +92,16 @@ How CLI reads reach the graph.
 | `server` | Use the running server only. Fails with a clear error if it is unreachable, rather than silently falling back. |
 | `in-process` | Open the backend directly and never contact the server. |
 
-Reading through the server avoids importing the embedding model in every CLI
-invocation and lets connector-backed commands such as `fetch` and `download` use the
-server's credentials and network access — which a sandboxed CLI usually cannot.
-Reading in-process needs nothing but filesystem access to the database.
+Reading through the server avoids loading the embedding model in every caller and lets
+connector-backed commands such as `fetch` and `download` use the server's credentials
+and network access — which a sandboxed CLI usually cannot. Reading in-process needs
+nothing but filesystem access to the database.
+
+The MCP server opens its database connection only when a tool actually needs one, so
+under `server` it never opens SQLite or loads the model at all. Because it is
+long-lived, it resolves the transport once and keeps it; if the server it was using
+stops, the next tool call re-resolves and `auto` falls back to in-process without the
+MCP server needing a restart.
 
 ### `AGENTGRAPH_SERVER_CONNECT_TIMEOUT_SECONDS`
 

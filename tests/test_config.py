@@ -12,7 +12,11 @@ import agentgraph.config as config
 
 # conftest pins these so unit tests never reach a real server; clear them where the
 # point of the test is what the shipped defaults are.
-_TRANSPORT_ENV = ("AGENTGRAPH_QUERY_TRANSPORT", "AGENTGRAPH_SERVER_UDS_PATH")
+_TRANSPORT_ENV = (
+    "AGENTGRAPH_QUERY_TRANSPORT",
+    "AGENTGRAPH_SERVER_UDS_PATH",
+    "AGENTGRAPH_SERVER_PORT",
+)
 
 
 def _use_shipped_transport_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -124,6 +128,8 @@ def test_config_dir_is_resolved_after_module_import(
     (config_dir / ".env").write_text("AGENTGRAPH_SERVER_PORT=9123\n", encoding="utf-8")
     monkeypatch.setenv("AGENTGRAPH_CONFIG_DIR", str(config_dir))
     monkeypatch.delenv("AGENTGRAPH_BACKEND_SQLITE_PATH", raising=False)
+    # The port has to come from the .env here, and a real env var would win.
+    _use_shipped_transport_defaults(monkeypatch)
 
     settings = config.Settings()
     resolved_dir, config_file, _, _, database_file = config.get_config_paths()

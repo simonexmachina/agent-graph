@@ -728,7 +728,7 @@ async def test_mcp_fetch_web_size_limit_suggests_compact_command() -> None:
 async def test_mcp_search_entities_tool_returns_json() -> None:
     from agentgraph.mcp.server import search_entities_tool
 
-    with patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[])):
+    with patch("agentgraph.graph.query.search_entities", new=AsyncMock(return_value=[])):
         result = await search_entities_tool("test")
 
     parsed = json.loads(result)
@@ -746,7 +746,7 @@ async def test_mcp_search_entities_tool_skips_connector_enrichment_by_default() 
             entities[0]["metadata"]["enriched"] = True
 
     with (
-        patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[entity])),
+        patch("agentgraph.graph.query.search_entities", new=AsyncMock(return_value=[entity])),
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()),
     ):
@@ -767,7 +767,7 @@ async def test_mcp_search_entities_tool_enriches_results_via_connector_when_refr
             entities[0]["metadata"]["enriched"] = True
 
     with (
-        patch("agentgraph.mcp.server.search_entities", new=AsyncMock(return_value=[entity])),
+        patch("agentgraph.graph.query.search_entities", new=AsyncMock(return_value=[entity])),
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_connector", return_value=FakeConnector()),
     ):
@@ -782,7 +782,7 @@ async def test_mcp_get_entity_tool_not_found() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
     eid = str(uuid4())
-    with patch("agentgraph.mcp.server.get_entity_details", new=AsyncMock(return_value=None)):
+    with patch("agentgraph.graph.operations.get_entity_details", new=AsyncMock(return_value=None)):
         result = await get_entity_tool(eid)
 
     parsed = json.loads(result)
@@ -797,7 +797,7 @@ async def test_mcp_get_entity_tool_found() -> None:
     fake_entity = _entity(title="My Doc")
     fake_entity["id"] = eid
     with patch(
-        "agentgraph.mcp.server.get_entity_details",
+        "agentgraph.graph.operations.get_entity_details",
         new=AsyncMock(return_value=fake_entity),
     ):
         result = await get_entity_tool(eid)
@@ -815,7 +815,7 @@ async def test_mcp_get_entity_tool_resolves_stub_when_requested() -> None:
     resolved["id"] = eid
 
     with patch(
-        "agentgraph.mcp.server.get_entity_details",
+        "agentgraph.graph.operations.get_entity_details",
         new=AsyncMock(return_value=resolved),
     ) as get_entity_details:
         result = await get_entity_tool(eid, resolve=True)
@@ -831,7 +831,7 @@ async def test_mcp_get_entity_tool_does_not_resolve_stub_by_default() -> None:
 
     stub = _entity(title="", content="")
     with patch(
-        "agentgraph.mcp.server.get_entity_details",
+        "agentgraph.graph.operations.get_entity_details",
         new=AsyncMock(return_value=stub),
     ) as get_entity_details:
         result = await get_entity_tool(str(stub["id"]))
@@ -846,7 +846,7 @@ async def test_mcp_get_entity_tool_url_found() -> None:
 
     fake_entity = _entity(platform="web", title="Web Page")
     with patch(
-        "agentgraph.mcp.server.get_entity_details",
+        "agentgraph.graph.operations.get_entity_details",
         new=AsyncMock(return_value=fake_entity),
     ):
         result = await get_entity_tool("https://example.com/page")
@@ -859,7 +859,7 @@ async def test_mcp_get_entity_tool_url_found() -> None:
 async def test_mcp_get_entity_tool_url_not_found() -> None:
     from agentgraph.mcp.server import get_entity_tool
 
-    with patch("agentgraph.mcp.server.get_entity_details", new=AsyncMock(return_value=None)):
+    with patch("agentgraph.graph.operations.get_entity_details", new=AsyncMock(return_value=None)):
         result = await get_entity_tool("https://example.com/missing")
 
     parsed = json.loads(result)
@@ -873,7 +873,7 @@ async def test_mcp_get_edges_resolves_platform_reference() -> None:
     entity = _entity(platform="slack")
     edge = _edge(source_entity_id=str(entity["id"]), target_entity_id=str(uuid4()))
     with patch(
-        "agentgraph.mcp.server.get_entity_edges",
+        "agentgraph.graph.operations.get_entity_edges",
         new=AsyncMock(return_value=(entity, [edge])),
     ) as get_entity_edges:
         result = await get_edges_tool("slack/T123/C123")
@@ -892,7 +892,7 @@ async def test_mcp_traverse_caps_depth() -> None:
 
     entity = _entity()
     with patch(
-        "agentgraph.mcp.server.traverse_entity",
+        "agentgraph.graph.operations.traverse_entity",
         new=AsyncMock(return_value=(entity, {"nodes": [], "edges": []})),
     ) as traverse:
         await traverse_graph_tool(str(uuid4()), max_depth=99)
@@ -908,7 +908,7 @@ async def test_mcp_traverse_allows_depth_zero() -> None:
 
     entity = _entity()
     with patch(
-        "agentgraph.mcp.server.traverse_entity",
+        "agentgraph.graph.operations.traverse_entity",
         new=AsyncMock(return_value=(entity, {"nodes": [], "edges": []})),
     ) as traverse:
         await traverse_graph_tool(str(uuid4()), max_depth=0)
@@ -927,7 +927,7 @@ async def test_mcp_traverse_resolves_stub_nodes_and_repeats_traversal() -> None:
     traversal = {"nodes": [start, resolved], "edges": []}
 
     with patch(
-        "agentgraph.mcp.server.traverse_entity",
+        "agentgraph.graph.operations.traverse_entity",
         new=AsyncMock(return_value=(start, traversal)),
     ) as traverse:
         result = await traverse_graph_tool("gdocs/doc-id", resolve=True)
@@ -971,7 +971,7 @@ async def test_mcp_tool_metadata_guides_agent_workflow() -> None:
 async def test_mcp_query_by_filter_tool() -> None:
     from agentgraph.mcp.server import query_by_filter_tool
 
-    with patch("agentgraph.mcp.server.query_by_filter", new=AsyncMock(return_value=[])):
+    with patch("agentgraph.graph.query.query_by_filter", new=AsyncMock(return_value=[])):
         result = await query_by_filter_tool("Message", filters={"channel_id": "C123"})
 
     parsed = json.loads(result)
@@ -985,14 +985,16 @@ async def test_mcp_query_by_filter_tool_truncates_long_content() -> None:
     entity = _entity(content="x" * 700)
 
     with (
-        patch("agentgraph.mcp.server.query_by_filter", new=AsyncMock(return_value=[entity])),
+        patch("agentgraph.graph.query.query_by_filter", new=AsyncMock(return_value=[entity])),
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_connector", return_value=None),
     ):
         result = await query_by_filter_tool("Message")
 
     parsed = json.loads(result)
-    assert len(parsed[0]["content"]) == 501
+    # Bounded by the query layer's summarize_entities, which the transport applies for
+    # every caller, rather than by a second truncation inside the MCP tool.
+    assert len(parsed[0]["content"]) == 500
     assert parsed[0]["content_truncated"] is True
 
 

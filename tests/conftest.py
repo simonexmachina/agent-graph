@@ -18,6 +18,10 @@ def _use_sqlite_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     # transport set this themselves or build a client directly.
     monkeypatch.setenv("AGENTGRAPH_QUERY_TRANSPORT", "in-process")
     monkeypatch.setenv("AGENTGRAPH_SERVER_UDS_PATH", "none")
+    # Point the server port at something closed. poll/ingest go through the server by
+    # design, and without this a test would POST to whatever agentgraph server the
+    # developer happens to be running — against their real connectors and database.
+    monkeypatch.setenv("AGENTGRAPH_SERVER_PORT", "1")
 
     import agentgraph.config as cfg
     import agentgraph.core.context as ctx

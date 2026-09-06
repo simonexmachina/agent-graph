@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, NoReturn, cast
+from typing import Any, cast
 
 import httpx
 from rich.console import Console
@@ -19,15 +19,21 @@ def _server_base() -> str:
     return f"http://{settings.server_host}:{settings.server_port}/api/sync"
 
 
-def _server_unavailable(exc: Exception) -> NoReturn:
-    console.print(
-        f"[red]AgentGraph server is not available at {_server_base()}.[/red]\n"
-        "Start it with: [bold]agentgraph serve[/bold]",
+def _unavailable_message() -> str:
+    return (
+        f"AgentGraph server is not available at {_server_base()}.\n"
+        "Start it with: agentgraph serve"
     )
-    raise SystemExit(1) from exc
 
 
 def _post(path: str, params: dict[str, Any] | None = None) -> Any:
+    """POST to the server, raising ConnectionError when it is not reachable.
+
+    Raises rather than printing and exiting: this runs inside the MCP server too,
+    where writing to stdout would corrupt the JSON-RPC stream and exiting would take
+    the whole server down. Callers decide how to report it — ConnectionError is an
+    OSError, so the CLI paths that already catch OSError keep working.
+    """
     try:
         response = httpx.post(
             f"{_server_base()}{path}",
@@ -37,7 +43,7 @@ def _post(path: str, params: dict[str, Any] | None = None) -> Any:
         response.raise_for_status()
         return response.json()
     except (httpx.ConnectError, httpx.TimeoutException) as exc:
-        _server_unavailable(exc)
+        raise ConnectionError(_unavailable_message()) from exc
 
 
 def _http_error_detail(exc: httpx.HTTPStatusError) -> str:
@@ -56,6 +62,9 @@ def cmd_poll(source: str | None, as_json: bool) -> None:
     except httpx.HTTPStatusError as exc:
         console.print(f"[red]{_http_error_detail(exc)}[/red]")
         return
+    except ConnectionError as exc:
+        console.print(f"[red]{exc}[/red]", markup=False, highlight=False)
+        raise SystemExit(1) from exc
     if as_json:
         console.print_json(json.dumps(result, default=str))
         return

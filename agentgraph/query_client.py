@@ -285,8 +285,14 @@ class HttpQueryClient:
         """
         import httpx
 
-        async with self._client() as client:
-            response = await client.request(method, path, **kwargs)
+        try:
+            async with self._client() as client:
+                response = await client.request(method, path, **kwargs)
+        except httpx.TransportError as exc:
+            # The server went away, or was never there. Surface a builtin so callers
+            # can react without importing httpx: the CLI prints the message, and the
+            # long-lived MCP server re-resolves its transport and retries.
+            raise ConnectionError(server_unavailable_message()) from exc
         if missing_ok and response.status_code == 404:
             return _MISSING
         if response.status_code == 400:

@@ -14,22 +14,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from agentgraph.core.context import get_backend
-from agentgraph.graph.operations import (
-    get_entity_details,
-    get_entity_edges,
-    traverse_entity,
-)
-from agentgraph.graph.query import (
-    query_by_filter,
-    search_entities,
-)
 from agentgraph.perf import timed
+from agentgraph.query_client import HttpQueryClient, QueryClient, resolve_query_client
 
 logger = logging.getLogger(__name__)
 MCP_INSTRUCTIONS = """AgentGraph is a local graph of selected messages, documents,
@@ -41,6 +34,127 @@ fetch, polling, and ingest may contact configured source services and do not rec
 human attention in observed_at. Inspect connector or auth state only when availability
 or freshness matters. Confirm destructive actions and Person merges with the user."""
 mcp = FastMCP("AgentGraph", instructions=MCP_INSTRUCTIONS)
+
+# --- Backend access -----------------------------------------------------------------
+# Tools reach the graph the same way the CLI does, through AGENTGRAPH_QUERY_TRANSPORT:
+# in-process against the database, or through the local server. Two things differ from
+# the CLI, both because this process is long-lived rather than one-shot.
+
+_transport_lock = asyncio.Lock()
+_backend_lock = asyncio.Lock()
+_client: QueryClient | None = None
+_backend_started = False
+# Strong refs to detached ingest tasks; without them the loop may collect a running
+# task mid-sweep.
+_ingest_tasks: set[asyncio.Task[None]] = set()
+
+
+async def _ensure_backend() -> None:
+    """Open the storage backend on first use.
+
+    Deferred rather than opened at startup so a server-transport process never opens
+    SQLite or imports the embedding model. The connector, demo, and poll-fallback tools
+    still need it, so it cannot be skipped outright. Opening it here also means the
+    connection is created on the loop that will use it.
+    """
+    global _backend_started
+    async with _backend_lock:
+        if _backend_started:
+            return
+        from agentgraph.core.context import set_backend
+        from agentgraph.core.runtime import create_backend
+
+        backend = create_backend()
+        await backend.initialize()
+        set_backend(backend)
+        _backend_started = True
+        logger.info("MCP opened the storage backend")
+
+
+async def _query_client() -> QueryClient:
+    """Return the resolved transport, resolving once and caching it."""
+    global _client
+    async with _transport_lock:
+        if _client is None:
+            _client = resolve_query_client()
+            logger.info("MCP query transport: %s", _client.label)
+        client = _client
+    if client.needs_backend:
+        await _ensure_backend()
+    return client
+
+
+async def _reset_client() -> None:
+    global _client
+    async with _transport_lock:
+        _client = None
+
+
+async def _with_client[T](operation: Callable[[QueryClient], Awaitable[T]]) -> T:
+    """Run one graph operation, re-resolving the transport if the server has gone.
+
+    The CLI resolves per invocation, so a server that stops between commands is picked
+    up naturally. This process can hold a transport for days, so a server restart would
+    otherwise leave every tool failing; on a connection error the cached transport is
+    dropped and `auto` gets to fall back to in-process.
+    """
+    client = await _query_client()
+    try:
+        return await operation(client)
+    except ConnectionError:
+        if not isinstance(client, HttpQueryClient):
+            raise
+        logger.warning("Query transport %s is unreachable; re-resolving", client.label)
+        await _reset_client()
+        retried = await _query_client()
+        return await operation(retried)
+
+
+async def _queue_poll(connector: Any) -> dict[str, Any]:
+    """Queue a poll on the server, falling back to running it here.
+
+    The server owns the poll scheduler and its already-running registry, so queueing
+    there matches the CLI and avoids two processes polling one connector at once. It
+    also outlives this process, which a desktop MCP host may stop at any time.
+
+    When no server is reachable the poll still runs locally, so a server-less setup
+    behaves as it did before.
+    """
+    from agentgraph.cli_sync import queue_connector_poll
+
+    try:
+        return dict(await asyncio.to_thread(queue_connector_poll, connector.source))
+    except ConnectionError:
+        logger.info("No server reachable; polling %s in-process", connector.source)
+    except ValueError as exc:
+        return {"source": connector.source, "status": "skipped", "reason": str(exc)}
+
+    from agentgraph.server.sync import schedule_poll_connector
+
+    await _ensure_backend()
+    return dict(await schedule_poll_connector(connector))
+
+
+async def _queue_ingest(connector: Any, account_id: str | None) -> dict[str, Any]:
+    """Queue a historical ingest on the server, falling back to running it here."""
+    from agentgraph.cli_sync import queue_connector_ingest
+
+    try:
+        return dict(await asyncio.to_thread(queue_connector_ingest, connector.source, account_id))
+    except ConnectionError:
+        logger.info("No server reachable; ingesting %s in-process", connector.source)
+    except ValueError as exc:
+        return {"source": connector.source, "status": "skipped", "reason": str(exc)}
+
+    from agentgraph.server.sync import run_ingest
+
+    await _ensure_backend()
+    account_ids = [account_id] if account_id else None
+    # Detached on purpose: a full history sweep outlasts any tool call.
+    task = asyncio.create_task(run_ingest(connector, account_ids=account_ids))
+    _ingest_tasks.add(task)
+    task.add_done_callback(_ingest_tasks.discard)
+    return {"source": connector.source, "status": "started", "account_id": account_id}
 
 
 def _tool_annotations(
@@ -58,15 +172,6 @@ def _tool_annotations(
         idempotentHint=idempotent,
         openWorldHint=open_world,
     )
-
-
-def _truncate_content(entity: dict[str, Any], limit: int = 500) -> None:
-    content = entity.get("content")
-    if isinstance(content, str) and len(content) > limit:
-        entity["content"] = content[:limit] + "…"
-        entity["content_truncated"] = True
-    else:
-        entity["content_truncated"] = False
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +224,7 @@ async def list_connectors_tool(verify: bool = False) -> str:
     from agentgraph.connectors.status import connector_status_items
 
     bootstrap()
+    await _ensure_backend()
     all_connectors = get_all_connectors()
     result = await connector_status_items(all_connectors, get_backend(), verify=verify)
     return json.dumps(result)
@@ -319,25 +425,17 @@ async def run_connector_command_tool(source: str, args: list[str]) -> str:
         if effects.delete_entities:
             from agentgraph.connectors.command_effects import execute_deletions
 
+            await _ensure_backend()
             result["deleted_entities"] = await execute_deletions(effects)
         if effects.fetch_references:
             from agentgraph.connectors.command_effects import execute_fetches
 
+            await _ensure_backend()
             result["fetched"] = await execute_fetches(effects)
         if effects.poll:
-            from agentgraph.server.sync import schedule_poll_connector
-
-            result["poll"] = await schedule_poll_connector(connector)
+            result["poll"] = await _queue_poll(connector)
         if effects.ingest:
-            from agentgraph.server.sync import run_ingest
-
-            account_ids = [effects.ingest_account_id] if effects.ingest_account_id else None
-            asyncio.create_task(run_ingest(connector, account_ids=account_ids))
-            result["ingest"] = {
-                "source": connector.source,
-                "status": "started",
-                "account_id": effects.ingest_account_id,
-            }
+            result["ingest"] = await _queue_ingest(connector, effects.ingest_account_id)
         return json.dumps(result, default=str)
     except (NotImplementedError, OSError, ValueError) as exc:
         hint = None
@@ -363,6 +461,7 @@ async def add_demo_tool() -> str:
     from agentgraph.config import get_config_paths
     from agentgraph.demo import add_demo
 
+    await _ensure_backend()
     return json.dumps(await add_demo(get_config_paths()[0]))
 
 
@@ -380,6 +479,7 @@ async def remove_demo_tool() -> str:
     from agentgraph.config import get_config_paths
     from agentgraph.demo import remove_demo
 
+    await _ensure_backend()
     return json.dumps(await remove_demo(get_config_paths()[0]))
 
 
@@ -469,11 +569,9 @@ async def search_entities_tool(
         full stored content. Connectors may refresh or enrich connector-owned
         metadata before results are returned.
     """
-    results = await search_entities(
-        query, entity_types=entity_types, limit=limit, min_score=min_score, platform=platform
+    results = await _with_client(
+        lambda client: client.search(query, entity_types, limit, min_score, platform)
     )
-    for r in results:
-        _truncate_content(r)
     if refresh:
         await _enrich_results(results)
     return json.dumps(results, default=str)
@@ -507,7 +605,7 @@ async def get_entity_tool(entity_id: str, resolve: bool = False) -> str:
         JSON object with all entity fields, or an error message if not found.
     """
     try:
-        entity = await get_entity_details(entity_id, resolve=resolve)
+        entity = await _with_client(lambda client: client.get_entity(entity_id, resolve))
         if entity is None:
             return json.dumps({"error": f"Entity {entity_id!r} not found"})
         return json.dumps(entity, default=str)
@@ -547,10 +645,8 @@ async def get_edges_tool(
         JSON array of edge objects including source/target references.
     """
     try:
-        entity, edges = await get_entity_edges(
-            entity_id,
-            edge_type=edge_type,
-            direction=direction,
+        entity, edges = await _with_client(
+            lambda client: client.edges(entity_id, edge_type, direction)
         )
         if entity is None:
             return json.dumps({"error": f"Entity {entity_id!r} not found"})
@@ -596,10 +692,8 @@ async def traverse_graph_tool(
     """
     try:
         depth = min(max(max_depth, 0), 4)
-        entity, result = await traverse_entity(
-            entity_id,
-            max_depth=depth,
-            resolve=resolve,
+        entity, result = await _with_client(
+            lambda client: client.traverse(entity_id, depth, resolve)
         )
         if entity is None:
             return json.dumps({"error": f"Entity {entity_id!r} not found"})
@@ -644,10 +738,8 @@ async def fetch_entity_tool(platform: str, resource_id: str) -> str:
     Returns:
         JSON object with counts of ingested entities, persons, and edges.
     """
-    from agentgraph.graph.fetch import fetch_entity
-
     try:
-        result = await fetch_entity(platform, resource_id)
+        result = await _with_client(lambda client: client.fetch(platform, resource_id))
         return json.dumps(result)
     except ValueError as exc:
         from agentgraph.connectors.registry import get_connector
@@ -687,10 +779,8 @@ async def fetch_entity_by_id_tool(entity_id: str) -> str:
         JSON object with counts of ingested entities, persons, and edges,
         or an error message if the entity is not found.
     """
-    from agentgraph.graph.fetch import fetch_entity_by_id
-
     try:
-        result = await fetch_entity_by_id(entity_id)
+        result = await _with_client(lambda client: client.fetch_entity(entity_id))
         return json.dumps(result)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -726,7 +816,6 @@ async def poll_connectors_tool(source: str | None = None) -> str:
         or an error if a requested connector source is not registered.
     """
     from agentgraph.connectors.registry import bootstrap, get_all_connectors, get_connector
-    from agentgraph.server.sync import schedule_poll_connector
 
     bootstrap()
     if source is not None:
@@ -743,7 +832,7 @@ async def poll_connectors_tool(source: str | None = None) -> str:
     for connector in connectors:
         if connector.poll_interval is None:
             continue
-        result = await schedule_poll_connector(connector)
+        result = await _queue_poll(connector)
         if result["status"] == "queued":
             polled.append(connector.source)
         elif result["status"] == "already_running":
@@ -786,10 +875,8 @@ async def download_entity_tool(entity_id: str, output_path: str | None = None) -
         JSON object with path, byte count, filename, platform, and MIME type, or
         an error message if the entity or connector cannot be downloaded.
     """
-    from agentgraph.graph.download import download_entity
-
     try:
-        result = await download_entity(entity_id, output_path)
+        result = await _with_client(lambda client: client.download(entity_id, output_path))
         return json.dumps(result, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -826,14 +913,8 @@ async def bookmark_entity_tool(entity_id: str, bookmarked: bool = True) -> str:
         JSON object for the updated entity with its bookmark state, or an error
         message if the entity cannot be found.
     """
-    from agentgraph.graph.bookmark import bookmark_target, set_entity_bookmark
-
     try:
-        result = (
-            await bookmark_target(entity_id)
-            if bookmarked
-            else await set_entity_bookmark(entity_id, False)
-        )
+        result = await _with_client(lambda client: client.bookmark(entity_id, bookmarked))
         return json.dumps(result, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -868,10 +949,8 @@ async def delete_entity_tool(entity_id: str) -> str:
         JSON object with deleted=true and the deleted entity, or an error
         message if the entity cannot be found.
     """
-    from agentgraph.graph.delete import delete_entity
-
     try:
-        result = await delete_entity(entity_id)
+        result = await _with_client(lambda client: client.delete(entity_id))
         return json.dumps(result, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -912,10 +991,10 @@ async def unify_persons_tool(
         JSON object with the updated primary Person and merged duplicate IDs,
         or an error message if any entity is missing or is not a Person.
     """
-    from agentgraph.graph.person import unify_persons
-
     try:
-        result = await unify_persons(primary_entity_id, duplicate_entity_ids)
+        result = await _with_client(
+            lambda client: client.unify_persons(primary_entity_id, duplicate_entity_ids)
+        )
         return json.dumps(result, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
@@ -1008,17 +1087,17 @@ async def query_by_filter_tool(
         connector-owned metadata before results are returned.
     """
     str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
-    results = await query_by_filter(
-        entity_type,
-        filters=str_filters,
-        limit=limit,
-        order_by=order_by,
-        since=since,
-        authored_by_me=authored_by_me,
-        has_attachments=has_attachments,
+    results = await _with_client(
+        lambda client: client.query_by_filter(
+            entity_type,
+            str_filters,
+            limit,
+            order_by,
+            since,
+            authored_by_me,
+            has_attachments,
+        )
     )
-    for result in results:
-        _truncate_content(result)
     if refresh:
         await _enrich_results(results)
     return json.dumps(results, default=str)

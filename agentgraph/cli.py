@@ -843,15 +843,9 @@ def mcp_serve(
     ),
 ) -> None:
     """Start the AgentGraph MCP server."""
-    import asyncio
-
-    from agentgraph.core.context import set_backend
-    from agentgraph.core.runtime import create_backend
-
-    backend = create_backend()
-    asyncio.run(backend.initialize())
-    set_backend(backend)
-
+    # The backend is opened on first use inside the serving loop rather than here.
+    # A transport of `server` never needs it, and opening it under a throwaway
+    # asyncio.run() bound its connection to a loop that was closed before serving.
     from agentgraph.mcp.server import mcp
 
     if transport in ("sse", "streamable-http"):
