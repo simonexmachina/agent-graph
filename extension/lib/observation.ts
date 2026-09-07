@@ -61,6 +61,18 @@ interface ReportResult {
 
 const pending = new Map<number, ObservationEntry>();
 const observations = new Map<number, ObservationStatus>();
+type ObservationStatusListener = (tabId: number, status: ObservationStatus) => void;
+const observationStatusListeners = new Set<ObservationStatusListener>();
+
+function notifyObservationStatus(tabId: number, status: ObservationStatus): void {
+  for (const listener of observationStatusListeners) listener(tabId, status);
+}
+
+/** Subscribe to state changes for observations tracked in this worker. */
+export function onObservationStatusChange(listener: ObservationStatusListener): () => void {
+  observationStatusListeners.add(listener);
+  return () => observationStatusListeners.delete(listener);
+}
 
 // ---------------------------------------------------------------------------
 // Pattern matching
@@ -167,19 +179,21 @@ export function startObservation(
 ): void {
   cancelObservation(tabId);
   if (!matchesAny(url, patterns)) {
-    observations.set(tabId, {
+    const status: ObservationStatus = {
       url,
       matches: false,
       state: "not_matched",
       threshold_ms: thresholdMs,
-    });
+    };
+    observations.set(tabId, status);
+    notifyObservationStatus(tabId, status);
     return;
   }
 
   const startedAt = Date.now();
   const firesAt = startedAt + thresholdMs;
   const observationId = crypto.randomUUID();
-  observations.set(tabId, {
+  const status: ObservationStatus = {
     observation_id: observationId,
     url,
     matches: true,
@@ -188,7 +202,9 @@ export function startObservation(
     started_at: startedAt,
     fires_at: firesAt,
     meta,
-  });
+  };
+  observations.set(tabId, status);
+  notifyObservationStatus(tabId, status);
 
   const timer = setTimeout(() => {
     pending.delete(tabId);
@@ -196,6 +212,7 @@ export function startObservation(
     if (obs && obs.matches) {
       obs.state = "sending";
       obs.threshold_reported_at = Date.now();
+      notifyObservationStatus(tabId, obs);
       void sendReportObservation(
         obs.url,
         thresholdMs,
@@ -219,12 +236,14 @@ export function startObservation(
           }
           if (observations.get(tabId) === obs && obs.state === "sending") {
             obs.state = "sent";
+            notifyObservationStatus(tabId, obs);
           }
         } else {
           obs.pending_observation_duration_ms = undefined;
           obs.error = result.error;
           if (observations.get(tabId) === obs && obs.state === "sending") {
             obs.state = "failed";
+            notifyObservationStatus(tabId, obs);
           }
         }
       });
@@ -251,6 +270,7 @@ export function cancelObservation(tabId: number): void {
   const obs = observations.get(tabId);
   if (obs && obs.matches && obs.started_at) {
     obs.state = "canceled";
+    notifyObservationStatus(tabId, obs);
     const elapsed = Date.now() - obs.started_at;
     if (elapsed > 0) {
       const meta = entry?.meta || obs.meta || {};

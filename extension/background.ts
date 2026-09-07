@@ -11,9 +11,11 @@ import {
   startObservation,
   cancelObservation,
   getObservationStatus,
+  onObservationStatusChange,
   refreshMeta,
   updateMeta,
 } from "./lib/observation.js";
+import { updateActionIndicator } from "./lib/action-indicator.js";
 import { getExtensionBookmarkUrl, getExtensionFetchUrl, getExtensionPageUrl, getServerBaseUrl } from "./lib/config.js";
 
 // Gmail metadata extracted by the content script, keyed by tab ID.
@@ -28,6 +30,10 @@ const META_REFRESH_PERIOD_MINUTES = 15;
 let activeTabId: number | null = null;
 let activeUrl: string = "";
 const gmailMetaRetryByTab = new Map<number, ReturnType<typeof setTimeout>>();
+
+onObservationStatusChange((tabId, status) => {
+  if (tabId === activeTabId) void updateActionIndicator(status.state);
+});
 
 function clearGmailMetaRetry(tabId: number): void {
   const timer = gmailMetaRetryByTab.get(tabId);
@@ -61,7 +67,10 @@ async function onFocus(tabId: number): Promise<void> {
   }
 
   const url = tab.url ?? "";
-  if (!url.startsWith("http://") && !url.startsWith("https://")) return;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    void updateActionIndicator("not_matched");
+    return;
+  }
 
   if (tabId !== activeTabId || url !== activeUrl) {
     clearGmailMetaRetry(tabId);
@@ -291,6 +300,9 @@ async function initialiseBackground(): Promise<void> {
   await chrome.alarms.create(META_REFRESH_ALARM, {
     periodInMinutes: META_REFRESH_PERIOD_MINUTES,
   });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id != null) await onFocus(tab.id);
+  else await updateActionIndicator("not_matched");
 }
 
 initialiseBackground().catch(() => {/* server may not be running yet */});

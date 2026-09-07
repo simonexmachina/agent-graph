@@ -20,6 +20,7 @@ const {
   cancelObservation,
   getObservationStatus,
   matchesPattern,
+  onObservationStatusChange,
   refreshMeta,
   startObservation,
   updateMeta,
@@ -81,6 +82,19 @@ test("marks an observation as sent after a successful report", async () => {
   assert.equal(status.state, "sent");
   assert.equal(status.http_status, 204);
   assert.equal(typeof status.sent_at, "number");
+});
+
+test("notifies listeners as an observation progresses", async () => {
+  await configureObservation(new Response(null, { status: 204 }));
+  const states = [];
+  const unsubscribe = onObservationStatusChange((_tabId, status) => states.push(status.state));
+
+  const url = "https://example.com/status-events";
+  startObservation(11, url);
+  await waitForTerminalStatus(11, url);
+  unsubscribe();
+
+  assert.deepEqual(states, ["waiting", "sending", "sent"]);
 });
 
 test("marks an observation as failed after an unsuccessful report", async () => {
