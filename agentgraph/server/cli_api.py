@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 router = APIRouter(prefix="/api/cli", tags=["cli"])
 
 _WHITESPACE_RE = re.compile(r"\s+")
+_VIEWER_CONTENT_LIMIT = 300
 
 
 async def search_entities(
@@ -22,22 +23,27 @@ async def search_entities(
     limit: int = 10,
     min_score: float = 0.03,
     platform: str | None = None,
+    content_limit: int | None = None,
 ) -> list[dict[str, Any]]:
     from agentgraph.graph.query import search_entities as impl
 
-    return await impl(query, entity_types, limit, min_score, platform)
+    return await impl(query, entity_types, limit, min_score, platform, content_limit)
 
 
-async def get_entity(entity_id: str) -> dict[str, Any] | None:
+async def get_entity(
+    entity_id: str, content_limit: int | None = None
+) -> dict[str, Any] | None:
     from agentgraph.graph.query import get_entity as impl
 
-    return await impl(entity_id)
+    return await impl(entity_id, content_limit)
 
 
-async def traverse_graph(entity_id: str, max_depth: int = 2) -> dict[str, Any]:
+async def traverse_graph(
+    entity_id: str, max_depth: int = 2, content_limit: int | None = None
+) -> dict[str, Any]:
     from agentgraph.graph.query import traverse_graph as impl
 
-    return await impl(entity_id, max_depth=max_depth)
+    return await impl(entity_id, max_depth=max_depth, content_limit=content_limit)
 
 
 async def get_edges_for_entities(entity_ids: list[str]) -> list[dict[str, Any]]:
@@ -46,10 +52,12 @@ async def get_edges_for_entities(entity_ids: list[str]) -> list[dict[str, Any]]:
     return await impl(entity_ids)
 
 
-async def get_entities_by_ids(entity_ids: list[str]) -> list[dict[str, Any]]:
+async def get_entities_by_ids(
+    entity_ids: list[str], content_limit: int | None = None
+) -> list[dict[str, Any]]:
     from agentgraph.graph.query import get_entities_by_ids as impl
 
-    return await impl(entity_ids)
+    return await impl(entity_ids, content_limit)
 
 
 async def list_entities(
@@ -57,10 +65,11 @@ async def list_entities(
     platform: str | None = None,
     since: str | None = None,
     limit: int = 50,
+    content_limit: int | None = None,
 ) -> list[dict[str, Any]]:
     from agentgraph.graph.query import list_entities as impl
 
-    return await impl(entity_types, platform, since, limit)
+    return await impl(entity_types, platform, since, limit, content_limit)
 
 
 async def list_entities_page(
@@ -71,10 +80,13 @@ async def list_entities_page(
     offset: int = 0,
     order_by: str | None = "observed_at",
     order_dir: str = "desc",
+    content_limit: int | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     from agentgraph.graph.query import list_entities_page as impl
 
-    return await impl(entity_types, platform, since, limit, offset, order_by, order_dir)
+    return await impl(
+        entity_types, platform, since, limit, offset, order_by, order_dir, content_limit
+    )
 
 
 def parse_since(since: str) -> datetime:
@@ -143,10 +155,13 @@ def _summarize_entities(
 
 
 @router.get("/entity/{entity_id:path}")
-async def cli_get_entity(entity_id: str) -> dict[str, Any]:
+async def cli_get_entity(
+    entity_id: str,
+    content_limit: int | None = Query(default=None, ge=1),
+) -> dict[str, Any]:
     from agentgraph.graph.operations import get_entity_details
 
-    entity = await get_entity_details(entity_id)
+    entity = await get_entity_details(entity_id, content_limit=content_limit)
     if entity is None:
         raise HTTPException(status_code=404, detail="Entity not found")
     return _with_display_name(entity)
@@ -242,10 +257,12 @@ async def _resolve_viewer_node_set(
     traverse_edges: list[dict[str, Any]] = []
 
     if node_id is not None:
-        focal = await get_entity(node_id)
+        focal = await get_entity(node_id, content_limit=_VIEWER_CONTENT_LIMIT)
         if focal is None:
             raise HTTPException(status_code=404, detail="Entity not found")
-        tresult = await traverse_graph(focal["id"], max_depth=depth)
+        tresult = await traverse_graph(
+            focal["id"], max_depth=depth, content_limit=_VIEWER_CONTENT_LIMIT
+        )
         neighbourhood_ids = {n["id"] for n in tresult["nodes"]}
         traverse_edges = tresult["edges"]
 
@@ -260,6 +277,7 @@ async def _resolve_viewer_node_set(
             entity_types=entity_type or None,
             limit=search_limit,
             min_score=0.0,
+            content_limit=_VIEWER_CONTENT_LIMIT,
         )
         if neighbourhood_ids is not None:
             nodes = [n for n in nodes if n["id"] in neighbourhood_ids]
@@ -278,6 +296,7 @@ async def _resolve_viewer_node_set(
             offset=offset,
             order_by=order_by if ordered else None,
             order_dir=order_dir,
+            content_limit=_VIEWER_CONTENT_LIMIT,
         )
         return nodes, min(total, limit), total > limit
     else:
@@ -286,6 +305,7 @@ async def _resolve_viewer_node_set(
             platform=platform,
             since=since,
             limit=limit + 1,
+            content_limit=_VIEWER_CONTENT_LIMIT,
         )
 
     # Apply platform / since on search and neighbourhood paths (list_entities handles them natively)
@@ -342,7 +362,9 @@ async def _resolve_viewer_node_set(
                 if eid not in visible_ids
             }
             if neighbour_ids:
-                neighbours = await get_entities_by_ids(list(neighbour_ids))
+                neighbours = await get_entities_by_ids(
+                    list(neighbour_ids), content_limit=_VIEWER_CONTENT_LIMIT
+                )
                 neighbours = [n for n in neighbours if n["entity_type"] in allowed]
                 has_more = has_more or len(nodes) + len(neighbours) > limit
                 nodes = (nodes + neighbours)[:limit]

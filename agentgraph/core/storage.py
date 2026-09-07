@@ -87,20 +87,30 @@ class StorageBackend(ABC):
         limit: int,
         min_score: float,
         platform: str | None = None,
+        content_limit: int | None = None,
     ) -> list[EntityResult]: ...
 
     @abstractmethod
-    async def get_entity_by_id(self, entity_id: str) -> EntityResult | None: ...
+    async def get_entity_by_id(
+        self, entity_id: str, content_limit: int | None = None
+    ) -> EntityResult | None: ...
 
     @abstractmethod
-    async def get_entities_by_ids(self, entity_ids: list[str]) -> list[EntityResult]: ...
+    async def get_entities_by_ids(
+        self, entity_ids: list[str], content_limit: int | None = None
+    ) -> list[EntityResult]: ...
 
     @abstractmethod
-    async def get_entities_by_id_prefix(self, prefix: str) -> list[EntityResult]: ...
+    async def get_entities_by_id_prefix(
+        self, prefix: str, content_limit: int | None = None
+    ) -> list[EntityResult]: ...
 
     @abstractmethod
     async def get_entity_by_platform(
-        self, platform: str, platform_entity_id: str
+        self,
+        platform: str,
+        platform_entity_id: str,
+        content_limit: int | None = None,
     ) -> EntityResult | None: ...
 
     @abstractmethod
@@ -110,6 +120,7 @@ class StorageBackend(ABC):
         platform: str | None,
         since: datetime | None,
         limit: int,
+        content_limit: int | None = None,
     ) -> list[EntityResult]: ...
 
     @abstractmethod
@@ -122,6 +133,7 @@ class StorageBackend(ABC):
         offset: int,
         order_by: str | None,
         order_dir: str,
+        content_limit: int | None = None,
     ) -> tuple[list[EntityResult], int]:
         """Return an entity page and total count, optionally ordered by a supported field."""
         ...
@@ -136,6 +148,7 @@ class StorageBackend(ABC):
         since: datetime | None,
         authored_by: list[str] | None,
         has_attachments: bool = False,
+        content_limit: int | None = None,
     ) -> list[EntityResult]: ...
 
     @abstractmethod
@@ -166,7 +179,7 @@ class StorageBackend(ABC):
 
     @abstractmethod
     async def traverse_graph(
-        self, entity_id: str, max_depth: int
+        self, entity_id: str, max_depth: int, content_limit: int | None = None
     ) -> dict[str, Any]: ...
 
     # --- Linking ---

@@ -22,6 +22,8 @@ def is_stub(entity: EntityResult) -> bool:
 def summarize_entity(entity: EntityResult, *, content_limit: int = 500) -> EntityResult:
     """Copy an entity and bound its content for list-style responses."""
     summarized = dict(entity)
+    if summarized.get("content_truncated") is True:
+        return summarized
     content = summarized.get("content")
     if isinstance(content, str) and len(content) > content_limit:
         summarized["content"] = content[: max(content_limit - 1, 0)].rstrip() + "…"
@@ -40,14 +42,25 @@ def summarize_entities(
     return [summarize_entity(entity, content_limit=content_limit) for entity in entities]
 
 
-async def resolve_entity(target: str) -> EntityResult | None:
+async def resolve_entity(
+    target: str, content_limit: int | None = None
+) -> EntityResult | None:
     """Resolve an existing entity from a UUID, prefix, platform ref, or URL."""
-    return await get_entity_by_url(target) if is_http_url(target) else await get_entity(target)
+    if is_http_url(target):
+        if content_limit is None:
+            return await get_entity_by_url(target)
+        return await get_entity_by_url(target, content_limit=content_limit)
+    return await get_entity(target, content_limit=content_limit)
 
 
-async def get_entity_details(target: str, *, resolve: bool = False) -> EntityResult | None:
+async def get_entity_details(
+    target: str,
+    *,
+    resolve: bool = False,
+    content_limit: int | None = None,
+) -> EntityResult | None:
     """Resolve an entity and optionally fetch it when it is still a stub."""
-    entity = await resolve_entity(target)
+    entity = await resolve_entity(target, content_limit=content_limit)
     if entity is None or not resolve or not is_stub(entity):
         return entity
     return await refresh_stub(entity)

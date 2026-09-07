@@ -472,6 +472,7 @@ def test_viewer_sidebar_uses_native_form_submission() -> None:
     assert "function wireTextInputSubmission(input, submit)" not in viewer_html
     assert "searchInput.addEventListener('input'" not in viewer_html
     assert "lookupInput.addEventListener('keydown'" not in viewer_html
+    assert "encodeURIComponent(q) + '?content_limit=300'" in viewer_html
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +608,9 @@ async def test_traverse_called_with_depth_when_node_id_given() -> None:
             limit=50,
         )
 
-    mock_traverse.assert_called_once_with(focal["id"], max_depth=3)
+    mock_traverse.assert_called_once_with(
+        focal["id"], max_depth=3, content_limit=300
+    )
 
 
 @pytest.mark.asyncio
@@ -635,7 +638,9 @@ async def test_browse_allows_zero_depth_for_a_node_only_view() -> None:
         )
 
     assert [node["id"] for node in result["nodes"]] == [focal["id"]]
-    mock_traverse.assert_called_once_with(focal["id"], max_depth=0)
+    mock_traverse.assert_called_once_with(
+        focal["id"], max_depth=0, content_limit=300
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -999,6 +1004,7 @@ async def test_browse_nodes_returns_paginated_node_page() -> None:
         offset=2,
         order_by="updated_at",
         order_dir="asc",
+        content_limit=300,
     )
 
 
@@ -1032,6 +1038,7 @@ async def test_browse_nodes_can_skip_ordering_for_graph_view() -> None:
         offset=0,
         order_by=None,
         order_dir="desc",
+        content_limit=300,
     )
 
 
@@ -1094,7 +1101,7 @@ async def test_browse_nodes_checks_one_extra_search_result() -> None:
     assert result["total"] == 2
     assert result["has_more"] is True
     mock_search.assert_awaited_once_with(
-        "result", entity_types=None, limit=3, min_score=0.0
+        "result", entity_types=None, limit=3, min_score=0.0, content_limit=300
     )
 
 

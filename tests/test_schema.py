@@ -375,6 +375,38 @@ async def test_list_entities_page_can_omit_ordering(
     assert "ORDER BY" not in sql
 
 
+async def test_content_projection_bounds_viewer_reads_but_preserves_detail_content(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    """Summary projections avoid hydrating full content for viewer requests."""
+    content = "x" * 320
+    conn = sqlite_backend._conn_or_raise()
+    await conn.execute(
+        """
+        INSERT INTO entities (id, entity_type, platform, platform_entity_id, title, content)
+        VALUES ('entity-1', 'Document', 'web', 'document-1', 'Long document', ?)
+        """,
+        [content],
+    )
+
+    listed, total = await sqlite_backend.list_entities_page(
+        None, None, None, 10, 0, "observed_at", "desc", content_limit=300
+    )
+    traversed = await sqlite_backend.traverse_graph(
+        "entity-1", max_depth=0, content_limit=300
+    )
+    detail = await sqlite_backend.get_entity_by_id("entity-1")
+
+    assert total == 1
+    assert listed[0]["content"] == ("x" * 299) + "…"
+    assert listed[0]["content_truncated"] is True
+    assert traversed["nodes"][0]["content"] == listed[0]["content"]
+    assert traversed["nodes"][0]["content_truncated"] is True
+    assert detail is not None
+    assert detail["content"] == content
+    assert "content_truncated" not in detail
+
+
 async def test_file_database_uses_separate_read_connection(tmp_path: Path) -> None:
     backend = SQLiteBackend(str(tmp_path / "graph.db"))
     await backend.initialize()

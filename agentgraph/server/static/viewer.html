@@ -1963,7 +1963,7 @@
     lookupError.style.display = 'none';
     showSpinner();
     try {
-      const res = await fetch('/api/cli/entity/' + q);
+      const res = await fetch('/api/cli/entity/' + encodeURIComponent(q) + '?content_limit=300');
       if (res.status === 404) {
         lookupError.textContent = 'Not found';
         lookupError.style.display = 'block';

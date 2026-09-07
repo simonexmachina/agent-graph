@@ -80,6 +80,22 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _content_projection(
+    content_limit: int | None, column: str = "content"
+) -> tuple[str, list[int]]:
+    """Return SQL that bounds content before it leaves SQLite."""
+    if content_limit is None:
+        return column, []
+    if content_limit < 1:
+        raise ValueError("content_limit must be at least 1")
+    return (
+        f"CASE WHEN length({column}) > ? THEN substr({column}, 1, ?) || '…' "
+        f"ELSE {column} END AS content, "
+        f"CASE WHEN length({column}) > ? THEN 1 ELSE 0 END AS content_truncated",
+        [content_limit, content_limit - 1, content_limit],
+    )
+
+
 def _append_merged_people(
     metadata: dict[str, Any],
     merged_people: list[dict[str, str]],
@@ -1180,6 +1196,7 @@ class SQLiteBackend(StorageBackend):
         limit: int,
         min_score: float,
         platform: str | None = None,
+        content_limit: int | None = None,
     ) -> list[EntityResult]:
         conn = self._read_conn_or_raise()
 
@@ -1271,17 +1288,18 @@ class SQLiteBackend(StorageBackend):
             id_list = [eid for eid, _ in top]
             score_map = {eid: sc for eid, sc in top}
             placeholders = ",".join("?" * len(id_list))
+            content_column, content_params = _content_projection(content_limit)
             with timed("sqlite.search.hydrate", count=len(id_list)):
                 cursor = await conn.execute(
                     f"""
                     SELECT id, entity_type, platform, platform_entity_id,
-                           title, content, metadata, created_at, updated_at,
+                           title, {content_column}, metadata, created_at, updated_at,
                            source_created_at, source_updated_at, synced_at, observed_at,
                            retention_policy, retention_parent_id,
                            cumulative_observation_duration_ms, bookmarked
                     FROM entities WHERE id IN ({placeholders})
                     """,
-                    id_list,
+                    [*content_params, *id_list],
                 )
                 rows = await cursor.fetchall()
                 results: list[dict[str, Any]] = []
@@ -1302,34 +1320,40 @@ class SQLiteBackend(StorageBackend):
                 results.sort(key=_score, reverse=True)
                 return results
 
-    async def get_entity_by_id(self, entity_id: str) -> EntityResult | None:
+    async def get_entity_by_id(
+        self, entity_id: str, content_limit: int | None = None
+    ) -> EntityResult | None:
+        content_column, content_params = _content_projection(content_limit)
         row = await self._fetchone(
-            """
+            f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at,
+                   title, {content_column}, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
                    cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE id = ?
             """,
-            [entity_id],
+            [*content_params, entity_id],
         )
         return _row_to_entity(row) if row else None
 
-    async def get_entities_by_ids(self, entity_ids: list[str]) -> list[EntityResult]:
+    async def get_entities_by_ids(
+        self, entity_ids: list[str], content_limit: int | None = None
+    ) -> list[EntityResult]:
         if not entity_ids:
             return []
         placeholders = ",".join("?" * len(entity_ids))
+        content_column, content_params = _content_projection(content_limit)
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at,
+                   title, {content_column}, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
                    cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE id IN ({placeholders})
             """,
-            entity_ids,
+            [*content_params, *entity_ids],
         )
         return [_row_to_entity(r) for r in rows]
 
@@ -1340,33 +1364,40 @@ class SQLiteBackend(StorageBackend):
         by_id = {str(entity["id"]): entity for entity in entities}
         return [by_id[entity_id] for entity_id in entity_ids if entity_id in by_id]
 
-    async def get_entities_by_id_prefix(self, prefix: str) -> list[EntityResult]:
+    async def get_entities_by_id_prefix(
+        self, prefix: str, content_limit: int | None = None
+    ) -> list[EntityResult]:
+        content_column, content_params = _content_projection(content_limit)
         rows = await self._fetchall(
-            """
+            f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at,
+                   title, {content_column}, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
                    cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE id LIKE ?
             """,
-            [f"{prefix}%"],
+            [*content_params, f"{prefix}%"],
         )
         return [_row_to_entity(row) for row in rows]
 
     async def get_entity_by_platform(
-        self, platform: str, platform_entity_id: str
+        self,
+        platform: str,
+        platform_entity_id: str,
+        content_limit: int | None = None,
     ) -> EntityResult | None:
+        content_column, content_params = _content_projection(content_limit)
         row = await self._fetchone(
-            """
+            f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at,
+                   title, {content_column}, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
                    cumulative_observation_duration_ms, bookmarked
             FROM entities WHERE platform = ? AND platform_entity_id = ?
             """,
-            [platform, platform_entity_id],
+            [*content_params, platform, platform_entity_id],
         )
         return _row_to_entity(row) if row else None
 
@@ -1376,6 +1407,7 @@ class SQLiteBackend(StorageBackend):
         platform: str | None,
         since: datetime | None,
         limit: int,
+        content_limit: int | None = None,
     ) -> list[EntityResult]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -1391,10 +1423,11 @@ class SQLiteBackend(StorageBackend):
             params.append(since.strftime("%Y-%m-%dT%H:%M:%SZ"))
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)
+        content_column, content_params = _content_projection(content_limit)
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at,
+                   title, {content_column}, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
                    cumulative_observation_duration_ms, bookmarked
@@ -1403,7 +1436,7 @@ class SQLiteBackend(StorageBackend):
             ORDER BY observed_at DESC
             LIMIT ?
             """,
-            params,
+            [*content_params, *params],
         )
         return [_row_to_entity(row) for row in rows]
 
@@ -1416,6 +1449,7 @@ class SQLiteBackend(StorageBackend):
         offset: int,
         order_by: str | None,
         order_dir: str,
+        content_limit: int | None = None,
     ) -> tuple[list[EntityResult], int]:
         order_by_sql = (
             _LIST_PAGE_ORDER_BY.get(order_by, "observed_at") if order_by is not None else None
@@ -1442,10 +1476,11 @@ class SQLiteBackend(StorageBackend):
 
         count_row = await self._fetchone(f"SELECT COUNT(*) AS count FROM entities {where}", params)
         total = int(count_row["count"]) if count_row else 0
+        content_column, content_params = _content_projection(content_limit)
         rows = await self._fetchall(
             f"""
             SELECT id, entity_type, platform, platform_entity_id,
-                   title, content, metadata, created_at, updated_at,
+                   title, {content_column}, metadata, created_at, updated_at,
                    source_created_at, source_updated_at, synced_at, observed_at,
                    retention_policy, retention_parent_id,
                    cumulative_observation_duration_ms, bookmarked
@@ -1454,7 +1489,7 @@ class SQLiteBackend(StorageBackend):
             {order_clause}
             LIMIT ? OFFSET ?
             """,
-            [*params, limit, offset],
+            [*content_params, *params, limit, offset],
         )
         return [_row_to_entity(row) for row in rows], total
 
@@ -1467,6 +1502,7 @@ class SQLiteBackend(StorageBackend):
         since: datetime | None,
         authored_by: list[str] | None,
         has_attachments: bool = False,
+        content_limit: int | None = None,
     ) -> list[EntityResult]:
         if order_by not in _VALID_ORDER_BY:
             order_by = "observed_at"
@@ -1508,13 +1544,14 @@ class SQLiteBackend(StorageBackend):
 
         where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
         params.append(limit)
+        content_column, content_params = _content_projection(content_limit, "e.content")
         with timed(
             "sqlite.query_by_filter", entity_type=entity_type, order_by=order_by, limit=limit
         ):
             rows = await self._fetchall(
                 f"""
                 SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
-                       e.title, e.content, e.metadata, e.created_at, e.updated_at,
+                       e.title, {content_column}, e.metadata, e.created_at, e.updated_at,
                        e.source_created_at, e.source_updated_at,
                        e.synced_at, e.observed_at,
                        e.retention_policy, e.retention_parent_id,
@@ -1525,7 +1562,7 @@ class SQLiteBackend(StorageBackend):
                 ORDER BY e.{order_by} DESC
                 LIMIT ?
                 """,
-                [*authored_params, *params],
+                [*content_params, *authored_params, *params],
             )
         return [_row_to_entity(row) for row in rows]
 
@@ -1651,8 +1688,11 @@ class SQLiteBackend(StorageBackend):
         )
         return [_row_to_edge(row) for row in rows]
 
-    async def traverse_graph(self, entity_id: str, max_depth: int) -> dict[str, Any]:
+    async def traverse_graph(
+        self, entity_id: str, max_depth: int, content_limit: int | None = None
+    ) -> dict[str, Any]:
         conn = self._read_conn_or_raise()
+        content_column, content_params = _content_projection(content_limit)
         visited: set[str] = set()
         frontier: list[str] = [entity_id]
         all_nodes: list[EntityResult] = []
@@ -1666,13 +1706,13 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at,
+                       title, {content_column}, metadata, created_at, updated_at,
                        source_created_at, source_updated_at, synced_at, observed_at,
                        retention_policy, retention_parent_id,
                        cumulative_observation_duration_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
-                frontier,
+                [*content_params, *frontier],
             )
             for row in await cursor.fetchall():
                 eid = row["id"]
@@ -1713,13 +1753,13 @@ class SQLiteBackend(StorageBackend):
             cursor = await conn.execute(
                 f"""
                 SELECT id, entity_type, platform, platform_entity_id,
-                       title, content, metadata, created_at, updated_at,
+                       title, {content_column}, metadata, created_at, updated_at,
                        source_created_at, source_updated_at, synced_at, observed_at,
                        retention_policy, retention_parent_id,
                        cumulative_observation_duration_ms, bookmarked
                 FROM entities WHERE id IN ({placeholders})
                 """,
-                unvisited,
+                [*content_params, *unvisited],
             )
             for row in await cursor.fetchall():
                 all_nodes.append(_row_to_entity(row))
@@ -2018,7 +2058,7 @@ class SQLiteBackend(StorageBackend):
 
 def _row_to_entity(row: Any) -> EntityResult:
     keys = row.keys() if hasattr(row, "keys") else []
-    return {
+    entity: EntityResult = {
         "id": row["id"],
         "entity_type": row["entity_type"],
         "platform": row["platform"],
@@ -2042,6 +2082,9 @@ def _row_to_entity(row: Any) -> EntityResult:
         "bookmarked": bool(row["bookmarked"]) if "bookmarked" in keys else False,
         "score": row["score"] if "score" in keys else None,
     }
+    if "content_truncated" in keys:
+        entity["content_truncated"] = bool(row["content_truncated"])
+    return entity
 
 
 def _row_to_edge(row: Any) -> EdgeResult:
