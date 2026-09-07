@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { getActionIndicator } = await import("../dist/lib/action-indicator.js");
+const { getActionIndicator, getActionTitle } = await import("../dist/lib/action-indicator.js");
 
 test("maps active observation states to distinct toolbar indicators", () => {
   assert.deepEqual(getActionIndicator("waiting"), {
@@ -22,4 +22,12 @@ test("uses the normal toolbar icon for inactive observation states", () => {
   for (const state of ["not_matched", "failed", "canceled"]) {
     assert.equal(getActionIndicator(state), null);
   }
+});
+
+test("includes bookmark state in the action tooltip", () => {
+  assert.equal(getActionTitle("not_matched", true), "AgentGraph: bookmarked page");
+  assert.equal(
+    getActionTitle("sending", true),
+    "AgentGraph: sending observation; bookmarked page",
+  );
 });

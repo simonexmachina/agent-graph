@@ -14,6 +14,7 @@ import {
   onObservationStatusChange,
   refreshMeta,
   updateMeta,
+  type ObservationStatus,
 } from "./lib/observation.js";
 import { updateActionIndicator } from "./lib/action-indicator.js";
 import { getExtensionBookmarkUrl, getExtensionFetchUrl, getExtensionPageUrl, getServerBaseUrl } from "./lib/config.js";
@@ -30,9 +31,17 @@ const META_REFRESH_PERIOD_MINUTES = 15;
 let activeTabId: number | null = null;
 let activeUrl: string = "";
 const gmailMetaRetryByTab = new Map<number, ReturnType<typeof setTimeout>>();
+let actionObservationState: ObservationStatus["state"] = "not_matched";
+let actionBookmarked = false;
+
+function renderActionIndicator(): void {
+  void updateActionIndicator(actionObservationState, actionBookmarked);
+}
 
 onObservationStatusChange((tabId, status) => {
-  if (tabId === activeTabId) void updateActionIndicator(status.state);
+  if (tabId !== activeTabId) return;
+  actionObservationState = status.state;
+  renderActionIndicator();
 });
 
 function clearGmailMetaRetry(tabId: number): void {
@@ -45,6 +54,28 @@ function clearGmailMetaRetry(tabId: number): void {
 
 function hasUsableGmailMeta(meta: Record<string, string>): boolean {
   return Boolean(meta.gmail_message_id || meta.gmail_thread_id);
+}
+
+async function refreshBookmarkIndicator(
+  tabId: number,
+  url: string,
+  meta: Record<string, string>,
+): Promise<void> {
+  try {
+    const base = await getServerBaseUrl();
+    const response = await fetch(getExtensionPageUrl(base), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, meta: Object.keys(meta).length ? meta : undefined }),
+    });
+    if (!response.ok) return;
+    const data = await response.json() as { entity?: { bookmarked?: boolean } | null };
+    if (tabId !== activeTabId || url !== activeUrl) return;
+    actionBookmarked = Boolean(data.entity?.bookmarked);
+    renderActionIndicator();
+  } catch {
+    // The observation indicator remains useful when the local server is unavailable.
+  }
 }
 
 async function fetchGmailMetaFromTab(tabId: number): Promise<Record<string, string>> {
@@ -68,12 +99,15 @@ async function onFocus(tabId: number): Promise<void> {
 
   const url = tab.url ?? "";
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    void updateActionIndicator("not_matched");
+    actionObservationState = "not_matched";
+    actionBookmarked = false;
+    renderActionIndicator();
     return;
   }
 
   if (tabId !== activeTabId || url !== activeUrl) {
     clearGmailMetaRetry(tabId);
+    actionBookmarked = false;
     if (activeTabId !== null) cancelObservation(activeTabId);
     activeTabId = tabId;
     activeUrl = url;
@@ -99,6 +133,7 @@ async function onFocus(tabId: number): Promise<void> {
     }
 
     startObservation(tabId, url, meta);
+    void refreshBookmarkIndicator(tabId, url, meta);
   }
 }
 
@@ -207,6 +242,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail ?? `HTTP ${response.status}`);
+      if (tab.id === activeTabId && tab.url === activeUrl && data.entity) {
+        actionBookmarked = Boolean(data.entity.bookmarked);
+        renderActionIndicator();
+      }
       sendResponse({ ok: true, ...data });
     })
     .catch((error: unknown) => {
@@ -302,7 +341,11 @@ async function initialiseBackground(): Promise<void> {
   });
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id != null) await onFocus(tab.id);
-  else await updateActionIndicator("not_matched");
+  else {
+    actionObservationState = "not_matched";
+    actionBookmarked = false;
+    renderActionIndicator();
+  }
 }
 
 initialiseBackground().catch(() => {/* server may not be running yet */});
