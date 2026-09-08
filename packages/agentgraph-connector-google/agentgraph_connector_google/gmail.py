@@ -259,9 +259,9 @@ class GmailConnector(BaseConnector):
     source = "gmail"
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
-    sync_horizon_days: int = 90  # How far back to look on the initial bulk ingest
+    sync_horizon_days: int = 90  # How far back to look during explicit historical ingest
     url_patterns = ["https://mail.google.com/*"]
-    auth_description = "Gmail conversations (last 90 days by default): Email entities containing full message bodies with senders, recipients, and cc participants."
+    auth_description = "Gmail conversations: Email entities containing full message bodies with senders, recipients, and cc participants. Historical import covers the last 90 days when explicitly requested."
     auth_label = "google"
 
     @classmethod
@@ -520,25 +520,15 @@ class GmailConnector(BaseConnector):
         service = await loop.run_in_executor(None, _build_service_for, account_id)
 
         if not cursor:
-            # First run: capture current historyId *before* bulk fetch so we don't miss
-            # any messages that arrive during the bulk ingest.
+            # Establish a checkpoint without importing existing mail. Historical mail is
+            # imported only through the connector-owned ingest command.
             profile: dict[str, Any] = await loop.run_in_executor(
                 None,
                 lambda: service.users().getProfile(userId="me").execute(),
             )
             history_id: str = profile["historyId"]
-            logger.info(
-                "gmail poll: initialised cursor at historyId %s; starting bulk ingest", history_id
-            )
-
-            after_date = (datetime.now(UTC) - timedelta(days=self.sync_horizon_days)).strftime(
-                "%Y/%m/%d"
-            )
-            bulk_batch = await _list_threads(
-                service, loop, f"in:inbox after:{after_date}", account_id=account_id
-            )
-            logger.info("gmail poll: bulk ingest fetched %d thread(s)", len(bulk_batch.entities))
-            return bulk_batch, {"history_id": history_id}
+            logger.info("gmail poll: initialised cursor at historyId %s", history_id)
+            return EntityBatch(), {"history_id": history_id}
 
         # Incremental poll via history list.
         # No labelId filter: we want replies to any thread already in the graph,

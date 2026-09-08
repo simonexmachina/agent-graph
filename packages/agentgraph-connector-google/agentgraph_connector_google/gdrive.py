@@ -37,7 +37,9 @@ from agentgraph_connector_google.provider import (
 logger = logging.getLogger(__name__)
 
 _GDRIVE_FILE_MEDIA_URL = "https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
-_GDRIVE_DOC_EXPORT_URL = "https://www.googleapis.com/drive/v3/files/{file_id}/export?mimeType=text/html"
+_GDRIVE_DOC_EXPORT_URL = (
+    "https://www.googleapis.com/drive/v3/files/{file_id}/export?mimeType=text/html"
+)
 _GDRIVE_DOC_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _GDRIVE_SHEET_EXPORT_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _GDRIVE_SHEET_EXPORT_URL = (
@@ -47,12 +49,8 @@ _GDRIVE_SHEET_EXPORT_URL = (
 _GDRIVE_FOLDER_URL_RE = re.compile(
     r"https://drive\.google\.com/drive/folders/(?P<folder_id>[a-zA-Z0-9_-]+)"
 )
-_GDRIVE_FILE_URL_RE = re.compile(
-    r"https://drive\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
-)
-_GDOCS_FILE_URL_RE = re.compile(
-    r"https://docs\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)"
-)
+_GDRIVE_FILE_URL_RE = re.compile(r"https://drive\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)")
+_GDOCS_FILE_URL_RE = re.compile(r"https://docs\.google\.com/file/d/(?P<file_id>[a-zA-Z0-9_-]+)")
 _MIME_EXTENSIONS: dict[str, str] = {
     "application/pdf": ".pdf",
     "application/vnd.google-apps.document": ".docx",
@@ -91,6 +89,7 @@ class DriveChangesConnector(BaseConnector):
         args: list[str] | None = None,
     ) -> None:
         from agentgraph_connector_google.auth import run_oauth_flow
+
         run_oauth_flow(account_id=account_id, add=add, args=args)
 
     @classmethod
@@ -115,6 +114,7 @@ class DriveChangesConnector(BaseConnector):
     @classmethod
     async def verify_auth(cls, account_id: str | None = None) -> tuple[str, str | None]:
         import asyncio
+
         return await asyncio.to_thread(verify_google_auth, account_id)
 
     @classmethod
@@ -159,12 +159,14 @@ class DriveChangesConnector(BaseConnector):
         selected_account_id = account_id or ((meta or {}).get("account_id") if meta else None)
         loop = asyncio.get_event_loop()
         if resource_type == "folder":
-            batch = await loop.run_in_executor(None, _list_drive_folder_sync, resource_id, selected_account_id)
+            batch = await loop.run_in_executor(
+                None, _list_drive_folder_sync, resource_id, selected_account_id
+            )
             await upsert_batch(batch)
             return batch
 
         batch = await _fetch_drive_file(resource_id, account_id=selected_account_id)
-        if batch.entities or batch.persons or batch.edges:
+        if batch.has_writes():
             await upsert_batch(batch)
         return batch
 
@@ -204,11 +206,15 @@ class DriveChangesConnector(BaseConnector):
         while True:
             response = await loop.run_in_executor(
                 None,
-                lambda pt=page_token: service.changes().list(
-                    pageToken=pt,
-                    fields="nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,webViewLink,mimeType))",
-                    spaces="drive",
-                ).execute(),
+                lambda pt=page_token: (
+                    service.changes()
+                    .list(
+                        pageToken=pt,
+                        fields="nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,webViewLink,mimeType))",
+                        spaces="drive",
+                    )
+                    .execute()
+                ),
             )
 
             for change in response.get("changes", []):
@@ -257,15 +263,17 @@ class DriveChangesConnector(BaseConnector):
                     combined.persons.extend(batch.persons)
                     combined.edges.extend(batch.edges)
                 except Exception:
-                    logger.exception("drive poll: failed to fetch %s via %s", file_id, connector_source)
+                    logger.exception(
+                        "drive poll: failed to fetch %s via %s", file_id, connector_source
+                    )
 
         return combined, {"page_token": new_page_token}
 
 
 _GDRIVE_MIME_TO_RESOURCE: dict[str, tuple[str, str]] = {
-    "application/vnd.google-apps.document":     ("gdocs",   "document"),
-    "application/vnd.google-apps.spreadsheet":  ("gsheets", "spreadsheet"),
-    "application/vnd.google-apps.folder":       ("gdrive",  "folder"),
+    "application/vnd.google-apps.document": ("gdocs", "document"),
+    "application/vnd.google-apps.spreadsheet": ("gsheets", "spreadsheet"),
+    "application/vnd.google-apps.folder": ("gdrive", "folder"),
 }
 _GDRIVE_VIEW_BASE = "https://drive.google.com"
 
@@ -274,10 +282,14 @@ def _list_drive_folder_sync(folder_id: str, account_id: str | None = None) -> En
     service = _build_drive_service_for(account_id)
 
     # Get folder metadata
-    meta: dict[str, Any] = service.files().get(
-        fileId=folder_id,
-        fields="id,name,createdTime,modifiedTime",
-    ).execute()
+    meta: dict[str, Any] = (
+        service.files()
+        .get(
+            fileId=folder_id,
+            fields="id,name,createdTime,modifiedTime",
+        )
+        .execute()
+    )
     folder_name: str = meta.get("name", "")
 
     # List immediate children (non-trashed)
@@ -329,27 +341,32 @@ def _list_drive_folder_sync(folder_id: str, account_id: str | None = None) -> En
             resource_type_str = "document"
 
         from agentgraph.connectors.base import RESOURCE_TYPE_TO_ENTITY_TYPE
+
         entity_type = RESOURCE_TYPE_TO_ENTITY_TYPE.get(resource_type_str, "Document")
 
-        stubs.append(EntityRecord(
-            entity_type=entity_type,
-            platform=platform,
-            platform_entity_id=child_id,
-            title=child_name,
-            metadata=_file_metadata(
-                web_url=web_link or _web_url_for_file(child_id),
-                download_url=download_link,
-                mime_type=mime or None,
-                account_id=account_id,
-            ),
-            is_stub=True,
-        ))
-        edges.append(EdgeRecord(
-            edge_type="contains",
-            source_platform_entity_id=folder_id,
-            target_platform_entity_id=child_id,
-            platform="gdrive",
-        ))
+        stubs.append(
+            EntityRecord(
+                entity_type=entity_type,
+                platform=platform,
+                platform_entity_id=child_id,
+                title=child_name,
+                metadata=_file_metadata(
+                    web_url=web_link or _web_url_for_file(child_id),
+                    download_url=download_link,
+                    mime_type=mime or None,
+                    account_id=account_id,
+                ),
+                is_stub=True,
+            )
+        )
+        edges.append(
+            EdgeRecord(
+                edge_type="contains",
+                source_platform_entity_id=folder_id,
+                target_platform_entity_id=child_id,
+                platform="gdrive",
+            )
+        )
 
     logger.info("Listed %d items in Drive folder '%s' (%s)", len(stubs), folder_name, folder_id)
     return EntityBatch(entities=[folder_entity, *stubs], edges=edges)
@@ -379,10 +396,14 @@ async def _fetch_drive_file(file_id: str, account_id: str | None = None) -> Enti
     try:
         file_meta: dict[str, Any] = await loop.run_in_executor(
             None,
-            lambda: service.files().get(
-                fileId=file_id,
-                fields="id,name,mimeType,owners,webViewLink,webContentLink,createdTime,modifiedTime",
-            ).execute(),
+            lambda: (
+                service.files()
+                .get(
+                    fileId=file_id,
+                    fields="id,name,mimeType,owners,webViewLink,webContentLink,createdTime,modifiedTime",
+                )
+                .execute()
+            ),
         )
     except HttpError as exc:
         if exc.resp.status == 404:
@@ -398,18 +419,30 @@ async def _fetch_drive_file(file_id: str, account_id: str | None = None) -> Enti
 
         connector = get_connector("gdocs")
         if connector is not None:
-            return await connector.fetch("document", file_id, meta={"account_id": account_id} if account_id else None, account_id=account_id)
+            return await connector.fetch(
+                "document",
+                file_id,
+                meta={"account_id": account_id} if account_id else None,
+                account_id=account_id,
+            )
 
     if mime_type == "application/vnd.google-apps.spreadsheet":
         from agentgraph.connectors.registry import get_connector
 
         connector = get_connector("gsheets")
         if connector is not None:
-            return await connector.fetch("spreadsheet", file_id, meta={"account_id": account_id} if account_id else None, account_id=account_id)
+            return await connector.fetch(
+                "spreadsheet",
+                file_id,
+                meta={"account_id": account_id} if account_id else None,
+                account_id=account_id,
+            )
 
     title: str = file_meta.get("name", "")
     web_link: str = file_meta.get("webViewLink") or _web_url_for_file(file_id)
-    download_link: str = file_meta.get("webContentLink") or _download_url_for_mime(file_id, mime_type)
+    download_link: str = file_meta.get("webContentLink") or _download_url_for_mime(
+        file_id, mime_type
+    )
 
     edges: list[EdgeRecord] = []
 
@@ -418,18 +451,22 @@ async def _fetch_drive_file(file_id: str, account_id: str | None = None) -> Enti
         email: str = owner.get("emailAddress", "")
         name: str = owner.get("displayName", "")
         if email:
-            owner_persons.append(PersonRecord(
-                platform="gdrive",
-                platform_user_id=email,
-                canonical_email=email,
-                display_name=name or None,
-            ))
-            edges.append(EdgeRecord(
-                edge_type="authored",
-                source_platform_user_id=email,
-                target_platform_entity_id=file_id,
-                platform="gdrive",
-            ))
+            owner_persons.append(
+                PersonRecord(
+                    platform="gdrive",
+                    platform_user_id=email,
+                    canonical_email=email,
+                    display_name=name or None,
+                )
+            )
+            edges.append(
+                EdgeRecord(
+                    edge_type="authored",
+                    source_platform_user_id=email,
+                    target_platform_entity_id=file_id,
+                    platform="gdrive",
+                )
+            )
 
     entity = EntityRecord(
         entity_type="Document",
@@ -503,10 +540,14 @@ async def download_drive_file(
 
     file_meta: dict[str, Any] = await loop.run_in_executor(
         None,
-        lambda: service.files().get(
-            fileId=file_id,
-            fields="id,name,mimeType,size",
-        ).execute(),
+        lambda: (
+            service.files()
+            .get(
+                fileId=file_id,
+                fields="id,name,mimeType,size",
+            )
+            .execute()
+        ),
     )
     name: str = file_meta.get("name") or file_id
     mime_type: str = file_meta.get("mimeType", "")

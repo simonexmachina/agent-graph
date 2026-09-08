@@ -21,13 +21,13 @@ from agentgraph.connectors.base import (
     BaseConnector,
     ConnectorCommandEffects,
     EntityBatch,
+    EntityMetadataPatch,
     EntityRecord,
     FetchPolicy,
     ResourceType,
     SourceReference,
 )
 from agentgraph.core.context import get_backend
-from agentgraph.graph.upsert import upsert_batch
 from agentgraph_connector_web.config import (
     load_web_settings,
     observe_urls,
@@ -110,6 +110,7 @@ class WebConnector(BaseConnector):
             item = cast(dict[str, object], fetched[0])
             return (
                 f"Fetched {item.get('resource_id')}: {item.get('entities', 0)} entities, "
+                f"{item.get('metadata_patches', 0)} metadata patches, "
                 f"{item.get('persons', 0)} persons, {item.get('edges', 0)} edges"
             )
         raw_urls = result.get("observation_urls", [])
@@ -178,15 +179,15 @@ class WebConnector(BaseConnector):
         if ref is None:
             raise ValueError("Web connector only supports http:// and https:// URLs")
 
-        existing = await get_backend().get_entity_by_platform(self.source, ref.resource_id)
-        entity = await _fetch_web_entity(
+        existing = await _find_existing_web_entity(ref.resource_id)
+        result = await _fetch_web_entity(
             ref.resource_id,
             existing_entity=existing,
             compact_html=(meta or {}).get("compact_html") == "true",
         )
-        batch = EntityBatch(entities=[entity])
-        await upsert_batch(batch)
-        return batch
+        if isinstance(result, EntityMetadataPatch):
+            return EntityBatch(metadata_patches=[result])
+        return EntityBatch(entities=[result])
 
     def entity_url(self, platform_entity_id: str) -> str | None:
         return platform_entity_id
@@ -213,7 +214,7 @@ async def _fetch_web_entity(
     client: httpx.AsyncClient | None = None,
     existing_entity: dict[str, object] | None = None,
     compact_html: bool = False,
-) -> EntityRecord:
+) -> EntityRecord | EntityMetadataPatch:
     existing_metadata = _entity_metadata(existing_entity)
     headers = {
         "Accept": _ACCEPT,
@@ -239,7 +240,7 @@ async def _fetch_web_entity(
     final_url = _canonical_url(response.url)
     parsed = _parse_content(response.content, content_type, final_url)
     content_sha256 = hashlib.sha256(response.content).hexdigest()
-    return EntityRecord(
+    entity = EntityRecord(
         entity_type="Document",
         platform="web",
         platform_entity_id=final_url,
@@ -257,13 +258,20 @@ async def _fetch_web_entity(
             **_response_cache_metadata(response.headers),
         },
     )
+    if _same_web_document(existing_entity, entity):
+        return EntityMetadataPatch(
+            platform="web",
+            platform_entity_id=entity.platform_entity_id,
+            metadata=dict(entity.metadata),
+        )
+    return entity
 
 
 async def fetch_http_document(
     url: str,
     *,
     existing_entity: dict[str, object] | None = None,
-) -> EntityRecord:
+) -> EntityRecord | EntityMetadataPatch:
     """Fetch an HTTP-backed Document, using validators from existing metadata when present."""
     return await _fetch_web_entity(url, existing_entity=existing_entity)
 
@@ -309,9 +317,8 @@ def _not_modified_entity(
     url: str,
     response: HttpFetchResult,
     existing_entity: dict[str, object],
-) -> EntityRecord:
+) -> EntityMetadataPatch:
     metadata: dict[str, str | int | float | bool | None] = {
-        **_entity_record_metadata(existing_entity),
         "url": url,
         "final_url": str(existing_entity.get("platform_entity_id") or url),
         "web_url": str(existing_entity.get("platform_entity_id") or url),
@@ -319,28 +326,39 @@ def _not_modified_entity(
         "fetched_at": datetime.now(UTC).isoformat(),
         **_response_cache_metadata(response.headers),
     }
-    return EntityRecord(
-        entity_type=str(existing_entity.get("entity_type") or "Document"),
+    return EntityMetadataPatch(
         platform="web",
         platform_entity_id=str(existing_entity.get("platform_entity_id") or url),
-        title=_optional_str(existing_entity.get("title")),
-        content=_optional_str(existing_entity.get("content")),
         metadata=metadata,
     )
 
 
-def _optional_str(value: object) -> str | None:
-    return value if isinstance(value, str) else None
+def _same_web_document(
+    existing_entity: dict[str, object] | None,
+    candidate: EntityRecord,
+) -> bool:
+    return bool(
+        existing_entity is not None
+        and existing_entity.get("platform_entity_id") == candidate.platform_entity_id
+        and existing_entity.get("title") == candidate.title
+        and existing_entity.get("content") == candidate.content
+    )
 
 
-def _entity_record_metadata(
-    entity: dict[str, object],
-) -> dict[str, str | int | float | bool | None]:
-    metadata: dict[str, str | int | float | bool | None] = {}
-    for key, value in _entity_metadata(entity).items():
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            metadata[key] = value
-    return metadata
+async def _find_existing_web_entity(url: str) -> dict[str, object] | None:
+    backend = get_backend()
+    existing = await backend.get_entity_by_platform("web", url)
+    if existing is not None:
+        return cast(dict[str, object], existing)
+    matches = await backend.query_by_filter(
+        "Document",
+        {"platform": "web", "url": url},
+        1,
+        "updated_at",
+        None,
+        None,
+    )
+    return cast(dict[str, object], matches[0]) if matches else None
 
 
 class _ParsedContent:

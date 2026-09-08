@@ -148,7 +148,11 @@ async def poll_connector(connector: BaseConnector) -> None:
     try:
         remaining = _backoff_remaining(source)
         if remaining is not None:
-            logger.info("poll %s — skipped during failure backoff (%.0fs remaining)", source, remaining.total_seconds())
+            logger.info(
+                "poll %s — skipped during failure backoff (%.0fs remaining)",
+                source,
+                remaining.total_seconds(),
+            )
             return
         if not _has_local_auth(connector):
             logger.info("poll %s — skipped because authentication is not configured", source)
@@ -168,13 +172,18 @@ async def poll_connector(connector: BaseConnector) -> None:
             batch, new_cursor = await connector.poll(cursor, account_id=account_id)
 
             n_entities = len(batch.entities)
+            n_metadata_patches = len(batch.metadata_patches)
             n_persons = len(batch.persons)
             n_edges = len(batch.edges)
 
-            if batch.entities or batch.persons or batch.edges:
+            if batch.has_writes():
                 logger.info(
-                    "poll %s — upserting %d entities, %d persons, %d edges",
-                    scope, n_entities, n_persons, n_edges,
+                    "poll %s — applying %d entities, %d metadata patches, %d persons, %d edges",
+                    scope,
+                    n_entities,
+                    n_metadata_patches,
+                    n_persons,
+                    n_edges,
                 )
                 await upsert_batch(batch)
                 logger.info("poll %s — upsert complete", scope)
@@ -209,10 +218,14 @@ async def run_ingest(
             scope = _sync_scope(source, account_id)
             logger.info("ingest %s — starting", scope)
             batch = await connector.ingest(account_id=account_id)
-            if batch.entities or batch.persons or batch.edges:
+            if batch.has_writes():
                 logger.info(
-                    "ingest %s — upserting %d entities, %d persons, %d edges",
-                    scope, len(batch.entities), len(batch.persons), len(batch.edges),
+                    "ingest %s — applying %d entities, %d metadata patches, %d persons, %d edges",
+                    scope,
+                    len(batch.entities),
+                    len(batch.metadata_patches),
+                    len(batch.persons),
+                    len(batch.edges),
                 )
                 await upsert_batch(batch)
                 logger.info("ingest %s — complete in %.1fs", scope, perf_counter() - scope_started)

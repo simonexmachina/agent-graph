@@ -36,6 +36,7 @@ async def fetch_entity(platform: str, resource_id: str) -> dict[str, Any]:
     await upsert_batch(batch)
     return {
         "entities": len(batch.entities),
+        "metadata_patches": len(batch.metadata_patches),
         "persons": len(batch.persons),
         "edges": len(batch.edges),
     }
@@ -75,7 +76,7 @@ async def fetch_url(url: str, meta: dict[str, str] | None = None) -> dict[str, A
         resource_id=resource_id,
         meta=fetch_meta or None,
     )
-    if batch.entities or batch.persons or batch.edges:
+    if batch.has_writes():
         await upsert_batch(batch)
 
     backend = get_backend()
@@ -96,6 +97,7 @@ async def fetch_url(url: str, meta: dict[str, str] | None = None) -> dict[str, A
         "resource_id": resource_id,
         "entity": entity,
         "entities": len(batch.entities),
+        "metadata_patches": len(batch.metadata_patches),
         "persons": len(batch.persons),
         "edges": len(batch.edges),
     }

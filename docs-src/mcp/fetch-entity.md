@@ -22,6 +22,6 @@ fetch_entity_tool(platform, resource_id) -> JSON string
 - the agent has a platform-specific resource ID and needs current source content; or
 - a known resource is stale and should be re-ingested before reasoning over it.
 
-The owning connector fetches the resource and persists its complete returned batch of entities, people, and edges. Direct fetch does not set `observed_at`; it records retrieval by the agent, not human browser attention.
+The owning connector fetches the resource and persists its complete returned batch of entities, metadata patches, people, and edges. A metadata patch records a successful non-material refresh without emitting an entity upsert event. Direct fetch does not set `observed_at`; it records retrieval by the agent, not human browser attention.
 
 For an existing internal graph UUID, use [`fetch_entity_by_id_tool`](/mcp/fetch-entity-by-id.html).

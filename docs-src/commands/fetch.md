@@ -15,7 +15,7 @@ source_path = "docs-src/commands/fetch.md"
 agentgraph fetch PLATFORM RESOURCE_ID [--json]
 ```
 
-Use targeted fetch when a search result, graph edge, or external reference identifies context that is missing or stale. The owning connector persists its complete returned batch before the command reports counts.
+Use targeted fetch when a search result, graph edge, or external reference identifies context that is missing or stale. The owning connector persists its complete returned batch before the command reports entity, metadata-patch, person, and edge counts. A metadata patch records a successful non-material refresh without emitting an entity upsert event.
 
 Direct fetch does not update `observed_at`; it is source retrieval, not evidence that the human viewed the resource.
 

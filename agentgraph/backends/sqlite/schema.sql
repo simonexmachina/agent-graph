@@ -68,12 +68,12 @@ CREATE INDEX IF NOT EXISTS idx_entities_type_created_at ON entities(entity_type,
 CREATE INDEX IF NOT EXISTS idx_entities_type_updated_at ON entities(entity_type, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_observed_at_id ON entities(platform, observed_at DESC, id ASC);
 CREATE INDEX IF NOT EXISTS idx_entities_platform_type_observed_at ON entities(platform, entity_type, observed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_entities_platform_type_feed_updated
-    ON entities(platform, entity_type, json_extract(metadata, '$.feed_url'), updated_at DESC);
 
 -- Edge indexes
 CREATE INDEX IF NOT EXISTS idx_edges_source  ON edges(source_entity_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target  ON edges(target_entity_id);
+CREATE INDEX IF NOT EXISTS idx_edges_target_type_created_source
+    ON edges(target_entity_id, edge_type, created_at DESC, source_entity_id);
 
 -- Observation indexes
 CREATE INDEX IF NOT EXISTS idx_observations_timestamp ON observations(timestamp);

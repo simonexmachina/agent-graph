@@ -32,7 +32,7 @@ An agent can request a resource directly with `agentgraph fetch <platform> <reso
 
 ### Refresh
 
-Connectors poll source APIs for changes to keep the entity updated in the graph when the resource changes. Some connectors, such as Gmail, also provide an `ingest` command to perform a broader historical ingestion.
+Connectors poll source APIs for changes to keep the entity updated in the graph when the resource changes. Gmail's first poll establishes a change checkpoint without importing existing mail; use its `ingest` command for the optional broader historical import.
 
 ## The graph model
 

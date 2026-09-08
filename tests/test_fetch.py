@@ -11,6 +11,7 @@ from agentgraph.connectors.base import (
     BaseConnector,
     EdgeRecord,
     EntityBatch,
+    EntityMetadataPatch,
     EntityRecord,
     PersonRecord,
     ResourceType,
@@ -95,4 +96,33 @@ async def test_fetch_entity_persists_connector_batch() -> None:
     ]
     backend.reset_synced_at.assert_awaited_once_with("test", "article-1")
     upsert_batch.assert_awaited_once_with(batch)
-    assert result == {"entities": 1, "persons": 1, "edges": 1}
+    assert result == {"entities": 1, "metadata_patches": 0, "persons": 1, "edges": 1}
+
+
+@pytest.mark.asyncio
+async def test_fetch_entity_persists_metadata_patch_batch() -> None:
+    batch = EntityBatch(
+        metadata_patches=[
+            EntityMetadataPatch(
+                platform="test",
+                platform_entity_id="article-1",
+                metadata={"revision": "2"},
+            )
+        ]
+    )
+    connector = _FetchConnector(batch)
+    backend = MagicMock()
+    backend.get_entity_by_platform = AsyncMock(
+        return_value={"entity_type": "Document", "metadata": {}}
+    )
+    backend.reset_synced_at = AsyncMock()
+    set_backend(backend)
+
+    with (
+        patch("agentgraph.connectors.registry.get_connector", return_value=connector),
+        patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert_batch,
+    ):
+        result = await fetch_entity("test", "article-1")
+
+    upsert_batch.assert_awaited_once_with(batch)
+    assert result == {"entities": 0, "metadata_patches": 1, "persons": 0, "edges": 0}

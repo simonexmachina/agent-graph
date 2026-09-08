@@ -108,6 +108,14 @@ class EntityRecord(BaseModel):
     retention_parent_platform_entity_id: str | None = None
 
 
+class EntityMetadataPatch(BaseModel):
+    """Connector-declared non-material metadata updates for an existing entity."""
+
+    platform: str
+    platform_entity_id: str
+    metadata: dict[str, str | int | float | bool | None] = {}
+
+
 class EdgeRecord(BaseModel):
     edge_type: str  # 'authored' | 'posted_in' | 'replied_to' | 'mentions'
     source_platform_entity_id: str | None = None
@@ -120,8 +128,13 @@ class EdgeRecord(BaseModel):
 
 class EntityBatch(BaseModel):
     entities: list[EntityRecord] = []
+    metadata_patches: list[EntityMetadataPatch] = []
     edges: list[EdgeRecord] = []
     persons: list[PersonRecord] = []
+
+    def has_writes(self) -> bool:
+        """Return whether this batch contains anything for storage to apply."""
+        return bool(self.entities or self.metadata_patches or self.edges or self.persons)
 
     def add_stubs_from(self, entity: EntityRecord) -> None:
         """Scan entity content for recognisable URLs and append stub EntityRecords and

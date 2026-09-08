@@ -13,6 +13,7 @@ from agentgraph.backends.sqlite.backend import SQLiteBackend
 from agentgraph.connectors.base import (
     ConnectorCommandEffects,
     EntityBatch,
+    EntityMetadataPatch,
     EntityRecord,
     EntityReference,
     SourceReference,
@@ -109,7 +110,41 @@ async def test_execute_fetches_passes_metadata_and_upserts_batch() -> None:
             "resource_type": "document",
             "resource_id": "https://example.com/page",
             "entities": 1,
+            "metadata_patches": 0,
             "persons": 0,
             "edges": 0,
         }
     ]
+
+
+async def test_execute_fetches_persists_metadata_patch_batch() -> None:
+    batch = EntityBatch(
+        metadata_patches=[
+            EntityMetadataPatch(
+                platform="web",
+                platform_entity_id="https://example.com/page",
+                metadata={"http_etag": '"fresh"'},
+            )
+        ]
+    )
+
+    class Connector:
+        fetch = AsyncMock(return_value=batch)
+
+    effects = ConnectorCommandEffects(
+        fetch_references=(
+            SourceReference(
+                source="web",
+                resource_type="document",
+                resource_id="https://example.com/page",
+            ),
+        )
+    )
+    with (
+        patch("agentgraph.connectors.registry.get_connector", return_value=Connector()),
+        patch("agentgraph.graph.upsert.upsert_batch", new=AsyncMock()) as upsert,
+    ):
+        result = await execute_fetches(effects)
+
+    upsert.assert_awaited_once_with(batch)
+    assert result[0]["metadata_patches"] == 1
