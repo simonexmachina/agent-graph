@@ -126,11 +126,6 @@ class Settings(BaseSettings):
     )
     embedding_dimensions: int = Field(default=384)
 
-    # Connectors
-    slack_workspace_id: str | None = Field(
-        default=None,
-        description="Slack workspace ID (e.g. T01ABC123) to observe; others are ignored",
-    )
     # Logging
     log_level: str = Field(default="INFO")
     log_file: Path = Field(default_factory=lambda: get_config_paths()[0] / "agentgraph.log")
