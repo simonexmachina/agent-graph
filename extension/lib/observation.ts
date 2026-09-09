@@ -69,9 +69,14 @@ const observations = new Map<number, ObservationStatus>();
 /**
  * Match a URL against Chrome-style match patterns.
  *
- * Connectors declare patterns as `<scheme>://<host>/<path>`, where the host may
- * begin with `*.` to cover a domain and its subdomains, and `*` in the path
- * matches any span of characters. Patterns without a wildcard match exactly.
+ * Connectors declare patterns as `<scheme>://<host>[:<port>]/<path>`, where the
+ * host may begin with `*.` to cover a domain and its subdomains, and `*` in the
+ * path matches any span of characters — including `/`, unlike a filesystem glob.
+ * A pattern without a port matches any port; one with a port requires it.
+ * Patterns without a wildcard match exactly.
+ *
+ * Mirrored in Python by `agentgraph.connectors.match_patterns.matches_pattern`;
+ * `tests/fixtures/url_match_cases.json` holds the shared test vectors.
  */
 export function matchesPattern(url: string, pattern: string): boolean {
   const patternParts = splitPattern(pattern);
@@ -85,18 +90,49 @@ export function matchesPattern(url: string, pattern: string): boolean {
   }
 
   if (patternParts.scheme !== "*" && `${patternParts.scheme}:` !== target.protocol) return false;
+  if (!portMatches(target, patternParts.port)) return false;
   if (!hostMatches(target.hostname, patternParts.host)) return false;
   return wildcardRegExp(patternParts.path).test(`${target.pathname}${target.search}`);
 }
 
-function splitPattern(pattern: string): { scheme: string; host: string; path: string } | null {
+interface PatternParts {
+  scheme: string;
+  host: string;
+  port: string;
+  path: string;
+}
+
+function splitPattern(pattern: string): PatternParts | null {
   const schemeEnd = pattern.indexOf("://");
   if (schemeEnd === -1) return null;
   const scheme = pattern.slice(0, schemeEnd);
   const rest = pattern.slice(schemeEnd + 3);
   const pathStart = rest.indexOf("/");
-  if (pathStart === -1) return { scheme, host: rest, path: "/*" };
-  return { scheme, host: rest.slice(0, pathStart), path: rest.slice(pathStart) };
+  const authority = pathStart === -1 ? rest : rest.slice(0, pathStart);
+  const path = pathStart === -1 ? "/*" : rest.slice(pathStart);
+  return { scheme, ...splitAuthority(authority), path };
+}
+
+/** Peel a trailing `:<digits>` off the host, leaving `*` and IPv6-ish hosts intact. */
+function splitAuthority(authority: string): { host: string; port: string } {
+  const portStart = authority.lastIndexOf(":");
+  if (portStart === -1) return { host: authority, port: "" };
+  const port = authority.slice(portStart + 1);
+  if (!/^\d+$/.test(port)) return { host: authority, port: "" };
+  return { host: authority.slice(0, portStart), port };
+}
+
+function portMatches(target: URL, patternPort: string): boolean {
+  // A pattern without a port matches any port, as Chrome match patterns do.
+  if (patternPort === "") return true;
+  return normalisePort(patternPort, target.protocol) === target.port;
+}
+
+/** `URL.port` is empty for a scheme's default port, so normalise the pattern the same way. */
+function normalisePort(port: string, protocol: string): string {
+  if (protocol === "http:" && port === "80") return "";
+  if (protocol === "https:" && port === "443") return "";
+  return port;
 }
 
 function hostMatches(hostname: string, hostPattern: string): boolean {

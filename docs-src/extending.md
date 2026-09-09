@@ -41,7 +41,7 @@ A connector is a Python package that subclasses `BaseConnector`, implements the 
 The required shape is small: resolve the URLs your connector owns, implement `fetch()`, and optionally implement polling, ingest, auth, and user identity hooks. Refer to `BaseConnector` in the installed package for the complete, current type-checked contract.
 
 - `source` is the stable connector identifier used by the CLI, MCP server, and registry.
-- `url_patterns` declares static browser URL patterns for observation-based fetches. Connectors can override `observation_url_patterns()` to provide derived patterns.
+- `url_patterns` declares static browser URL patterns for observation-based fetches. Connectors can override `observation_url_patterns()` to provide derived patterns. These are Chrome match patterns, not filesystem globs: `*` in the path spans `/`, so `https://docs.google.com/document/*` matches `/document/d/abc/edit`. A host may start with `*.` to cover a domain and its subdomains, and an optional `:port` is honoured — a pattern without a port matches any port, one with a port requires it.
 - `fetch_policy` controls when a targeted fetch should be skipped because a resource is still fresh.
 - `can_handle(self, url) -> bool` is the required URL ownership check.
 - `resolve_url(self, url)` returns the fetchable resource behind a URL; `resolve_observation_url(self, url, meta)` can asynchronously resolve browser observations and attach generic fetch metadata.

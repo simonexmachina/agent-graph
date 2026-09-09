@@ -1,0 +1,179 @@
+{
+  "comment": "Shared match-pattern vectors for agentgraph.connectors.match_patterns.matches_pattern (tests/test_match_patterns.py) and matchesPattern in extension/lib/observation.ts (extension/test/observation.test.mjs).",
+  "cases": [
+    {
+      "name": "host wildcard covers a subdomain",
+      "url": "https://hello.atlassian.net/wiki/spaces/~71202099c5dd/pages/7650323840/Team+Brain",
+      "pattern": "https://*.atlassian.net/wiki/*",
+      "expected": true
+    },
+    {
+      "name": "host wildcard covers the bare domain",
+      "url": "https://atlassian.net/wiki/spaces/ENG",
+      "pattern": "https://*.atlassian.net/wiki/*",
+      "expected": true
+    },
+    {
+      "name": "host wildcard still requires the path prefix",
+      "url": "https://hello.atlassian.net/browse/ENG-1",
+      "pattern": "https://*.atlassian.net/wiki/*",
+      "expected": false
+    },
+    {
+      "name": "host wildcard does not match a lookalike parent domain",
+      "url": "https://hello.atlassian.net.evil.test/wiki/x",
+      "pattern": "https://*.atlassian.net/wiki/*",
+      "expected": false
+    },
+    {
+      "name": "host wildcard still requires the scheme",
+      "url": "http://hello.atlassian.net/wiki/x",
+      "pattern": "https://*.atlassian.net/wiki/*",
+      "expected": false
+    },
+    {
+      "name": "scheme wildcard accepts either scheme",
+      "url": "http://example.com/page",
+      "pattern": "*://example.com/*",
+      "expected": true
+    },
+    {
+      "name": "path wildcard spans slashes and the fragment is ignored",
+      "url": "https://mail.google.com/mail/u/0/#inbox",
+      "pattern": "https://mail.google.com/*",
+      "expected": true
+    },
+    {
+      "name": "an origin-only URL matches a root wildcard",
+      "url": "https://mail.google.com",
+      "pattern": "https://mail.google.com/*",
+      "expected": true
+    },
+    {
+      "name": "path wildcard spans slashes after a prefix",
+      "url": "https://docs.google.com/document/d/abc/edit",
+      "pattern": "https://docs.google.com/document/*",
+      "expected": true
+    },
+    {
+      "name": "a different path prefix does not match",
+      "url": "https://docs.google.com/spreadsheets/d/abc",
+      "pattern": "https://docs.google.com/document/*",
+      "expected": false
+    },
+    {
+      "name": "a pattern host embedded in another host's path does not match",
+      "url": "https://evil.test/https://mail.google.com/x",
+      "pattern": "https://mail.google.com/*",
+      "expected": false
+    },
+    {
+      "name": "trailing wildcard matches the query string",
+      "url": "https://acme.atlassian.net/jira/software/projects/ENG/boards/1?selectedIssue=ENG-2",
+      "pattern": "https://*.atlassian.net/jira/*",
+      "expected": true
+    },
+    {
+      "name": "a wildcard in the middle of a path matches",
+      "url": "https://example.com/a/b/c",
+      "pattern": "https://example.com/a/*/c",
+      "expected": true
+    },
+    {
+      "name": "patterns without wildcards match exactly",
+      "url": "https://example.com/page",
+      "pattern": "https://example.com/page",
+      "expected": true
+    },
+    {
+      "name": "an exact pattern does not match a child path",
+      "url": "https://example.com/page/other",
+      "pattern": "https://example.com/page",
+      "expected": false
+    },
+    {
+      "name": "an exact pattern does not match an added query",
+      "url": "https://example.com/page?ref=1",
+      "pattern": "https://example.com/page",
+      "expected": false
+    },
+    {
+      "name": "a ported pattern matches a ported URL",
+      "url": "http://localhost:3000/page",
+      "pattern": "http://localhost:3000/*",
+      "expected": true
+    },
+    {
+      "name": "a ported pattern matches a ported URL under a path prefix",
+      "url": "http://localhost:3000/content/research.md",
+      "pattern": "http://localhost:3000/content/*",
+      "expected": true
+    },
+    {
+      "name": "a ported exact pattern matches a ported URL",
+      "url": "http://localhost:3000/page",
+      "pattern": "http://localhost:3000/page",
+      "expected": true
+    },
+    {
+      "name": "a ported pattern does not match a different port",
+      "url": "http://localhost:3000/page",
+      "pattern": "http://localhost:3001/*",
+      "expected": false
+    },
+    {
+      "name": "a ported pattern does not match a portless URL",
+      "url": "http://localhost/page",
+      "pattern": "http://localhost:3000/*",
+      "expected": false
+    },
+    {
+      "name": "a portless pattern matches any port",
+      "url": "http://localhost:3000/page",
+      "pattern": "http://localhost/*",
+      "expected": true
+    },
+    {
+      "name": "a portless pattern matches a non-default https port",
+      "url": "https://example.com:8443/page",
+      "pattern": "https://example.com/*",
+      "expected": true
+    },
+    {
+      "name": "an explicit default https port matches a portless URL",
+      "url": "https://example.com/",
+      "pattern": "https://example.com:443/*",
+      "expected": true
+    },
+    {
+      "name": "an explicit default http port matches a portless URL",
+      "url": "http://example.com/",
+      "pattern": "http://example.com:80/*",
+      "expected": true
+    },
+    {
+      "name": "a portless pattern matches an explicit default port",
+      "url": "https://example.com:443/page",
+      "pattern": "https://example.com/page",
+      "expected": true
+    },
+    {
+      "name": "a default port of another scheme is not treated as absent",
+      "url": "http://example.com/page",
+      "pattern": "http://example.com:443/page",
+      "expected": false
+    },
+    {
+      "name": "a bare host wildcard matches any host",
+      "url": "http://localhost:3000/page",
+      "pattern": "*://*/*",
+      "expected": true
+    },
+    {
+      "name": "an unparseable URL never matches",
+      "url": "not-a-url",
+      "pattern": "https://example.com/*",
+      "expected": false
+    }
+  ]
+}

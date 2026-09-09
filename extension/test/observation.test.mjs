@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const storage = new Map();
@@ -246,6 +247,16 @@ test("discards trailing duration when the initial observation fails", async () =
   assert.equal(reports.length, 1);
 });
 
+
+test("agrees with the Python matcher on the shared match-pattern vectors", () => {
+  const fixture = JSON.parse(
+    readFileSync(new URL("../../tests/fixtures/url_match_cases.json", import.meta.url), "utf8"),
+  );
+
+  for (const { name, url, pattern, expected } of fixture.cases) {
+    assert.equal(matchesPattern(url, pattern), expected, `${name}: ${url} vs ${pattern}`);
+  }
+});
 
 test("matches host wildcards across subdomains", () => {
   const pattern = "https://*.atlassian.net/wiki/*";

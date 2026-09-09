@@ -27,6 +27,7 @@ from agentgraph.connectors.base import (
     ResourceType,
     SourceReference,
 )
+from agentgraph.connectors.match_patterns import matches_pattern
 from agentgraph.core.context import get_backend
 from agentgraph_connector_web.config import (
     load_web_settings,
@@ -160,7 +161,7 @@ class WebConnector(BaseConnector):
         _ = meta
         normalized = _canonical_url(url)
         for rule in load_web_settings().observation_urls:
-            if _matches_observation_rule(normalized, rule):
+            if matches_pattern(normalized, rule):
                 return SourceReference(source=self.source, resource_type="document", resource_id=normalized)
         return None
 
@@ -524,10 +525,6 @@ def _canonical_url(url: str) -> str:
 def _clean_text(text: str) -> str:
     lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
     return "\n".join(line for line in lines if line)
-
-
-def _matches_observation_rule(url: str, rule: str) -> bool:
-    return url.startswith(rule[:-1]) if rule.endswith("/*") else url == rule
 
 
 def _web_usage() -> str:
