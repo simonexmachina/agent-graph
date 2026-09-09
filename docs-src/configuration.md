@@ -217,11 +217,23 @@ Codex has two mutually exclusive permission systems. Use a **permission profile*
 if `sandbox_mode` or `[sandbox_workspace_write]` appears in any active config layer,
 or you pass `--sandbox`, the older system wins and this section does not apply.
 
-In `~/.codex/config.toml` or the project's `.codex/config.toml`:
+In `~/.codex/config.toml` or the project's `.codex/config.toml`, place
+`default_permissions` at the **top level, before any `[section]` header**:
 
 ```toml
 default_permissions = "agentgraph"
+```
 
+Do not append this line after an existing section: TOML treats it as part of that
+section, so Codex cannot find the top-level setting and reports:
+
+```text
+Error: config defines `[permissions]` profiles but does not set `default_permissions`
+```
+
+The permission tables below can go at the bottom of the file:
+
+```toml
 [permissions.agentgraph]
 extends = ":workspace"
 
