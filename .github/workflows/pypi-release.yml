@@ -5,6 +5,18 @@ on:
     tags:
       - "agentgraph-server-v*"
       - "agentgraph-connector-*-v*"
+  # Manual recovery path. GitHub drops push events when a single push carries more
+  # than a few tags, which silently skips those releases, and a missed event cannot
+  # be replayed by re-pushing an existing tag. Dispatch this workflow from a branch
+  # that has this trigger and name the tag to publish; the jobs below check out the
+  # tag itself, so the release is built from the tagged tree rather than the ref the
+  # dispatch ran against.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, e.g. agentgraph-connector-web-v0.5.6"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,8 +26,18 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       package: ${{ steps.release.outputs.package }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
+      - name: Resolve release tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: echo "tag=${INPUT_TAG:-$REF_NAME}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -24,7 +46,7 @@ jobs:
       - name: Resolve release package
         id: release
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: uv run python scripts/release_package.py "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
   build:
@@ -32,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
 
       - uses: astral-sh/setup-uv@v5
         with:
