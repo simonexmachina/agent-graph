@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-router = APIRouter(prefix="/api/cli", tags=["sync"])
+router = APIRouter(prefix="/api/sync", tags=["sync"])
 
 
 @router.post("/poll")

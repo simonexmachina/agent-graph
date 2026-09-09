@@ -45,7 +45,7 @@ try {
     const search = page.locator('#search-input');
     await search.fill('shared context');
     await search.press('Enter');
-    await page.waitForResponse(response => response.url().includes('/api/cli/browse/nodes'));
+    await page.waitForResponse(response => response.url().includes('/api/graph/nodes'));
   }));
   workloads.push(await measure('viewer.list_paging', async () => {
     await page.locator('#list-tab').click();

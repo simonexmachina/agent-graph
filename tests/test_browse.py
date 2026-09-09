@@ -1,4 +1,4 @@
-"""Tests for the /api/cli/browse endpoint."""
+"""Tests for the graph browse endpoints."""
 
 from __future__ import annotations
 
@@ -73,16 +73,20 @@ def test_server_exposes_only_viewer_extension_and_sync_routes() -> None:
     paths = {route.path for route in app.routes if isinstance(route, Route | Mount)}
     assert {
         "/api/meta",
-        "/api/cli/entity/{entity_id:path}",
-        "/api/cli/edges/{entity_id:path}",
-        "/api/cli/browse/nodes",
-        "/api/cli/browse/edges",
-        "/api/cli/bookmark",
-        "/api/cli/delete",
-        "/api/cli/unify-persons",
-        "/api/cli/fetch-entity",
-        "/api/cli/poll",
-        "/api/cli/ingest",
+        "/api/capabilities",
+        "/api/entities/search",
+        "/api/entities/{ref:path}",
+        "/api/entities/{ref:path}/edges",
+        "/api/entities/{ref:path}/bookmark",
+        "/api/entities/{ref:path}/fetch",
+        "/api/entities/{ref:path}/download",
+        "/api/fetches",
+        "/api/persons/unify",
+        "/api/graph/nodes",
+        "/api/graph/edges",
+        "/api/graph/traverse/{ref:path}",
+        "/api/sync/poll",
+        "/api/sync/ingest",
         "/report-observation",
         "/report-dwell",
         "/api/extension/fetch",
@@ -92,14 +96,12 @@ def test_server_exposes_only_viewer_extension_and_sync_routes() -> None:
         "/viewer",
         "/health",
     } <= paths
+    # Endpoints must not name the client that calls them. /api/cli and /api/query
+    # were retired for the resource paths above; neither had an independently
+    # installed consumer, so there are no compatibility aliases to keep.
+    assert not {path for path in paths if path.startswith(("/api/cli", "/api/query"))}
     assert {
-        "/api/cli/search",
-        "/api/cli/entity-by-url",
-        "/api/cli/traverse/{entity_id:path}",
-        "/api/cli/query",
-        "/api/cli/fetch",
-        "/api/cli/download",
-        "/api/cli/browse",
+        "/api/entities/entity-by-url",
         "/api/admin/relink",
         "/static",
     }.isdisjoint(paths)
@@ -119,7 +121,7 @@ def test_viewer_uses_bookmark_symbol_without_status_row() -> None:
     assert "aria-pressed" in viewer_html
     assert "applyZoomStyles();" in viewer_html
     assert "cy.style().update();" in viewer_html
-    assert "/api/cli/delete" in viewer_html
+    assert "/api/entities/${encodeRef(entity.id)}`" in viewer_html
     assert "detailFocus.onclick = () => {" in viewer_html
     assert "if (readUrlState().node_id !== entity.id) {" in viewer_html
     assert "lookupInput.value = '';" in viewer_html
@@ -142,7 +144,7 @@ def test_viewer_unifies_people_and_refreshes_the_active_view() -> None:
 
     assert "function renderPersonUnificationControls(entity)" in viewer_html
     assert "Merge duplicate people" in viewer_html
-    assert "/api/cli/unify-persons" in viewer_html
+    assert "/api/persons/unify" in viewer_html
     assert "const primary = result.primary;" in viewer_html
     assert "await forceRefreshGraph();" in viewer_html
     assert "await showEntityDetail(primary.id);" in viewer_html
@@ -293,8 +295,8 @@ def test_viewer_has_native_remote_list_mode() -> None:
     assert "tabulator" not in viewer_html.lower()
     assert '<table id="node-list" aria-label="Entities">' in viewer_html
     assert 'id="node-list-body"' in viewer_html
-    assert "/api/cli/browse/nodes" in viewer_html
-    assert "/api/cli/browse/edges" in viewer_html
+    assert "/api/graph/nodes" in viewer_html
+    assert "/api/graph/edges" in viewer_html
     assert "function loadList(params)" in viewer_html
     assert "function renderList(rawNodes, params)" in viewer_html
     assert "page: 1, size: params.limit" in viewer_html
@@ -472,7 +474,6 @@ def test_viewer_sidebar_uses_native_form_submission() -> None:
     assert "function wireTextInputSubmission(input, submit)" not in viewer_html
     assert "searchInput.addEventListener('input'" not in viewer_html
     assert "lookupInput.addEventListener('keydown'" not in viewer_html
-    assert "encodeURIComponent(q) + '?content_limit=300'" in viewer_html
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +483,7 @@ def test_viewer_sidebar_uses_native_form_submission() -> None:
 @pytest.mark.asyncio
 async def test_focal_node_shown_when_type_filter_excludes_it() -> None:
     """node_id entity is always in results even if entity_type filter would exclude it."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     focal = _entity(entity_type="Person", platform="slack")
     neighbour = _entity(entity_type="Document")
@@ -495,12 +496,12 @@ async def test_focal_node_shown_when_type_filter_excludes_it() -> None:
     )
     set_backend(backend)
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=focal)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [focal, neighbour], "edges": [edge]})), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value={"nodes": [focal, neighbour], "edges": [edge]})), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=focal["id"],
             entity_type=["Document"],  # excludes Person
@@ -522,7 +523,7 @@ async def test_focal_node_shown_when_type_filter_excludes_it() -> None:
 @pytest.mark.asyncio
 async def test_entity_type_filter_excludes_non_focal_nodes() -> None:
     """Non-focal nodes that don't match entity_type filter are excluded."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     focal = _entity(entity_type="Person", platform="slack")
     doc = _entity(entity_type="Document")
@@ -532,12 +533,12 @@ async def test_entity_type_filter_excludes_non_focal_nodes() -> None:
 
     traverse_result = {"nodes": [focal, doc, msg], "edges": [edge_doc, edge_msg]}
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=focal)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value=traverse_result)), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value=traverse_result)), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=focal["id"],
             entity_type=["Person", "Document"],  # excludes Message
@@ -561,16 +562,16 @@ async def test_entity_type_filter_excludes_non_focal_nodes() -> None:
 @pytest.mark.asyncio
 async def test_depth_ignored_without_node_id() -> None:
     """When no node_id is given, traverse_graph is never called."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     mock_traverse = AsyncMock(return_value={"nodes": [], "edges": []})
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
-         patch("agentgraph.server.cli_api.traverse_graph", mock_traverse), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.browse_api.traverse_graph", mock_traverse), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         await cli_browse(
             node_id=None,
             entity_type=[],
@@ -587,17 +588,17 @@ async def test_depth_ignored_without_node_id() -> None:
 @pytest.mark.asyncio
 async def test_traverse_called_with_depth_when_node_id_given() -> None:
     """When node_id is given, traverse_graph is called with the specified depth."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     focal = _entity(entity_type="Person")
     mock_traverse = AsyncMock(return_value={"nodes": [focal], "edges": []})
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=focal)), \
-         patch("agentgraph.server.cli_api.traverse_graph", mock_traverse), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)), \
+         patch("agentgraph.server.browse_api.traverse_graph", mock_traverse), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         await cli_browse(
             node_id=focal["id"],
             entity_type=[],
@@ -616,17 +617,17 @@ async def test_traverse_called_with_depth_when_node_id_given() -> None:
 @pytest.mark.asyncio
 async def test_browse_allows_zero_depth_for_a_node_only_view() -> None:
     """A focused browse request passes depth zero through to traversal."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     focal = _entity(entity_type="Person")
     mock_traverse = AsyncMock(return_value={"nodes": [focal], "edges": []})
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=focal)), \
-         patch("agentgraph.server.cli_api.traverse_graph", mock_traverse), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)), \
+         patch("agentgraph.server.browse_api.traverse_graph", mock_traverse), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=focal["id"],
             entity_type=[],
@@ -650,7 +651,7 @@ async def test_browse_allows_zero_depth_for_a_node_only_view() -> None:
 @pytest.mark.asyncio
 async def test_reachability_prune_removes_disconnected_nodes() -> None:
     """Nodes not reachable from focal through the filtered edge set are pruned."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     focal = _entity(entity_type="Person")
     connected = _entity(entity_type="Message")
@@ -660,12 +661,12 @@ async def test_reachability_prune_removes_disconnected_nodes() -> None:
 
     traverse_result = {"nodes": [focal, connected, orphan], "edges": [edge]}
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=focal)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value=traverse_result)), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value=traverse_result)), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=focal["id"],
             entity_type=[],
@@ -689,17 +690,17 @@ async def test_reachability_prune_removes_disconnected_nodes() -> None:
 @pytest.mark.asyncio
 async def test_no_node_id_returns_list_entities() -> None:
     """Without node_id or search, list_entities is used."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     entities = [_entity(), _entity()]
     mock_list = AsyncMock(return_value=entities)
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", mock_list), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", mock_list), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=None,
             entity_type=[],
@@ -721,7 +722,7 @@ async def test_no_node_id_returns_list_entities() -> None:
 @pytest.mark.asyncio
 async def test_search_with_node_id_intersects_neighbourhood() -> None:
     """Search results are intersected with the neighbourhood when node_id is given."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     focal = _entity(entity_type="Person")
     in_neighbourhood = _entity(entity_type="Document", title="Match")
@@ -734,12 +735,12 @@ async def test_search_with_node_id_intersects_neighbourhood() -> None:
     }
     search_results = [in_neighbourhood, outside_neighbourhood]
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=focal)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value=traverse_result)), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=search_results)), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value=traverse_result)), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=search_results)), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=focal["id"],
             entity_type=[],
@@ -754,6 +755,42 @@ async def test_search_with_node_id_intersects_neighbourhood() -> None:
     assert outside_neighbourhood["id"] not in node_ids
     assert in_neighbourhood["id"] in node_ids
     assert focal["id"] in node_ids  # focal always present
+
+
+@pytest.mark.parametrize("since", ["24h", "2025-01-02T00:00:00Z"])
+@pytest.mark.asyncio
+async def test_search_pushes_platform_and_since_into_the_query(since: str) -> None:
+    """Search takes the same filters as entity listing, applied as SQL predicates.
+
+    They used to be post-filtered in Python here because the ranked path could not
+    express them; the merged search can, so the viewer just forwards them.
+    """
+    from agentgraph.server.browse_api import cli_browse
+
+    mock_search = AsyncMock(return_value=[])
+    with patch("agentgraph.server.browse_api.search_entities", mock_search), patch(
+        "agentgraph.server.browse_api.get_edges_for_entities",
+        AsyncMock(return_value=[]),
+    ):
+        await cli_browse(
+            node_id=None,
+            entity_type=[],
+            search="match",
+            platform="slack",
+            since=since,
+            depth=2,
+            limit=50,
+        )
+
+    mock_search.assert_awaited_once_with(
+        "match",
+        entity_types=None,
+        limit=51,
+        min_score=0.0,
+        platform="slack",
+        since=since,
+        content_limit=300,
+    )
 
 
 @pytest.mark.parametrize(
@@ -772,43 +809,55 @@ async def test_search_with_node_id_intersects_neighbourhood() -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_search_filters_since_using_parsed_timestamps(
+async def test_neighbourhood_filters_since_using_parsed_timestamps(
     since: str,
     included_updated_at: str,
     excluded_updated_at: str,
 ) -> None:
-    """Search supports the same relative and ISO since values as entity listing."""
-    from agentgraph.server.cli_api import cli_browse
+    """The neighbourhood path has no predicate hook, so it still filters in Python."""
+    from agentgraph.server.browse_api import cli_browse
 
+    focal = _entity(title="Focal")
     included = _entity(title="Recent match")
     included["updated_at"] = included_updated_at
     excluded = _entity(title="Old match")
     excluded["updated_at"] = excluded_updated_at
 
+    traverse_result = {
+        "nodes": [focal, included, excluded],
+        "edges": [_edge(focal["id"], included["id"]), _edge(focal["id"], excluded["id"])],
+    }
+
     with patch(
-        "agentgraph.server.cli_api.search_entities",
-        AsyncMock(return_value=[included, excluded]),
+        "agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)
     ), patch(
-        "agentgraph.server.cli_api.get_edges_for_entities",
+        "agentgraph.server.browse_api.traverse_graph",
+        AsyncMock(return_value=traverse_result),
+    ), patch(
+        "agentgraph.server.browse_api.get_edges_for_entities",
         AsyncMock(return_value=[]),
+    ), patch(
+        "agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])
     ):
         result = await cli_browse(
-            node_id=None,
+            node_id=focal["id"],
             entity_type=[],
-            search="match",
+            search=None,
             platform=None,
             since=since,
             depth=2,
             limit=50,
         )
 
-    assert [node["id"] for node in result["nodes"]] == [included["id"]]
+    node_ids = {node["id"] for node in result["nodes"]}
+    assert included["id"] in node_ids
+    assert excluded["id"] not in node_ids
 
 
 @pytest.mark.asyncio
 async def test_browse_nodes_include_display_name_from_title() -> None:
     """Viewer nodes include a human label derived from title."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     thread = _entity(
         entity_type="Email",
@@ -816,12 +865,12 @@ async def test_browse_nodes_include_display_name_from_title() -> None:
         title="Quarterly planning sync with vendor and finance",
     )
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[thread])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[thread])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=None,
             entity_type=[],
@@ -838,17 +887,17 @@ async def test_browse_nodes_include_display_name_from_title() -> None:
 @pytest.mark.asyncio
 async def test_browse_nodes_fall_back_to_content_for_display_name() -> None:
     """Viewer nodes fall back to normalised content when title is missing."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     message = _entity(entity_type="Message", title="")
     message["content"] = "  First line\nwith extra   spacing  "
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[message])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[message])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=None,
             entity_type=[],
@@ -866,7 +915,7 @@ async def test_browse_nodes_fall_back_to_content_for_display_name() -> None:
 @pytest.mark.asyncio
 async def test_browse_message_nodes_include_truncated_viewer_label() -> None:
     """Message nodes expose a shortened label for graph rendering."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     message = _entity(entity_type="Message", title="")
     message["content"] = (
@@ -874,12 +923,12 @@ async def test_browse_message_nodes_include_truncated_viewer_label() -> None:
         "while keeping the full display name available in the detail view."
     )
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[message])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[message])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=None,
             entity_type=[],
@@ -899,17 +948,17 @@ async def test_browse_message_nodes_include_truncated_viewer_label() -> None:
 @pytest.mark.asyncio
 async def test_browse_nodes_preserve_bookmarked_flag() -> None:
     """Viewer nodes expose bookmark state for graph styling and detail actions."""
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
     document = _entity(entity_type="Document", title="Pinned Doc")
     document["bookmarked"] = True
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
-         patch("agentgraph.server.cli_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
-         patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.list_entities", AsyncMock(return_value=[document])), \
-         patch("agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])), \
-         patch("agentgraph.server.cli_api.get_entities_by_ids", AsyncMock(return_value=[])):
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=None)), \
+         patch("agentgraph.server.browse_api.traverse_graph", AsyncMock(return_value={"nodes": [], "edges": []})), \
+         patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.list_entities", AsyncMock(return_value=[document])), \
+         patch("agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])), \
+         patch("agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])):
         result = await cli_browse(
             node_id=None,
             entity_type=[],
@@ -932,9 +981,9 @@ async def test_browse_404_when_node_id_not_found() -> None:
     """Returns 404 when the specified node_id does not exist."""
     from fastapi import HTTPException
 
-    from agentgraph.server.cli_api import cli_browse
+    from agentgraph.server.browse_api import cli_browse
 
-    with patch("agentgraph.server.cli_api.get_entity", AsyncMock(return_value=None)), \
+    with patch("agentgraph.server.browse_api.get_entity", AsyncMock(return_value=None)), \
          pytest.raises(HTTPException) as exc_info:
         await cli_browse(
             node_id="nonexistent-id",
@@ -951,34 +1000,40 @@ async def test_browse_404_when_node_id_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_entity_returns_bad_request_for_connector_runtime_error() -> None:
-    """A re-fetch by UUID must expose connector setup errors without a 500."""
-    from fastapi import HTTPException
+    """A re-fetch by UUID must expose connector setup errors without a 500.
 
-    from agentgraph.server.cli_api import cli_fetch_entity
+    Connectors signal missing credentials with RuntimeError, so this goes through the
+    HTTP layer: the mapping lives in GraphAPIRoute, not in the handler function.
+    """
+    import httpx
 
-    with (
-        patch(
-            "agentgraph.graph.fetch.fetch_entity_by_id",
-            new=AsyncMock(side_effect=RuntimeError("Google credentials not configured. Run: agentgraph auth google")),
-        ),
-        pytest.raises(HTTPException) as exc_info,
+    from agentgraph.server.app import app
+
+    message = "Google credentials not configured. Run: agentgraph auth google"
+    entity_id = "01139ce4-550b-4086-8c4c-8f5bae045281"
+    with patch(
+        "agentgraph.graph.fetch.fetch_entity_by_id",
+        new=AsyncMock(side_effect=RuntimeError(message)),
     ):
-        await cli_fetch_entity(entity_id="01139ce4-550b-4086-8c4c-8f5bae045281")
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(base_url="http://test", transport=transport) as client:
+            response = await client.post(f"/api/entities/{entity_id}/fetch")
 
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "Google credentials not configured. Run: agentgraph auth google"
+    assert response.status_code == 400
+    # The class name travels with the message so clients can re-raise the same type.
+    assert response.json()["detail"] == {"message": message, "error_type": "RuntimeError"}
 
 
 @pytest.mark.asyncio
 async def test_browse_nodes_returns_paginated_node_page() -> None:
     """The list endpoint exposes Tabulator-compatible pagination metadata."""
-    from agentgraph.server.cli_api import cli_browse_nodes
+    from agentgraph.server.browse_api import browse_nodes
 
     entities = [_entity(title="First"), _entity(title="Second")]
     mock_page = AsyncMock(return_value=(entities, 7))
 
-    with patch("agentgraph.server.cli_api.list_entities_page", mock_page):
-        result = await cli_browse_nodes(
+    with patch("agentgraph.server.browse_api.list_entities_page", mock_page):
+        result = await browse_nodes(
             search=None,
             entity_type=[],
             platform=None,
@@ -1011,11 +1066,11 @@ async def test_browse_nodes_returns_paginated_node_page() -> None:
 @pytest.mark.asyncio
 async def test_browse_nodes_can_skip_ordering_for_graph_view() -> None:
     """Graph node pages tell storage to omit ordering without changing list defaults."""
-    from agentgraph.server.cli_api import cli_browse_nodes
+    from agentgraph.server.browse_api import browse_nodes
 
     mock_page = AsyncMock(return_value=([_entity(title="Node")], 1))
-    with patch("agentgraph.server.cli_api.list_entities_page", mock_page):
-        await cli_browse_nodes(
+    with patch("agentgraph.server.browse_api.list_entities_page", mock_page):
+        await browse_nodes(
             search=None,
             entity_type=["Message", "Email"],
             platform=None,
@@ -1045,15 +1100,15 @@ async def test_browse_nodes_can_skip_ordering_for_graph_view() -> None:
 @pytest.mark.asyncio
 async def test_browse_nodes_reports_results_beyond_limit() -> None:
     """The list endpoint distinguishes the active cap from the full result count."""
-    from agentgraph.server.cli_api import cli_browse_nodes
+    from agentgraph.server.browse_api import browse_nodes
 
     entities = [_entity(title="First"), _entity(title="Second")]
 
     with patch(
-        "agentgraph.server.cli_api.list_entities_page",
+        "agentgraph.server.browse_api.list_entities_page",
         AsyncMock(return_value=(entities, 7)),
     ):
-        result = await cli_browse_nodes(
+        result = await browse_nodes(
             search=None,
             entity_type=[],
             platform=None,
@@ -1075,15 +1130,15 @@ async def test_browse_nodes_reports_results_beyond_limit() -> None:
 @pytest.mark.asyncio
 async def test_browse_nodes_checks_one_extra_search_result() -> None:
     """Search overflow is detected without returning more than the active limit."""
-    from agentgraph.server.cli_api import cli_browse_nodes
+    from agentgraph.server.browse_api import browse_nodes
 
     entities = [_entity(title=f"Result {index}") for index in range(3)]
     mock_search = AsyncMock(return_value=entities)
 
-    with patch("agentgraph.server.cli_api.search_entities", mock_search), patch(
-        "agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])
+    with patch("agentgraph.server.browse_api.search_entities", mock_search), patch(
+        "agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])
     ):
-        result = await cli_browse_nodes(
+        result = await browse_nodes(
             search="result",
             entity_type=[],
             platform=None,
@@ -1101,21 +1156,27 @@ async def test_browse_nodes_checks_one_extra_search_result() -> None:
     assert result["total"] == 2
     assert result["has_more"] is True
     mock_search.assert_awaited_once_with(
-        "result", entity_types=None, limit=3, min_score=0.0, content_limit=300
+        "result",
+        entity_types=None,
+        limit=3,
+        min_score=0.0,
+        platform=None,
+        since=None,
+        content_limit=300,
     )
 
 
 @pytest.mark.asyncio
 async def test_browse_nodes_sorts_search_results_by_display_name() -> None:
     """Sorting a list header also orders search-backed result sets."""
-    from agentgraph.server.cli_api import cli_browse_nodes
+    from agentgraph.server.browse_api import browse_nodes
 
     zulu = _entity(title="Zulu")
     alpha = _entity(title="Alpha")
-    with patch("agentgraph.server.cli_api.search_entities", AsyncMock(return_value=[zulu, alpha])), patch(
-        "agentgraph.server.cli_api.get_edges_for_entities", AsyncMock(return_value=[])
+    with patch("agentgraph.server.browse_api.search_entities", AsyncMock(return_value=[zulu, alpha])), patch(
+        "agentgraph.server.browse_api.get_edges_for_entities", AsyncMock(return_value=[])
     ):
-        result = await cli_browse_nodes(
+        result = await browse_nodes(
             search="letter",
             entity_type=[],
             platform=None,
@@ -1135,7 +1196,7 @@ async def test_browse_nodes_sorts_search_results_by_display_name() -> None:
 @pytest.mark.asyncio
 async def test_browse_edges_accepts_comma_separated_node_ids() -> None:
     """Edge lookup deduplicates node IDs and omits edges outside the visible set."""
-    from agentgraph.server.cli_api import cli_browse_edges
+    from agentgraph.server.browse_api import browse_edges
 
     first = _entity()
     second = _entity()
@@ -1144,8 +1205,8 @@ async def test_browse_edges_accepts_comma_separated_node_ids() -> None:
     hidden_edge = _edge(first["id"], outside["id"])
     mock_edges = AsyncMock(return_value=[visible_edge, hidden_edge])
 
-    with patch("agentgraph.server.cli_api.get_edges_for_entities", mock_edges):
-        result = await cli_browse_edges(f" {first['id']}, {second['id']}, {first['id']} ")
+    with patch("agentgraph.server.browse_api.get_edges_for_entities", mock_edges):
+        result = await browse_edges(f" {first['id']}, {second['id']}, {first['id']} ")
 
     assert result == {"edges": [visible_edge]}
     mock_edges.assert_awaited_once_with([first["id"], second["id"]])

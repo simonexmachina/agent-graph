@@ -114,8 +114,14 @@ def _auth_status_display(
 def _server_is_running() -> bool:
     """Return whether the configured AgentGraph server responds to health checks."""
     from agentgraph.config import get_settings
+    from agentgraph.server import uds
 
     settings = get_settings()
+    # Prefer the socket: a sandbox may deny loopback TCP while allowing the socket,
+    # in which case a TCP probe would report a running server as down.
+    if settings.server_uds_path is not None and uds.socket_is_live(settings.server_uds_path):
+        return True
+
     host = "127.0.0.1" if settings.server_host in ("", "0.0.0.0", "::") else settings.server_host
     url = f"http://{host}:{settings.server_port}/health"
     try:
@@ -528,33 +534,99 @@ def serve(
     configure_logging(settings.log_level, settings.log_file)
     typer.echo(f"AgentGraph config directory: {get_config_paths()[0]}")
     typer.echo(f"AgentGraph log file: {settings.log_file.expanduser()}")
-    uvicorn.run(
+
+    uds_path = settings.server_uds_path
+    if uds_path is None or reload:
+        # Reload runs a supervisor that rebinds on its own, so it cannot take the
+        # pre-bound sockets below; serve TCP only and say so.
+        if reload and uds_path is not None:
+            typer.echo(f"Reload mode serves TCP only; not listening on {uds_path}")
+        uvicorn.run(
+            "agentgraph.server.app:app",
+            host=settings.server_host,
+            port=settings.server_port,
+            reload=reload,
+        )
+        return
+
+    from agentgraph.server import uds
+
+    # TCP stays bound for the browser extension and graph viewer; the socket is for
+    # CLI clients in sandboxes that deny loopback TCP.
+    config = uvicorn.Config(
         "agentgraph.server.app:app",
         host=settings.server_host,
         port=settings.server_port,
-        reload=reload,
     )
+    try:
+        uds_socket = uds.bind_socket(uds_path, backlog=config.backlog)
+    except OSError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+    typer.echo(f"AgentGraph socket: {uds_path}")
+    # The app's shutdown hook does the removal: uvicorn's signal handling exits
+    # without unwinding this frame, so a finally here would not run on SIGTERM.
+    uds.set_owned_socket(uds_path)
+    try:
+        uvicorn.Server(config).run(sockets=[config.bind_socket(), uds_socket])
+    finally:
+        uds_socket.close()
+        uds.release_owned_socket()
 
 
 @app.command()
 def search(
-    query: str = typer.Argument(..., help="Search query"),
+    query: str | None = typer.Argument(
+        None, help="Search query. Omit to select by filters alone, newest first."
+    ),
     type: list[str] = typer.Option([], "--type", "-t", help="Filter by entity type"),
     platform: str | None = typer.Option(
         None, "--platform", "-p", help="Scope to a single platform (e.g. slack, discord)"
     ),
-    limit: int = typer.Option(10, "--limit", "-n", help="Maximum results"),
-    min_score: float = typer.Option(0.03, "--min-score", help="Minimum relevance score (0–1)"),
+    filter: list[str] = typer.Option(
+        [], "--filter", "-f", help="key=value filters (column or metadata)"
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        "-s",
+        help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)",
+    ),
+    mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
+    has_attachments: bool = typer.Option(
+        False, "--has-attachments", help="Only Message entities that have file/image attachments"
+    ),
+    limit: int | None = typer.Option(
+        None, "--limit", "-n", help="Maximum results (default 10 with a query, 50 without)"
+    ),
+    order_by: str | None = typer.Option(
+        None,
+        "--order-by",
+        "-o",
+        help=(
+            "Sort by a date column instead of relevance (created_at, updated_at, "
+            "source_created_at, source_updated_at, observed_at, synced_at)"
+        ),
+    ),
+    min_score: float = typer.Option(
+        0.03, "--min-score", help="Minimum relevance score (0–1); ignored without a query"
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Search the knowledge graph."""
+    """Search the knowledge graph, or list entities matching filters alone."""
     from agentgraph.cli_query import cmd_search
 
     cmd_search(
         query=query,
         entity_types=type,
         platform=platform,
+        filters=dict(f.split("=", 1) for f in filter if "=" in f),
+        since=since,
+        authored_by_me=mine,
+        has_attachments=has_attachments,
         limit=limit,
+        order_by=order_by,
         min_score=min_score,
         as_json=json,
     )
@@ -752,6 +824,18 @@ def mcp_config() -> None:
     typer.echo("  Add this to ~/Library/Application Support/Claude/claude_desktop_config.json:\n")
     typer.echo(json.dumps(config, indent=2))
     typer.echo()
+    typer.echo("Codex:")
+    typer.echo("  Register the server from your terminal:\n")
+    typer.echo(f"  codex mcp add agentgraph -- {binary} mcp-serve")
+    typer.echo()
+    typer.echo("Claude Code:")
+    typer.echo("  Register the server from your terminal:\n")
+    typer.echo(f"  claude mcp add agentgraph -- {binary} mcp-serve")
+    typer.echo()
+    typer.echo("Every client above runs the same server. Reads follow")
+    typer.echo("AGENTGRAPH_QUERY_TRANSPORT: by default the local server when one is")
+    typer.echo("reachable, otherwise the database directly.")
+    typer.echo()
 
 
 @app.command()
@@ -804,15 +888,9 @@ def mcp_serve(
     ),
 ) -> None:
     """Start the AgentGraph MCP server."""
-    import asyncio
-
-    from agentgraph.core.context import set_backend
-    from agentgraph.core.runtime import create_backend
-
-    backend = create_backend()
-    asyncio.run(backend.initialize())
-    set_backend(backend)
-
+    # The backend is opened on first use inside the serving loop rather than here.
+    # A transport of `server` never needs it, and opening it under a throwaway
+    # asyncio.run() bound its connection to a loop that was closed before serving.
     from agentgraph.mcp.server import mcp
 
     if transport in ("sse", "streamable-http"):
@@ -836,47 +914,3 @@ def poll(
     from agentgraph.cli_sync import cmd_poll
 
     cmd_poll(source=source, as_json=json)
-
-
-@app.command()
-def query(
-    entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
-    filter: list[str] = typer.Option(
-        [], "--filter", "-f", help="key=value filters (column or metadata)"
-    ),
-    since: str | None = typer.Option(
-        None,
-        "--since",
-        "-s",
-        help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)",
-    ),
-    mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
-    has_attachments: bool = typer.Option(
-        False, "--has-attachments", help="Only Message entities that have file/image attachments"
-    ),
-    limit: int = typer.Option(50, "--limit", "-n", help="Maximum results"),
-    order_by: str = typer.Option(
-        "created_at",
-        "--order-by",
-        "-o",
-        help=(
-            "Column to sort by (created_at, updated_at, source_created_at, "
-            "source_updated_at, observed_at, synced_at)"
-        ),
-    ),
-    json: bool = typer.Option(False, "--json", help="Output as JSON"),
-) -> None:
-    """Query entities by type and filters."""
-    from agentgraph.cli_query import cmd_query
-
-    parsed_filters = dict(f.split("=", 1) for f in filter if "=" in f)
-    cmd_query(
-        entity_type=entity_type,
-        filters=parsed_filters,
-        limit=limit,
-        order_by=order_by,
-        since=since,
-        authored_by_me=mine,
-        has_attachments=has_attachments,
-        as_json=json,
-    )

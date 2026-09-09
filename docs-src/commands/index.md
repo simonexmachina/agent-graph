@@ -12,8 +12,7 @@ aliases = ["commands.html"]
 
 ## Query
 
-- [`search`](/commands/search.html) - hybrid semantic and lexical search.
-- [`query`](/commands/query.html) - structured filtering by entity type, metadata, time, and attachments.
+- [`search`](/commands/search.html) - hybrid semantic and lexical search, plus structured filtering by entity type, metadata, time, and attachments.
 - [`get`](/commands/get.html) - fetch one entity by UUID, prefix, or platform ref.
 - [`edges`](/commands/edges.html) - list connected graph edges for one entity.
 - [`traverse`](/commands/traverse.html) - walk the neighborhood around one entity.

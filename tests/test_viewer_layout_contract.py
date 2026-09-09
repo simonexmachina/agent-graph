@@ -34,18 +34,23 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
         elif path == "/api/meta":
             time.sleep(server.meta_delay_seconds)
             self._send(200, "application/json", {"entity_types": ["Document"], "platforms": []})
-        elif path.startswith("/api/cli/entity/"):
-            entity_id = path.removeprefix("/api/cli/entity/")
+        elif path.startswith("/api/entities/") and path.endswith("/edges"):
+            entity_id = path.removeprefix("/api/entities/").removesuffix("/edges")
+            entity = next((node for node in server.nodes if node["id"] == entity_id), None)
+            if entity is None:
+                self._send(404, "application/json", {"detail": "not found"})
+            else:
+                self._send(200, "application/json", {"entity": entity, "edges": server.edges})
+        elif path.startswith("/api/entities/"):
+            entity_id = path.removeprefix("/api/entities/")
             entity = next((node for node in server.nodes if node["id"] == entity_id), None)
             if entity:
                 self._send(200, "application/json", entity)
             else:
                 self._send(404, "application/json", {"detail": "not found"})
-        elif path.startswith("/api/cli/edges/"):
-            self._send(200, "application/json", server.edges)
-        elif path == "/api/cli/browse/nodes":
+        elif path == "/api/graph/nodes":
             self._send(200, "application/json", {"data": server.nodes, "has_more": False})
-        elif path == "/api/cli/browse/edges":
+        elif path == "/api/graph/edges":
             self._send(200, "application/json", {"edges": server.edges})
         else:
             self._send(404, "application/json", {"detail": "not found"})
@@ -53,13 +58,13 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         server = cast(_ViewerFixtureServer, self.server)
         request = urlsplit(self.path)
-        if request.path != "/api/cli/unify-persons":
+        if request.path != "/api/persons/unify":
             self._send(404, "application/json", {"detail": "not found"})
             return
 
         params = parse_qs(request.query)
-        primary_id = params.get("primary", [""])[0]
-        duplicate_ids = params.get("duplicate", [])
+        primary_id = params.get("canonical_id", [""])[0]
+        duplicate_ids = params.get("duplicate_ids", [])
         primary = next((node for node in server.nodes if node["id"] == primary_id), None)
         duplicates = [node for node in server.nodes if node["id"] in duplicate_ids]
         if primary is None or len(duplicates) != len(duplicate_ids):

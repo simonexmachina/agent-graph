@@ -1,10 +1,10 @@
 [project]
 name = "agentgraph-connector-discord"
-version = "0.5.4"
+version = "0.5.6"
 description = "Discord connector for AgentGraph"
 requires-python = ">=3.12"
 dependencies = [
-    "agentgraph-server>=0.5.0,<0.7",
+    "agentgraph-server>=0.7.0,<0.8",
     "httpx>=0.28.1",
 ]
 
