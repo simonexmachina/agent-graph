@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { getActionIndicator, getActionTitle } = await import("../dist/lib/action-indicator.js");
+const { BOOKMARK_INDICATOR_COLOR, getActionIndicator, getActionTitle } = await import("../dist/lib/action-indicator.js");
+
+test("uses a black bookmark stripe in the toolbar icon", () => {
+  assert.equal(BOOKMARK_INDICATOR_COLOR, "#000000");
+});
 
 test("maps active observation states to distinct toolbar indicators", () => {
   assert.deepEqual(getActionIndicator("waiting"), {

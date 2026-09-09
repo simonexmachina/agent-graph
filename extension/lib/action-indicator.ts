@@ -24,6 +24,8 @@ const BASE_ICON_PATHS = {
   32: "assets/icon-32.png",
 };
 
+export const BOOKMARK_INDICATOR_COLOR = "#000000";
+
 const INDICATORS: Partial<Record<ObservationState, ActionIndicator>> = {
   waiting: { color: "#2563eb", title: "AgentGraph: observing page" },
   sending: { color: "#f59e0b", title: "AgentGraph: sending observation" },
@@ -73,7 +75,7 @@ function drawBookmarkIndicator(context: OffscreenCanvasRenderingContext2D, size:
   context.lineTo(inset + width / 2, inset + height - notch);
   context.lineTo(inset, inset + height);
   context.closePath();
-  context.fillStyle = "#eab308";
+  context.fillStyle = BOOKMARK_INDICATOR_COLOR;
   context.fill();
 }
 
