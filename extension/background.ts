@@ -16,7 +16,10 @@ import {
   updateMeta,
   type ObservationStatus,
 } from "./lib/observation.js";
-import { updateActionIndicator } from "./lib/action-indicator.js";
+import {
+  createActionIndicatorStateController,
+  updateActionIndicator,
+} from "./lib/action-indicator.js";
 import { getExtensionBookmarkUrl, getExtensionFetchUrl, getExtensionPageUrl, getServerBaseUrl } from "./lib/config.js";
 
 // Gmail metadata extracted by the content script, keyed by tab ID.
@@ -38,10 +41,14 @@ function renderActionIndicator(): void {
   void updateActionIndicator(actionObservationState, actionBookmarked);
 }
 
+const actionIndicatorState = createActionIndicatorStateController((state) => {
+  actionObservationState = state;
+  renderActionIndicator();
+});
+
 onObservationStatusChange((tabId, status) => {
   if (tabId !== activeTabId) return;
-  actionObservationState = status.state;
-  renderActionIndicator();
+  actionIndicatorState.update(status.state);
 });
 
 function clearGmailMetaRetry(tabId: number): void {
@@ -99,9 +106,8 @@ async function onFocus(tabId: number): Promise<void> {
 
   const url = tab.url ?? "";
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    actionObservationState = "not_matched";
+    actionIndicatorState.update("not_matched");
     actionBookmarked = false;
-    renderActionIndicator();
     return;
   }
 
@@ -342,9 +348,8 @@ async function initialiseBackground(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id != null) await onFocus(tab.id);
   else {
-    actionObservationState = "not_matched";
+    actionIndicatorState.update("not_matched");
     actionBookmarked = false;
-    renderActionIndicator();
   }
 }
 

@@ -1,10 +1,46 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { BOOKMARK_INDICATOR_COLOR, getActionIndicator, getActionTitle } = await import("../dist/lib/action-indicator.js");
+const {
+  BOOKMARK_INDICATOR_COLOR,
+  SENT_INDICATOR_DURATION_MS,
+  createActionIndicatorStateController,
+  getActionIndicator,
+  getActionTitle,
+} = await import("../dist/lib/action-indicator.js");
 
 test("uses a black bookmark stripe in the toolbar icon", () => {
   assert.equal(BOOKMARK_INDICATOR_COLOR, "#000000");
+});
+
+test("clears the sent indicator after two seconds", async () => {
+  const states = [];
+  const controller = createActionIndicatorStateController(
+    (state) => states.push(state),
+    5,
+  );
+
+  controller.update("sent");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  controller.dispose();
+
+  assert.equal(SENT_INDICATOR_DURATION_MS, 2_000);
+  assert.deepEqual(states, ["sent", "not_matched"]);
+});
+
+test("does not clear a newer action indicator state", async () => {
+  const states = [];
+  const controller = createActionIndicatorStateController(
+    (state) => states.push(state),
+    5,
+  );
+
+  controller.update("sent");
+  controller.update("waiting");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  controller.dispose();
+
+  assert.deepEqual(states, ["sent", "waiting"]);
 });
 
 test("maps active observation states to distinct toolbar indicators", () => {

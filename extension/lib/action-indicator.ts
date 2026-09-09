@@ -6,7 +6,7 @@
  * visible without opening the popup.
  */
 
-type ObservationState =
+export type ObservationState =
   | "not_matched"
   | "waiting"
   | "sending"
@@ -25,6 +25,7 @@ const BASE_ICON_PATHS = {
 };
 
 export const BOOKMARK_INDICATOR_COLOR = "#000000";
+export const SENT_INDICATOR_DURATION_MS = 2_000;
 
 const INDICATORS: Partial<Record<ObservationState, ActionIndicator>> = {
   waiting: { color: "#2563eb", title: "AgentGraph: observing page" },
@@ -37,6 +38,40 @@ let updateVersion = 0;
 
 export function getActionIndicator(state: ObservationState): ActionIndicator | null {
   return INDICATORS[state] ?? null;
+}
+
+export interface ActionIndicatorStateController {
+  update(state: ObservationState): void;
+  dispose(): void;
+}
+
+export function createActionIndicatorStateController(
+  onStateChange: (state: ObservationState) => void,
+  sentDurationMs = SENT_INDICATOR_DURATION_MS,
+): ActionIndicatorStateController {
+  let sentTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function clearSentTimeout(): void {
+    if (sentTimeout === null) return;
+    clearTimeout(sentTimeout);
+    sentTimeout = null;
+  }
+
+  return {
+    update(state: ObservationState): void {
+      clearSentTimeout();
+      onStateChange(state);
+      if (state !== "sent") return;
+
+      sentTimeout = setTimeout(() => {
+        sentTimeout = null;
+        onStateChange("not_matched");
+      }, sentDurationMs);
+    },
+    dispose(): void {
+      clearSentTimeout();
+    },
+  };
 }
 
 export function getActionTitle(state: ObservationState, bookmarked: boolean): string {
