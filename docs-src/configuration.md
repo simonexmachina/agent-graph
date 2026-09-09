@@ -174,14 +174,6 @@ process already uses `8766`; the callback URL remains on `localhost` at
 redirect URLs. AgentGraph prints a manifest with the configured callback URL during
 Slack app setup.
 
-## Slack workspace filter
-
-If you only want Slack data from one workspace, set `AGENTGRAPH_SLACK_WORKSPACE_ID`.
-
-```bash
-AGENTGRAPH_SLACK_WORKSPACE_ID=T04T4TH8W agentgraph serve
-```
-
 ## Coding agent sandboxes
 
 Several coding agents run shell commands inside an OS-level sandbox. Most of them
