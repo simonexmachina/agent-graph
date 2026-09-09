@@ -538,6 +538,7 @@ def test_filtered_search_uses_graph_operation_without_http() -> None:
         platform=None,
         filters={"platform": "gmail"},
         since=None,
+        observed_since=None,
         authored_by_me=False,
         has_attachments=False,
         order_by="updated_at",

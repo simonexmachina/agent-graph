@@ -93,6 +93,7 @@ async def search_entities(
     has_attachments: bool = Query(default=False),
     order_by: str | None = Query(default=None),
     include: str | None = Query(default=None),
+    observed_since: str | None = Query(default=None),
 ) -> list[dict[str, Any]]:
     """POST, not GET, because ``filters`` is an open-ended field/value mapping.
 
@@ -110,6 +111,7 @@ async def search_entities(
         platform=platform,
         filters=filters or None,
         since=since,
+        observed_since=observed_since,
         authored_by_me=authored_by_me,
         has_attachments=has_attachments,
         order_by=order_by,

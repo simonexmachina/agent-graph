@@ -15,7 +15,7 @@ source_path = "docs-src/mcp/search-entities.md"
 search_entities_tool(query=null, entity_types=null, platform=null, filters=null,
                      since=null, authored_by_me=false, has_attachments=false,
                      limit=null, order_by=null, min_score=0.03,
-                     refresh=false) -> JSON string
+                     refresh=false, observed_since=null) -> JSON string
 ```
 
 ## Notes
@@ -25,6 +25,11 @@ search_entities_tool(query=null, entity_types=null, platform=null, filters=null,
   ranking: the filters select the entities and `order_by` sorts them, newest first.
 - `limit` defaults to 10 with a query and 50 without; `min_score` is ignored
   without a query
+- `since` filters `updated_at`; `observed_since` filters browser observation time
+  (`observed_at`), excluding never-observed entities. Both accept ISO timestamps or
+  relative durations such as `30m`, `12h`, `2d` and include the cutoff itself.
+  When combined, both cutoffs must match. Neither changes ordering. For example,
+  `observed_since="2d", order_by="observed_at"` lists recently observed entities.
 - `order_by` takes a date column (`created_at`, `updated_at`, `source_created_at`,
   `source_updated_at`, `observed_at`, `synced_at`). Combined with a query, results
   are relevance-filtered but date-sorted.

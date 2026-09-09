@@ -591,7 +591,7 @@ def search(
         None,
         "--since",
         "-s",
-        help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)",
+        help="Only results updated at or after this time: ISO timestamp or relative (12h, 30m, 2d)",
     ),
     mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
     has_attachments: bool = typer.Option(
@@ -613,6 +613,11 @@ def search(
         0.03, "--min-score", help="Minimum relevance score (0–1); ignored without a query"
     ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
+    observed_since: str | None = typer.Option(
+        None,
+        "--observed-since",
+        help="Only results observed at or after this time: ISO timestamp or relative (12h, 30m, 2d)",
+    ),
 ) -> None:
     """Search the knowledge graph, or list entities matching filters alone."""
     from agentgraph.cli_query import cmd_search
@@ -623,6 +628,7 @@ def search(
         platform=platform,
         filters=dict(f.split("=", 1) for f in filter if "=" in f),
         since=since,
+        observed_since=observed_since,
         authored_by_me=mine,
         has_attachments=has_attachments,
         limit=limit,

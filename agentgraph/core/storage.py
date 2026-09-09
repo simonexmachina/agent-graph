@@ -93,6 +93,7 @@ class StorageBackend(ABC):
         has_attachments: bool = False,
         order_by: str | None = None,
         content_limit: int | None = None,
+        observed_since: datetime | None = None,
     ) -> list[EntityResult]:
         """Select entities by predicate, ranked by relevance or ordered by date.
 

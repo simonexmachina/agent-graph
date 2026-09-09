@@ -55,9 +55,15 @@ allowlist settings.
 Start with search unless the user already supplied a graph ID, platform reference, or
 known indexed URL. `search` covers both jobs: pass a query string for ranked
 discovery, and add or use only its filters (`--type`, `--platform`, `--filter`,
-`--since`, `--mine`, `--has-attachments`) when the entity type or constraints are
-already known. Omitting the query string turns it into a deterministic listing
-ordered by date.
+`--since`, `--observed-since`, `--mine`, `--has-attachments`) when the entity type or
+constraints are already known. Omitting the query string turns it into a
+deterministic listing ordered by date.
+
+Use `--observed-since 2d` (MCP: `observed_since="2d"`) for entities observed in
+the browser within the last two days. It accepts the same relative durations and
+ISO timestamps as `--since`, which filters `updated_at`. Both cutoffs are inclusive;
+when combined, both must match. Never-observed entities are excluded by
+`--observed-since`. Add `--order-by observed_at` to sort by observation time.
 
 ## Context lifecycle
 

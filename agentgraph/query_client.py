@@ -57,6 +57,7 @@ class QueryClient(Protocol):
         authored_by_me: bool = False,
         has_attachments: bool = False,
         order_by: str | None = None,
+        observed_since: str | None = None,
     ) -> list[dict[str, Any]]: ...
 
     async def get_entity(self, entity_id: str, resolve: bool) -> dict[str, Any] | None: ...
@@ -110,6 +111,7 @@ class InProcessQueryClient:
         authored_by_me: bool = False,
         has_attachments: bool = False,
         order_by: str | None = None,
+        observed_since: str | None = None,
     ) -> list[dict[str, Any]]:
         from agentgraph.graph.operations import summarize_entities
         from agentgraph.graph.query import search_entities
@@ -122,6 +124,7 @@ class InProcessQueryClient:
             platform=platform,
             filters=filters,
             since=since,
+            observed_since=observed_since,
             authored_by_me=authored_by_me,
             has_attachments=has_attachments,
             order_by=order_by,
@@ -319,6 +322,7 @@ class HttpQueryClient:
         authored_by_me: bool = False,
         has_attachments: bool = False,
         order_by: str | None = None,
+        observed_since: str | None = None,
     ) -> list[dict[str, Any]]:
         """POST because ``filters`` is an open-ended field/value mapping."""
         return cast(
@@ -332,6 +336,7 @@ class HttpQueryClient:
                     "min_score": min_score,
                     "platform": platform,
                     "since": since,
+                    "observed_since": observed_since,
                     "authored_by_me": authored_by_me,
                     "has_attachments": has_attachments,
                     "order_by": order_by,

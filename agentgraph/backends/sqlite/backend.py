@@ -116,6 +116,7 @@ def _entity_predicates(
     since: datetime | None = None,
     authored_by: list[str] | None = None,
     has_attachments: bool = False,
+    observed_since: datetime | None = None,
 ) -> tuple[str, list[Any], str, list[Any]]:
     """Build the entity-selection predicates shared by every leg of a search.
 
@@ -143,6 +144,9 @@ def _entity_predicates(
     if since:
         clauses.append("e.updated_at >= ?")
         params.append(_utc_stamp(since))
+    if observed_since:
+        clauses.append("e.observed_at >= ?")
+        params.append(_utc_stamp(observed_since))
     if has_attachments:
         clauses.append(
             "json_extract(e.metadata, '$.attachments') IS NOT NULL"
@@ -1269,6 +1273,7 @@ class SQLiteBackend(StorageBackend):
         has_attachments: bool = False,
         order_by: str | None = None,
         content_limit: int | None = None,
+        observed_since: datetime | None = None,
     ) -> list[EntityResult]:
         """Select entities by predicate, ranked by relevance or ordered by date.
 
@@ -1286,6 +1291,7 @@ class SQLiteBackend(StorageBackend):
             since,
             authored_by,
             has_attachments,
+            observed_since=observed_since,
         )
 
         if query_text is None or query_vec is None:

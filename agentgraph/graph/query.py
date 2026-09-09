@@ -63,6 +63,7 @@ async def search_entities(
     has_attachments: bool = False,
     order_by: str | None = None,
     content_limit: int | None = None,
+    observed_since: str | None = None,
 ) -> list[EntityResult]:
     """Select entities by filter, ranked by hybrid relevance when a query is given.
 
@@ -76,6 +77,7 @@ async def search_entities(
         else None
     )
     since_dt = parse_since(since) if since else None
+    observed_since_dt = parse_since(observed_since) if observed_since else None
     authored_by: list[str] | None = _resolve_me() if authored_by_me else None
     # `platform` is ergonomic shorthand for the same predicate `filters` can carry, so
     # an explicit filter wins instead of ANDing two contradictory platform clauses.
@@ -91,6 +93,7 @@ async def search_entities(
         platform=platform,
         filters=filters,
         since=since_dt,
+        observed_since=observed_since_dt,
         authored_by=authored_by,
         has_attachments=has_attachments,
         order_by=order_by,

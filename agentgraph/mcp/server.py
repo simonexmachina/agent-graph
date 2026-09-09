@@ -536,6 +536,7 @@ async def search_entities_tool(
     order_by: str | None = None,
     min_score: float = 0.03,
     refresh: bool = False,
+    observed_since: str | None = None,
 ) -> str:
     """
     Search or filter the knowledge graph.
@@ -593,8 +594,12 @@ async def search_entities_tool(
             (platform, platform_entity_id, entity_type) are applied as column
             filters; all other keys are matched against the metadata JSONB field.
         since: Optional time cutoff — ISO timestamp or relative duration
-            like "12h", "30m", "2d". Only returns entities updated after
+            like "12h", "30m", "2d". Only returns entities updated at or after
             this time.
+        observed_since: Optional browser observation cutoff, using the same
+            ISO timestamp or relative duration format as since. Only returns
+            entities with observed_at at or after this time, excluding entities
+            never observed. When since is also set, both cutoffs must match.
         authored_by_me: If true, only return entities with an authored
             edge from the current user (resolved from stored credentials).
         has_attachments: If true, only return Message entities that have
@@ -636,6 +641,7 @@ async def search_entities_tool(
             platform,
             filters=str_filters,
             since=since,
+            observed_since=observed_since,
             authored_by_me=authored_by_me,
             has_attachments=has_attachments,
             order_by=order_by,

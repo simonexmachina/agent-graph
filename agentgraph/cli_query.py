@@ -109,6 +109,7 @@ def cmd_search(
     authored_by_me: bool = False,
     has_attachments: bool = False,
     order_by: str | None = None,
+    observed_since: str | None = None,
 ) -> None:
     # An empty or whitespace-only argument is an absent query, not a query for
     # nothing: this keeps the limit default, the renderer, and the backend's
@@ -127,6 +128,7 @@ def cmd_search(
             platform,
             filters=filters,
             since=since,
+            observed_since=observed_since,
             authored_by_me=authored_by_me,
             has_attachments=has_attachments,
             order_by=order_by,

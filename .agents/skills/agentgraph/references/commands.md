@@ -3,7 +3,7 @@
 ## CLI
 
 ```bash
-agentgraph search ["<query>"] [--type <type>] [--platform <platform>] [--filter key=value] [--since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|source_created_at|source_updated_at|observed_at|synced_at] [--min-score N] [--json]
+agentgraph search ["<query>"] [--type <type>] [--platform <platform>] [--filter key=value] [--since 12h|30m|2d] [--observed-since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|source_created_at|source_updated_at|observed_at|synced_at] [--min-score N] [--json]
 agentgraph get <entity-id|platform/ref|url> [--resolve] [--json]
 agentgraph edges <entity-id|platform/ref> [--type <edge-type>] [--direction in|out|both] [--json]
 agentgraph traverse <entity-id|platform/ref> [--resolve] [--depth 0..4] [--json]
@@ -13,6 +13,11 @@ The query string is optional. With one, results are ranked by relevance and ever
 filter is applied as a hard constraint (`--limit` defaults to 10). Without one there
 is no ranking: the filters select the entities, `--order-by` sorts them newest first,
 `--min-score` is ignored, and `--limit` defaults to 50.
+
+`--since` filters `updated_at`; `--observed-since` filters browser observation time
+(`observed_at`), excluding never-observed entities. Both accept ISO timestamps or
+relative durations and include the cutoff itself. When supplied together, both
+must match. Neither flag changes ordering.
 
 `get` and `traverse` do not resolve stubs unless `--resolve` is supplied. Depth 0
 returns only the starting entity; depths 1 through 4 include that many relationship
@@ -28,7 +33,7 @@ accept full UUIDs, unambiguous UUID prefixes, and platform references.
 ## MCP equivalents
 
 ```text
-agentgraph search ...    -> search_entities_tool(query, entity_types, platform, filters, since, authored_by_me, has_attachments, limit, order_by, min_score, refresh)
+agentgraph search ...    -> search_entities_tool(query, entity_types, platform, filters, since, authored_by_me, has_attachments, limit, order_by, min_score, refresh, observed_since)
 agentgraph get ...       -> get_entity_tool(entity_id, resolve)
 agentgraph edges ...     -> get_edges_tool(entity_id, edge_type, direction)
 agentgraph traverse ...  -> traverse_graph_tool(entity_id, max_depth, resolve)

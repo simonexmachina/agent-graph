@@ -13,7 +13,7 @@ source_path = "docs-src/commands/search.md"
 
 ```bash
 agentgraph search [QUERY] [--type TYPE] [--platform PLATFORM] [--filter key=value] \
-                  [--since 24h] [--mine] [--has-attachments] \
+                  [--since 24h] [--observed-since 2d] [--mine] [--has-attachments] \
                   [--limit N] [--order-by FIELD] [--min-score SCORE] [--json]
 ```
 
@@ -42,7 +42,12 @@ agentgraph search [QUERY] [--type TYPE] [--platform PLATFORM] [--filter key=valu
 - `--platform` - source filter such as `slack`, `gmail`, or `gdocs`. Shorthand for
   `--filter platform=...`; an explicit `--filter` wins.
 - `--filter` - repeatable `key=value` filter against columns or metadata
-- `--since` - ISO timestamp or relative duration such as `12h`, `30m`, `2d`
+- `--since` - only entities with `updated_at` at or after an ISO timestamp or
+  relative cutoff such as `12h`, `30m`, `2d`
+- `--observed-since` - only entities with `observed_at` at or after an ISO timestamp
+  or relative cutoff, excluding never-observed entities. Browser observation sets
+  this timestamp; fetching and syncing do not. When combined with `--since`, both
+  cutoffs must match. Neither cutoff changes ordering.
 - `--mine` - only entities authored by the authenticated user
 - `--has-attachments` - only `Message` entities with chat-style attachments; Gmail
   email attachments are `Document` stubs
@@ -57,6 +62,8 @@ agentgraph search [QUERY] [--type TYPE] [--platform PLATFORM] [--filter key=valu
 agentgraph search "project kickoff notes" --type Document --limit 10
 agentgraph search "images from standup" --type Message --platform slack --json
 agentgraph search "atlas" --since 7d --platform slack
+agentgraph search --observed-since 2d --order-by observed_at
+agentgraph search "project notes" --observed-since 12h --json
 agentgraph search --filter platform=slack --since 24h --limit 20
 agentgraph search --type Message --has-attachments --since 7d --json
 agentgraph search --type Document --filter platform=gmail --json
