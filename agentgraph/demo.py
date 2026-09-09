@@ -15,11 +15,11 @@ DEMO_FIXTURE_METADATA_KEY = "_agentgraph_fixture"
 DEMO_FIXTURE_METADATA_VALUE = "atlas-demo"
 DEMO_CREATED_AT = "2026-08-14T08:00:00Z"
 WEBHOOK_ARTICLE_URL = (
-    "https://github.com/simonexmachina/agent-graph/blob/main/"
+    "https://github.com/simonexmachina/agentgraph/blob/main/"
     "agentgraph/demo_fixtures/reliable-webhooks.md"
 )
 RETRY_GUIDE_URL = (
-    "https://github.com/simonexmachina/agent-graph/blob/main/"
+    "https://github.com/simonexmachina/agentgraph/blob/main/"
     "agentgraph/demo_fixtures/retry-guidance.md"
 )
 

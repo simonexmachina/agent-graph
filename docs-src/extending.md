@@ -54,7 +54,7 @@ The contract is intentionally generic: core AgentGraph code calls these hooks wi
 
 ### Example implementation
 
-The [type-checked custom connector example](https://github.com/simonexmachina/agent-graph/blob/main/examples/custom_connector.py) shows URL resolution, targeted fetches, polling, and historical ingest. Adapt its placeholder API helpers and add provider-specific authentication in your connector package.
+The [type-checked custom connector example](https://github.com/simonexmachina/agentgraph/blob/main/examples/custom_connector.py) shows URL resolution, targeted fetches, polling, and historical ingest. Adapt its placeholder API helpers and add provider-specific authentication in your connector package.
 
 ### Output model
 
