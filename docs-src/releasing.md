@@ -67,8 +67,16 @@ gh workflow run "PyPI Release" --ref main -f tag=agentgraph-connector-web-v0.5.6
 ```
 
 The dispatch takes its workflow definition from `--ref` but checks out the tag
-itself, so the distribution is built from the tagged tree. Dispatching only works
-for tags whose workflow the `workflow_dispatch` trigger predates; for older tags,
-re-release at the next patch version. Orphaned tags are inert either way, because
-`scripts/release_package.py` rejects a tag whose version no longer matches the
-package metadata.
+itself, so the distribution is built from the tagged tree.
+
+Because the tag's own tree is what gets validated, a dispatch will happily publish
+any tag whose version still matches its `pyproject.toml` — including an abandoned
+tag from a release that was superseded. `scripts/release_package.py` only rejects a
+tag when the *current* checkout disagrees with it, which protects a push event
+against a stale tag but not a dispatch. Delete abandoned release tags rather than
+leaving them for someone to dispatch by mistake:
+
+```bash
+git push origin :refs/tags/agentgraph-connector-web-v0.5.5
+git tag -d agentgraph-connector-web-v0.5.5
+```
