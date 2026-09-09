@@ -69,11 +69,11 @@ function drawBookmarkIndicator(context: OffscreenCanvasRenderingContext2D, size:
   const notch = Math.max(1, Math.round(height * 0.22));
 
   context.beginPath();
-  context.moveTo(inset, inset);
-  context.lineTo(inset + width, inset);
-  context.lineTo(inset + width, inset + height);
-  context.lineTo(inset + width / 2, inset + height - notch);
-  context.lineTo(inset, inset + height);
+  context.moveTo(inset, 0);
+  context.lineTo(inset + width, 0);
+  context.lineTo(inset + width, height);
+  context.lineTo(inset + width / 2, height - notch);
+  context.lineTo(inset, height);
   context.closePath();
   context.fillStyle = BOOKMARK_INDICATOR_COLOR;
   context.fill();
