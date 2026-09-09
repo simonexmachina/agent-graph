@@ -98,7 +98,7 @@ observations or extend observation-based retention. See [Entity retention](reten
 RSS entries are indexed as `Document` entities with `platform=rss`.
 
 ```bash
-agentgraph query --type Document --filter platform=rss --limit 20
+agentgraph search --type Document --filter platform=rss --limit 20
 agentgraph search "release notes" --platform rss --limit 10
 ```
 

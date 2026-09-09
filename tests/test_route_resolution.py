@@ -15,16 +15,16 @@ import pytest
 
 from agentgraph.server.app import app
 
-# (path, expected handler name)
+# (path, method, expected handler name)
 CASES = [
-    ("/api/entities/search", "search_entities"),
-    ("/api/capabilities", "capabilities"),
-    ("/api/entities/22c57772-78cb-4234-ada7-36730b26e52c", "get_entity"),
-    ("/api/entities/slack/TDEMO/CATLAS", "get_entity"),
-    ("/api/entities/22c57772-78cb-4234-ada7-36730b26e52c/edges", "entity_edges"),
-    ("/api/entities/slack/TDEMO/CATLAS/edges", "entity_edges"),
-    ("/api/graph/nodes", "browse_nodes"),
-    ("/api/graph/traverse/slack/TDEMO/CATLAS", "traverse"),
+    ("/api/entities/search", "POST", "search_entities"),
+    ("/api/capabilities", "GET", "capabilities"),
+    ("/api/entities/22c57772-78cb-4234-ada7-36730b26e52c", "GET", "get_entity"),
+    ("/api/entities/slack/TDEMO/CATLAS", "GET", "get_entity"),
+    ("/api/entities/22c57772-78cb-4234-ada7-36730b26e52c/edges", "GET", "entity_edges"),
+    ("/api/entities/slack/TDEMO/CATLAS/edges", "GET", "entity_edges"),
+    ("/api/graph/nodes", "GET", "browse_nodes"),
+    ("/api/graph/traverse/slack/TDEMO/CATLAS", "GET", "traverse"),
 ]
 
 
@@ -46,9 +46,9 @@ def _resolve(path: str, method: str = "GET") -> str | None:
     return None
 
 
-@pytest.mark.parametrize(("path", "expected"), CASES)
-def test_path_resolves_to_expected_handler(path: str, expected: str) -> None:
-    assert _resolve(path) == expected
+@pytest.mark.parametrize(("path", "method", "expected"), CASES)
+def test_path_resolves_to_expected_handler(path: str, method: str, expected: str) -> None:
+    assert _resolve(path, method) == expected
 
 
 def test_delete_and_get_on_an_entity_reach_different_handlers() -> None:
@@ -67,5 +67,6 @@ def test_entity_subresource_suffixes_are_declared_before_the_catch_all() -> None
         route = f"/api/entities/{{ref:path}}{suffix}"
         assert paths.index(route) < catch_all, f"{route} must precede the catch-all"
 
-    for literal in ("/api/entities/search", "/api/entities/filter"):
-        assert paths.index(literal) < catch_all, f"{literal} must precede the catch-all"
+    assert paths.index("/api/entities/search") < catch_all, (
+        "/api/entities/search must precede the catch-all"
+    )

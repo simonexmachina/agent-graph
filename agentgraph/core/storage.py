@@ -81,13 +81,26 @@ class StorageBackend(ABC):
     @abstractmethod
     async def search_entities(
         self,
-        query_vec: list[float],
-        query_text: str,
+        query_vec: list[float] | None,
+        query_text: str | None,
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
         platform: str | None = None,
-    ) -> list[EntityResult]: ...
+        filters: dict[str, str] | None = None,
+        since: datetime | None = None,
+        authored_by: list[str] | None = None,
+        has_attachments: bool = False,
+        order_by: str | None = None,
+    ) -> list[EntityResult]:
+        """Select entities by predicate, ranked by relevance or ordered by date.
+
+        Passing ``query_text=None`` (and no vector) drops the retrieval legs, leaving
+        the filters to select the rows and ``order_by`` to sort them; ``min_score`` is
+        then inert. With a query, ``order_by`` still applies, so results can be
+        relevance-filtered but date-sorted.
+        """
+        ...
 
     @abstractmethod
     async def get_entity_by_id(self, entity_id: str) -> EntityResult | None: ...
@@ -136,7 +149,12 @@ class StorageBackend(ABC):
         since: datetime | None,
         authored_by: list[str] | None,
         has_attachments: bool = False,
-    ) -> list[EntityResult]: ...
+    ) -> list[EntityResult]:
+        """Single-type filtered read, kept for connectors that hold a backend directly.
+
+        A narrow spelling of ``search_entities`` with no query string.
+        """
+        ...
 
     @abstractmethod
     async def list_recent_metadata_by_edge_target(

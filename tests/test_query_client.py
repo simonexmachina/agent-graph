@@ -129,15 +129,26 @@ def test_uds_probe_skips_when_socket_is_disabled() -> None:
 
 
 @pytest.mark.parametrize(
-    ("status", "expected"),
-    [(200, True), (404, False), (500, False)],
+    ("status", "payload", "expected"),
+    [
+        (200, {"status": "ok", "routes": "resource2"}, True),
+        # A server new enough to answer the probe but too old to serve the reshaped
+        # search route: `auto` must fall back in-process rather than 404 every read.
+        (200, {"status": "ok", "routes": "resource"}, False),
+        (200, {"status": "ok"}, False),
+        (404, {}, False),
+        (500, {}, False),
+    ],
+    ids=["current", "older-routes", "no-marker", "404", "500"],
 )
-def test_is_available_requires_the_resource_routes(status: int, expected: bool) -> None:
+def test_is_available_requires_the_resource_routes(
+    status: int, payload: dict[str, str], expected: bool
+) -> None:
     """A server predating these routes 404s the probe, so it must not be selected."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/capabilities"
-        return httpx.Response(status, json={})
+        return httpx.Response(status, json=payload)
 
     client = HttpQueryClient("http://t", probe_transport=httpx.MockTransport(handler))
 
@@ -167,7 +178,7 @@ def test_socket_transports_skip_the_ssl_context() -> None:
             return False
 
         def get(self, _path: str) -> httpx.Response:
-            return httpx.Response(200, json={"status": "ok"})
+            return httpx.Response(200, json={"status": "ok", "routes": "resource2"})
 
     client = HttpQueryClient("http://localhost", uds_path=Path("/tmp/ag.sock"))
 

@@ -59,29 +59,28 @@ async def load_sqlite_vec(conn: Any) -> bool:
 async def vector_ranked(
     conn: Any,
     query_vec: list[float],
-    entity_types: list[str] | None,
     limit: int,
     mode: str,
     vec_loaded: bool,
-    platform: str | None = None,
+    where_fragment: str = "",
+    where_params: list[Any] | None = None,
+    join_sql: str = "",
+    join_params: list[Any] | None = None,
     candidate_limit: int | None = None,
 ) -> list[tuple[str, int]]:
     """Return (entity_id, rank) pairs with rank starting at 1 (best).
+
+    The caller supplies the prebuilt entity predicates — an ``AND``-prefixed
+    ``where_fragment`` qualified with the ``e`` alias, plus any JOIN they need — so
+    both paths below filter identically to the lexical leg they are fused with.
 
     Returns an empty list when mode is "bm25-only" or when no embeddings exist.
     """
     if mode == "bm25-only":
         return []
 
-    type_clause = ""
-    type_params: list[Any] = []
-    if entity_types:
-        placeholders = ",".join("?" * len(entity_types))
-        type_clause = f"AND entity_type IN ({placeholders})"
-        type_params = list(entity_types)
-    if platform:
-        type_clause += " AND platform = ?"
-        type_params.append(platform)
+    where_params = list(where_params or [])
+    join_params = list(join_params or [])
 
     query_blob = pack_embedding(query_vec)
     candidate_limit = candidate_limit if candidate_limit is not None else limit * 5
@@ -89,16 +88,19 @@ async def vector_ranked(
     # ---- sqlite-vec path ----
     if mode == "sqlite-vec" and vec_loaded:
         try:
-            with timed("sqlite.vector_ranked.sqlite_vec", limit=limit, platform=platform):
+            with timed("sqlite.vector_ranked.sqlite_vec", limit=limit):
                 cursor = await conn.execute(
                     f"""
-                    SELECT id, vec_distance_cosine(content_embedding, ?) AS dist
-                    FROM entities
-                    WHERE content_embedding IS NOT NULL {type_clause}
+                    SELECT e.id, vec_distance_cosine(e.content_embedding, ?) AS dist
+                    FROM entities e
+                    {join_sql}
+                    WHERE e.content_embedding IS NOT NULL {where_fragment}
                     ORDER BY dist ASC
                     LIMIT ?
                     """,
-                    [query_blob, *type_params, candidate_limit],
+                    # The distance placeholder sits in the SELECT list, so it binds
+                    # ahead of anything the JOIN or WHERE contributes.
+                    [query_blob, *join_params, *where_params, candidate_limit],
                 )
                 rows = await cursor.fetchall()
             return [(row[0], i + 1) for i, row in enumerate(rows)]
@@ -109,10 +111,15 @@ async def vector_ranked(
     try:
         import numpy as np
 
-        with timed("sqlite.vector_ranked.numpy", limit=limit, platform=platform):
+        with timed("sqlite.vector_ranked.numpy", limit=limit):
             cursor = await conn.execute(
-                f"SELECT id, content_embedding FROM entities WHERE content_embedding IS NOT NULL {type_clause}",
-                type_params,
+                f"""
+                SELECT e.id, e.content_embedding
+                FROM entities e
+                {join_sql}
+                WHERE e.content_embedding IS NOT NULL {where_fragment}
+                """,
+                [*join_params, *where_params],
             )
             rows = await cursor.fetchall()
             if not rows:

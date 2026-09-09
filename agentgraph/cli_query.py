@@ -91,21 +91,45 @@ def run_graph_operation[T](
     return _run(operation, error_hint=error_hint)
 
 
+# Ranked search returns a tight, hand-inspectable set; a filter-only listing is a
+# browse, so it gets the wider window the removed `query` command used.
+_RANKED_LIMIT = 10
+_FILTER_LIMIT = 50
+
+
 def cmd_search(
-    query: str,
-    entity_types: list[str],
-    limit: int,
-    min_score: float,
-    as_json: bool,
+    query: str | None = None,
+    entity_types: list[str] | None = None,
+    limit: int | None = None,
+    min_score: float = 0.03,
+    as_json: bool = False,
     platform: str | None = None,
+    filters: dict[str, str] | None = None,
+    since: str | None = None,
+    authored_by_me: bool = False,
+    has_attachments: bool = False,
+    order_by: str | None = None,
 ) -> None:
+    # An empty or whitespace-only argument is an absent query, not a query for
+    # nothing: this keeps the limit default, the renderer, and the backend's
+    # `query_text is None` branch all agreeing on which mode we are in.
+    query = query.strip() or None if query is not None else None
+    resolved_limit = limit if limit is not None else (
+        _RANKED_LIMIT if query else _FILTER_LIMIT
+    )
+
     async def operation(client: QueryClient) -> list[dict[str, Any]]:
         return await client.search(
             query,
             entity_types or None,
-            limit,
+            resolved_limit,
             min_score,
             platform,
+            filters=filters,
+            since=since,
+            authored_by_me=authored_by_me,
+            has_attachments=has_attachments,
+            order_by=order_by,
         )
 
     results = _run_with_client(operation)
@@ -117,22 +141,26 @@ def cmd_search(
         console.print("[dim]No results.[/dim]")
         return
 
-    table = Table(title=f'Search: "{query}"', show_lines=True)
+    title = f'Search: "{query}"' if query else "Entities"
+    table = Table(title=title, show_lines=True)
     table.add_column("ID", style="dim", no_wrap=True, max_width=8)
     table.add_column("Type")
     table.add_column("Platform")
     table.add_column("Title / Content", ratio=1)
-    table.add_column("Score", justify="right")
+    # Without a query there are no relevance scores to show.
+    if query:
+        table.add_column("Score", justify="right")
     for result in results:
         snippet = (result.get("title") or result.get("content") or "")[:120]
-        score = f"{result['score']:.4f}" if result.get("score") else "—"
-        table.add_row(
+        row = [
             str(result["id"])[:8],
             str(result["entity_type"]),
             str(result["platform"]),
             str(snippet),
-            score,
-        )
+        ]
+        if query:
+            row.append(f"{result['score']:.4f}" if result.get("score") else "—")
+        table.add_row(*row)
     console.print(table)
 
 
@@ -342,42 +370,3 @@ def cmd_unify_persons(
         "Canonical person:"
     )
     _print_entity(result["primary"])
-
-
-def cmd_query(
-    entity_type: str,
-    filters: dict[str, str],
-    limit: int,
-    order_by: str,
-    since: str | None,
-    authored_by_me: bool,
-    as_json: bool,
-    has_attachments: bool = False,
-) -> None:
-    async def operation(client: QueryClient) -> list[dict[str, Any]]:
-        return await client.query_by_filter(
-            entity_type,
-            filters,
-            limit,
-            order_by,
-            since,
-            authored_by_me,
-            has_attachments,
-        )
-
-    results = _run_with_client(operation)
-    if as_json:
-        console.print_json(json.dumps(results, default=str))
-        return
-    if not results:
-        console.print("[dim]No results.[/dim]")
-        return
-
-    table = Table(title=f"Query: {entity_type}", show_lines=True)
-    table.add_column("ID", style="dim", max_width=8)
-    table.add_column("Platform")
-    table.add_column("Title / Content", ratio=1)
-    for result in results:
-        snippet = (result.get("title") or result.get("content") or "")[:120]
-        table.add_row(str(result["id"])[:8], str(result["platform"]), str(snippet))
-    console.print(table)

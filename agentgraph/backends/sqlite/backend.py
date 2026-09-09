@@ -93,6 +93,68 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+def _entity_predicates(
+    entity_types: list[str] | None = None,
+    platform: str | None = None,
+    filters: dict[str, str] | None = None,
+    since: datetime | None = None,
+    authored_by: list[str] | None = None,
+    has_attachments: bool = False,
+) -> tuple[str, list[Any], str, list[Any]]:
+    """Build the entity-selection predicates shared by every leg of a search.
+
+    Returns ``(where_fragment, where_params, join_sql, join_params)``. The fragment
+    already carries its leading ``AND`` so a caller can append it to whatever base
+    predicate its own leg needs, and every column is qualified with the ``e`` alias
+    the callers give the ``entities`` table. Because the JOIN precedes the WHERE in
+    the statement text, callers must bind ``[*join_params, *where_params]``.
+    """
+    clauses: list[str] = []
+    params: list[Any] = []
+    if entity_types:
+        placeholders = ",".join("?" * len(entity_types))
+        clauses.append(f"e.entity_type IN ({placeholders})")
+        params.extend(entity_types)
+    if platform:
+        clauses.append("e.platform = ?")
+        params.append(platform)
+    for key, value in (filters or {}).items():
+        if key in _COLUMN_FILTERS:
+            clauses.append(f"e.{key} = ?")
+        else:
+            clauses.append(f"json_extract(e.metadata, '$.{key}') = ?")
+        params.append(value)
+    if since:
+        clauses.append("e.updated_at >= ?")
+        params.append(_utc_stamp(since))
+    if has_attachments:
+        clauses.append(
+            "json_extract(e.metadata, '$.attachments') IS NOT NULL"
+            " AND json_extract(e.metadata, '$.attachments') != '[]'"
+        )
+
+    join_sql = ""
+    join_params: list[Any] = []
+    if authored_by:
+        placeholders = ", ".join("?" for _ in authored_by)
+        metadata_placeholders = ", ".join("?" for _ in authored_by)
+        join_sql = f"""
+            JOIN edges _auth ON _auth.edge_type = 'authored' AND _auth.target_entity_id = e.id
+            JOIN entities _p ON _p.id = _auth.source_entity_id AND _p.entity_type = 'Person'
+                AND (
+                    _p.platform_entity_id IN ({placeholders})
+                    OR EXISTS (
+                        SELECT 1 FROM json_each(_p.metadata)
+                        WHERE json_each.value IN ({metadata_placeholders})
+                    )
+                )
+        """
+        join_params.extend([*authored_by, *authored_by])
+
+    fragment = ("AND " + " AND ".join(clauses)) if clauses else ""
+    return fragment, params, join_sql, join_params
+
+
 def _append_merged_people(
     metadata: dict[str, Any],
     merged_people: list[dict[str, str]],
@@ -1179,14 +1241,45 @@ class SQLiteBackend(StorageBackend):
 
     async def search_entities(
         self,
-        query_vec: list[float],
-        query_text: str,
+        query_vec: list[float] | None,
+        query_text: str | None,
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
         platform: str | None = None,
+        filters: dict[str, str] | None = None,
+        since: datetime | None = None,
+        authored_by: list[str] | None = None,
+        has_attachments: bool = False,
+        order_by: str | None = None,
     ) -> list[EntityResult]:
+        """Select entities by predicate, ranked by relevance or ordered by date.
+
+        Without ``query_text`` there is no retrieval leg at all: the predicates alone
+        select the rows and ``min_score`` is inert. With one, both the lexical and
+        vector legs apply the same predicates, and ``order_by`` switches the surviving
+        results from score order to date order — relevance-filtered, date-sorted.
+        """
         conn = self._read_conn_or_raise()
+
+        where_fragment, where_params, join_sql, join_params = _entity_predicates(
+            entity_types,
+            platform,
+            filters,
+            since,
+            authored_by,
+            has_attachments,
+        )
+
+        if query_text is None or query_vec is None:
+            return await self._select_entities(
+                where_fragment,
+                where_params,
+                join_sql,
+                join_params,
+                limit,
+                order_by,
+            )
 
         with timed("sqlite.search_entities", limit=limit, platform=platform):
             initial_candidate_limit = limit * 2
@@ -1196,26 +1289,22 @@ class SQLiteBackend(StorageBackend):
             fts_ids: list[tuple[str, int]] = []
             with timed("sqlite.search.fts", limit=initial_candidate_limit, platform=platform):
                 try:
-                    extra_clause = ""
-                    fts_extra_params: list[Any] = []
-                    if entity_types:
-                        placeholders = ",".join("?" * len(entity_types))
-                        extra_clause += f" AND e.entity_type IN ({placeholders})"
-                        fts_extra_params.extend(entity_types)
-                    if platform:
-                        extra_clause += " AND e.platform = ?"
-                        fts_extra_params.append(platform)
-
                     cursor = await conn.execute(
                         f"""
                         SELECT e.id
                         FROM entities_fts f
                         JOIN entities e ON e.id = f.id
-                        WHERE entities_fts MATCH ? {extra_clause}
+                        {join_sql}
+                        WHERE entities_fts MATCH ? {where_fragment}
                         ORDER BY f.rank
                         LIMIT ?
                         """,
-                        [_fts5_query(query_text), *fts_extra_params, initial_candidate_limit],
+                        [
+                            *join_params,
+                            _fts5_query(query_text),
+                            *where_params,
+                            initial_candidate_limit,
+                        ],
                     )
                     rows = await cursor.fetchall()
                     fts_ids = [(row[0], i + 1) for i, row in enumerate(rows)]
@@ -1237,11 +1326,13 @@ class SQLiteBackend(StorageBackend):
                 vec_ids = await vector_ranked(
                     conn,
                     query_vec,
-                    entity_types,
                     limit,
                     self._vector_mode,
                     self._vec_loaded,
-                    platform=platform,
+                    where_fragment=where_fragment,
+                    where_params=where_params,
+                    join_sql=join_sql,
+                    join_params=join_params,
                     candidate_limit=max_candidate_limit,
                 )
 
@@ -1300,12 +1391,52 @@ class SQLiteBackend(StorageBackend):
                     if (r["score"] or 0) >= min_score:
                         results.append(r)
 
+                if order_by in _VALID_ORDER_BY:
+                    date_column = order_by
+
+                    def _stamp(result: dict[str, Any]) -> str:
+                        return str(result.get(date_column) or "")
+
+                    results.sort(key=_stamp, reverse=True)
+                    return results
+
                 def _score(result: dict[str, Any]) -> float:
                     raw_score = result.get("score")
                     return float(raw_score) if isinstance(raw_score, int | float) else 0.0
 
                 results.sort(key=_score, reverse=True)
                 return results
+
+    async def _select_entities(
+        self,
+        where_fragment: str,
+        where_params: list[Any],
+        join_sql: str,
+        join_params: list[Any],
+        limit: int,
+        order_by: str | None,
+    ) -> list[EntityResult]:
+        """Return entities matching the predicates alone, newest first."""
+        if order_by not in _VALID_ORDER_BY:
+            order_by = "observed_at"
+        with timed("sqlite.select_entities", order_by=order_by, limit=limit):
+            rows = await self._fetchall(
+                f"""
+                SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
+                       e.title, e.content, e.metadata, e.created_at, e.updated_at,
+                       e.source_created_at, e.source_updated_at,
+                       e.synced_at, e.observed_at,
+                       e.retention_policy, e.retention_parent_id,
+                       e.cumulative_observation_duration_ms, e.bookmarked
+                FROM entities e
+                {join_sql}
+                WHERE 1 = 1 {where_fragment}
+                ORDER BY e.{order_by} DESC
+                LIMIT ?
+                """,
+                [*join_params, *where_params, limit],
+            )
+        return [_row_to_entity(row) for row in rows]
 
     async def get_entity_by_id(self, entity_id: str) -> EntityResult | None:
         row = await self._fetchone(
@@ -1473,66 +1604,19 @@ class SQLiteBackend(StorageBackend):
         authored_by: list[str] | None,
         has_attachments: bool = False,
     ) -> list[EntityResult]:
-        if order_by not in _VALID_ORDER_BY:
-            order_by = "observed_at"
-
-        params: list[Any] = [entity_type]
-        extra_clauses: list[str] = []
-        for k, v in filters.items():
-            if k in _COLUMN_FILTERS:
-                extra_clauses.append(f"e.{k} = ?")
-            else:
-                extra_clauses.append(f"json_extract(e.metadata, '$.{k}') = ?")
-            params.append(v)
-        if since:
-            extra_clauses.append("e.updated_at >= ?")
-            params.append(_utc_stamp(since))
-        if has_attachments:
-            extra_clauses.append(
-                "json_extract(e.metadata, '$.attachments') IS NOT NULL"
-                " AND json_extract(e.metadata, '$.attachments') != '[]'"
-            )
-
-        authored_join = ""
-        authored_params: list[Any] = []
-        if authored_by:
-            placeholders = ", ".join("?" for _ in authored_by)
-            metadata_placeholders = ", ".join("?" for _ in authored_by)
-            authored_join = f"""
-            JOIN edges _auth ON _auth.edge_type = 'authored' AND _auth.target_entity_id = e.id
-            JOIN entities _p ON _p.id = _auth.source_entity_id AND _p.entity_type = 'Person'
-                AND (
-                    _p.platform_entity_id IN ({placeholders})
-                    OR EXISTS (
-                        SELECT 1 FROM json_each(_p.metadata)
-                        WHERE json_each.value IN ({metadata_placeholders})
-                    )
-                )
-            """
-            authored_params.extend([*authored_by, *authored_by])
-
-        where_extra = ("AND " + " AND ".join(extra_clauses)) if extra_clauses else ""
-        params.append(limit)
-        with timed(
-            "sqlite.query_by_filter", entity_type=entity_type, order_by=order_by, limit=limit
-        ):
-            rows = await self._fetchall(
-                f"""
-                SELECT e.id, e.entity_type, e.platform, e.platform_entity_id,
-                       e.title, e.content, e.metadata, e.created_at, e.updated_at,
-                       e.source_created_at, e.source_updated_at,
-                       e.synced_at, e.observed_at,
-                       e.retention_policy, e.retention_parent_id,
-                       e.cumulative_observation_duration_ms, e.bookmarked
-                FROM entities e
-                {authored_join}
-                WHERE e.entity_type = ? {where_extra}
-                ORDER BY e.{order_by} DESC
-                LIMIT ?
-                """,
-                [*authored_params, *params],
-            )
-        return [_row_to_entity(row) for row in rows]
+        """Single-type filtered read, for connectors that hold the backend directly."""
+        return await self.search_entities(
+            None,
+            None,
+            [entity_type],
+            limit,
+            0.0,
+            filters=filters,
+            since=since,
+            authored_by=authored_by,
+            has_attachments=has_attachments,
+            order_by=order_by,
+        )
 
     async def list_recent_metadata_by_edge_target(
         self,

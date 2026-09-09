@@ -21,7 +21,7 @@ the configured graph. Remove them afterward with `agentgraph demo remove` or
 
 `agentgraph poll` and connector or authentication commands that queue a poll or
 historical ingest always call the local AgentGraph server. Reads (`search`, `get`,
-`edges`, `traverse`, `query`) and `fetch`/`download` use it when it is reachable and
+`edges`, `traverse`) and `fetch`/`download` use it when it is reachable and
 otherwise read the database directly, so they work with no server running.
 
 Many agent sandboxes deny loopback TCP but allow an allowlisted Unix socket, so the
@@ -43,7 +43,7 @@ allowlist settings.
 1. Discover likely entities with `agentgraph search "<query>" --json` or
    `search_entities_tool`.
 2. Open promising results with `agentgraph get <target> --json` or
-   `get_entity_tool` to read full content and source metadata. Search and query results
+   `get_entity_tool` to read full content and source metadata. Search results
    contain bounded snippets and set `content_truncated` when content was shortened.
 3. Follow relationships with `agentgraph edges`, `agentgraph traverse`,
    `get_edges_tool`, or `traverse_graph_tool`.
@@ -53,8 +53,11 @@ allowlist settings.
    each source URL or entity identifier used.
 
 Start with search unless the user already supplied a graph ID, platform reference, or
-known indexed URL. Use structured `query` only when the entity type or filters are
-already known.
+known indexed URL. `search` covers both jobs: pass a query string for ranked
+discovery, and add or use only its filters (`--type`, `--platform`, `--filter`,
+`--since`, `--mine`, `--has-attachments`) when the entity type or constraints are
+already known. Omitting the query string turns it into a deterministic listing
+ordered by date.
 
 ## Context lifecycle
 

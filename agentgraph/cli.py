@@ -577,23 +577,56 @@ def serve(
 
 @app.command()
 def search(
-    query: str = typer.Argument(..., help="Search query"),
+    query: str | None = typer.Argument(
+        None, help="Search query. Omit to select by filters alone, newest first."
+    ),
     type: list[str] = typer.Option([], "--type", "-t", help="Filter by entity type"),
     platform: str | None = typer.Option(
         None, "--platform", "-p", help="Scope to a single platform (e.g. slack, discord)"
     ),
-    limit: int = typer.Option(10, "--limit", "-n", help="Maximum results"),
-    min_score: float = typer.Option(0.03, "--min-score", help="Minimum relevance score (0–1)"),
+    filter: list[str] = typer.Option(
+        [], "--filter", "-f", help="key=value filters (column or metadata)"
+    ),
+    since: str | None = typer.Option(
+        None,
+        "--since",
+        "-s",
+        help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)",
+    ),
+    mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
+    has_attachments: bool = typer.Option(
+        False, "--has-attachments", help="Only Message entities that have file/image attachments"
+    ),
+    limit: int | None = typer.Option(
+        None, "--limit", "-n", help="Maximum results (default 10 with a query, 50 without)"
+    ),
+    order_by: str | None = typer.Option(
+        None,
+        "--order-by",
+        "-o",
+        help=(
+            "Sort by a date column instead of relevance (created_at, updated_at, "
+            "source_created_at, source_updated_at, observed_at, synced_at)"
+        ),
+    ),
+    min_score: float = typer.Option(
+        0.03, "--min-score", help="Minimum relevance score (0–1); ignored without a query"
+    ),
     json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Search the knowledge graph."""
+    """Search the knowledge graph, or list entities matching filters alone."""
     from agentgraph.cli_query import cmd_search
 
     cmd_search(
         query=query,
         entity_types=type,
         platform=platform,
+        filters=dict(f.split("=", 1) for f in filter if "=" in f),
+        since=since,
+        authored_by_me=mine,
+        has_attachments=has_attachments,
         limit=limit,
+        order_by=order_by,
         min_score=min_score,
         as_json=json,
     )
@@ -883,45 +916,3 @@ def poll(
     cmd_poll(source=source, as_json=json)
 
 
-@app.command()
-def query(
-    entity_type: str = typer.Option(..., "--type", "-t", help="Entity type to query"),
-    filter: list[str] = typer.Option(
-        [], "--filter", "-f", help="key=value filters (column or metadata)"
-    ),
-    since: str | None = typer.Option(
-        None,
-        "--since",
-        "-s",
-        help="Only results after this time: ISO timestamp or relative (12h, 30m, 2d)",
-    ),
-    mine: bool = typer.Option(False, "--mine", "-m", help="Only entities authored by me"),
-    has_attachments: bool = typer.Option(
-        False, "--has-attachments", help="Only Message entities that have file/image attachments"
-    ),
-    limit: int = typer.Option(50, "--limit", "-n", help="Maximum results"),
-    order_by: str = typer.Option(
-        "created_at",
-        "--order-by",
-        "-o",
-        help=(
-            "Column to sort by (created_at, updated_at, source_created_at, "
-            "source_updated_at, observed_at, synced_at)"
-        ),
-    ),
-    json: bool = typer.Option(False, "--json", help="Output as JSON"),
-) -> None:
-    """Query entities by type and filters."""
-    from agentgraph.cli_query import cmd_query
-
-    parsed_filters = dict(f.split("=", 1) for f in filter if "=" in f)
-    cmd_query(
-        entity_type=entity_type,
-        filters=parsed_filters,
-        limit=limit,
-        order_by=order_by,
-        since=since,
-        authored_by_me=mine,
-        has_attachments=has_attachments,
-        as_json=json,
-    )

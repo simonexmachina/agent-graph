@@ -186,7 +186,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'href="../docs.css"' in search_html
     assert 'href="../index.html"' in search_html
     assert 'class="page-nav-prev" href="index.html"' in search_html
-    assert 'class="page-nav-next" href="query.html"' in search_html
+    assert 'class="page-nav-next" href="get.html"' in search_html
     assert "MCP tools" in mcp_html
     assert "authenticate_provider_tool" in mcp_auth_html
     assert 'content="0; url=commands/index.html"' in redirect_html

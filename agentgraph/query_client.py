@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 # One attempt, no retry: this is a liveness probe, and `auto` has a local fallback.
 _PROBE_TIMEOUT_MULTIPLIER = 1.0
 
+# `routes` markers from /api/capabilities this client knows how to talk to. Bumped
+# whenever a route's shape changes incompatibly, so an older server is treated as
+# unavailable instead of 404ing every read. See `server/graph_api.capabilities`.
+_SUPPORTED_ROUTE_MARKERS = {"resource2"}
+
 # Every URL here is plain http:// over a Unix socket or loopback, so TLS is never
 # negotiated. httpx still builds an SSL context eagerly in its transport constructor,
 # and the default reads certifi's cacert.pem — which agent sandboxes commonly deny,
@@ -42,11 +47,16 @@ class QueryClient(Protocol):
 
     async def search(
         self,
-        query: str,
+        query: str | None,
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
         platform: str | None,
+        filters: dict[str, str] | None = None,
+        since: str | None = None,
+        authored_by_me: bool = False,
+        has_attachments: bool = False,
+        order_by: str | None = None,
     ) -> list[dict[str, Any]]: ...
 
     async def get_entity(self, entity_id: str, resolve: bool) -> dict[str, Any] | None: ...
@@ -64,17 +74,6 @@ class QueryClient(Protocol):
         max_depth: int,
         resolve: bool,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]: ...
-
-    async def query_by_filter(
-        self,
-        entity_type: str,
-        filters: dict[str, str],
-        limit: int,
-        order_by: str,
-        since: str | None,
-        authored_by_me: bool,
-        has_attachments: bool,
-    ) -> list[dict[str, Any]]: ...
 
     async def fetch(self, platform: str, resource_id: str) -> dict[str, Any]: ...
 
@@ -101,11 +100,16 @@ class InProcessQueryClient:
 
     async def search(
         self,
-        query: str,
+        query: str | None,
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
         platform: str | None,
+        filters: dict[str, str] | None = None,
+        since: str | None = None,
+        authored_by_me: bool = False,
+        has_attachments: bool = False,
+        order_by: str | None = None,
     ) -> list[dict[str, Any]]:
         from agentgraph.graph.operations import summarize_entities
         from agentgraph.graph.query import search_entities
@@ -116,6 +120,11 @@ class InProcessQueryClient:
             limit=limit,
             min_score=min_score,
             platform=platform,
+            filters=filters,
+            since=since,
+            authored_by_me=authored_by_me,
+            has_attachments=has_attachments,
+            order_by=order_by,
         )
         return summarize_entities(results)
 
@@ -153,30 +162,6 @@ class InProcessQueryClient:
             resolve=resolve,
         )
         return entity, result
-
-    async def query_by_filter(
-        self,
-        entity_type: str,
-        filters: dict[str, str],
-        limit: int,
-        order_by: str,
-        since: str | None,
-        authored_by_me: bool,
-        has_attachments: bool,
-    ) -> list[dict[str, Any]]:
-        from agentgraph.graph.operations import summarize_entities
-        from agentgraph.graph.query import query_by_filter
-
-        results = await query_by_filter(
-            entity_type,
-            filters=filters,
-            limit=limit,
-            order_by=order_by,
-            since=since,
-            authored_by_me=authored_by_me,
-            has_attachments=has_attachments,
-        )
-        return summarize_entities(results)
 
     async def fetch(self, platform: str, resource_id: str) -> dict[str, Any]:
         from agentgraph.graph.fetch import fetch_entity
@@ -254,7 +239,9 @@ class HttpQueryClient:
 
         A plain connect is not enough: a server predating these routes accepts the
         connection and then 404s every call, so `auto` would hard-fail where it should
-        fall back to in-process.
+        fall back to in-process. The marker is checked too, not just the status: the
+        server is launchd-managed and restarts independently of the CLI, so a CLI
+        newer than its running server is routine and must fall back rather than 404.
         """
         import httpx
 
@@ -267,8 +254,15 @@ class HttpQueryClient:
                 transport=transport,
                 timeout=timeout,
             ) as client:
-                return client.get("/api/capabilities").status_code == 200
-        except (httpx.HTTPError, OSError):
+                response = client.get("/api/capabilities")
+                if response.status_code != 200:
+                    return False
+                payload: object = response.json()
+                if not isinstance(payload, dict):
+                    return False
+                body = cast("dict[str, object]", payload)
+                return body.get("routes") in _SUPPORTED_ROUTE_MARKERS
+        except (httpx.HTTPError, OSError, ValueError):
             return False
 
     async def _request(
@@ -315,15 +309,21 @@ class HttpQueryClient:
 
     async def search(
         self,
-        query: str,
+        query: str | None,
         entity_types: list[str] | None,
         limit: int,
         min_score: float,
         platform: str | None,
+        filters: dict[str, str] | None = None,
+        since: str | None = None,
+        authored_by_me: bool = False,
+        has_attachments: bool = False,
+        order_by: str | None = None,
     ) -> list[dict[str, Any]]:
+        """POST because ``filters`` is an open-ended field/value mapping."""
         return cast(
             list[dict[str, Any]],
-            await self._get(
+            await self._post(
                 "/api/entities/search",
                 {
                     "query": query,
@@ -331,7 +331,12 @@ class HttpQueryClient:
                     "limit": limit,
                     "min_score": min_score,
                     "platform": platform,
+                    "since": since,
+                    "authored_by_me": authored_by_me,
+                    "has_attachments": has_attachments,
+                    "order_by": order_by,
                 },
+                json=filters or {},
             ),
         )
 
@@ -372,32 +377,6 @@ class HttpQueryClient:
         if isinstance(payload, _Missing):
             return None, {}
         return payload["entity"], payload["result"]
-
-    async def query_by_filter(
-        self,
-        entity_type: str,
-        filters: dict[str, str],
-        limit: int,
-        order_by: str,
-        since: str | None,
-        authored_by_me: bool,
-        has_attachments: bool,
-    ) -> list[dict[str, Any]]:
-        return cast(
-            list[dict[str, Any]],
-            await self._post(
-                "/api/entities/filter",
-                {
-                    "entity_type": entity_type,
-                    "limit": limit,
-                    "order_by": order_by,
-                    "since": since,
-                    "authored_by_me": authored_by_me,
-                    "has_attachments": has_attachments,
-                },
-                json=filters,
-            ),
-        )
 
     async def fetch(self, platform: str, resource_id: str) -> dict[str, Any]:
         return cast(

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -260,6 +263,145 @@ async def test_sqlite_search_uses_large_vector_window_for_sparse_fts() -> None:
         await backend.close()
 
 
+@asynccontextmanager
+async def _filter_backend() -> AsyncIterator[Any]:
+    """A backend holding two platforms' Alpha documents, one of them authored."""
+    from agentgraph.backends.sqlite.backend import SQLiteBackend
+    from agentgraph.connectors.base import EdgeRecord, EntityBatch, EntityRecord, PersonRecord
+
+    backend = SQLiteBackend(":memory:", vector_mode="bm25-only")
+    await backend.initialize()
+    try:
+        await backend.upsert_batch(
+            EntityBatch(
+                entities=[
+                    EntityRecord(
+                        entity_type="Document",
+                        platform=platform,
+                        platform_entity_id=f"{platform}-doc",
+                        title="Alpha",
+                        content="alpha content",
+                        metadata={"web_url": f"https://{platform}.example/alpha"},
+                    )
+                    for platform in ("web", "rss")
+                ],
+                persons=[
+                    PersonRecord(
+                        platform="web", platform_user_id="author-1", display_name="Author One"
+                    )
+                ],
+                edges=[
+                    EdgeRecord(
+                        edge_type="authored",
+                        platform="web",
+                        source_platform_user_id="author-1",
+                        target_platform_entity_id="web-doc",
+                    )
+                ],
+            ),
+            person_embeddings={},
+            entity_embeddings={},
+        )
+        yield backend
+    finally:
+        await backend.close()
+
+
+@pytest.mark.asyncio
+async def test_sqlite_search_applies_filters_to_the_ranked_path() -> None:
+    """Filters narrow ranked search, which was impossible before the merge."""
+    async with _filter_backend() as backend:
+        unfiltered = await backend.search_entities([0.0] * 384, "alpha", None, 10, 0.0)
+        assert {result["platform"] for result in unfiltered} == {"web", "rss"}
+
+        by_platform = await backend.search_entities(
+            [0.0] * 384, "alpha", None, 10, 0.0, platform="rss"
+        )
+        assert [result["platform"] for result in by_platform] == ["rss"]
+
+        by_metadata = await backend.search_entities(
+            [0.0] * 384,
+            "alpha",
+            None,
+            10,
+            0.0,
+            filters={"web_url": "https://web.example/alpha"},
+        )
+        assert [result["platform"] for result in by_metadata] == ["web"]
+
+        by_since = await backend.search_entities(
+            [0.0] * 384,
+            "alpha",
+            None,
+            10,
+            0.0,
+            since=datetime(2099, 1, 1, tzinfo=UTC),
+        )
+        assert by_since == []
+
+
+@pytest.mark.asyncio
+async def test_sqlite_search_authored_join_applies_to_the_fts_leg() -> None:
+    """The lexical leg never had the authored JOIN; bm25-only proves it does now."""
+    async with _filter_backend() as backend:
+        results = await backend.search_entities(
+            [0.0] * 384, "alpha", None, 10, 0.0, authored_by=["author-1"]
+        )
+
+    assert [result["platform_entity_id"] for result in results] == ["web-doc"]
+
+
+@pytest.mark.asyncio
+async def test_sqlite_search_orders_a_ranked_result_set_by_date() -> None:
+    """`order_by` with a query means relevance-filtered but date-sorted."""
+    async with _filter_backend() as backend:
+        await backend.search_entities([0.0] * 384, "alpha", None, 10, 0.0)
+        ordered = await backend.search_entities(
+            [0.0] * 384, "alpha", None, 10, 0.0, order_by="observed_at"
+        )
+
+    stamps = [str(result["observed_at"]) for result in ordered]
+    assert stamps == sorted(stamps, reverse=True)
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected"),
+    [
+        # The exact shapes the RSS and web connectors call the backend with. Only
+        # web_url is stored on the fixture entities, so the link/url probes miss.
+        ({"platform": "rss", "web_url": "https://rss.example/alpha"}, ["rss"]),
+        ({"platform": "web", "web_url": "https://web.example/alpha"}, ["web"]),
+        ({"platform": "rss", "link": "https://rss.example/alpha"}, []),
+        ({"platform": "web", "url": "https://web.example/alpha"}, []),
+        ({"platform": "web", "web_url": "https://rss.example/alpha"}, []),
+    ],
+    ids=["rss-web_url", "web-web_url", "rss-link-miss", "web-url-miss", "mismatched-platform"],
+)
+@pytest.mark.asyncio
+async def test_sqlite_query_by_filter_delegate_keeps_connector_call_shapes(
+    filters: dict[str, str], expected: list[str]
+) -> None:
+    """Connectors call query_by_filter positionally; the delegate must behave as before."""
+    async with _filter_backend() as backend:
+        results = await backend.query_by_filter("Document", filters, 1, "updated_at", None, None)
+
+    assert [result["platform"] for result in results] == expected
+
+
+@pytest.mark.asyncio
+async def test_sqlite_query_by_filter_delegate_honours_limit_and_type() -> None:
+    async with _filter_backend() as backend:
+        one = await backend.query_by_filter("Document", {}, 1, "updated_at", None, None)
+        both = await backend.query_by_filter("Document", {}, 10, "updated_at", None, None)
+        wrong_type = await backend.query_by_filter("Message", {}, 10, "updated_at", None, None)
+
+    assert len(one) == 1
+    assert len(both) == 2
+    # The Person seeded alongside the documents must not leak into a Document query.
+    assert {result["entity_type"] for result in both} == {"Document"}
+    assert wrong_type == []
+
+
 @pytest.mark.asyncio
 async def test_query_by_filter_reuses_connector_for_web_url_enrichment() -> None:
     from agentgraph.graph.query import query_by_filter
@@ -268,7 +410,8 @@ async def test_query_by_filter_reuses_connector_for_web_url_enrichment() -> None
         _entity(platform="example"),
         _entity(platform="example"),
     ]
-    backend = _mock_backend(query_by_filter=AsyncMock(return_value=entities))
+    # query_by_filter is a narrow spelling of search_entities with no query string.
+    backend = _mock_backend(search_entities=AsyncMock(return_value=entities))
     set_backend(backend)
 
     class FakeConnector:
@@ -998,37 +1141,63 @@ async def test_mcp_tool_metadata_guides_agent_workflow() -> None:
     assert tools["delete_entity_tool"].annotations is not None
     assert tools["delete_entity_tool"].annotations.destructiveHint is True
     assert "install_skill_tool" not in tools
+    assert "query_by_filter_tool" not in tools
     search_description = tools["search_entities_tool"].description
-    query_description = tools["query_by_filter_tool"].description
     assert search_description is not None
-    assert query_description is not None
     assert "default 0.03" in search_description
-    assert "filters={\"platform\": \"gmail\"}" in query_description
+    # The filtering guidance folded in from the removed query_by_filter_tool.
+    assert 'platform="gmail"' in search_description
+    assert "has_attachments" in search_description
+    assert "metadata.attachments" in search_description
 
 
 @pytest.mark.asyncio
-async def test_mcp_query_by_filter_tool() -> None:
-    from agentgraph.mcp.server import query_by_filter_tool
+async def test_mcp_search_entities_tool_filters_without_a_query() -> None:
+    from agentgraph.mcp.server import search_entities_tool
 
-    with patch("agentgraph.graph.query.query_by_filter", new=AsyncMock(return_value=[])):
-        result = await query_by_filter_tool("Message", filters={"channel_id": "C123"})
+    with patch(
+        "agentgraph.graph.query.search_entities", new=AsyncMock(return_value=[])
+    ) as search:
+        result = await search_entities_tool(filters={"channel_id": "C123"})
 
-    parsed = json.loads(result)
-    assert isinstance(parsed, list)
+    assert isinstance(json.loads(result), list)
+    # No query string, so the unranked default limit applies and filter values are
+    # coerced to the strings every predicate compares against.
+    assert search.await_args is not None
+    assert search.await_args.args[0] is None
+    assert search.await_args.kwargs["filters"] == {"channel_id": "C123"}
+    assert search.await_args.kwargs["limit"] == 50
 
 
 @pytest.mark.asyncio
-async def test_mcp_query_by_filter_tool_truncates_long_content() -> None:
-    from agentgraph.mcp.server import query_by_filter_tool
+async def test_mcp_search_entities_tool_coerces_non_string_filter_values() -> None:
+    """MCP clients send numbers and bools; the predicates compare against text."""
+    from agentgraph.mcp.server import search_entities_tool
+
+    with patch(
+        "agentgraph.graph.query.search_entities", new=AsyncMock(return_value=[])
+    ) as search:
+        await search_entities_tool(filters={"issue_number": 42, "resolved": True})
+
+    assert search.await_args is not None
+    assert search.await_args.kwargs["filters"] == {
+        "issue_number": "42",
+        "resolved": "True",
+    }
+
+
+@pytest.mark.asyncio
+async def test_mcp_search_entities_tool_truncates_long_content() -> None:
+    from agentgraph.mcp.server import search_entities_tool
 
     entity = _entity(content="x" * 700)
 
     with (
-        patch("agentgraph.graph.query.query_by_filter", new=AsyncMock(return_value=[entity])),
+        patch("agentgraph.graph.query.search_entities", new=AsyncMock(return_value=[entity])),
         patch("agentgraph.connectors.registry.bootstrap"),
         patch("agentgraph.connectors.registry.get_connector", return_value=None),
     ):
-        result = await query_by_filter_tool("Message")
+        result = await search_entities_tool(entity_types=["Message"])
 
     parsed = json.loads(result)
     # Bounded by the query layer's summarize_entities, which the transport applies for

@@ -197,7 +197,7 @@ async def list_connectors_tool(verify: bool = False) -> str:
 
     Use this when source availability, freshness, authentication, or valid
     platform values matter. Normal graph reads do not need to call it first.
-    For query_by_filter_tool, scope a source with filters={"platform": "..."}.
+    For search_entities_tool, scope a source with platform="...".
     Set verify=true only when a live provider credential check is needed.
 
     Returns:
@@ -525,52 +525,121 @@ async def _enrich_results(results: list[dict[str, Any]]) -> None:
     )
 )
 async def search_entities_tool(
-    query: str,
+    query: str | None = None,
     entity_types: list[str] | None = None,
     platform: str | None = None,
-    limit: int = 10,
+    filters: dict[str, Any] | None = None,
+    since: str | None = None,
+    authored_by_me: bool = False,
+    has_attachments: bool = False,
+    limit: int | None = None,
+    order_by: str | None = None,
     min_score: float = 0.03,
     refresh: bool = False,
 ) -> str:
     """
-    Search the knowledge graph using a natural-language query.
+    Search or filter the knowledge graph.
 
-    Combines semantic vector similarity and full-text search via
-    Reciprocal Rank Fusion for high-quality results.
+    With a query, combines semantic vector similarity and full-text search via
+    Reciprocal Rank Fusion, applying every filter below as a hard predicate.
+    Without a query there is no ranking: the filters alone select entities,
+    newest first. Use this for listing all messages in a specific channel, all
+    documents on a platform, activity within a time window, or content authored
+    by the current user.
+
+    Entity types and what they contain:
+      - Message: chat messages from Discord, Slack, etc. This is
+          where chat image and file uploads live — attachments are stored
+          in metadata.attachments as a JSON array with fields: url,
+          filename, content_type, width, height. To find images or
+          uploaded files, search Message (not Document) and set
+          has_attachments=True.
+      - Document: text documents such as Google Docs, plus Gmail attachment
+          stubs referenced by their owning Email. Gmail attachment Document
+          stubs can be passed to download_entity_tool.
+      - Spreadsheet: Google Sheets or Excel files.
+      - Folder: a Google Drive folder containing other entities.
+      - Channel: a chat channel or DM thread (Discord, Slack, etc.).
+      - Email: an email thread (Gmail).
+      - Task: a tracked work item such as a Jira issue. Status, assignee,
+          and issue key live in metadata.
+      - Video: a recorded video such as a Loom. The transcript is indexed as
+          content, and metadata.web_url links to the video.
+      - Person: a source identity or confirmed cross-source identity merge.
 
     IMPORTANT — attachments: chat photos, images, and uploaded files are
     stored as attachments on Message entities (in metadata.attachments).
     Gmail email attachments are represented as Gmail Document stubs referenced
     by the owning Email and can be downloaded with download_entity_tool.
-    If the user asks about chat uploads, search Message entities or use
-    query_by_filter_tool with has_attachments=True. If the user asks about
-    Gmail attachments, inspect the Email's referenced Document stubs.
+    If the user asks about chat uploads, pass entity_types=["Message"] and
+    has_attachments=True. If the user asks about Gmail attachments, inspect the
+    Email's referenced Document stubs.
+
+    Example — find images uploaded in the last 7 days:
+        entity_types=["Message"], has_attachments=True, since="7d"
 
     Args:
-        query: Natural-language search query.
+        query: Optional natural-language search query. Omit to select purely by
+            the filters below.
         entity_types: Optional list of entity types to restrict results
-            (e.g. ["Message", "Document", "Channel"]). To find chat images or
-            attachments, pass ["Message"]. To find Gmail attachment stubs, pass
-            ["Document"] and platform="gmail".
-        platform: Optional platform name to scope the search to a single
-            source (e.g. "slack", "discord", "gdocs", "gmail", "rss"). When
-            omitted, all platforms are searched. Use this to avoid
-            cross-platform noise when the user specifies a source.
-        limit: Maximum number of results to return (default 10).
+            (e.g. ["Message", "Document", "Channel"]). See above for what each
+            type contains. To find chat images or attachments, pass ["Message"].
+            To find Gmail attachment stubs, pass ["Document"] and platform="gmail".
+        platform: Optional platform name to scope to a single source (e.g.
+            "slack", "discord", "gdocs", "gmail", "rss"). When omitted, all
+            platforms are searched. Use this to avoid cross-platform noise when
+            the user specifies a source.
+        filters: Optional dict of key=value filters. Known columns
+            (platform, platform_entity_id, entity_type) are applied as column
+            filters; all other keys are matched against the metadata JSONB field.
+        since: Optional time cutoff — ISO timestamp or relative duration
+            like "12h", "30m", "2d". Only returns entities updated after
+            this time.
+        authored_by_me: If true, only return entities with an authored
+            edge from the current user (resolved from stored credentials).
+        has_attachments: If true, only return Message entities that have
+            at least one chat file or image attachment in metadata.attachments.
+            Ignored for non-Message entity types. Gmail attachments are
+            Document stubs instead.
+        limit: Maximum number of results. Defaults to 10 with a query and 50
+            without.
+        order_by: Optional date column to sort by descending instead of
+            relevance: created_at, updated_at, source_created_at,
+            source_updated_at, observed_at, or synced_at. With a query, results
+            are still relevance-filtered but date-sorted.
         min_score: Minimum relevance score threshold (0–1, default 0.03).
-            Results below this score are suppressed as noise.
+            Results below this score are suppressed as noise. Ignored when no
+            query is given.
         refresh: If true, let connectors refresh or enrich connector-owned
             presentation metadata before returning. Defaults to false to keep
             search responsive.
 
     Returns:
         JSON array of matching entities with id, title, bounded content snippet,
-        content_truncated, platform, and relevance score. Use get_entity_tool for
-        full stored content. Connectors may refresh or enrich connector-owned
-        metadata before results are returned.
+        content_truncated, platform, and (with a query) a relevance score. For
+        Message entities with attachments, each result includes
+        metadata.attachments — a JSON string that decodes to a list of
+        {url, filename, content_type, width?, height?} objects. Use
+        get_entity_tool for full stored content. Connectors may refresh or
+        enrich connector-owned metadata before results are returned.
     """
+    # MCP clients send non-string filter values (numbers, bools), but every
+    # predicate compares against text columns or JSON scalars.
+    str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
+    resolved_limit = limit if limit is not None else (10 if query else 50)
     results = await _with_client(
-        lambda client: client.search(query, entity_types, limit, min_score, platform)
+        lambda client: client.search(
+            query,
+            entity_types,
+            resolved_limit,
+            min_score,
+            platform,
+            filters=str_filters,
+            since=since,
+            authored_by_me=authored_by_me,
+            has_attachments=has_attachments,
+            order_by=order_by,
+        )
     )
     if refresh:
         await _enrich_results(results)
@@ -998,106 +1067,3 @@ async def unify_persons_tool(
         return json.dumps(result, default=str)
     except ValueError as exc:
         return json.dumps({"error": str(exc)})
-
-
-# ---------------------------------------------------------------------------
-# query_by_filter — type + metadata filters
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool(
-    annotations=_tool_annotations(
-        "Filter AgentGraph entities",
-        read_only=True,
-        destructive=False,
-        idempotent=True,
-        open_world=True,
-    )
-)
-async def query_by_filter_tool(
-    entity_type: str,
-    filters: dict[str, Any] | None = None,
-    since: str | None = None,
-    authored_by_me: bool = False,
-    has_attachments: bool = False,
-    limit: int = 50,
-    order_by: str = "created_at",
-    refresh: bool = False,
-) -> str:
-    """
-    Query entities by type with optional filters.
-
-    Useful for listing all messages in a specific channel, all documents
-    on a platform, activity within a time window, or content authored by
-    the current user.
-
-    Entity types and what they contain:
-      - Message: chat messages from Discord, Slack, etc. This is
-          where chat image and file uploads live — attachments are stored
-          in metadata.attachments as a JSON array with fields: url,
-          filename, content_type, width, height. To find images or
-          uploaded files, query Message (not Document) and set
-          has_attachments=True.
-      - Document: text documents such as Google Docs, plus Gmail attachment
-          stubs referenced by their owning Email. Gmail attachment Document
-          stubs can be passed to download_entity_tool.
-      - Spreadsheet: Google Sheets or Excel files.
-      - Folder: a Google Drive folder containing other entities.
-      - Channel: a chat channel or DM thread (Discord, Slack, etc.).
-      - Email: an email thread (Gmail).
-      - Task: a tracked work item such as a Jira issue. Status, assignee,
-          and issue key live in metadata.
-      - Video: a recorded video such as a Loom. The transcript is indexed as
-          content, and metadata.web_url links to the video.
-      - Person: a source identity or confirmed cross-source identity merge.
-
-    Example — find images uploaded in the last 7 days:
-        entity_type="Message", has_attachments=True, since="7d"
-
-    Args:
-        entity_type: Entity type to query. See above for what each type
-            contains. Use "Message" to find chat uploads; use "Document" with
-            filters={"platform": "gmail"} to find Gmail attachment stubs.
-        filters: Optional dict of key=value filters. Known columns
-            (platform, platform_entity_id) are applied as column filters;
-            all other keys are matched against the metadata JSONB field.
-        since: Optional time cutoff — ISO timestamp or relative duration
-            like "12h", "30m", "2d". Only returns entities updated after
-            this time.
-        authored_by_me: If true, only return entities with an authored
-            edge from the current user (resolved from stored credentials).
-        has_attachments: If true, only return Message entities that have
-            at least one chat file or image attachment in metadata.attachments.
-            Ignored for non-Message entity types. Gmail attachments are
-            Document stubs instead.
-        limit: Maximum number of results (default 50).
-        order_by: Date column to sort by descending: created_at, updated_at,
-            source_created_at, source_updated_at, observed_at, or synced_at
-            (default "created_at").
-        refresh: If true, let connectors refresh or enrich connector-owned
-            presentation metadata before returning. Defaults to false to keep
-            queries responsive.
-
-    Returns:
-        JSON array of matching entities with bounded content and a
-        content_truncated flag. For Message entities with
-        attachments, each result includes metadata.attachments — a JSON
-        string that decodes to a list of {url, filename, content_type,
-        width?, height?} objects. Connectors may refresh or enrich
-        connector-owned metadata before results are returned.
-    """
-    str_filters: dict[str, str] = {k: str(v) for k, v in (filters or {}).items()}
-    results = await _with_client(
-        lambda client: client.query_by_filter(
-            entity_type,
-            str_filters,
-            limit,
-            order_by,
-            since,
-            authored_by_me,
-            has_attachments,
-        )
-    )
-    if refresh:
-        await _enrich_results(results)
-    return json.dumps(results, default=str)

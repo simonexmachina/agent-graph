@@ -52,17 +52,47 @@ def _enrich_web_url(entities: list[EntityResult]) -> None:
 
 
 async def search_entities(
-    query: str,
+    query: str | None = None,
     entity_types: list[str] | None = None,
     limit: int = 10,
     min_score: float = 0.03,
     platform: str | None = None,
+    filters: dict[str, str] | None = None,
+    since: str | None = None,
+    authored_by_me: bool = False,
+    has_attachments: bool = False,
+    order_by: str | None = None,
 ) -> list[EntityResult]:
-    """Hybrid search: combines vector similarity with full-text via RRF."""
-    embedding = list(await asyncio.to_thread(_cached_query_embedding, query))
+    """Select entities by filter, ranked by hybrid relevance when a query is given.
+
+    With ``query`` the vector and full-text legs are fused via RRF and every filter
+    is applied as a SQL predicate. Without it there is no retrieval leg: the filters
+    alone select the rows, ``order_by`` sorts them, and ``min_score`` is inert.
+    """
+    embedding = (
+        list(await asyncio.to_thread(_cached_query_embedding, query))
+        if query is not None
+        else None
+    )
+    since_dt = parse_since(since) if since else None
+    authored_by: list[str] | None = _resolve_me() if authored_by_me else None
+    # `platform` is ergonomic shorthand for the same predicate `filters` can carry, so
+    # an explicit filter wins instead of ANDing two contradictory platform clauses.
+    if filters and "platform" in filters:
+        platform = None
     backend = get_backend()
     results = await backend.search_entities(
-        embedding, query, entity_types, limit, min_score, platform=platform
+        embedding,
+        query,
+        entity_types,
+        limit,
+        min_score,
+        platform=platform,
+        filters=filters,
+        since=since_dt,
+        authored_by=authored_by,
+        has_attachments=has_attachments,
+        order_by=order_by,
     )
     _enrich_web_url(results)
     return results
@@ -150,14 +180,17 @@ async def query_by_filter(
     authored_by_me: bool = False,
     has_attachments: bool = False,
 ) -> list[EntityResult]:
-    since_dt = parse_since(since) if since else None
-    authored_by: list[str] | None = _resolve_me() if authored_by_me else None
-    results = await get_backend().query_by_filter(
-        entity_type, filters, limit, order_by, since_dt, authored_by,
+    """Single-type filtered read: ``search_entities`` with no query string."""
+    return await search_entities(
+        None,
+        entity_types=[entity_type],
+        limit=limit,
+        filters=filters,
+        since=since,
+        authored_by_me=authored_by_me,
         has_attachments=has_attachments,
+        order_by=order_by,
     )
-    _enrich_web_url(results)
-    return results
 
 
 async def list_entities(

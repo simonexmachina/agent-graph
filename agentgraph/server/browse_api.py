@@ -28,10 +28,11 @@ async def search_entities(
     limit: int = 10,
     min_score: float = 0.03,
     platform: str | None = None,
+    since: str | None = None,
 ) -> list[dict[str, Any]]:
     from agentgraph.graph.query import search_entities as impl
 
-    return await impl(query, entity_types, limit, min_score, platform)
+    return await impl(query, entity_types, limit, min_score, platform, since=since)
 
 
 async def get_entity(entity_id: str) -> dict[str, Any] | None:
@@ -180,6 +181,9 @@ async def _resolve_viewer_node_set(
 
     # --- Phase 2: candidate nodes ---
     if search:
+        # Over-fetch only for the neighbourhood path, where the Python prune below
+        # can discard most of the window. Platform and since are SQL predicates now,
+        # so the plain search path needs nothing beyond the More-control probe.
         search_limit = limit + 1 if neighbourhood_ids is None else max(limit + 1, 500)
         # The viewer needs every lexical match up to its active limit so it can
         # reliably expose the More control. Hybrid RRF scores naturally fall
@@ -189,6 +193,8 @@ async def _resolve_viewer_node_set(
             entity_types=entity_type or None,
             limit=search_limit,
             min_score=0.0,
+            platform=platform,
+            since=since,
         )
         if neighbourhood_ids is not None:
             nodes = [n for n in nodes if n["id"] in neighbourhood_ids]
@@ -217,12 +223,14 @@ async def _resolve_viewer_node_set(
             limit=limit + 1,
         )
 
-    # Apply platform / since on search and neighbourhood paths (list_entities handles them natively)
-    if platform and (search or neighbourhood_ids is not None):
-        nodes = [n for n in nodes if n.get("platform") == platform]
-    if since and (search or neighbourhood_ids is not None):
-        cutoff = parse_since(since)
-        nodes = [n for n in nodes if _viewer_updated_at_on_or_after(n, cutoff)]
+    # The neighbourhood path materialises nodes from a traversal, which has no
+    # predicate hooks; search and list_entities apply both filters in SQL.
+    if neighbourhood_ids is not None:
+        if platform:
+            nodes = [n for n in nodes if n.get("platform") == platform]
+        if since:
+            cutoff = parse_since(since)
+            nodes = [n for n in nodes if _viewer_updated_at_on_or_after(n, cutoff)]
 
     has_more = len(nodes) > limit
     nodes = nodes[:limit]

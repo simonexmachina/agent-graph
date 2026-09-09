@@ -27,7 +27,7 @@ context is sufficient and traversal when the investigation needs a bounded subgr
 Chat photos and file uploads are attachments on `Message` entities. Query them with:
 
 ```bash
-agentgraph query --type Message --has-attachments --since 7d --json
+agentgraph search --type Message --has-attachments --since 7d --json
 ```
 
 `metadata.attachments` is a JSON array containing `url`, `filename`, `content_type`,

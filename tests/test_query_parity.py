@@ -33,7 +33,7 @@ def _as_cli_json(value: object) -> str:
 @pytest_asyncio.fixture
 async def seeded_clients() -> AsyncIterator[tuple[QueryClient, QueryClient, dict[str, Any]]]:
     from agentgraph.backends.sqlite.backend import SQLiteBackend
-    from agentgraph.connectors.base import EntityBatch, EntityRecord
+    from agentgraph.connectors.base import EdgeRecord, EntityBatch, EntityRecord, PersonRecord
 
     backend = SQLiteBackend(":memory:")
     await backend.initialize()
@@ -51,12 +51,29 @@ async def seeded_clients() -> AsyncIterator[tuple[QueryClient, QueryClient, dict
                         metadata={"web_url": f"https://example.com/{index}"},
                     )
                     for index in range(3)
-                ]
+                ],
+                persons=[
+                    PersonRecord(
+                        platform="web",
+                        platform_user_id="author-1",
+                        display_name="Author One",
+                    )
+                ],
+                # One authored document, so `--mine` parity compares a non-empty
+                # result set rather than two empty ones.
+                edges=[
+                    EdgeRecord(
+                        edge_type="authored",
+                        platform="web",
+                        source_platform_user_id="author-1",
+                        target_platform_entity_id="doc-1",
+                    )
+                ],
             ),
             person_embeddings={},
             entity_embeddings={},
         )
-        listed = await backend.list_entities(None, None, None, 10)
+        listed = await backend.list_entities(["Document"], None, None, 10)
         anchor = dict(listed[0])
 
         in_process = InProcessQueryClient()
@@ -92,6 +109,75 @@ async def test_search_with_filters_matches(
     assert _as_cli_json(await in_process.search(*args)) == _as_cli_json(
         await over_http.search(*args)
     )
+
+
+# Every combination the merged `search` accepts, as the CLI would pass it:
+# (query, entity_types, limit, min_score, platform) then the filter keywords.
+_SEARCH_CASES: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = [
+    ("query with metadata filters", ("roadmap", None, 10, 0.0, None),
+     {"filters": {"web_url": "https://example.com/1"}}),
+    ("query with a column filter", ("roadmap", None, 10, 0.0, None),
+     {"filters": {"platform": "web"}}),
+    ("query with since", ("roadmap", None, 10, 0.0, None), {"since": "24h"}),
+    ("query with an exhausted since", ("roadmap", None, 10, 0.0, None),
+     {"since": "2099-01-01T00:00:00+00:00"}),
+    ("query ordered by date", ("roadmap", None, 10, 0.0, None),
+     {"order_by": "created_at"}),
+    ("no query, filters only", (None, ["Document"], 50, 0.03, None),
+     {"filters": {"platform": "web"}}),
+    ("no query, no filters", (None, None, 50, 0.03, None), {}),
+    ("no query, since and order_by", (None, ["Document"], 50, 0.03, None),
+     {"since": "24h", "order_by": "updated_at"}),
+    ("no query, empty filter mapping", (None, ["Document"], 50, 0.03, None),
+     {"filters": {}}),
+]
+
+
+@pytest.mark.parametrize(
+    ("args", "kwargs"),
+    [(args, kwargs) for _, args, kwargs in _SEARCH_CASES],
+    ids=[name for name, _, _ in _SEARCH_CASES],
+)
+@pytest.mark.asyncio
+async def test_search_combinations_match(
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    seeded_clients: tuple[QueryClient, QueryClient, dict[str, Any]],
+) -> None:
+    """The filter set is now shared between the ranked and unranked paths.
+
+    An empty filter mapping is in here on purpose: it has to survive being sent as
+    a JSON body, which is what the removed `/entities/filter` route guarded.
+    """
+    in_process, over_http, _ = seeded_clients
+
+    local = await in_process.search(*args, **kwargs)
+    remote = await over_http.search(*args, **kwargs)
+    assert _as_cli_json(local) == _as_cli_json(remote)
+
+
+@pytest.mark.parametrize("query", ["roadmap", None], ids=["ranked", "unranked"])
+@pytest.mark.asyncio
+async def test_search_authored_by_me_matches(
+    query: str | None,
+    seeded_clients: tuple[QueryClient, QueryClient, dict[str, Any]],
+) -> None:
+    """`--mine` resolves identities through connectors, so pin one for both sides."""
+    from unittest.mock import patch
+
+    in_process, over_http, _ = seeded_clients
+
+    with patch("agentgraph.graph.query._resolve_me", return_value=["author-1"]):
+        local = await in_process.search(
+            query, None, 10, 0.0, None, authored_by_me=True
+        )
+        remote = await over_http.search(
+            query, None, 10, 0.0, None, authored_by_me=True
+        )
+
+    assert _as_cli_json(local) == _as_cli_json(remote)
+    # The authored JOIN must narrow both legs, not just the unranked path.
+    assert [entity["platform_entity_id"] for entity in local] == ["doc-1"]
 
 
 @pytest.mark.asyncio
@@ -158,32 +244,6 @@ async def test_traverse_matches(
 
     assert _as_cli_json(local_entity) == _as_cli_json(remote_entity)
     assert _as_cli_json(local_result) == _as_cli_json(remote_result)
-
-
-@pytest.mark.asyncio
-async def test_query_by_filter_matches(
-    seeded_clients: tuple[QueryClient, QueryClient, dict[str, Any]],
-) -> None:
-    in_process, over_http, _ = seeded_clients
-
-    args = ("Document", {"platform": "web"}, 10, "observed_at", None, False, False)
-    assert _as_cli_json(await in_process.query_by_filter(*args)) == _as_cli_json(
-        await over_http.query_by_filter(*args)
-    )
-
-
-@pytest.mark.asyncio
-async def test_query_by_filter_with_no_filters_matches(
-    seeded_clients: tuple[QueryClient, QueryClient, dict[str, Any]],
-) -> None:
-    """An empty filter mapping must survive being sent as a JSON body."""
-    in_process, over_http, _ = seeded_clients
-
-    no_filters: dict[str, str] = {}
-    args = ("Document", no_filters, 10, "observed_at", None, False, False)
-    assert _as_cli_json(await in_process.query_by_filter(*args)) == _as_cli_json(
-        await over_http.query_by_filter(*args)
-    )
 
 
 @pytest.mark.asyncio

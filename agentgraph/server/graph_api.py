@@ -65,8 +65,8 @@ def _wants_display(include: str | None) -> bool:
 
 # --- Literal paths and distinct prefixes -------------------------------------------
 # Declared before the `{ref:path}` routes below: a path converter matches greedily, so
-# a bare `{ref:path}` declared earlier would swallow "search", "filter" and the
-# `/edges`-style suffixes. tests/test_route_resolution.py pins this ordering.
+# a bare `{ref:path}` declared earlier would swallow "search" and the `/edges`-style
+# suffixes. tests/test_route_resolution.py pins this ordering.
 
 
 @router.get("/capabilities")
@@ -77,18 +77,28 @@ async def capabilities() -> dict[str, Any]:
     accepts the connection and then 404s every call, so the CLI's `auto` transport
     would hard-fail where it should fall back to in-process.
     """
-    return {"status": "ok", "routes": "resource"}
+    return {"status": "ok", "routes": "resource2"}
 
 
-@router.get("/entities/search")
+@router.post("/entities/search")
 async def search_entities(
-    query: str,
+    filters: dict[str, str] = Body(default_factory=dict),
+    query: str | None = Query(default=None),
     entity_types: list[str] | None = Query(default=None),
     limit: int = Query(default=10),
     min_score: float = Query(default=0.03),
     platform: str | None = Query(default=None),
+    since: str | None = Query(default=None),
+    authored_by_me: bool = Query(default=False),
+    has_attachments: bool = Query(default=False),
+    order_by: str | None = Query(default=None),
     include: str | None = Query(default=None),
 ) -> list[dict[str, Any]]:
+    """POST, not GET, because ``filters`` is an open-ended field/value mapping.
+
+    Omitting ``query`` drops the retrieval legs, leaving the filters to select the
+    rows — what the removed ``/entities/filter`` route used to do.
+    """
     from agentgraph.graph.operations import summarize_entities
     from agentgraph.graph.query import search_entities as impl
 
@@ -98,34 +108,11 @@ async def search_entities(
         limit=limit,
         min_score=min_score,
         platform=platform,
-    )
-    summarized = summarize_entities(results)
-    return with_display_names(summarized) if _wants_display(include) else summarized
-
-
-@router.post("/entities/filter")
-async def filter_entities(
-    entity_type: str,
-    filters: dict[str, str] = Body(default_factory=dict),
-    limit: int = Query(default=50),
-    order_by: str = Query(default="observed_at"),
-    since: str | None = Query(default=None),
-    authored_by_me: bool = Query(default=False),
-    has_attachments: bool = Query(default=False),
-    include: str | None = Query(default=None),
-) -> list[dict[str, Any]]:
-    """POST because ``filters`` is an open-ended field/value mapping."""
-    from agentgraph.graph.operations import summarize_entities
-    from agentgraph.graph.query import query_by_filter
-
-    results = await query_by_filter(
-        entity_type,
-        filters=filters,
-        limit=limit,
-        order_by=order_by,
+        filters=filters or None,
         since=since,
         authored_by_me=authored_by_me,
         has_attachments=has_attachments,
+        order_by=order_by,
     )
     summarized = summarize_entities(results)
     return with_display_names(summarized) if _wants_display(include) else summarized

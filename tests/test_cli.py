@@ -498,57 +498,68 @@ def test_fetch_entity_uses_graph_operation_without_http() -> None:
 
 
 def test_backend_error_exits_nonzero() -> None:
-    from agentgraph.cli_query import cmd_query
+    from agentgraph.cli_query import cmd_search
 
     with (
         patch("agentgraph.cli_query.backend_context", side_effect=RuntimeError("database offline")),
         pytest.raises(SystemExit) as exc,
     ):
-        cmd_query(
-            entity_type="Email",
-            filters={},
-            limit=5,
-            order_by="updated_at",
-            since=None,
-            authored_by_me=False,
-            as_json=True,
-        )
+        cmd_search(entity_types=["Email"], order_by="updated_at", as_json=True)
 
     assert exc.value.code == 1
 
 
-def test_query_uses_graph_operation_without_http() -> None:
-    from agentgraph.cli_query import cmd_query
+def test_filtered_search_uses_graph_operation_without_http() -> None:
+    from agentgraph.cli_query import cmd_search
 
     with (
         patch("agentgraph.cli_query.backend_context", _fake_backend_context),
         patch("agentgraph.connectors.registry.bootstrap"),
         patch(
-            "agentgraph.graph.query.query_by_filter",
+            "agentgraph.graph.query.search_entities",
             new=AsyncMock(return_value=[]),
-        ) as query_by_filter,
+        ) as search_entities,
         patch("httpx.get", side_effect=AssertionError("unexpected HTTP GET")),
         patch("httpx.post", side_effect=AssertionError("unexpected HTTP POST")),
     ):
-        cmd_query(
-            entity_type="Email",
-            filters={},
+        cmd_search(
+            entity_types=["Email"],
+            filters={"platform": "gmail"},
             limit=5,
             order_by="updated_at",
-            since=None,
-            authored_by_me=False,
             as_json=True,
         )
 
-    query_by_filter.assert_awaited_once_with(
-        "Email",
-        filters={},
+    search_entities.assert_awaited_once_with(
+        None,
+        entity_types=["Email"],
         limit=5,
-        order_by="updated_at",
+        min_score=0.03,
+        platform=None,
+        filters={"platform": "gmail"},
         since=None,
         authored_by_me=False,
         has_attachments=False,
+        order_by="updated_at",
     )
+
+
+def test_search_limit_defaults_split_on_whether_a_query_was_given() -> None:
+    """A ranked search stays at 10; a filter-only listing browses 50, as `query` did."""
+    from agentgraph.cli_query import cmd_search
+
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.query.search_entities",
+            new=AsyncMock(return_value=[]),
+        ) as search_entities,
+    ):
+        cmd_search(query="atlas", as_json=True)
+        cmd_search(as_json=True)
+
+    assert [call.kwargs["limit"] for call in search_entities.await_args_list] == [10, 50]
 
 
 def test_auth_help() -> None:
@@ -2026,6 +2037,28 @@ def test_auth_google_valid_credentials_can_skip_reauth(
     assert "Keeping existing credentials" in result.output
 
 
-def test_search_requires_query() -> None:
-    result = runner.invoke(app, ["search"])
-    assert result.exit_code != 0
+def test_search_without_a_query_lists_recent_entities() -> None:
+    """The query argument is optional: filters alone are a valid selection."""
+    entity = {
+        "id": "22c57772-78cb-4234-ada7-36730b26e52c",
+        "entity_type": "Message",
+        "platform": "slack",
+        "title": "Standup notes",
+    }
+
+    with (
+        patch("agentgraph.cli_query.backend_context", _fake_backend_context),
+        patch("agentgraph.connectors.registry.bootstrap"),
+        patch(
+            "agentgraph.graph.query.search_entities",
+            new=AsyncMock(return_value=[entity]),
+        ) as search_entities,
+    ):
+        result = runner.invoke(app, ["search"])
+
+    assert result.exit_code == 0
+    assert "Standup notes" in result.output
+    # No query string, so there is no relevance column to render.
+    assert "Score" not in result.output
+    assert search_entities.await_args is not None
+    assert search_entities.await_args.args[0] is None

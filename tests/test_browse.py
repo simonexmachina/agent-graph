@@ -75,7 +75,6 @@ def test_server_exposes_only_viewer_extension_and_sync_routes() -> None:
         "/api/meta",
         "/api/capabilities",
         "/api/entities/search",
-        "/api/entities/filter",
         "/api/entities/{ref:path}",
         "/api/entities/{ref:path}/edges",
         "/api/entities/{ref:path}/bookmark",
@@ -754,6 +753,36 @@ async def test_search_with_node_id_intersects_neighbourhood() -> None:
     assert focal["id"] in node_ids  # focal always present
 
 
+@pytest.mark.parametrize("since", ["24h", "2025-01-02T00:00:00Z"])
+@pytest.mark.asyncio
+async def test_search_pushes_platform_and_since_into_the_query(since: str) -> None:
+    """Search takes the same filters as entity listing, applied as SQL predicates.
+
+    They used to be post-filtered in Python here because the ranked path could not
+    express them; the merged search can, so the viewer just forwards them.
+    """
+    from agentgraph.server.browse_api import cli_browse
+
+    mock_search = AsyncMock(return_value=[])
+    with patch("agentgraph.server.browse_api.search_entities", mock_search), patch(
+        "agentgraph.server.browse_api.get_edges_for_entities",
+        AsyncMock(return_value=[]),
+    ):
+        await cli_browse(
+            node_id=None,
+            entity_type=[],
+            search="match",
+            platform="slack",
+            since=since,
+            depth=2,
+            limit=50,
+        )
+
+    mock_search.assert_awaited_once_with(
+        "match", entity_types=None, limit=51, min_score=0.0, platform="slack", since=since
+    )
+
+
 @pytest.mark.parametrize(
     ("since", "included_updated_at", "excluded_updated_at"),
     [
@@ -770,37 +799,49 @@ async def test_search_with_node_id_intersects_neighbourhood() -> None:
     ],
 )
 @pytest.mark.asyncio
-async def test_search_filters_since_using_parsed_timestamps(
+async def test_neighbourhood_filters_since_using_parsed_timestamps(
     since: str,
     included_updated_at: str,
     excluded_updated_at: str,
 ) -> None:
-    """Search supports the same relative and ISO since values as entity listing."""
+    """The neighbourhood path has no predicate hook, so it still filters in Python."""
     from agentgraph.server.browse_api import cli_browse
 
+    focal = _entity(title="Focal")
     included = _entity(title="Recent match")
     included["updated_at"] = included_updated_at
     excluded = _entity(title="Old match")
     excluded["updated_at"] = excluded_updated_at
 
+    traverse_result = {
+        "nodes": [focal, included, excluded],
+        "edges": [_edge(focal["id"], included["id"]), _edge(focal["id"], excluded["id"])],
+    }
+
     with patch(
-        "agentgraph.server.browse_api.search_entities",
-        AsyncMock(return_value=[included, excluded]),
+        "agentgraph.server.browse_api.get_entity", AsyncMock(return_value=focal)
+    ), patch(
+        "agentgraph.server.browse_api.traverse_graph",
+        AsyncMock(return_value=traverse_result),
     ), patch(
         "agentgraph.server.browse_api.get_edges_for_entities",
         AsyncMock(return_value=[]),
+    ), patch(
+        "agentgraph.server.browse_api.get_entities_by_ids", AsyncMock(return_value=[])
     ):
         result = await cli_browse(
-            node_id=None,
+            node_id=focal["id"],
             entity_type=[],
-            search="match",
+            search=None,
             platform=None,
             since=since,
             depth=2,
             limit=50,
         )
 
-    assert [node["id"] for node in result["nodes"]] == [included["id"]]
+    node_ids = {node["id"] for node in result["nodes"]}
+    assert included["id"] in node_ids
+    assert excluded["id"] not in node_ids
 
 
 @pytest.mark.asyncio
@@ -1103,7 +1144,7 @@ async def test_browse_nodes_checks_one_extra_search_result() -> None:
     assert result["total"] == 2
     assert result["has_more"] is True
     mock_search.assert_awaited_once_with(
-        "result", entity_types=None, limit=3, min_score=0.0
+        "result", entity_types=None, limit=3, min_score=0.0, platform=None, since=None
     )
 
 
