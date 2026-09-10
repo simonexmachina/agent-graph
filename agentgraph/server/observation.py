@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any
 
-from agentgraph.connectors.base import ResourceType, ResourceUnavailableError
+from agentgraph.connectors.base import ResourceType, ResourceUnavailableError, SourceReference
 from agentgraph.server.router import classify_observation_url
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,28 @@ def _forget_inflight_observation(
         task.exception()
 
 
+def _canonical_url(ref: SourceReference, observed_url: str) -> str:
+    """Prefer the connector's URL for a resource over the browsed one.
+
+    A browsed URL can carry information the resource identifier does not — a
+    Confluence page URL ends in the page title — and an observation is stored
+    and published to feed connectors, so the connector-derived form wins.
+    """
+    from agentgraph.connectors.registry import get_connector
+
+    web_url = (ref.fetch_meta or {}).get("web_url")
+    if web_url:
+        return web_url
+
+    connector = get_connector(ref.source)
+    if connector is not None:
+        entity_url = connector.entity_url(ref.resource_id)
+        if entity_url:
+            return entity_url
+
+    return observed_url
+
+
 async def record_observation(
     url: str,
     observation_duration_ms: int,
@@ -45,6 +67,7 @@ async def record_observation(
     from agentgraph.core.context import get_backend
 
     try:
+        canonical_url = _canonical_url(ref, url)
         backend = get_backend()
         if not observed:
             await backend.increment_observation_duration(
@@ -55,7 +78,7 @@ async def record_observation(
                     source=ref.source,
                     resource_id=ref.resource_id,
                     resource_type=ref.resource_type,
-                    url=url,
+                    url=canonical_url,
                     observation_duration_ms=observation_duration_ms,
                     meta=meta,
                 )
@@ -100,7 +123,7 @@ async def record_observation(
                     resource_type=ref.resource_type,
                     resource_id=ref.resource_id,
                     observation_id=observation_id,
-                    url=url,
+                    url=canonical_url,
                     observation_duration_ms=observation_duration_ms,
                     meta=fetch_meta or None,
                 )

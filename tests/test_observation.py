@@ -241,6 +241,8 @@ async def test_new_observation_dispatches_once() -> None:
     backend.record_observation_once = AsyncMock(return_value=True)
     set_backend(backend)
     ref = SourceReference(source="gmail", resource_type="thread", resource_id="thread-1")
+    # Already the connector's own form, so canonicalisation is a no-op here.
+    url = "https://mail.google.com/mail/u/0/#all/thread-1"
 
     with (
         patch(
@@ -252,12 +254,8 @@ async def test_new_observation_dispatches_once() -> None:
             new=AsyncMock(return_value={"entities": 1, "persons": 0, "edges": 0}),
         ) as dispatch,
     ):
-        first = await record_observation(
-            "https://mail.google.com/thread-1", 3000, "observation-1", True
-        )
-        duplicate = await record_observation(
-            "https://mail.google.com/thread-1", 3000, "observation-1", True
-        )
+        first = await record_observation(url, 3000, "observation-1", True)
+        duplicate = await record_observation(url, 3000, "observation-1", True)
     assert first["observation_created"] is True
     assert first["fetch"] == {"entities": 1, "persons": 0, "edges": 0}
     assert duplicate["observation_created"] is False
@@ -266,7 +264,7 @@ async def test_new_observation_dispatches_once() -> None:
         "gmail",
         "thread-1",
         "observation-1",
-        "https://mail.google.com/thread-1",
+        url,
         3000,
     )
     backend.upsert_stub_entity.assert_not_called()
@@ -518,3 +516,140 @@ def test_report_observation_returns_accepted_for_unavailable_resource(client: Te
 
     assert response.status_code == 202
     assert response.json() == {"status": "ignored", "reason": "resource unavailable"}
+
+
+_TITLED_PAGE_URL = "https://acme.atlassian.net/wiki/spaces/ENG/pages/884736/Q3+headcount+plan"
+_CANONICAL_PAGE_URL = "https://acme.atlassian.net/wiki/spaces/ENG/pages/884736"
+
+
+@pytest.mark.asyncio
+async def test_new_observation_records_connector_url_not_browsed_url() -> None:
+    from agentgraph.connectors.feed import ObservationMutation
+    from agentgraph.server.observation import record_observation
+
+    backend = MagicMock()
+    backend.observation_exists = AsyncMock(return_value=False)
+    backend.get_entity_by_platform = AsyncMock(return_value={"id": "page-entity"})
+    backend.record_observation_once = AsyncMock(return_value=True)
+    set_backend(backend)
+    ref = SourceReference(
+        source="twg",
+        resource_type="document",
+        resource_id="confluence/acme/884736",
+        fetch_meta={"web_url": _CANONICAL_PAGE_URL},
+    )
+
+    with (
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
+        patch(
+            "agentgraph.server.observation._dispatch",
+            new=AsyncMock(return_value={"entities": 1, "persons": 0, "edges": 0}),
+        ),
+        patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
+    ):
+        result = await record_observation(_TITLED_PAGE_URL, 3000, "observation-1", True)
+
+    assert result["observation_created"] is True
+    backend.record_observation_once.assert_awaited_once_with(
+        "twg",
+        "confluence/acme/884736",
+        "observation-1",
+        _CANONICAL_PAGE_URL,
+        3000,
+    )
+    await_args = notify.await_args
+    assert await_args is not None
+    event = await_args.args[0]
+    assert isinstance(event, ObservationMutation)
+    assert event.target.url == _CANONICAL_PAGE_URL
+
+
+@pytest.mark.asyncio
+async def test_duration_only_observation_publishes_connector_url() -> None:
+    from agentgraph.server.observation import record_observation
+
+    backend = MagicMock()
+    backend.increment_observation_duration = AsyncMock()
+    set_backend(backend)
+    ref = SourceReference(
+        source="twg",
+        resource_type="document",
+        resource_id="confluence/acme/884736",
+        fetch_meta={"web_url": _CANONICAL_PAGE_URL},
+    )
+
+    with (
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
+        patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
+    ):
+        result = await record_observation(_TITLED_PAGE_URL, 3000, "observation-1", False)
+
+    assert result["status"] == "accepted"
+    await_args = notify.await_args
+    assert await_args is not None
+    assert await_args.args[0].target.url == _CANONICAL_PAGE_URL
+
+
+@pytest.mark.asyncio
+async def test_observation_falls_back_to_connector_entity_url() -> None:
+    from agentgraph.server.observation import record_observation
+
+    backend = MagicMock()
+    backend.increment_observation_duration = AsyncMock()
+    set_backend(backend)
+    ref = SourceReference(
+        source="twg",
+        resource_type="document",
+        resource_id="confluence/acme/884736",
+    )
+    id_only_url = "https://acme.atlassian.net/wiki/pages/viewpage.action?pageId=884736"
+    connector = MagicMock()
+    connector.entity_url = MagicMock(return_value=id_only_url)
+
+    with (
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
+        patch("agentgraph.connectors.registry.get_connector", return_value=connector),
+        patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
+    ):
+        await record_observation(_TITLED_PAGE_URL, 3000, "observation-1", False)
+
+    connector.entity_url.assert_called_once_with("confluence/acme/884736")
+    await_args = notify.await_args
+    assert await_args is not None
+    assert await_args.args[0].target.url == id_only_url
+
+
+@pytest.mark.asyncio
+async def test_observation_keeps_browsed_url_when_connector_cannot_canonicalise() -> None:
+    from agentgraph.server.observation import record_observation
+
+    browsed = "https://mail.google.com/mail/u/0/#inbox/opaque"
+    backend = MagicMock()
+    backend.increment_observation_duration = AsyncMock()
+    set_backend(backend)
+    ref = SourceReference(source="gmail", resource_type="thread", resource_id="thread-1")
+    connector = MagicMock()
+    connector.entity_url = MagicMock(return_value=None)
+
+    with (
+        patch(
+            "agentgraph.server.observation.classify_observation_url",
+            new=AsyncMock(return_value=ref),
+        ),
+        patch("agentgraph.connectors.registry.get_connector", return_value=connector),
+        patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
+    ):
+        await record_observation(browsed, 3000, "observation-1", False)
+
+    await_args = notify.await_args
+    assert await_args is not None
+    assert await_args.args[0].target.url == browsed
