@@ -35,6 +35,7 @@ from agentgraph.connectors.base import (
     ConnectorAccount,
     ConnectorCommandEffects,
     EntityReference,
+    EntityTypeDefinition,
     SourceReference,
 )
 from agentgraph.core.storage import EntityResult
@@ -763,6 +764,13 @@ class _FakeGoogleConnector:
     poll_interval = None
     poll_delegates: list[str] = []
     url_patterns: list[str] = []
+    entity_types = (
+        EntityTypeDefinition(
+            name="Project",
+            resource_type="project",
+            description="A Google project.",
+        ),
+    )
 
     @classmethod
     def run_auth_flow(
@@ -1602,6 +1610,8 @@ def test_list_connectors_reports_delegated_polling() -> None:
     assert result.exit_code == 0
     assert "Connectors" in result.output
     assert "Connector" in result.output
+    assert "Types" in result.output
+    assert "Project" in result.output
     assert "Auth" in result.output
     assert "Last sync" in result.output
     assert "gdocs" in result.output
@@ -1626,6 +1636,13 @@ def test_list_connectors_json_reports_delegated_polling() -> None:
     assert result.exit_code == 0
     parsed = json.loads(result.output)
     assert parsed[0]["auth_provider"] == "google"
+    assert parsed[0]["entity_types"] == [
+        {
+            "name": "Project",
+            "resource_type": "project",
+            "description": "A Google project.",
+        }
+    ]
     assert parsed[0]["last_synced_at"] == "2026-05-25T01:02:03+00:00"
     assert parsed[0]["polled_by"] == ["gdrive"]
     assert parsed[1]["poll_delegates"] == ["gdocs"]
@@ -1732,6 +1749,7 @@ def test_list_connectors_includes_feed_connector() -> None:
         {
             "source": "feed",
             "description": "Shares local observations and bookmarks through an AgentGraph feed server.",
+            "entity_types": [],
             "auth_provider": None,
             "shared_auth": False,
             "auth_status": None,

@@ -6,7 +6,7 @@ import inspect
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
-from agentgraph.connectors.base import BaseConnector
+from agentgraph.connectors.base import BaseConnector, EntityTypeDefinition
 from agentgraph.core.storage import StorageBackend
 
 
@@ -188,9 +188,14 @@ async def connector_status_items(
         polled_by = sorted(poll_delegators.get(connector.source, []))
         poll_delegates = list(type(connector).poll_delegates)
         last_synced_at = last_synced_by_platform.get(connector.source)
+        entity_types = cast(
+            tuple[EntityTypeDefinition, ...],
+            getattr(type(connector), "entity_types", ()),
+        )
         items.append({
             "source": connector.source,
             "description": type(connector).auth_description,
+            "entity_types": [definition.model_dump() for definition in entity_types],
             "auth_provider": provider,
             "shared_auth": bool(provider_item["shared"]) if provider_item is not None else False,
             "auth_status": provider_item["auth_status"] if provider_item is not None else None,

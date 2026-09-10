@@ -12,6 +12,7 @@ transport the CLI uses; see ``agentgraph.query_client``.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -174,6 +175,20 @@ def _tool_annotations(
     )
 
 
+def entity_type_catalog_description() -> str:
+    """Format installed entity types for MCP tool discovery metadata."""
+    from agentgraph.connectors.registry import get_entity_type_catalog
+
+    lines = ["Entity types available in this MCP process:"]
+    for name, descriptions in get_entity_type_catalog():
+        details = "; ".join(
+            description if source == "core" else f"{source}: {description}"
+            for source, description in descriptions
+        )
+        lines.append(f"  - {name}: {details}")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # list_connectors — connector discovery for agents
 # ---------------------------------------------------------------------------
@@ -204,6 +219,7 @@ async def list_connectors_tool(verify: bool = False) -> str:
         JSON array of connector objects, each with:
           - source: platform name to pass as the platform= argument
           - description: what this connector ingests
+          - entity_types: connector-declared name, resource_type, and description objects
           - auth_provider: shared auth provider key (e.g. "google"), or null
             for connectors that do not use credentials
           - auth_status: "ok" | "missing" | "invalid", or null when no auth is used
@@ -515,15 +531,6 @@ async def _enrich_results(results: list[dict[str, Any]]) -> None:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(
-    annotations=_tool_annotations(
-        "Search AgentGraph entities",
-        read_only=True,
-        destructive=False,
-        idempotent=True,
-        open_world=True,
-    )
-)
 async def search_entities_tool(
     query: str | None = None,
     entity_types: list[str] | None = None,
@@ -547,26 +554,6 @@ async def search_entities_tool(
     newest first. Use this for listing all messages in a specific channel, all
     documents on a platform, activity within a time window, or content authored
     by the current user.
-
-    Entity types and what they contain:
-      - Message: chat messages from Discord, Slack, etc. This is
-          where chat image and file uploads live — attachments are stored
-          in metadata.attachments as a JSON array with fields: url,
-          filename, content_type, width, height. To find images or
-          uploaded files, search Message (not Document) and set
-          has_attachments=True.
-      - Document: text documents such as Google Docs, plus Gmail attachment
-          stubs referenced by their owning Email. Gmail attachment Document
-          stubs can be passed to download_entity_tool.
-      - Spreadsheet: Google Sheets or Excel files.
-      - Folder: a Google Drive folder containing other entities.
-      - Channel: a chat channel or DM thread (Discord, Slack, etc.).
-      - Email: an email thread (Gmail).
-      - Task: a tracked work item such as a Jira issue. Status, assignee,
-          and issue key live in metadata.
-      - Video: a recorded video such as a Loom. The transcript is indexed as
-          content, and metadata.web_url links to the video.
-      - Person: a source identity or confirmed cross-source identity merge.
 
     IMPORTANT — attachments: chat photos, images, and uploaded files are
     stored as attachments on Message entities (in metadata.attachments).
@@ -650,6 +637,21 @@ async def search_entities_tool(
     if refresh:
         await _enrich_results(results)
     return json.dumps(results, default=str)
+
+
+mcp.tool(
+    description=(
+        f"{inspect.cleandoc(search_entities_tool.__doc__ or '')}\n\n"
+        f"{entity_type_catalog_description()}"
+    ),
+    annotations=_tool_annotations(
+        "Search AgentGraph entities",
+        read_only=True,
+        destructive=False,
+        idempotent=True,
+        open_world=True,
+    ),
+)(search_entities_tool)
 
 
 # ---------------------------------------------------------------------------

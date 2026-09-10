@@ -37,8 +37,8 @@ search_entities_tool(query=null, entity_types=null, platform=null, filters=null,
   with `has_attachments=true`
 - `has_attachments=true` only applies to `Message`
 - Gmail email attachments are represented as Gmail `Document` stubs referenced by the owning `Email`
-- current entity types are `Channel`, `Document`, `Email`, `Folder`, `Message`,
-  `Person`, `Spreadsheet`, `Task`, and `Video`
+- the tool description returned by MCP discovery contains the complete alphabetical
+  catalog of core and installed connector-defined entity types
 - scope by source with `platform="gmail"`, or with an equivalent column filter such
   as `filters={"platform": "gmail"}`; other `filters` keys are matched against the
   entity's metadata

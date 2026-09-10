@@ -505,6 +505,7 @@ def list_connectors(
     table = Table(title="Connectors", show_lines=True)
     table.add_column("Connector", style="bold", no_wrap=True)
     table.add_column("Description", ratio=1)
+    table.add_column("Types")
     table.add_column("Auth")
     table.add_column("Sync")
     table.add_column("Last sync", no_wrap=True)
@@ -513,6 +514,11 @@ def list_connectors(
         table.add_row(
             str(item["source"]),
             str(desc),
+            ", ".join(
+                str(definition["name"])
+                for definition in cast(list[dict[str, object]], item["entity_types"])
+            )
+            or "core",
             _connector_auth_label(item),
             str(item["sync"]),
             str(item["last_sync"]),

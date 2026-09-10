@@ -1149,6 +1149,29 @@ async def test_mcp_tool_metadata_guides_agent_workflow() -> None:
     assert 'platform="gmail"' in search_description
     assert "has_attachments" in search_description
     assert "metadata.attachments" in search_description
+    assert "Entity types available in this MCP process:" in search_description
+    for entity_type in ("Channel", "Document", "Email", "Folder", "Message", "Person"):
+        assert f"- {entity_type}:" in search_description
+
+
+def test_mcp_entity_type_catalog_includes_connector_descriptions() -> None:
+    from agentgraph.mcp.server import entity_type_catalog_description
+
+    catalog = [
+        (
+            "Project",
+            [
+                ("first", "A project in the first source."),
+                ("second", "A project in the second source."),
+            ],
+        )
+    ]
+    with patch("agentgraph.connectors.registry.get_entity_type_catalog", return_value=catalog):
+        description = entity_type_catalog_description()
+
+    assert "Project:" in description
+    assert "first: A project in the first source." in description
+    assert "second: A project in the second source." in description
 
 
 @pytest.mark.asyncio

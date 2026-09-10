@@ -69,5 +69,10 @@ article hydration, and background fetches retain the original HTML behavior.
 Connectors that do not use credentials, such as RSS and generic web, omit auth
 status in the human-readable table and report `null` auth fields in JSON.
 
+The table includes connector-declared entity type names. JSON output includes each
+declaration's shared `name`, connector-local `resource_type`, and `description` under
+`entity_types`. Core types inherited without a connector-specific mapping are shown as
+`core` in the table and are not repeated in that connector's JSON declarations.
+
 Use `--verify` only when credential validity is uncertain; it performs live provider
 API checks before reporting connector status.

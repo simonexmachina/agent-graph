@@ -23,7 +23,13 @@ for a live provider credential check.
 
 - connector `source`
 - `description`
+- connector-declared `entity_types`, each with its shared `name`, connector-local
+  `resource_type`, and `description`
 - authentication provider, shared-auth, and account-count metadata
 - `auth_status`, `auth_detail`, and `auth_verified`, or null for connectors that do not use credentials
 - `url_patterns`
 - polling metadata, delegation, and sync timestamps/summary
+
+The full installed entity type catalog is also embedded in the
+`search_entities_tool` description returned during MCP tool discovery, so an agent
+does not need to call this tool before searching.

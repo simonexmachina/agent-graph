@@ -67,7 +67,7 @@ def get_entity_type_names(connectors: Sequence[BaseConnector] | None = None) -> 
     resolved = list(connectors) if connectors is not None else get_all_connectors()
     names = set(ENTITY_TYPES)
     for connector in resolved:
-        names.update(definition.name for definition in type(connector).entity_types)
+        names.update(definition.name for definition in _entity_type_definitions(connector))
     return sorted(names)
 
 
@@ -80,7 +80,7 @@ def get_entity_type_catalog(
         name: [("core", ENTITY_TYPE_DESCRIPTIONS[name])] for name in ENTITY_TYPES
     }
     for connector in resolved:
-        for definition in type(connector).entity_types:
+        for definition in _entity_type_definitions(connector):
             entries = descriptions.setdefault(definition.name, [])
             detail = (connector.source, definition.description)
             if detail not in entries:
@@ -91,6 +91,13 @@ def get_entity_type_catalog(
         entries.sort(key=lambda item: (item[0] != "core", item[0], item[1]))
         catalog.append((name, entries))
     return catalog
+
+
+def _entity_type_definitions(connector: BaseConnector) -> tuple[EntityTypeDefinition, ...]:
+    return cast(
+        tuple[EntityTypeDefinition, ...],
+        getattr(type(connector), "entity_types", ()),
+    )
 
 
 def entity_type_for_reference(reference: SourceReference) -> str:

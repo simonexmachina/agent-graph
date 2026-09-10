@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 async def get_meta(include_dynamic_url_patterns: bool = True) -> dict[str, Any]:
     """Return registered connector sources, URL patterns, and known entity types."""
     from agentgraph.config import get_settings
-    from agentgraph.connectors.base import ENTITY_TYPES
-    from agentgraph.connectors.registry import get_all_connectors
+    from agentgraph.connectors.registry import get_all_connectors, get_entity_type_names
 
     connectors = get_all_connectors()
     seen_patterns: list[str] = []
@@ -44,7 +43,7 @@ async def get_meta(include_dynamic_url_patterns: bool = True) -> dict[str, Any]:
                 seen_set.add(pattern)
 
     return {
-        "entity_types": list(ENTITY_TYPES),
+        "entity_types": get_entity_type_names(connectors),
         "platforms": sorted({connector.source for connector in connectors}),
         "url_patterns": seen_patterns,
         "observation_threshold_ms": get_settings().observation_threshold_seconds * 1000,

@@ -14,7 +14,12 @@
 | `Task` | Tracked work items such as Jira issues. Issue key, status, and assignee live in `metadata`. |
 | `Video` | Recorded videos such as Looms. The transcript is indexed as content and `metadata.web_url` links to the video. |
 
-The valid core model does not currently include `Project`.
+Installed connectors may add shared entity type names such as `Project`. The complete
+alphabetical catalog, including connector descriptions, is embedded in the
+`search_entities_tool` MCP description. With the CLI, connector-specific declarations
+are available from `agentgraph list-connectors --json`. Undeclared type strings remain
+storable and searchable for compatibility, but do not receive automatic discovery or
+reference routing.
 
 ## Relationships
 

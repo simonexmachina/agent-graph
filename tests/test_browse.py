@@ -277,7 +277,9 @@ def test_viewer_renders_text_inside_rounded_rectangle_nodes() -> None:
     assert "return `${marker}${lbl}`;" in viewer_html
     assert "return `${marker}[${type}]\\n${lbl}`;" not in viewer_html
     assert "'border-color': (ele) => nodeColor(ele.data('entity_type'))" in viewer_html
-    assert "const TYPE_COLORS = NODE_COLORS;" in viewer_html
+    assert "const FALLBACK_NODE_COLORS = [" in viewer_html
+    assert "hash = ((hash * 31) + char.codePointAt(0)) >>> 0;" in viewer_html
+    assert "span.style.color = nodeColor(t);" in viewer_html
     assert "// ── Zoom-aware styling" in viewer_html
     assert "'width':          (NODE_MAX_WIDTH - (NODE_PADDING * 2)) / zc" in viewer_html
     assert "'height':         (NODE_MAX_HEIGHT - (NODE_PADDING * 2)) / zc" in viewer_html

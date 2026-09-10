@@ -13,6 +13,7 @@ from agentgraph.connectors.base import (
     BaseConnector,
     EntityBatch,
     EntityRecord,
+    EntityTypeDefinition,
     FetchPolicy,
     ResourceType,
     SourceReference,
@@ -27,6 +28,13 @@ class ExampleConnector(BaseConnector):
     fetch_policy: ClassVar[FetchPolicy] = FetchPolicy(stale_after_seconds=15 * 60)
     poll_interval: ClassVar[timedelta | None] = timedelta(minutes=10)
     url_patterns: ClassVar[list[str]] = ["https://app.example.com/*"]
+    entity_types: ClassVar[tuple[EntityTypeDefinition, ...]] = (
+        EntityTypeDefinition(
+            name="Project",
+            resource_type="project",
+            description="A project tracked in Example.",
+        ),
+    )
 
     def can_handle(self, url: str) -> bool:
         return url.startswith("https://app.example.com/")
@@ -39,7 +47,7 @@ class ExampleConnector(BaseConnector):
             return None
         return SourceReference(
             source=self.source,
-            resource_type="document",
+            resource_type="project",
             resource_id=resource_id,
         )
 
@@ -88,7 +96,7 @@ async def fetch_example_resource(
 ) -> EntityBatch:
     """Replace this placeholder with the upstream API request and mapping."""
     entity = EntityRecord(
-        entity_type="Document",
+        entity_type="Project",
         platform="example",
         platform_entity_id=resource_id,
         title=f"Example resource {resource_id}",

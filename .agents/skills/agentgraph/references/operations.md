@@ -10,8 +10,10 @@ agentgraph auth remove <provider> [--account <account-id>] [--json]
 ```
 
 Use `agentgraph list-connectors --json` to discover installed connector source names,
-valid platform values, URL ownership, polling delegation, and sync state. Do not rely
-on a hardcoded platform list. Use `--verify` only when a live provider check is
+valid platform values, connector-declared entity types, URL ownership, polling
+delegation, and sync state. Do not rely on a hardcoded platform list. MCP clients
+receive the full installed entity type catalog in the `search_entities_tool`
+description during tool discovery. Use `--verify` only when a live provider check is
 needed.
 
 MCP equivalents are `list_connectors_tool`, `list_auth_providers_tool`,

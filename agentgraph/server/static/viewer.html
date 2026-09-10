@@ -1051,6 +1051,11 @@
     Video:       '#fb7185',
   };
 
+  const FALLBACK_NODE_COLORS = [
+    '#f472b6', '#2dd4bf', '#facc15', '#c084fc',
+    '#38bdf8', '#a3e635', '#fb923c', '#e879f9',
+  ];
+
   const EDGE_COLORS = {
     authored:    '#4ade80',
     posted_in:   '#a78bfa',
@@ -1060,7 +1065,12 @@
   };
 
   function nodeColor(type) {
-    return NODE_COLORS[type] || '#94a3b8';
+    if (NODE_COLORS[type]) return NODE_COLORS[type];
+    let hash = 0;
+    for (const char of type || '') {
+      hash = ((hash * 31) + char.codePointAt(0)) >>> 0;
+    }
+    return FALLBACK_NODE_COLORS[hash % FALLBACK_NODE_COLORS.length];
   }
 
   function edgeColor(type) {
@@ -2741,7 +2751,7 @@
             }
           });
           const span = document.createElement('span');
-          span.style.color = TYPE_COLORS[t] || '#94a3b8';
+          span.style.color = nodeColor(t);
           span.textContent = t;
           label.appendChild(cb);
           label.appendChild(span);
@@ -2763,8 +2773,6 @@
       applyUrlState(readUrlState());
     } catch (_) { /* server not running yet — static fallbacks remain empty */ }
   }
-
-  const TYPE_COLORS = NODE_COLORS;
 
   async function bootstrapViewer() {
     const metaRequest = loadMeta();

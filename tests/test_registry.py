@@ -112,8 +112,10 @@ def test_get_connector_records_entry_point_load_error(monkeypatch: Any) -> None:
     assert registry.get_connector_load_error("broken") == "missing"
 
 
-def test_entity_type_names_are_shared_and_resource_types_are_connector_local() -> None:
-    from agentgraph.connectors.registry import get_entity_type_catalog, get_entity_type_names
+def test_entity_type_names_are_shared_and_resource_types_are_connector_local(
+    monkeypatch: Any,
+) -> None:
+    from agentgraph.connectors import registry
 
     class _FirstConnector(_LazyConnector):
         source = "first"
@@ -136,9 +138,12 @@ def test_entity_type_names_are_shared_and_resource_types_are_connector_local() -
         )
 
     connectors = [_SecondConnector(), _FirstConnector()]
+    monkeypatch.setattr(registry, "_registry", {})
+    for connector in connectors:
+        registry.register(connector)
 
-    names = get_entity_type_names(connectors)
-    catalog = dict(get_entity_type_catalog(connectors))
+    names = registry.get_entity_type_names(connectors)
+    catalog = dict(registry.get_entity_type_catalog(connectors))
 
     assert names == sorted(names)
     assert names.count("Project") == 1

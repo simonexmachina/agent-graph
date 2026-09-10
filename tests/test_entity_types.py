@@ -147,9 +147,7 @@ def test_add_stubs_from_resolves_connector_local_resource_type() -> None:
 async def test_meta_exposes_task_and_video_entity_types() -> None:
     from agentgraph.server.meta_api import get_meta
 
-    connector = MagicMock()
-    connector.source = "stub"
-    connector.url_patterns = []
+    connector = _ProjectConnector()
     settings = MagicMock(observation_threshold_seconds=3)
 
     with (
@@ -161,3 +159,5 @@ async def test_meta_exposes_task_and_video_entity_types() -> None:
     entity_types: Any = result["entity_types"]
     assert "Task" in entity_types
     assert "Video" in entity_types
+    assert "Project" in entity_types
+    assert entity_types == sorted(entity_types)

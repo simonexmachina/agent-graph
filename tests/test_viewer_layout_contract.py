@@ -23,6 +23,7 @@ class _ViewerFixtureServer(ThreadingHTTPServer):
     edges: list[dict[str, Any]]
     viewer_html: bytes
     meta_delay_seconds: float
+    entity_types: list[str]
 
 
 class _ViewerFixtureHandler(BaseHTTPRequestHandler):
@@ -33,7 +34,11 @@ class _ViewerFixtureHandler(BaseHTTPRequestHandler):
             self._send(200, "text/html; charset=utf-8", server.viewer_html)
         elif path == "/api/meta":
             time.sleep(server.meta_delay_seconds)
-            self._send(200, "application/json", {"entity_types": ["Document"], "platforms": []})
+            self._send(
+                200,
+                "application/json",
+                {"entity_types": server.entity_types, "platforms": []},
+            )
         elif path.startswith("/api/entities/") and path.endswith("/edges"):
             entity_id = path.removeprefix("/api/entities/").removesuffix("/edges")
             entity = next((node for node in server.nodes if node["id"] == entity_id), None)
@@ -107,11 +112,13 @@ def _serve_viewer(
     edges: list[dict[str, Any]],
     *,
     meta_delay_seconds: float = 0,
+    entity_types: list[str] | None = None,
 ) -> Iterator[str]:
     server = _ViewerFixtureServer(("127.0.0.1", 0), _ViewerFixtureHandler)
     server.nodes = nodes
     server.edges = edges
     server.meta_delay_seconds = meta_delay_seconds
+    server.entity_types = entity_types or ["Document"]
     server.viewer_html = Path("agentgraph/server/static/viewer.html").read_bytes()
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -232,6 +239,18 @@ def test_graph_load_does_not_wait_indefinitely_for_metadata(page: Page) -> None:
         elapsed = time.monotonic() - started
 
     assert elapsed < 1.5
+
+
+def test_viewer_adds_connector_entity_type_filter_with_stable_color(page: Page) -> None:
+    with _serve_viewer([], [], entity_types=["Document", "Project"]) as url:
+        page.goto(url)
+        project_filter = page.locator("label", has_text="Project")
+        expect(project_filter).to_be_visible()
+        color = project_filter.locator("span").evaluate(
+            "element => getComputedStyle(element).color"
+        )
+
+    assert color != "rgb(148, 163, 184)"
 
 
 def test_viewer_uses_all_time_twenty_node_default_state(page: Page) -> None:
