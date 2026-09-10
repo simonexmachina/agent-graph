@@ -13,11 +13,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from agentgraph.connectors.base import (
-    RESOURCE_TYPE_TO_ENTITY_TYPE,
-    BaseConnector,
-    ResourceType,
-)
+from agentgraph.connectors.base import BaseConnector, ResourceType
 
 logger = logging.getLogger(__name__)
 
@@ -201,11 +197,19 @@ def mutation_target_from_reference(
     url: str,
 ) -> MutationTarget:
     """Build a target from a connector-owned source reference."""
+    from agentgraph.connectors.base import SourceReference
+    from agentgraph.connectors.registry import entity_type_for_reference
 
     return MutationTarget(
         platform=platform,
         platform_entity_id=platform_entity_id,
-        entity_type=RESOURCE_TYPE_TO_ENTITY_TYPE[resource_type],
+        entity_type=entity_type_for_reference(
+            SourceReference(
+                source=platform,
+                resource_type=resource_type,
+                resource_id=platform_entity_id,
+            )
+        ),
         resource_type=resource_type,
         url=url,
     )

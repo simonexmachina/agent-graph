@@ -5,7 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agentgraph.connectors.base import BaseConnector, EntityBatch, ResourceType
+import pytest
+
+from agentgraph.connectors.base import (
+    BaseConnector,
+    EntityBatch,
+    EntityTypeDefinition,
+    ResourceType,
+)
 
 
 class _LazyConnector(BaseConnector):
@@ -103,3 +110,68 @@ def test_get_connector_records_entry_point_load_error(monkeypatch: Any) -> None:
 
     assert registry.get_connector("broken") is None
     assert registry.get_connector_load_error("broken") == "missing"
+
+
+def test_entity_type_names_are_shared_and_resource_types_are_connector_local() -> None:
+    from agentgraph.connectors.registry import get_entity_type_catalog, get_entity_type_names
+
+    class _FirstConnector(_LazyConnector):
+        source = "first"
+        entity_types = (
+            EntityTypeDefinition(
+                name="Project",
+                resource_type="project",
+                description="A project in the first source.",
+            ),
+        )
+
+    class _SecondConnector(_LazyConnector):
+        source = "second"
+        entity_types = (
+            EntityTypeDefinition(
+                name="Project",
+                resource_type="project",
+                description="A project in the second source.",
+            ),
+        )
+
+    connectors = [_SecondConnector(), _FirstConnector()]
+
+    names = get_entity_type_names(connectors)
+    catalog = dict(get_entity_type_catalog(connectors))
+
+    assert names == sorted(names)
+    assert names.count("Project") == 1
+    assert catalog["Project"] == [
+        ("first", "A project in the first source."),
+        ("second", "A project in the second source."),
+    ]
+
+
+@pytest.mark.parametrize(
+    "entity_types",
+    [
+        (
+            EntityTypeDefinition(name="Project", resource_type="project", description="One"),
+            EntityTypeDefinition(name="Project", resource_type="portfolio", description="Two"),
+        ),
+        (
+            EntityTypeDefinition(name="Project", resource_type="project", description="One"),
+            EntityTypeDefinition(name="Portfolio", resource_type="project", description="Two"),
+        ),
+    ],
+)
+def test_register_rejects_duplicate_connector_entity_type_fields(
+    monkeypatch: Any,
+    entity_types: tuple[EntityTypeDefinition, ...],
+) -> None:
+    from agentgraph.connectors import registry
+
+    class _InvalidConnector(_LazyConnector):
+        source = "invalid"
+
+    _InvalidConnector.entity_types = entity_types
+    monkeypatch.setattr(registry, "_registry", {})
+
+    with pytest.raises(ValueError, match="declares .* more than once"):
+        registry.register(_InvalidConnector())

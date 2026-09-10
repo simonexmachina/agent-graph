@@ -11,24 +11,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-# All resource_type values understood by the connector layer.
-# Each value maps to a distinct fetch strategy within a connector.
-ResourceType = Literal[
-    "channel",
-    "dm",
-    "document",
-    "folder",
-    "message",
-    "spreadsheet",
-    "thread",
-    "video",
-    "work-item",
-]
+# Resource types name connector-local fetch strategies. Connectors may extend them.
+type ResourceType = str
 RetentionPolicy = Literal["observed", "owned", "connected", "persistent"]
 
-# All valid entity_type values stored in the DB.
+# Built-in entity type vocabulary. Storage also accepts connector-defined names.
 ENTITY_TYPES: tuple[str, ...] = (
     "Channel",
     "Document",
@@ -40,6 +29,18 @@ ENTITY_TYPES: tuple[str, ...] = (
     "Task",
     "Video",
 )
+
+ENTITY_TYPE_DESCRIPTIONS: dict[str, str] = {
+    "Channel": "Chat channels and direct-message threads.",
+    "Document": "Text documents, web pages, files, and attachment stubs.",
+    "Email": "Email threads.",
+    "Folder": "Containers such as Drive folders and RSS feeds.",
+    "Message": "Chat messages, including chat uploads stored in metadata.",
+    "Person": "Source identities and confirmed cross-source identity merges.",
+    "Spreadsheet": "Spreadsheets and tabular workbook resources.",
+    "Task": "Tracked work items such as issues and tasks.",
+    "Video": "Recorded videos whose searchable content may include a transcript.",
+}
 
 # Broad URL extractor — classify_url does fine-grained matching
 _URL_RE = re.compile(r"https?://\S+")
@@ -56,6 +57,27 @@ RESOURCE_TYPE_TO_ENTITY_TYPE: dict[str, str] = {
     "video": "Video",
     "work-item": "Task",
 }
+
+_ENTITY_TYPE_TO_RESOURCE_TYPE: dict[str, ResourceType] = {
+    "Channel": "channel",
+    "Document": "document",
+    "Email": "thread",
+    "Folder": "folder",
+    "Message": "message",
+    "Spreadsheet": "spreadsheet",
+    "Task": "work-item",
+    "Video": "video",
+}
+
+
+class EntityTypeDefinition(BaseModel):
+    """A connector-local fetch resource mapped to a shared graph entity type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(pattern=r"^[A-Z][A-Za-z0-9]*$")
+    resource_type: str = Field(pattern=r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+    description: str = Field(min_length=1)
 
 
 @dataclass(frozen=True)
@@ -147,6 +169,7 @@ class EntityBatch(BaseModel):
         """
         if not entity.content:
             return
+        from agentgraph.connectors.registry import entity_type_for_reference
         from agentgraph.server.router import classify_url
 
         seen: set[str] = set()
@@ -163,7 +186,7 @@ class EntityBatch(BaseModel):
             seen.add(key)
             self.entities.append(
                 EntityRecord(
-                    entity_type=RESOURCE_TYPE_TO_ENTITY_TYPE[ref.resource_type],
+                    entity_type=entity_type_for_reference(ref),
                     platform=ref.source,
                     platform_entity_id=ref.resource_id,
                     is_stub=True,
@@ -260,6 +283,9 @@ class ResourceUnavailableError(RuntimeError):
 class BaseConnector(ABC):
     source: ClassVar[str]  # platform name, e.g. "slack" — must be set by subclass
     fetch_policy: ClassVar[FetchPolicy]  # staleness policy — must be set by subclass
+    entity_types: ClassVar[tuple[EntityTypeDefinition, ...]] = ()
+    """Connector-local resource mappings that extend or override the core defaults."""
+
     is_generic_url_fallback: ClassVar[bool] = False
     """True for broad fallback connectors that should not claim URLs during discovery."""
 
@@ -387,21 +413,33 @@ class BaseConnector(ABC):
     def normalise_fetch_id(self, resource_id: str, entity_type: str) -> tuple[str, ResourceType]:
         """Map a stored resource_id + entity_type to the (id, resource_type) that fetch() expects.
 
-        The default maps entity_type to ResourceType using the standard table and
-        returns resource_id unchanged. Connectors override this when their stored IDs
-        differ from their fetchable IDs (e.g. Discord message IDs encode the channel).
+        The default prefers connector-declared mappings, falls back to the core
+        vocabulary, and returns resource_id unchanged. Connectors override this when
+        their stored IDs differ from their fetchable IDs (e.g. Discord message IDs
+        encode the channel).
         """
-        resource_type_map: dict[str, ResourceType] = {
-            "Document": "document",
-            "Folder": "folder",
-            "Spreadsheet": "spreadsheet",
-            "Channel": "channel",
-            "Message": "message",
-            "Email": "thread",
-            "Task": "work-item",
-            "Video": "video",
-        }
-        return resource_id, resource_type_map.get(entity_type, "document")  # type: ignore[return-value]
+        return resource_id, type(self).resource_type_for_entity_type(entity_type)
+
+    @classmethod
+    def entity_type_for_resource_type(cls, resource_type: ResourceType) -> str:
+        """Map this connector's fetch resource type to a stored entity type."""
+        for definition in cls.entity_types:
+            if definition.resource_type == resource_type:
+                return definition.name
+        try:
+            return RESOURCE_TYPE_TO_ENTITY_TYPE[resource_type]
+        except KeyError as exc:
+            raise ValueError(
+                f"Connector {cls.source!r} does not declare resource type {resource_type!r}"
+            ) from exc
+
+    @classmethod
+    def resource_type_for_entity_type(cls, entity_type: str) -> ResourceType:
+        """Map a stored entity type to this connector's canonical fetch resource type."""
+        for definition in cls.entity_types:
+            if definition.name == entity_type:
+                return definition.resource_type
+        return _ENTITY_TYPE_TO_RESOURCE_TYPE.get(entity_type, "document")
 
     @classmethod
     def current_user_id(cls) -> str | None:
