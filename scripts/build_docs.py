@@ -17,7 +17,7 @@ from pygments.util import ClassNotFound
 ROOT = Path(__file__).resolve().parent.parent
 DOCS_SRC = ROOT / "docs-src"
 DOCS_OUT = ROOT / "docs"
-GITHUB_ROOT = "https://github.com/simonexmachina/agent-graph/blob/main"
+GITHUB_ROOT = "https://github.com/simonexmachina/agentgraph/blob/main"
 SITE_ROOT = "https://agentgraph.simonwa.de"
 SOCIAL_IMAGE_URL = f"{SITE_ROOT}/assets/og-image.png?v=2"
 SECTION_ORDER = {"Start": 10, "Configuration": 15, "Reference": 20, "MCP": 30}
@@ -456,7 +456,7 @@ def build_page(page: Page, pages: list[Page], index: int, nav_html: str) -> str:
         </div>
         <div class="hero-meta">
           <a class="repo" href="{home_href}">Home</a>
-          <a class="repo" href="https://github.com/simonexmachina/agent-graph" rel="noopener">GitHub</a>
+          <a class="repo" href="https://github.com/simonexmachina/agentgraph" rel="noopener">GitHub</a>
           <a class="edit" href="{source_href}">Edit page</a>
         </div>
       </header>

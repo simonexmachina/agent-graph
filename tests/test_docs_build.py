@@ -128,7 +128,7 @@ def test_build_writes_docs_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert 'href="tester-extension-install.html"' not in nav_html
     assert 'href="privacy.html"' not in nav_html
     assert 'href="extension-distribution.html"' not in nav_html
-    assert 'https://github.com/simonexmachina/agent-graph/blob/main/examples/custom_connector.py' in extending_html
+    assert 'https://github.com/simonexmachina/agentgraph/blob/main/examples/custom_connector.py' in extending_html
     assert "Interface reference" not in extending_html
     assert "<table>" not in extending_html
     assert "Why extend AgentGraph" in extending_html

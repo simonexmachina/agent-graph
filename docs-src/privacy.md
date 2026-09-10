@@ -65,7 +65,7 @@ Removing credentials stops future authenticated API access but does not automati
 
 ## Open source
 
-The project source is public at [github.com/simonexmachina/agent-graph](https://github.com/simonexmachina/agent-graph). There is no hidden telemetry layer in AgentGraph itself.
+The project source is public at [github.com/simonexmachina/agentgraph](https://github.com/simonexmachina/agentgraph). There is no hidden telemetry layer in AgentGraph itself.
 
 ## Changes
 
@@ -73,6 +73,6 @@ If this policy changes materially, the updated version will be published at this
 
 ## Contact
 
-Privacy questions can be sent to [simon.wade@gmail.com](mailto:simon.wade@gmail.com). Non-sensitive defects and documentation issues can be reported at [github.com/simonexmachina/agent-graph/issues](https://github.com/simonexmachina/agent-graph/issues).
+Privacy questions can be sent to [simon.wade@gmail.com](mailto:simon.wade@gmail.com). Non-sensitive defects and documentation issues can be reported at [github.com/simonexmachina/agentgraph/issues](https://github.com/simonexmachina/agentgraph/issues).
 
 See also the [Terms of Service](/terms.html).

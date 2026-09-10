@@ -59,8 +59,8 @@ These connectors are proof of the pattern, not the boundary of the product. A co
 AgentGraph requires Python 3.12+, [`uv`](https://docs.astral.sh/uv/), and Chrome for browser observation.
 
 ```bash
-git clone https://github.com/simonexmachina/agent-graph
-cd agent-graph
+git clone https://github.com/simonexmachina/agentgraph
+cd agentgraph
 uv sync --extra all
 source .venv/bin/activate
 agentgraph onboard

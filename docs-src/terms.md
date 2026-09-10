@@ -14,7 +14,7 @@ Effective date: August 15, 2026.
 
 ## Open-source software
 
-AgentGraph is open-source software that you install and operate on systems you control. Your use, copying, modification, and distribution of the software are governed by the license included in the [AgentGraph repository](https://github.com/simonexmachina/agent-graph/blob/main/LICENSE).
+AgentGraph is open-source software that you install and operate on systems you control. Your use, copying, modification, and distribution of the software are governed by the license included in the [AgentGraph repository](https://github.com/simonexmachina/agentgraph/blob/main/LICENSE).
 
 The project does not provide a hosted graph service, manage your connected-service accounts, or accept custody of your indexed content.
 
@@ -44,4 +44,4 @@ To the maximum extent permitted by law, the project maintainers are not liable f
 
 ## Changes and contact
 
-Material changes will be published on this page with a revised effective date. Questions about these terms can be sent to [simon.wade@gmail.com](mailto:simon.wade@gmail.com). Project issues can be reported at [github.com/simonexmachina/agent-graph/issues](https://github.com/simonexmachina/agent-graph/issues).
+Material changes will be published on this page with a revised effective date. Questions about these terms can be sent to [simon.wade@gmail.com](mailto:simon.wade@gmail.com). Project issues can be reported at [github.com/simonexmachina/agentgraph/issues](https://github.com/simonexmachina/agentgraph/issues).

@@ -16,7 +16,7 @@ source_path = "docs-src/index.md"
 <div class="home-actions">
   <a class="primary" href="/demo.html">See the demo</a>
   <a href="/install.html">Install</a>
-  <a href="https://github.com/simonexmachina/agent-graph">GitHub</a>
+  <a href="https://github.com/simonexmachina/agentgraph">GitHub</a>
 </div>
 
 Coding agents work well because their source of truth is already available on disk. They can search files, follow references, inspect history, and build a model of a system. AgentGraph applies that advantage to the selected digital context outside the current repository.
