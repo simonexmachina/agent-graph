@@ -30,6 +30,7 @@ Install the published package with `uv` and install the Graph skill:
 ```bash
 uv tool install 'agentgraph-server[all]'
 mkdir -p ~/agentgraph && cd "$_"
+printf 'AGENTGRAPH_CONFIG_DIR="%s"\n' "$PWD" > .env
 agentgraph install-skill --target project
 ```
 
