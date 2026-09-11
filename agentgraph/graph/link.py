@@ -48,6 +48,13 @@ async def link_entity_to_urls(platform_entity_id: str, platform: str, content: s
             continue
         seen.add(ref.resource_id)
 
+        # An entity's own URL is normally part of its content — connectors append
+        # it to the rendered body, and a page or work item often links to itself
+        # from a comment. A self-loop carries no information, so it is dropped
+        # here rather than left for every caller to filter out of a traversal.
+        if ref.source == platform and ref.resource_id == platform_entity_id:
+            continue
+
         tgt_id = await backend.find_entity_id(ref.source, ref.resource_id)
         if not tgt_id:
             entity_type = entity_type_for_reference(ref)

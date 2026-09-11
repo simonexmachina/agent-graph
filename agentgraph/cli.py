@@ -886,7 +886,13 @@ def install_skill(
 
     typer.echo(f"Installed AgentGraph skill '{result.skill}' to {result.destination}")
     if result.claude_destination is not None:
-        typer.echo(f"Linked Claude skill to {result.claude_destination}")
+        if result.claude_linked:
+            typer.echo(f"Linked Claude skill to {result.claude_destination}")
+        else:
+            typer.echo(
+                f"Claude reads {result.claude_destination} already; "
+                "its skill directory is the same one."
+            )
 
 
 @app.command()

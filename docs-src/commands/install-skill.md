@@ -18,6 +18,8 @@ agentgraph install-skill [agentgraph] [--target user|project] [--no-claude] [--f
 The default target is `~/.agents/skills/agentgraph`, with a matching Claude link at
 `~/.claude/skills/agentgraph`. A project target installs into `./.agents/skills/agentgraph`
 and links `./.claude/skills/agentgraph`. Pass `--no-claude` to skip the Claude link.
+When the Claude skill directory is already a link to the agent skill directory, the single
+install serves both and no extra link is created.
 
 The command refuses to replace an existing skill or Claude link unless `--force` is
 supplied. The complete skill directory, including progressively loaded references, is
