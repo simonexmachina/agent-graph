@@ -484,7 +484,7 @@ def list_connectors(
         False, "--verify", help="Live-check connector credentials with provider APIs"
     ),
 ) -> None:
-    """List installed connectors and their sync status."""
+    """List installed connectors, their resource entity types, and sync status."""
     from agentgraph.connectors.registry import bootstrap, get_all_connectors
     from agentgraph.connectors.status import connector_status_items
     from agentgraph.core.runtime import backend_context

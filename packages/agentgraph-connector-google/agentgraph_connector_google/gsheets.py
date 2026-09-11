@@ -18,6 +18,7 @@ from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
     EntityRecord,
+    EntityTypeDefinition,
     FetchPolicy,
     PersonRecord,
     ResourceType,
@@ -100,6 +101,13 @@ def _extract_plain_text(spreadsheet: dict[str, Any], values_by_range: dict[str, 
 
 class GoogleSheetsConnector(BaseConnector):
     source = "gsheets"
+    entity_types = (
+        EntityTypeDefinition(
+            name="Spreadsheet",
+            resource_type="spreadsheet",
+            description="Google Sheets workbooks and their tabular content.",
+        ),
+    )
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     url_patterns = ["https://docs.google.com/spreadsheets/*"]
     auth_label = "google"

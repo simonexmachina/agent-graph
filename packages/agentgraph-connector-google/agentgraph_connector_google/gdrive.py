@@ -20,6 +20,7 @@ from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
     EntityRecord,
+    EntityTypeDefinition,
     FetchPolicy,
     PersonRecord,
     ResourceType,
@@ -74,6 +75,18 @@ class DriveChangesConnector(BaseConnector):
     """Polls drive.changes.list and handles folder fetches."""
 
     source = "gdrive"
+    entity_types = (
+        EntityTypeDefinition(
+            name="Document",
+            resource_type="document",
+            description="Google Drive files such as PDFs and other non-native documents.",
+        ),
+        EntityTypeDefinition(
+            name="Folder",
+            resource_type="folder",
+            description="Google Drive folders and listings of their contents.",
+        ),
+    )
     fetch_policy = FetchPolicy(stale_after_seconds=15 * 60)
     poll_interval: timedelta | None = timedelta(minutes=10)  # type: ignore[assignment]
     poll_delegates = ["gdocs", "gsheets"]

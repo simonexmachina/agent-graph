@@ -27,6 +27,7 @@ from agentgraph.connectors.base import (
     EntityMetadataPatch,
     EntityRecord,
     EntityReference,
+    EntityTypeDefinition,
     FetchPolicy,
     PersonRecord,
     ResourceType,
@@ -64,6 +65,18 @@ logger = logging.getLogger(__name__)
 
 class RssConnector(BaseConnector):
     source = "rss"
+    entity_types = (
+        EntityTypeDefinition(
+            name="Document",
+            resource_type="document",
+            description="RSS and Atom feed entries.",
+        ),
+        EntityTypeDefinition(
+            name="Folder",
+            resource_type="folder",
+            description="RSS and Atom feeds containing entries.",
+        ),
+    )
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=15)  # type: ignore[assignment]
     url_patterns = []

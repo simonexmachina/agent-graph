@@ -67,6 +67,12 @@ when combined, both must match. Never-observed entities are excluded by
 
 ## Context lifecycle
 
+`agentgraph list-connectors --json` (MCP: `list_connectors_tool`) reports each
+connector's declared resource `entity_types`, including standard graph types,
+with their names, resource types, and source-specific descriptions. Person
+identities are handled separately. An empty list means the connector has not
+declared resource types; it does not mean the source has no indexed entities.
+
 - **Connect** is setup: installed connectors and their authentication/configuration
   determine which selected sources AgentGraph can access.
 - **Observe** records human attention to a supported browser URL and triggers a

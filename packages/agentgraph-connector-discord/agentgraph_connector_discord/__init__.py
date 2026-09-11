@@ -16,6 +16,7 @@ from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
     EntityRecord,
+    EntityTypeDefinition,
     FetchPolicy,
     PersonRecord,
     ResourceType,
@@ -175,6 +176,18 @@ def _extract_attachments(msg: dict[str, Any]) -> str | None:
 
 class DiscordConnector(BaseConnector):
     source = "discord"
+    entity_types = (
+        EntityTypeDefinition(
+            name="Channel",
+            resource_type="channel",
+            description="Discord channels and direct-message conversations.",
+        ),
+        EntityTypeDefinition(
+            name="Message",
+            resource_type="message",
+            description="Discord messages, replies, and uploads stored in message metadata.",
+        ),
+    )
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     url_patterns = ["https://discord.com/*"]

@@ -23,6 +23,7 @@ from agentgraph.connectors.base import (
     EntityBatch,
     EntityMetadataPatch,
     EntityRecord,
+    EntityTypeDefinition,
     FetchPolicy,
     ResourceType,
     SourceReference,
@@ -53,6 +54,13 @@ class UnsupportedFormatError(ValueError):
 
 class WebConnector(BaseConnector):
     source = "web"
+    entity_types = (
+        EntityTypeDefinition(
+            name="Document",
+            resource_type="document",
+            description="Web pages and files fetched over HTTP.",
+        ),
+    )
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     is_generic_url_fallback = True
     url_patterns: ClassVar[list[str]] = []

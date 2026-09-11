@@ -19,6 +19,7 @@ from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
     EntityRecord,
+    EntityTypeDefinition,
     FetchPolicy,
     PersonRecord,
     ResourceType,
@@ -87,6 +88,13 @@ def _export_as_html(drive_service: Any, doc_id: str) -> str:
 
 class GoogleDocsConnector(BaseConnector):
     source = "gdocs"
+    entity_types = (
+        EntityTypeDefinition(
+            name="Document",
+            resource_type="document",
+            description="Google Docs documents.",
+        ),
+    )
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     url_patterns = ["https://docs.google.com/document/*"]
     auth_label = "google"

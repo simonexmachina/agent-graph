@@ -23,6 +23,7 @@ from agentgraph.connectors.base import (
     EdgeRecord,
     EntityBatch,
     EntityRecord,
+    EntityTypeDefinition,
     FetchPolicy,
     PersonRecord,
     ResourceType,
@@ -257,6 +258,18 @@ def _format_date(date_str: str) -> str:
 
 class GmailConnector(BaseConnector):
     source = "gmail"
+    entity_types = (
+        EntityTypeDefinition(
+            name="Email",
+            resource_type="thread",
+            description="Gmail email threads.",
+        ),
+        EntityTypeDefinition(
+            name="Document",
+            resource_type="document",
+            description="Email attachment stubs downloaded separately from their threads.",
+        ),
+    )
     fetch_policy = FetchPolicy(stale_after_seconds=_STALE_AFTER)
     poll_interval: timedelta | None = timedelta(minutes=5)  # type: ignore[assignment]
     sync_horizon_days: int = 90  # How far back to look during explicit historical ingest

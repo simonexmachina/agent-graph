@@ -284,7 +284,11 @@ class BaseConnector(ABC):
     source: ClassVar[str]  # platform name, e.g. "slack" — must be set by subclass
     fetch_policy: ClassVar[FetchPolicy]  # staleness policy — must be set by subclass
     entity_types: ClassVar[tuple[EntityTypeDefinition, ...]] = ()
-    """Connector-local resource mappings that extend or override the core defaults."""
+    """Resource entity types exposed by this connector, including core vocabulary.
+
+    Used for capability discovery and to extend or override core resource mappings.
+    Person identities are emitted separately through EntityBatch.persons.
+    """
 
     is_generic_url_fallback: ClassVar[bool] = False
     """True for broad fallback connectors that should not claim URLs during discovery."""
