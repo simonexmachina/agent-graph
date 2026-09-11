@@ -1743,8 +1743,13 @@ def test_list_connectors_includes_feed_connector() -> None:
         ),
     ):
         result = runner.invoke(app, ["list-connectors", "--json"])
+        text_result = runner.invoke(app, ["list-connectors"])
 
     assert result.exit_code == 0
+    assert text_result.exit_code == 0
+    assert "feed" in text_result.output
+    assert "Types" in text_result.output
+    assert "core" not in text_result.output
     assert json.loads(result.output) == [
         {
             "source": "feed",

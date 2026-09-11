@@ -72,6 +72,7 @@ connector's declared resource `entity_types`, including standard graph types,
 with their names, resource types, and source-specific descriptions. Person
 identities are handled separately. An empty list means the connector has not
 declared resource types; it does not mean the source has no indexed entities.
+The CLI table displays `-` for this empty list.
 
 - **Connect** is setup: installed connectors and their authentication/configuration
   determine which selected sources AgentGraph can access.

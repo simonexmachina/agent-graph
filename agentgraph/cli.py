@@ -518,7 +518,7 @@ def list_connectors(
                 str(definition["name"])
                 for definition in cast(list[dict[str, object]], item["entity_types"])
             )
-            or "core",
+            or "-",
             _connector_auth_label(item),
             str(item["sync"]),
             str(item["last_sync"]),

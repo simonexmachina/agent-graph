@@ -221,6 +221,7 @@ async def list_connectors_tool(verify: bool = False) -> str:
           - description: what this connector ingests
           - entity_types: connector-declared resource entity types, including core types,
             as name, resource_type, and description objects (Person identities are separate)
+            An empty list means no declared resource types, shown as "-" in the CLI table.
           - auth_provider: shared auth provider key (e.g. "google"), or null
             for connectors that do not use credentials
           - auth_status: "ok" | "missing" | "invalid", or null when no auth is used
