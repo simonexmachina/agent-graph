@@ -24,6 +24,10 @@ historical ingest always call the local AgentGraph server. Reads (`search`, `get
 `edges`, `traverse`) and `fetch`/`download` use it when it is reachable and
 otherwise read the database directly, so they work with no server running.
 
+Run ordinary commands without setting `AGENTGRAPH_QUERY_TRANSPORT`, including for
+the demo or when the server is stopped. The default `auto` transport tries the Unix
+socket, then TCP, then falls back to in-process automatically.
+
 Many agent sandboxes deny loopback TCP but allow an allowlisted Unix socket, so the
 server listens on both and clients prefer the socket. If a command fails because the
 sandbox blocked it:
@@ -31,9 +35,12 @@ sandbox blocked it:
 - For `poll`, ingest, or auth commands there is no fallback — request permission to
   contact the local server, or ask the user to allowlist the socket
   (`~/.agentgraph/agentgraph.sock`), then retry.
-- For reads, `AGENTGRAPH_QUERY_TRANSPORT=in-process` bypasses the server entirely.
-- `AGENTGRAPH_QUERY_TRANSPORT=server agentgraph search x --limit 1` reports plainly
-  whether the server is reachable, instead of silently falling back.
+- For reads, retry with `AGENTGRAPH_QUERY_TRANSPORT=in-process` only after an actual
+  sandbox connection failure. This bypasses server probes for that retry.
+
+To diagnose server connectivity explicitly, use
+`AGENTGRAPH_QUERY_TRANSPORT=server agentgraph search x --limit 1`; it reports whether
+the server is reachable instead of silently falling back.
 
 See the Coding agent sandboxes section of the configuration docs for the per-agent
 allowlist settings.
