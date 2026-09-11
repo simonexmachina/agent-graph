@@ -29,8 +29,8 @@ Install the published package with `uv` and install the Graph skill:
 
 ```bash
 uv tool install 'agentgraph-server[all]'
-mkdir -p ~/agentgraph && cd "$_"
-printf 'AGENTGRAPH_CONFIG_DIR="%s"\n' "$PWD" > .env
+mkdir -p ~/agentgraph-tmp && cd ~/agentgraph-tmp
+echo "AGENTGRAPH_CONFIG_DIR=$PWD" > .env
 agentgraph install-skill --target project
 ```
 
@@ -46,7 +46,7 @@ The fixture contains a set of Gmail, Slack, Drive, research, people, and relatio
 
 ## 3. Ask your coding agent
 
-Open a coding-agent session in the `~/agentgraph` directory and give it this prompt:
+Open a coding-agent session in the `~/agentgraph-tmp` directory and give it this prompt:
 
 > Use the agentgraph skill to answer this question: Before I reply to Maya, reconstruct the Atlas synchronization decision. What did she require, what did engineering agree, does this match the plan on Drive, and which research supports the decision? Flag contradictions and link every source.
 

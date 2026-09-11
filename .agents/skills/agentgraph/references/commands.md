@@ -3,7 +3,7 @@
 ## CLI
 
 ```bash
-agentgraph search ["<query>"] [--type <type>] [--platform <platform>] [--filter key=value] [--since 12h|30m|2d] [--observed-since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|source_created_at|source_updated_at|observed_at|synced_at] [--min-score N] [--json]
+agentgraph search [--type <type>] [--platform <platform>] [--filter key=value] [--since 12h|30m|2d] [--observed-since 12h|30m|2d] [--mine] [--has-attachments] [--limit N] [--order-by created_at|updated_at|source_created_at|source_updated_at|observed_at|synced_at] [--min-score N] [--json]
 agentgraph get <entity-id|platform/ref|url> [--resolve] [--json]
 agentgraph edges <entity-id|platform/ref> [--type <edge-type>] [--direction in|out|both] [--json]
 agentgraph traverse <entity-id|platform/ref> [--resolve] [--depth 0..4] [--json]

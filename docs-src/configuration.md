@@ -225,13 +225,7 @@ default_permissions = "agentgraph"
 ```
 
 Do not append this line after an existing section: TOML treats it as part of that
-section, so Codex cannot find the top-level setting and reports:
-
-```text
-Error: config defines `[permissions]` profiles but does not set `default_permissions`
-```
-
-The permission tables below can go at the bottom of the file:
+section. The permission tables below can go at the bottom of the file:
 
 ```toml
 [permissions.agentgraph]
