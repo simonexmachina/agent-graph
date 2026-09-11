@@ -1,13 +1,13 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'linux'",
+    "python_full_version >= '3.14' and sys_platform != 'linux'",
+    "python_full_version == '3.13.*' and sys_platform == 'linux'",
+    "python_full_version == '3.13.*' and sys_platform != 'linux'",
     "python_full_version < '3.13' and sys_platform == 'linux'",
     "python_full_version < '3.13' and sys_platform != 'linux'",
-    "python_full_version == '3.13.*' and sys_platform == 'linux'",
-    "python_full_version >= '3.14' and sys_platform == 'linux'",
-    "python_full_version == '3.13.*' and sys_platform != 'linux'",
-    "python_full_version >= '3.14' and sys_platform != 'linux'",
 ]
 
 [manifest]
@@ -22,7 +22,7 @@ members = [
 
 [[package]]
 name = "agentgraph-connector-discord"
-version = "0.5.6"
+version = "0.6.0"
 source = { editable = "packages/agentgraph-connector-discord" }
 dependencies = [
     { name = "agentgraph-server" },
@@ -37,7 +37,7 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-connector-google"
-version = "0.5.6"
+version = "0.6.0"
 source = { editable = "packages/agentgraph-connector-google" }
 dependencies = [
     { name = "agentgraph-server" },
@@ -56,7 +56,7 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-connector-rss"
-version = "0.5.6"
+version = "0.6.0"
 source = { editable = "packages/agentgraph-connector-rss" }
 dependencies = [
     { name = "agentgraph-connector-web" },
@@ -79,7 +79,7 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-connector-slack"
-version = "0.5.6"
+version = "0.6.0"
 source = { editable = "packages/agentgraph-connector-slack" }
 dependencies = [
     { name = "agentgraph-server" },
@@ -94,7 +94,7 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-connector-web"
-version = "0.5.6"
+version = "0.6.0"
 source = { editable = "packages/agentgraph-connector-web" }
 dependencies = [
     { name = "agentgraph-server" },
@@ -113,7 +113,7 @@ requires-dist = [
 
 [[package]]
 name = "agentgraph-server"
-version = "0.7.2"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "agentgraph-connector-web" },
