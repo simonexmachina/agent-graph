@@ -716,6 +716,43 @@ async def test_upsert_event_includes_reference_edge_created_after_storage_commit
     assert notify.await_count == 1
 
 
+async def test_content_linking_ignores_the_entity_s_own_url(
+    sqlite_backend: SQLiteBackend,
+) -> None:
+    """A body that links to its own entity must not gain a `references` self-loop.
+
+    Connectors append an entity's web URL to its rendered content, so every
+    content-bearing entity hits this path on the way in.
+    """
+    own_url = "https://example.com/self"
+    batch = EntityBatch(
+        entities=[
+            EntityRecord(
+                entity_type="Document",
+                platform="web",
+                platform_entity_id=own_url,
+                content=f"Canonical location: {own_url}",
+            )
+        ]
+    )
+    own_ref = SourceReference(source="web", resource_type="document", resource_id=own_url)
+
+    with (
+        patch("agentgraph.graph.upsert._build_embeddings", return_value=({}, {})),
+        patch("agentgraph.server.router.classify_url", return_value=own_ref),
+        patch("agentgraph.connectors.feed.notify_feed_connectors", new=AsyncMock()) as notify,
+    ):
+        await upsert_batch(batch)
+
+    entity_id = await sqlite_backend.find_entity_id("web", own_url)
+    assert entity_id is not None
+    assert await sqlite_backend.get_edges(entity_id, None, "both") == []
+
+    notify_args = notify.await_args
+    assert notify_args is not None
+    assert notify_args.args[0].edges == []
+
+
 async def test_upsert_batch_skips_fts_rewrites_for_unchanged_text(
     sqlite_backend: SQLiteBackend,
 ) -> None:
