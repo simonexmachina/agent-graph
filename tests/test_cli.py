@@ -68,7 +68,7 @@ def test_version() -> None:
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.output == "agentgraph 0.7.1\n"
+    assert result.output == "agentgraph 0.7.2\n"
 
 
 def _serve_settings(uds_path: Path | None) -> SimpleNamespace:
@@ -688,6 +688,76 @@ def test_install_skill_force_overwrites_existing_skill(
     assert parsed["target"] == "user"
     assert parsed["overwritten"] is True
     assert "AgentGraph CLI skill" in skill_path.read_text(encoding="utf-8")
+
+
+def test_install_skill_succeeds_when_claude_skills_links_to_agent_skills(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    agent_skills = home / ".agents" / "skills"
+    agent_skills.mkdir(parents=True)
+    claude_skills = home / ".claude" / "skills"
+    claude_skills.parent.mkdir(parents=True)
+    claude_skills.symlink_to(Path("..") / ".agents" / "skills", target_is_directory=True)
+
+    result = runner.invoke(app, ["install-skill", "--json"])
+
+    assert result.exit_code == 0
+    skill_path = agent_skills / "agentgraph" / "SKILL.md"
+    assert skill_path.is_file()
+    # The one copy is what Claude reads, so no nested link is made inside it.
+    assert (claude_skills / "agentgraph" / "SKILL.md").is_file()
+    assert not (skill_path.parent / "agentgraph").exists()
+    parsed = json.loads(result.output)
+    assert parsed["claude_linked"] is False
+    assert parsed["claude_destination"] == str(claude_skills / "agentgraph")
+
+
+def test_install_skill_force_reinstalls_through_a_linked_claude_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    skill_path = home / ".agents" / "skills" / "agentgraph" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("custom", encoding="utf-8")
+    claude_skills = home / ".claude" / "skills"
+    claude_skills.parent.mkdir(parents=True)
+    claude_skills.symlink_to(Path("..") / ".agents" / "skills", target_is_directory=True)
+
+    result = runner.invoke(app, ["install-skill", "--force", "--json"])
+
+    assert result.exit_code == 0
+    assert "File exists" not in result.output
+    parsed = json.loads(result.output)
+    assert parsed["overwritten"] is True
+    assert parsed["claude_linked"] is False
+    assert "AgentGraph CLI skill" in skill_path.read_text(encoding="utf-8")
+
+
+def test_install_skill_force_replaces_a_separate_claude_link(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    stale_target = tmp_path / "stale"
+    stale_target.mkdir()
+    claude_skills = home / ".claude" / "skills"
+    claude_skills.mkdir(parents=True)
+    (claude_skills / "agentgraph").symlink_to(stale_target, target_is_directory=True)
+
+    result = runner.invoke(app, ["install-skill", "--force", "--json"])
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert parsed["claude_linked"] is True
+    claude_path = claude_skills / "agentgraph"
+    assert claude_path.is_symlink()
+    assert claude_path.resolve() == (home / ".agents" / "skills" / "agentgraph").resolve()
 
 
 def test_install_skill_project_target_uses_current_directory(

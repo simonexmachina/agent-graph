@@ -22,6 +22,7 @@ class SkillInstallResult:
     source: str
     destination: str
     claude_destination: str | None
+    claude_linked: bool
     overwritten: bool
 
     def to_dict(self) -> dict[str, object]:
@@ -31,6 +32,7 @@ class SkillInstallResult:
             "source": self.source,
             "destination": self.destination,
             "claude_destination": self.claude_destination,
+            "claude_linked": self.claude_linked,
             "overwritten": self.overwritten,
         }
 
@@ -83,6 +85,11 @@ def _remove_path(path: Path) -> None:
         shutil.rmtree(path)
 
 
+def _shares_directory(destination: Path, claude_destination: Path) -> bool:
+    """Claude's skill directory may already be a link to the agent one."""
+    return claude_destination.parent.resolve() == destination.parent.resolve()
+
+
 def install_skill(
     skill: str = "agentgraph",
     *,
@@ -96,28 +103,35 @@ def install_skill(
     source = _find_source_skill(skill, source_root)
     destination = _target_root(target, project_dir) / skill
     claude_destination = _claude_target_root(target, project_dir) / skill if claude else None
+    # One copy already serves both readers when the two skill directories are the same
+    # one, so linking would only try to overwrite the skill that was just installed.
+    claude_link = (
+        claude_destination
+        if claude_destination is not None and not _shares_directory(destination, claude_destination)
+        else None
+    )
     overwritten = _path_exists(destination)
 
     if overwritten and not force:
         raise SkillInstallError(
             f"Skill {skill!r} already exists at {destination}. Use --force to overwrite it."
         )
-    if claude_destination is not None and _path_exists(claude_destination) and not force:
+    if claude_link is not None and _path_exists(claude_link) and not force:
         raise SkillInstallError(
-            f"Claude skill link for {skill!r} already exists at {claude_destination}. "
+            f"Claude skill link for {skill!r} already exists at {claude_link}. "
             "Use --force to overwrite it."
         )
 
     if overwritten:
         _remove_path(destination)
-    if claude_destination is not None and _path_exists(claude_destination):
-        _remove_path(claude_destination)
+    if claude_link is not None and _path_exists(claude_link):
+        _remove_path(claude_link)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, destination)
-    if claude_destination is not None:
-        claude_destination.parent.mkdir(parents=True, exist_ok=True)
-        claude_destination.symlink_to(destination, target_is_directory=True)
+    if claude_link is not None:
+        claude_link.parent.mkdir(parents=True, exist_ok=True)
+        claude_link.symlink_to(destination, target_is_directory=True)
 
     return SkillInstallResult(
         skill=skill,
@@ -125,5 +139,6 @@ def install_skill(
         source=str(source),
         destination=str(destination),
         claude_destination=str(claude_destination) if claude_destination is not None else None,
+        claude_linked=claude_link is not None,
         overwritten=overwritten,
     )
