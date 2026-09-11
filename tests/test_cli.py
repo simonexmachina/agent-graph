@@ -618,8 +618,8 @@ def test_install_skill_defaults_to_user_agent_and_claude_skills(
     assert "AGENTGRAPH_QUERY_TRANSPORT=in-process" in skill_content
     normalized_skill_content = " ".join(skill_content.split())
     assert (
-        "Run ordinary commands without setting `AGENTGRAPH_QUERY_TRANSPORT`, including for "
-        "the demo or when the server is stopped."
+        "Run ordinary commands without setting `AGENTGRAPH_QUERY_TRANSPORT`, even when the "
+        "server is stopped."
     ) in normalized_skill_content
     assert (
         "retry with `AGENTGRAPH_QUERY_TRANSPORT=in-process` only after an actual "
